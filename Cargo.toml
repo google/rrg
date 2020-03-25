@@ -1,0 +1,7 @@
+[package]
+name = "rrg"
+version = "0.1.0"
+authors = ["Łukasz Hanuszczak <hanuszczak@google.com>"]
+edition = "2018"
+
+[dependencies]
