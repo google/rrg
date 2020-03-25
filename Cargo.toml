@@ -5,3 +5,4 @@ authors = ["Łukasz Hanuszczak <hanuszczak@google.com>"]
 edition = "2018"
 
 [dependencies]
+rrg-proto = { path = "proto/" }
