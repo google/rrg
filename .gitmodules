@@ -1,0 +1,3 @@
+[submodule "proto/grr"]
+	path = proto/grr
+	url = https://github.com/google/grr
