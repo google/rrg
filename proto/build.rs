@@ -3,7 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use std::fs::File;
+use std::path::Path;
 use std::io::{Read, Write, Result};
 
 const PROTOS: &'static [&'static str] = &[
@@ -16,42 +16,51 @@ const INCLUDES: &'static [&'static str] = &[
     "grr/grr/proto",
 ];
 
-fn main() -> Result<()> {
-    let tempdir = tempfile::tempdir()?;
+fn main() {
+    let tempdir = tempfile::tempdir()
+        .expect("failed to create temp dir");
 
-    let mut patched_paths = Vec::new();
-    let mut patched_includes = Vec::new();
+    let mut protos = Vec::new();
+    let mut includes = Vec::new();
 
-    for path in PROTOS {
-        let patched_path = tempdir.path().join(path);
-        let patched_path_dir = patched_path.parent().unwrap();
-        std::fs::create_dir_all(patched_path_dir)?;
+    for path_before in PROTOS {
+        let path_after = tempdir.path().join(path_before);
 
-        let mut proto = File::open(&path).unwrap();
-        let mut patched_proto = File::create(&patched_path).unwrap();
+        patch_path(&path_before, &path_after)
+            .expect(&format!("failed to patch file '{}'", path_before));
 
-        patch(&mut proto, &mut patched_proto)?;
-
-        patched_paths.push(patched_path);
+        protos.push(path_after);
     }
 
-    for path in INCLUDES {
-        let patched_path = tempdir.path().join(path);
-        patched_includes.push(patched_path);
+    for path_before in INCLUDES {
+        let path_after = tempdir.path().join(path_before);
+        includes.push(path_after);
     }
 
-    prost_build::compile_protos(&patched_paths, &patched_includes)
+    prost_build::compile_protos(&protos, &includes)
+        .expect("failed to compile proto files");
 }
 
-fn patch<R, W>(input: &mut R, output: &mut W) -> Result<()>
+fn patch_path<PI, PO>(input: PI, output: PO) -> Result<()>
+where
+    PI: AsRef<Path>,
+    PO: AsRef<Path>,
+{
+    let mut input = file::open(&input)?;
+    let mut output = file::create(&output)?;
+
+    patch_buffer(&mut input, &mut output)
+}
+
+fn patch_buffer<R, W>(input: &mut R, output: &mut W) -> Result<()>
 where
     R: Read,
     W: Write,
 {
-    let reader = std::io::BufReader::new(input);
-    for line in std::io::BufRead::lines(reader) {
-        let line = line?;
+    let mut buffer = String::new();
+    input.read_to_string(&mut buffer)?;
 
+    for line in buffer.lines() {
         writeln!(output, "{}", line)?;
         if line.starts_with("syntax =") {
             writeln!(output, "package grr;")?;
@@ -59,4 +68,22 @@ where
     }
 
     Ok(())
+}
+
+mod file {
+    use std::fs::File;
+    use std::io::Result;
+    use std::path::Path;
+
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<File> {
+        File::open(path)
+    }
+
+    pub fn create<P: AsRef<Path>>(path: P) -> Result<File> {
+        if let Some(parent) = path.as_ref().parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        File::create(path)
+    }
 }
