@@ -10,3 +10,4 @@ prost-types = { version = "0.6.1" }
 
 [build-dependencies]
 prost-build = { version = "0.6.1" }
+tempfile = { version = "3.1.0" }
