@@ -18,7 +18,7 @@ const INCLUDES: &'static [&'static str] = &[
 
 fn main() {
     // Because GRR proto files are not something that PROST! can accept (because
-    // of the missing package definitions), we create a temporary directory with
+    // of the missing package declaration), we create a temporary directory with
     // recreated file structure. We apply the patch to each of them and feed the
     // Protocol Buffers compiler with updated files.
     let tempdir = tempfile::tempdir()
