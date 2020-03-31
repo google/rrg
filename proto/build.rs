@@ -3,7 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::io::{Read, Write, Result};
 
 const PROTOS: &'static [&'static str] = &[
@@ -48,13 +48,14 @@ fn main() {
     // use name mangling, but it's default value does not. This is likely a bug
     // in PROST! itself, but for now we hack around it by replacing the spurious
     // line in the output file ourselves.
-    let outdir = std::env::var("OUT_DIR")
-        .expect("no output directory");
+    let outdir: PathBuf = std::env::var("OUT_DIR")
+        .expect("no output directory")
+        .into();
 
-    let target = Path::new(&outdir).join("grr.rs");
+    let target = outdir.join("grr.rs");
 
     let grr = std::fs::read_to_string(&target)
-        .expect("invalid generated Rust code")
+        .expect("failed to read the generated output file")
         .replace("TskFsAttrTypeDefault", "Default");
 
     std::fs::write(&target, grr)
