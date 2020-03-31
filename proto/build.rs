@@ -17,6 +17,10 @@ const INCLUDES: &'static [&'static str] = &[
 ];
 
 fn main() {
+    // Because GRR proto files are not something that PROST! can accept (because
+    // of the missing package definitions), we create a temporary directory with
+    // recreated file structure. We apply the patch to each of them and feed the
+    // Protocol Buffers compiler with updated files.
     let tempdir = tempfile::tempdir()
         .expect("failed to create temp dir");
 
@@ -41,6 +45,12 @@ fn main() {
         .expect("failed to compile proto files");
 }
 
+/// Patches given file at path `input`, writing patched content at `output`.
+///
+/// This function takes a path to malformed (i.e. lacking package definition)
+/// GRR proto file and converts it to something that PROST! can understand. This
+/// workaround has to be used as long as GRR does not fixes its proto files
+/// upstream, which might be hard because of compatibility reasons.
 fn patch_path<PI, PO>(input: PI, output: PO) -> Result<()>
 where
     PI: AsRef<Path>,
@@ -52,6 +62,12 @@ where
     patch_buffer(&mut input, &mut output)
 }
 
+/// Patches given `input` buffer, writing patched content to `output`.
+///
+/// This function takes a buffer with malformed (lacking package definition)
+/// GRR proto file and converts it to something that PROST! can understand. This
+/// workaround has to be used as long as GRR does not fixes its proto files
+/// upstream, which might be hard because of compatibility reasons.
 fn patch_buffer<R, W>(input: &mut R, output: &mut W) -> Result<()>
 where
     R: Read,
@@ -75,10 +91,19 @@ mod file {
     use std::io::Result;
     use std::path::Path;
 
+    /// Opens a file at the specified `path`.
+    ///
+    /// This function simply delegates to the standard library `File::open` and
+    /// exists purely for aesthetic purposes.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<File> {
         File::open(path)
     }
 
+    /// Creates a file at the specified `path` and all the necessary folders
+    /// along the way.
+    ///
+    /// Except for directory creation, this function should behave identically
+    /// to the standard library's `File::create`.
     pub fn create<P: AsRef<Path>>(path: P) -> Result<File> {
         if let Some(parent) = path.as_ref().parent() {
             std::fs::create_dir_all(parent)?;
