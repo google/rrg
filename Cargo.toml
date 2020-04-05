@@ -6,6 +6,8 @@ edition = "2018"
 
 [dependencies]
 fleetspeak = { version = "0.1.1" }
+log = { version = "0.4.8" }
 rrg-proto = { path = "proto/" }
+simplelog = { version = "0.7.5" }
 structopt = { version = "0.1.3" }
 structopt-derive = { version = "0.1.3" }
