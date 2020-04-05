@@ -7,3 +7,5 @@ edition = "2018"
 [dependencies]
 fleetspeak = { version = "0.1.1" }
 rrg-proto = { path = "proto/" }
+structopt = { version = "0.1.3" }
+structopt-derive = { version = "0.1.3" }

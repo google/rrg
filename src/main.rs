@@ -6,7 +6,14 @@
 use std::io::Result;
 use std::time::Duration;
 
+#[derive(structopt_derive::StructOpt)]
+#[structopt(name = "RRG", about = "A GRR agent rewritten in Rust.")]
+struct Opts {
+}
+
 fn main() -> Result<()> {
+    <Opts as structopt::StructOpt>::from_args();
+
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))?;
 
     loop {
