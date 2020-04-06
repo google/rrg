@@ -8,7 +8,7 @@ mod opts;
 use std::fs::File;
 use std::io::Result;
 
-use opts::{Opts, Verbosity, Std};
+use opts::{Opts, Std};
 
 fn main() -> Result<()> {
     let opts = opts::from_args();
@@ -23,7 +23,7 @@ fn main() -> Result<()> {
 }
 
 fn init(opts: &Opts) {
-    let Verbosity(level) = opts.log_verbosity;
+    let level = opts.log_verbosity.level();
     let mut loggers = Vec::<Box<dyn simplelog::SharedLogger>>::new();
 
     if let Some(std) = &opts.log_std {

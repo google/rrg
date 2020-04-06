@@ -34,7 +34,16 @@ pub fn from_args() -> Opts {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Verbosity(pub log::LevelFilter);
+pub struct Verbosity {
+    level: log::LevelFilter,
+}
+
+impl Verbosity {
+
+    pub fn level(&self) -> log::LevelFilter {
+        self.level
+    }
+}
 
 impl std::str::FromStr for Verbosity {
 
@@ -43,15 +52,19 @@ impl std::str::FromStr for Verbosity {
     fn from_str(string: &str) -> std::result::Result<Verbosity, String> {
         use log::LevelFilter::*;
 
-        match string {
-            "quiet" => Ok(Verbosity(Off)),
-            "error" => Ok(Verbosity(Error)),
-            "warn" => Ok(Verbosity(Warn)),
-            "info" => Ok(Verbosity(Info)),
-            "debug" => Ok(Verbosity(Debug)),
-            "trace" => Ok(Verbosity(Trace)),
-            _ => Err(format!("invalid verbosity choice '{}'", string)),
-        }
+        let level = match string {
+            "quiet" => Off,
+            "error" => Error,
+            "warn" => Warn,
+            "info" => Info,
+            "debug" => Debug,
+            "trace" => Trace,
+            _ => return Err(format!("invalid verbosity choice '{}'", string)),
+        };
+
+        Ok(Verbosity {
+            level: level,
+        })
     }
 }
 
