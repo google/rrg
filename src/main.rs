@@ -68,6 +68,11 @@ struct Opts {
     #[structopt(long="log-file", name="FILE",
                 help="A file to log to")]
     log_file: Option<PathBuf>,
+
+    #[structopt(long="heartbeat-rate", name="DURATION", default_value="5s",
+                parse(try_from_str = "humantime::parse_duration"),
+                help="A frequency of Fleetspeak heartbeat messages.")]
+    heartbeat_rate: Duration,
 }
 
 fn main() -> Result<()> {
@@ -77,7 +82,7 @@ fn main() -> Result<()> {
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))?;
 
     loop {
-        let packet = fleetspeak::collect(Duration::from_secs(1))?;
+        let packet = fleetspeak::collect(opts.heartbeat_rate)?;
         handle(packet.data);
     }
 }
