@@ -24,26 +24,29 @@ fn main() -> Result<()> {
 
 fn init(opts: &Opts) {
     let level = opts.log_verbosity.level();
+
     let mut loggers = Vec::<Box<dyn simplelog::SharedLogger>>::new();
 
     if let Some(std) = &opts.log_std {
         let config = Default::default();
-
-        let logger = simplelog::TermLogger::new(level, config, std.mode()).expect("failed to create a terminal logger");
+        let logger = simplelog::TermLogger::new(level, config, std.mode())
+            .expect("failed to create a terminal logger");
 
         loggers.push(logger);
     }
 
     if let Some(path) = &opts.log_file {
-        let config = Default::default();
+        let file = File::create(path)
+            .expect("failed to create the log file");
 
-        let file = File::create(path).expect("failed to create the log file");
+        let config = Default::default();
         let logger = simplelog::WriteLogger::new(level, config, file);
 
         loggers.push(logger);
     }
 
-    simplelog::CombinedLogger::init(loggers).expect("failed to init logging");
+    simplelog::CombinedLogger::init(loggers)
+        .expect("failed to init logging");
 }
 
 fn handle(message: rrg_proto::GrrMessage) {
