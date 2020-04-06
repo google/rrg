@@ -8,7 +8,7 @@ mod opts;
 use std::fs::File;
 use std::io::Result;
 
-use opts::{Opts, Std};
+use opts::{Opts};
 
 fn main() -> Result<()> {
     let opts = opts::from_args();
@@ -29,12 +29,7 @@ fn init(opts: &Opts) {
     if let Some(std) = &opts.log_std {
         let config = Default::default();
 
-        use simplelog::TerminalMode::*;
-        let logger = simplelog::TermLogger::new(level, config, match std {
-            Std::Out => Stdout,
-            Std::Err => Stderr,
-            Std::Mix => Mixed,
-        }).expect("failed to create a terminal logger");
+        let logger = simplelog::TermLogger::new(level, config, std.mode()).expect("failed to create a terminal logger");
 
         loggers.push(logger);
     }

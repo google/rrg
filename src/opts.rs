@@ -78,6 +78,19 @@ pub enum Std {
     Mix,
 }
 
+impl Std {
+
+    pub fn mode(&self) -> simplelog::TerminalMode {
+        use simplelog::TerminalMode::*;
+
+        match self {
+            Std::Out => Stdout,
+            Std::Err => Stderr,
+            Std::Mix => Mixed,
+        }
+    }
+}
+
 impl std::str::FromStr for Std {
 
     type Err = String; // TODO.
