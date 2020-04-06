@@ -8,6 +8,8 @@ use std::io::Result;
 use std::time::Duration;
 use std::path::PathBuf;
 
+use structopt::StructOpt;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Verbosity(log::LevelFilter);
 
@@ -54,7 +56,7 @@ impl std::str::FromStr for Std {
     }
 }
 
-#[derive(structopt_derive::StructOpt)]
+#[derive(StructOpt)]
 #[structopt(name = "RRG", about = "A GRR agent rewritten in Rust.")]
 struct Opts {
     #[structopt(long="log-verbosity", name="LEVEL", default_value="info",
@@ -70,13 +72,13 @@ struct Opts {
     log_file: Option<PathBuf>,
 
     #[structopt(long="heartbeat-rate", name="DURATION", default_value="5s",
-                parse(try_from_str = "humantime::parse_duration"),
+                parse(try_from_str = humantime::parse_duration),
                 help="A frequency of Fleetspeak heartbeat messages.")]
     heartbeat_rate: Duration,
 }
 
 fn main() -> Result<()> {
-    let opts = <Opts as structopt::StructOpt>::from_args();
+    let opts = Opts::from_args();
     init(&opts);
 
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))?;
