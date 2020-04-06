@@ -12,20 +12,20 @@ use structopt::StructOpt;
 #[structopt(name = "RRG", about = "A GRR agent rewritten in Rust.")]
 pub struct Opts {
     #[structopt(long="log-verbosity", name="LEVEL", default_value="info",
-                help="A log verbosity level")]
+                help="Specifies the level of log verbosity")]
     pub log_verbosity: Verbosity,
 
     #[structopt(long="log-std", name="STD",
-                help="A standard stream to log to")]
+                help="Enables logging to the specified standard stream")]
     pub log_std: Option<Std>,
 
     #[structopt(long="log-file", name="FILE",
-                help="A file to log to")]
+                help="Enables logging to the specified file")]
     pub log_file: Option<PathBuf>,
 
     #[structopt(long="heartbeat-rate", name="DURATION", default_value="5s",
                 parse(try_from_str = humantime::parse_duration),
-                help="A frequency of Fleetspeak heartbeat messages.")]
+                help="Specifies the frequency of heartbeat messages")]
     pub heartbeat_rate: Duration,
 }
 
