@@ -23,6 +23,10 @@ fn main() -> Result<()> {
 }
 
 fn init(opts: &Opts) {
+    init_log(opts);
+}
+
+fn init_log(opts: &Opts) {
     let level = opts.log_verbosity.level();
 
     let mut loggers = Vec::<Box<dyn simplelog::SharedLogger>>::new();
