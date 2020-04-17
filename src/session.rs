@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::marker::PhantomData;
 
 use fleetspeak::Packet;
 
@@ -61,13 +62,6 @@ pub struct Session {
 
 impl Session {
 
-    pub fn known<S: Into<String>>(id: S) -> Session {
-        Session {
-            id: id.into(),
-            next_response_id: 0,
-        }
-    }
-
     pub fn reply<R: Response>(&mut self, response: R) -> Result<()> {
         Message {
             session_id: self.id.clone(),
@@ -80,6 +74,27 @@ impl Session {
         Ok(())
     }
 }
+
+pub struct Sink<R: Response> {
+    id: &'static str,
+    kind: PhantomData<R>,
+}
+
+impl<R: Response> Sink<R> {
+
+    pub fn send(&self, response: R) -> Result<()> {
+        Message {
+            session_id: String::from(self.id),
+            response_id: 0,
+            data: response,
+        }.send()
+    }
+}
+
+pub static STARTUP: Sink<crate::action::startup::Response> = Sink {
+    id: "/flows/F:Startup",
+    kind: PhantomData,
+};
 
 struct Message<R: Response> {
     session_id: String,

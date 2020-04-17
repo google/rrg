@@ -13,8 +13,6 @@ use std::io::Result;
 use log::error;
 use opts::{Opts};
 
-use self::session::{Session};
-
 fn main() -> Result<()> {
     let opts = opts::from_args();
     init(&opts);
@@ -25,7 +23,7 @@ fn main() -> Result<()> {
         Ok(response) => {
             use session::Error::*;
 
-            match Session::known("/flows/F:Startup").reply(response) {
+            match self::session::STARTUP.send(response) {
                 Err(Send(error)) => {
                     // Fleetspeak errors are critical, better to fail hard and
                     // force agent restart.
