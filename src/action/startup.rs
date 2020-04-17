@@ -2,14 +2,27 @@
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
+
+//! A handler and associated types for the startup action.
+//!
+//! The startup action collects basic information about the system (e.g. its
+//! boot time) and metadata about the agent (e.g. it's name and version). It is
+//! special in a sense that generally it should be not invoked by flows, but be
+//! called explicitly during agent startup.
+
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use log::error;
 
+/// A response type for the startup action.
 pub struct Response {
+    /// Time of last system boot.
     boot_time: SystemTime,
+    /// Name of the GRR agent.
     name: String,
+    /// Description of the GRR agent.
     description: String,
+    /// Version of the GRR agent.
     version: Version,
 }
 
@@ -40,6 +53,7 @@ impl super::Response for Response {
     }
 }
 
+/// Handles requests for the startup action.
 pub fn handle(_: ()) -> Result<Response, super::Error> {
     Ok(Response {
         boot_time: boot_time()?,
@@ -49,6 +63,7 @@ pub fn handle(_: ()) -> Result<Response, super::Error> {
     })
 }
 
+/// Returns information about the system boot time.
 fn boot_time() -> Result<SystemTime, sys_info::Error> {
     let timeval = sys_info::boottime()?;
 
@@ -58,7 +73,8 @@ fn boot_time() -> Result<SystemTime, sys_info::Error> {
     Ok(UNIX_EPOCH + Duration::from_secs(secs) + Duration::from_micros(micros))
 }
 
-pub struct Version {
+/// A type for representing version metadata.
+struct Version {
     pub major: u8,
     pub minor: u8,
     pub patch: u8,
@@ -67,6 +83,10 @@ pub struct Version {
 
 impl Version {
 
+    /// Constructs version metadata from Crate information.
+    ///
+    /// This function assumes that are relevant crate information is correctly
+    /// specified in the `Cargo.toml` file.
     fn from_crate() -> Version {
         Version {
             major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap_or(0),
@@ -76,6 +96,26 @@ impl Version {
         }
     }
 
+    /// Returns a numeric representation of version metadata.
+    ///
+    /// This function assumes that all version components are smaller than 10.
+    /// In other cases, the output is undefined (but the function call itself
+    /// does not panic).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rrg::action::startup::Version;
+    ///
+    /// let version = Version {
+    ///     major: 1,
+    ///     minor: 2,
+    ///     patch: 3,
+    ///     revision: 4,
+    /// };
+    ///
+    /// assert_eq!(version.as_numeric(), 1234)
+    /// ```
     fn as_numeric(&self) -> u32 {
         let mut result = 0;
         result = 10 * result + self.major as u32;
