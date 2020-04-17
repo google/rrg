@@ -29,9 +29,8 @@ fn main() -> Result<()> {
             prost::Message::encode(&response.into_proto(), &mut data)?;
 
             let message = rrg_proto::GrrMessage {
-                session_id: Some(String::from("Startup")),
+                session_id: Some(String::from("flows/F:Startup")),
                 r#type: Some(rrg_proto::grr_message::Type::Message.into()),
-                ttl: Some(1),
                 args_rdf_name: startup::Response::RDF_NAME.map(String::from),
                 args: Some(data),
                 ..Default::default()
