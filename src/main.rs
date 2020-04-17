@@ -3,18 +3,48 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+mod action;
 mod opts;
 
 use std::fs::File;
 use std::io::Result;
 
+use fleetspeak::Packet;
+use log::error;
 use opts::{Opts};
+
+use self::action::{Response};
 
 fn main() -> Result<()> {
     let opts = opts::from_args();
     init(&opts);
 
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))?;
+
+    use self::action::startup;
+    match startup::handle(startup::Request {}) {
+        Ok(response) => {
+            let mut data = Vec::new();
+            // TODO: Use proper error handling.
+            prost::Message::encode(&response.into_proto(), &mut data)?;
+
+            let message = rrg_proto::GrrMessage {
+                session_id: Some(String::from("Startup")),
+                r#type: Some(rrg_proto::grr_message::Type::Message.into()),
+                ttl: Some(1),
+                args_rdf_name: startup::Response::RDF_NAME.map(String::from),
+                args: Some(data),
+                ..Default::default()
+            };
+
+            fleetspeak::send(Packet {
+                service: String::from("GRR"),
+                kind: Some(String::from("GrrMessage")),
+                data: message,
+            })?;
+        },
+        Err(error) => error!("failed to execute startup action: {}", error),
+    }
 
     loop {
         let packet = fleetspeak::collect(opts.heartbeat_rate)?;
