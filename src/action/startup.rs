@@ -26,33 +26,6 @@ pub struct Response {
     version: Version,
 }
 
-impl super::Response for Response {
-
-    const RDF_NAME: Option<&'static str> = Some("StartupInfo");
-
-    type Proto = rrg_proto::StartupInfo;
-
-    fn into_proto(self) -> rrg_proto::StartupInfo {
-        let boot_time_micros = match rrg_proto::micros(self.boot_time) {
-            Ok(boot_time_micros) => boot_time_micros,
-            Err(error) => {
-                error!("failed to convert boot time: {}", error);
-                0
-            }
-        };
-
-        rrg_proto::StartupInfo {
-            client_info: Some(rrg_proto::ClientInformation {
-                client_name: Some(self.name),
-                client_version: Some(self.version.as_numeric()),
-                client_description: Some(self.description),
-                ..Default::default()
-            }),
-            boot_time: Some(boot_time_micros),
-        }
-    }
-}
-
 /// Handles requests for the startup action.
 pub fn handle(_: ()) -> Result<Response, super::Error> {
     Ok(Response {
@@ -123,5 +96,32 @@ impl Version {
         result = 10 * result + self.patch as u32;
         result = 10 * result + self.revision as u32;
         result
+    }
+}
+
+impl super::Response for Response {
+
+    const RDF_NAME: Option<&'static str> = Some("StartupInfo");
+
+    type Proto = rrg_proto::StartupInfo;
+
+    fn into_proto(self) -> rrg_proto::StartupInfo {
+        let boot_time_micros = match rrg_proto::micros(self.boot_time) {
+            Ok(boot_time_micros) => boot_time_micros,
+            Err(error) => {
+                error!("failed to convert boot time: {}", error);
+                0
+            }
+        };
+
+        rrg_proto::StartupInfo {
+            client_info: Some(rrg_proto::ClientInformation {
+                client_name: Some(self.name),
+                client_version: Some(self.version.as_numeric()),
+                client_description: Some(self.description),
+                ..Default::default()
+            }),
+            boot_time: Some(boot_time_micros),
+        }
     }
 }
