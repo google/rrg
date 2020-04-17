@@ -7,18 +7,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use log::error;
 
-pub struct Request {
-}
-
-impl super::Request for Request {
-
-    type Proto = ();
-
-    fn from_proto(_: ()) -> Request {
-        Request {}
-    }
-}
-
 pub struct Response {
     boot_time: SystemTime,
 }
@@ -50,7 +38,7 @@ impl super::Response for Response {
     }
 }
 
-pub fn handle(_: Request) -> Result<Response, super::Error> {
+pub fn handle(_: ()) -> Result<Response, super::Error> {
     Ok(Response {
         boot_time: boot_time()?,
     })

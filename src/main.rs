@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))?;
 
     use self::action::startup;
-    match startup::handle(startup::Request {}) {
+    match startup::handle(()) {
         Ok(response) => {
             let mut data = Vec::new();
             // TODO: Use proper error handling.

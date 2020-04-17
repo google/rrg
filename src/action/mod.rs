@@ -18,3 +18,21 @@ pub trait Response {
     type Proto: prost::Message;
     fn into_proto(self) -> Self::Proto;
 }
+
+impl Request for () {
+
+    type Proto = ();
+
+    fn from_proto(_: ()) {
+    }
+}
+
+impl Response for () {
+
+    const RDF_NAME: Option<&'static str> = None;
+
+    type Proto = ();
+
+    fn into_proto(self) {
+    }
+}
