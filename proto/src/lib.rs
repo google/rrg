@@ -5,9 +5,12 @@
 
 include!(concat!(env!("OUT_DIR"), "/grr.rs"));
 
+/// An error type for failures of converting timestamps to microseconds.
 #[derive(Clone, Debug)]
 pub enum MicrosError {
+    /// Attempted to convert pre-epoch system time.
     Epoch(std::time::SystemTimeError),
+    /// Attempted to convert a value outside of 64-bit unsigned integer range.
     Overflow(std::num::TryFromIntError),
 }
 
@@ -53,6 +56,18 @@ impl From<std::num::TryFromIntError> for MicrosError {
     }
 }
 
+/// Converts system time into epoch microseconds.
+///
+/// Because most GRR messages use epoch microseconds for representing timestamps
+/// this function be be useful to convert from more idiomatic representations.
+///
+/// # Examples
+///
+/// ```
+/// use rrg_proto::micros;
+///
+/// assert_eq!(micros(std::time::UNIX_EPOCH).unwrap(), 0);
+/// ```
 pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
     let time_micros = time.duration_since(std::time::UNIX_EPOCH)?.as_micros();
     Ok(std::convert::TryInto::try_into(time_micros)?)
