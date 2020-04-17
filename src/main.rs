@@ -5,6 +5,7 @@
 
 mod action;
 mod opts;
+mod session;
 
 use std::fs::File;
 use std::io::Result;
