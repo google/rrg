@@ -8,6 +8,9 @@ use log::error;
 
 pub struct Response {
     boot_time: SystemTime,
+    name: String,
+    description: String,
+    version: Version,
 }
 
 impl super::Response for Response {
@@ -26,7 +29,12 @@ impl super::Response for Response {
         };
 
         rrg_proto::StartupInfo {
-            client_info: None,
+            client_info: Some(rrg_proto::ClientInformation {
+                client_name: Some(self.name),
+                client_version: Some(self.version.as_numeric()),
+                client_description: Some(self.description),
+                ..Default::default()
+            }),
             boot_time: Some(boot_time_micros),
         }
     }
@@ -35,6 +43,9 @@ impl super::Response for Response {
 pub fn handle(_: ()) -> Result<Response, super::Error> {
     Ok(Response {
         boot_time: boot_time()?,
+        name: String::from(env!("CARGO_PKG_NAME")),
+        description: String::from(env!("CARGO_PKG_DESCRIPTION")),
+        version: Version::from_crate(),
     })
 }
 
@@ -45,4 +56,32 @@ fn boot_time() -> Result<SystemTime, sys_info::Error> {
     let micros = timeval.tv_usec as u64;
 
     Ok(UNIX_EPOCH + Duration::from_secs(secs) + Duration::from_micros(micros))
+}
+
+pub struct Version {
+    pub major: u8,
+    pub minor: u8,
+    pub patch: u8,
+    pub revision: u8,
+}
+
+impl Version {
+
+    fn from_crate() -> Version {
+        Version {
+            major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap_or(0),
+            minor: env!("CARGO_PKG_VERSION_MINOR").parse().unwrap_or(0),
+            patch: env!("CARGO_PKG_VERSION_PATCH").parse().unwrap_or(0),
+            revision: env!("CARGO_PKG_VERSION_PRE").parse().unwrap_or(0),
+        }
+    }
+
+    fn as_numeric(&self) -> u32 {
+        let mut result = 0;
+        result = 10 * result + self.major as u32;
+        result = 10 * result + self.minor as u32;
+        result = 10 * result + self.patch as u32;
+        result = 10 * result + self.revision as u32;
+        result
+    }
 }
