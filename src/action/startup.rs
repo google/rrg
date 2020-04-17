@@ -2,7 +2,6 @@
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
-use std::convert::{TryInto};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use log::error;
@@ -18,12 +17,7 @@ impl super::Response for Response {
     type Proto = rrg_proto::StartupInfo;
 
     fn into_proto(self) -> rrg_proto::StartupInfo {
-        let boot_time_micros = self.boot_time
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or(Duration::new(0, 0))
-            .as_micros();
-
-        let boot_time_micros = match boot_time_micros.try_into() {
+        let boot_time_micros = match rrg_proto::micros(self.boot_time) {
             Ok(boot_time_micros) => boot_time_micros,
             Err(error) => {
                 error!("failed to convert boot time: {}", error);
