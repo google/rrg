@@ -22,7 +22,21 @@ fn main() -> Result<()> {
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))?;
 
     match self::action::startup::handle(()) {
-        Ok(response) => Session::known("/flows/F:Startup").reply(response)?,
+        Ok(response) => {
+            use session::Error::*;
+
+            match Session::known("/flows/F:Startup").reply(response) {
+                Err(Send(error)) => {
+                    // Fleetspeak errors are critical, better to fail hard and
+                    // force agent restart.
+                    return Err(error.into());
+                }
+                Err(Encode(error)) => {
+                    error!("failed to encode startup metadata: {}", error);
+                }
+                Ok(()) => (),
+            }
+        }
         Err(error) => error!("failed to execute startup action: {}", error),
     }
 

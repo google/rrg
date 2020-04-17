@@ -1,8 +1,58 @@
-use std::io::Result;
+use std::fmt::{Display, Formatter};
 
 use fleetspeak::Packet;
 
 use crate::action::Response;
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum Error {
+    Send(fleetspeak::WriteError),
+    Encode(prost::EncodeError),
+}
+
+impl Display for Error {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        use Error::*;
+
+        match *self {
+            Send(ref error) => {
+                write!(fmt, "Fleetspeak message delivery error: {}", error)
+            }
+            Encode(ref error) => {
+                write!(fmt, "failure during encoding proto message: {}", error)
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use Error::*;
+
+        match *self {
+            Send(ref error) => Some(error),
+            Encode(ref error) => Some(error),
+        }
+    }
+}
+
+impl From<fleetspeak::WriteError> for Error {
+
+    fn from(error: fleetspeak::WriteError) -> Error {
+        Error::Send(error)
+    }
+}
+
+impl From<prost::EncodeError> for Error {
+
+    fn from(error: prost::EncodeError) -> Error {
+        Error::Encode(error)
+    }
+}
 
 pub struct Session {
     id: String,
@@ -18,7 +68,6 @@ impl Session {
         }
     }
 
-    // TODO: Handle errors properly.
     pub fn reply<R: Response>(&mut self, response: R) -> Result<()> {
         Message {
             session_id: self.id.clone(),
@@ -40,7 +89,6 @@ struct Message<R: Response> {
 
 impl<R: Response> Message<R> {
 
-    // TODO: Handle errors properly.
     fn send(self) -> Result<()> {
         let mut data = Vec::new();
         prost::Message::encode(&self.data.into_proto(), &mut data)?;
