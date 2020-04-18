@@ -26,6 +26,9 @@ fn main() -> Result<()> {
             use session::Error::*;
 
             match self::session::startup().send(response) {
+                Err(Action(error)) => {
+                    error!("failed to collect startup metadata: {}", error);
+                }
                 Err(Send(error)) => {
                     // Fleetspeak errors are critical, better to fail hard and
                     // force agent restart.

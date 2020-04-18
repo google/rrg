@@ -8,8 +8,19 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
+    Action(Box<dyn std::error::Error>),
     Send(fleetspeak::WriteError),
     Encode(prost::EncodeError),
+}
+
+impl Error {
+
+    pub fn action<E>(error: E) -> Error
+    where
+        E: std::error::Error + 'static
+    {
+        Error::Action(Box::new(error))
+    }
 }
 
 impl Display for Error {
@@ -18,6 +29,9 @@ impl Display for Error {
         use Error::*;
 
         match *self {
+            Action(ref error) => {
+                write!(fmt, "action error: {}", error)
+            }
             Send(ref error) => {
                 write!(fmt, "Fleetspeak message delivery error: {}", error)
             }
@@ -34,6 +48,7 @@ impl std::error::Error for Error {
         use Error::*;
 
         match *self {
+            Action(ref error) => Some(error.as_ref()),
             Send(ref error) => Some(error),
             Encode(ref error) => Some(error),
         }
