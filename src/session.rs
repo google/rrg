@@ -63,6 +63,14 @@ pub struct Session {
 
 impl Session {
 
+    pub fn new(session_id: String, request_id: u64) -> Session {
+        Session {
+            id: session_id,
+            request_id: request_id,
+            next_response_id: 0,
+        }
+    }
+
     pub fn reply<R: Response>(&mut self, response: R) -> Result<()> {
         Message {
             session_id: self.id.clone(),

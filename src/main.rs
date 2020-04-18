@@ -13,6 +13,8 @@ use std::io::Result;
 use log::error;
 use opts::{Opts};
 
+use self::session::{Session};
+
 fn main() -> Result<()> {
     let opts = opts::from_args();
     init(&opts);
@@ -76,8 +78,34 @@ fn init_log(opts: &Opts) {
 }
 
 fn handle(message: rrg_proto::GrrMessage) {
-    match message.name {
-        Some(name) => println!("requested to execute the '{}' action", name),
-        None => eprintln!("missing action name to execute"),
+    let name = match message.name {
+        Some(name) => name,
+        None => {
+            eprintln!("action request without an action name");
+            return;
+        },
+    };
+
+    let session_id = match message.session_id {
+        Some(session_id) => session_id,
+        None => {
+            eprintln!("'{}' action request without a session id", name);
+            return;
+        },
+    };
+
+    let request_id = match message.request_id {
+        Some(request_id) => request_id,
+        None => {
+            eprintln!("'{}' action request without a request id", name);
+            return;
+        },
+    };
+
+    // TODO: Do something useful with this.
+    let session = Session::new(session_id, request_id);
+
+    match name {
+        _ => eprintln!("unsupported action '{}'", name),
     }
 }
