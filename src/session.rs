@@ -1,5 +1,4 @@
 use std::fmt::{Display, Formatter};
-use std::marker::PhantomData;
 
 use fleetspeak::Packet;
 
@@ -55,23 +54,30 @@ impl From<prost::EncodeError> for Error {
     }
 }
 
-pub struct Session {
+pub trait Session {
+    fn send<R: Response>(&mut self, response: R) -> Result<()>;
+}
+
+pub struct Action {
     id: String,
     request_id: u64,
     next_response_id: u64,
 }
 
-impl Session {
+impl Action {
 
-    pub fn new(session_id: String, request_id: u64) -> Session {
-        Session {
+    pub fn new(session_id: String, request_id: u64) -> Action {
+        Action {
             id: session_id,
             request_id: request_id,
             next_response_id: 0,
         }
     }
+}
 
-    pub fn reply<R: Response>(&mut self, response: R) -> Result<()> {
+impl Session for Action {
+
+    fn send<R: Response>(&mut self, response: R) -> Result<()> {
         Message {
             session_id: self.id.clone(),
             request_id: Some(self.request_id),
@@ -85,14 +91,13 @@ impl Session {
     }
 }
 
-pub struct Sink<R: Response> {
+pub struct Sink {
     id: &'static str,
-    kind: PhantomData<R>,
 }
 
-impl<R: Response> Sink<R> {
+impl Session for Sink {
 
-    pub fn send(&self, response: R) -> Result<()> {
+    fn send<R: Response>(&mut self, response: R) -> Result<()> {
         Message {
             session_id: String::from(self.id),
             request_id: None,
@@ -102,10 +107,9 @@ impl<R: Response> Sink<R> {
     }
 }
 
-pub static STARTUP: Sink<crate::action::startup::Response> = Sink {
-    id: "/flows/F:Startup",
-    kind: PhantomData,
-};
+pub fn startup() -> Sink {
+    Sink { id: "/flows/F:Startup" }
+}
 
 struct Message<R: Response> {
     session_id: String,

@@ -13,7 +13,7 @@ use std::io::Result;
 use log::error;
 use opts::{Opts};
 
-use self::session::{Session};
+use self::session::{Action, Session};
 
 fn main() -> Result<()> {
     let opts = opts::from_args();
@@ -25,7 +25,7 @@ fn main() -> Result<()> {
         Ok(response) => {
             use session::Error::*;
 
-            match self::session::STARTUP.send(response) {
+            match self::session::startup().send(response) {
                 Err(Send(error)) => {
                     // Fleetspeak errors are critical, better to fail hard and
                     // force agent restart.
@@ -103,7 +103,7 @@ fn handle(message: rrg_proto::GrrMessage) {
     };
 
     // TODO: Do something useful with this.
-    let session = Session::new(session_id, request_id);
+    let session = Action::new(session_id, request_id);
 
     match name {
         _ => eprintln!("unsupported action '{}'", name),
