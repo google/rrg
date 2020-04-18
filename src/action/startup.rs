@@ -14,6 +14,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use log::error;
 
+use crate::session::{Session, Error, Result};
+
 /// A response type for the startup action.
 pub struct Response {
     /// Time of last system boot.
@@ -27,17 +29,21 @@ pub struct Response {
 }
 
 /// Handles requests for the startup action.
-pub fn handle(_: ()) -> Result<Response, super::Error> {
-    Ok(Response {
-        boot_time: boot_time()?,
+pub fn handle<S: Session>(session: &mut S, _: ()) -> Result<()> {
+    let boot_time = boot_time().map_err(Error::action)?;
+
+    session.send(Response {
+        boot_time: boot_time,
         name: String::from(env!("CARGO_PKG_NAME")),
         description: String::from(env!("CARGO_PKG_DESCRIPTION")),
         version: Version::from_crate(),
-    })
+    })?;
+
+    Ok(())
 }
 
 /// Returns information about the system boot time.
-fn boot_time() -> Result<SystemTime, sys_info::Error> {
+fn boot_time() -> std::result::Result<SystemTime, sys_info::Error> {
     let timeval = sys_info::boottime()?;
 
     let secs = timeval.tv_sec as u64;

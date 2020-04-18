@@ -13,7 +13,7 @@ use std::io::Result;
 use log::error;
 use opts::{Opts};
 
-use self::session::{Action, Session};
+use crate::session::{Action};
 
 fn main() -> Result<()> {
     let opts = opts::from_args();
@@ -21,26 +21,20 @@ fn main() -> Result<()> {
 
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))?;
 
-    match self::action::startup::handle(()) {
-        Ok(response) => {
-            use session::Error::*;
-
-            match self::session::startup().send(response) {
-                Err(Action(error)) => {
-                    error!("failed to collect startup metadata: {}", error);
-                }
-                Err(Send(error)) => {
-                    // Fleetspeak errors are critical, better to fail hard and
-                    // force agent restart.
-                    return Err(error.into());
-                }
-                Err(Encode(error)) => {
-                    error!("failed to encode startup metadata: {}", error);
-                }
-                Ok(()) => (),
-            }
+    use session::Error::*;
+    match action::startup::handle(&mut session::startup(), ()) {
+        Err(Action(error)) => {
+            error!("failed to collect startup metadata: {}", error);
         }
-        Err(error) => error!("failed to execute startup action: {}", error),
+        Err(Send(error)) => {
+            // Fleetspeak errors are critical, better to fail hard and
+            // force agent restart.
+            return Err(error.into());
+        }
+        Err(Encode(error)) => {
+            error!("failed to encode startup metadata: {}", error);
+        }
+        Ok(()) => (),
     }
 
     loop {
