@@ -99,10 +99,30 @@ fn handle(message: rrg_proto::GrrMessage) {
         },
     };
 
-    // TODO: Do something useful with this.
-    let session = Action::new(session_id, request_id);
+    let mut session = Action::new(session_id, request_id);
+    let result = match name.as_str() {
+        "SendStartupInfo" => action::startup::handle(&mut session, ()),
+        _ => {
+            // TODO: Report this error to the GRR server.
+            eprintln!("unsupported action '{}'", name);
+            Ok(())
+        }
+    };
 
-    match name {
-        _ => eprintln!("unsupported action '{}'", name),
+    use session::Error;
+    match result {
+        Ok(()) => (),
+        Err(Error::Action(error)) => {
+            error!("failed to execute the '{}' action: {}",
+                   name, error);
+        }
+        Err(Error::Send(error)) => {
+            panic!("failed to send a response for the '{}' action: {}",
+                   name, error);
+        }
+        Err(Error::Encode(error)) => {
+            error!("failed to encode a response for the '{}' action: {}",
+                   name, error);
+        }
     }
 }
