@@ -38,7 +38,20 @@ fn main() -> Result<()> {
     }
 
     loop {
-        let packet = fleetspeak::collect(opts.heartbeat_rate)?;
+        use fleetspeak::ReadError::*;
+        let packet = match fleetspeak::collect(opts.heartbeat_rate) {
+            Ok(packet) => packet,
+            Err(Malformed(error)) => {
+                error!("received a malformed message: {}", error);
+                continue;
+            }
+            Err(Decode(error)) => {
+                error!("failed to decode the message: {}", error);
+                continue;
+            }
+            Err(error) => return Err(error.into()),
+        };
+
         handle(packet.data);
     }
 }
