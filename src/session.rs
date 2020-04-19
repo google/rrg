@@ -9,7 +9,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     Action(Box<dyn std::error::Error>),
-    Send(fleetspeak::WriteError),
+    Send(std::io::Error),
     Encode(prost::EncodeError),
 }
 
@@ -58,7 +58,11 @@ impl std::error::Error for Error {
 impl From<fleetspeak::WriteError> for Error {
 
     fn from(error: fleetspeak::WriteError) -> Error {
-        Error::Send(error)
+        use fleetspeak::WriteError::*;
+        match error {
+            Output(error) => Error::Send(error),
+            Encode(error) => Error::Encode(error),
+        }
     }
 }
 
