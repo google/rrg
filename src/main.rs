@@ -13,8 +13,6 @@ use std::io::Result;
 use log::error;
 use opts::{Opts};
 
-use crate::session::{Action};
-
 fn main() -> Result<()> {
     let opts = opts::from_args();
     init(&opts);
@@ -88,22 +86,19 @@ fn init_log(opts: &Opts) {
 }
 
 fn handle(message: rrg_proto::GrrMessage) {
-    use std::convert::TryFrom;
-    let request = match session::Request::try_from(message) {
-        Ok(request) => request,
-        Err(error) => {
-            error!("malformed action request: {}", error);
+    let name = match &message.name {
+        Some(name) => name.clone(),
+        None => {
+            error!("unspecified action to execute");
             return;
         }
     };
 
-    let mut session = Action::new(request.session_id, request.request_id);
-    let result = match request.name.as_str() {
-        "SendStartupInfo" => action::startup::handle(&mut session, request.data),
+    let result = match name.as_str() {
+        "SendStartupInfo" => session::handle(action::startup::handle, message),
         _ => {
-            // TODO: Report this error to the GRR server.
-            eprintln!("unsupported action '{}'", request.name);
-            Ok(())
+            error!("unsupported action: {}", name);
+            return;
         }
     };
 
@@ -112,15 +107,15 @@ fn handle(message: rrg_proto::GrrMessage) {
         Ok(()) => (),
         Err(Error::Action(error)) => {
             error!("failed to execute the '{}' action: {}",
-                   request.name, error);
+                   name, error);
         }
         Err(Error::Send(error)) => {
             panic!("failed to send a response for the '{}' action: {}",
-                   request.name, error);
+                   name, error);
         }
         Err(Error::Encode(error)) => {
             error!("failed to encode a response for the '{}' action: {}",
-                   request.name, error);
+                   name, error);
         }
     }
 }
