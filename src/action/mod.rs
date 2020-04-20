@@ -9,13 +9,13 @@ pub mod startup;
 type Error = Box<dyn std::error::Error>;
 
 pub trait Request {
-    type Proto: prost::Message;
+    type Proto: prost::Message + Default;
     fn from_proto(proto: Self::Proto) -> Self;
 }
 
 pub trait Response {
     const RDF_NAME: Option<&'static str>;
-    type Proto: prost::Message;
+    type Proto: prost::Message + Default;
     fn into_proto(self) -> Self::Proto;
 }
 

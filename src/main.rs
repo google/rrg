@@ -88,36 +88,21 @@ fn init_log(opts: &Opts) {
 }
 
 fn handle(message: rrg_proto::GrrMessage) {
-    let name = match message.name {
-        Some(name) => name,
-        None => {
-            eprintln!("action request without an action name");
+    use std::convert::TryFrom;
+    let request = match session::Request::try_from(message) {
+        Ok(request) => request,
+        Err(error) => {
+            error!("malformed action request: {}", error);
             return;
-        },
+        }
     };
 
-    let session_id = match message.session_id {
-        Some(session_id) => session_id,
-        None => {
-            eprintln!("'{}' action request without a session id", name);
-            return;
-        },
-    };
-
-    let request_id = match message.request_id {
-        Some(request_id) => request_id,
-        None => {
-            eprintln!("'{}' action request without a request id", name);
-            return;
-        },
-    };
-
-    let mut session = Action::new(session_id, request_id);
-    let result = match name.as_str() {
-        "SendStartupInfo" => action::startup::handle(&mut session, ()),
+    let mut session = Action::new(request.session_id, request.request_id);
+    let result = match request.name.as_str() {
+        "SendStartupInfo" => action::startup::handle(&mut session, request.data),
         _ => {
             // TODO: Report this error to the GRR server.
-            eprintln!("unsupported action '{}'", name);
+            eprintln!("unsupported action '{}'", request.name);
             Ok(())
         }
     };
@@ -127,15 +112,15 @@ fn handle(message: rrg_proto::GrrMessage) {
         Ok(()) => (),
         Err(Error::Action(error)) => {
             error!("failed to execute the '{}' action: {}",
-                   name, error);
+                   request.name, error);
         }
         Err(Error::Send(error)) => {
             panic!("failed to send a response for the '{}' action: {}",
-                   name, error);
+                   request.name, error);
         }
         Err(Error::Encode(error)) => {
             error!("failed to encode a response for the '{}' action: {}",
-                   name, error);
+                   request.name, error);
         }
     }
 }

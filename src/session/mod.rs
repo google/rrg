@@ -1,5 +1,7 @@
 mod error;
 
+use std::convert::TryFrom;
+
 use fleetspeak::Packet;
 
 use crate::action;
@@ -62,6 +64,50 @@ impl Session for Sink {
 
 pub fn startup() -> Sink {
     Sink { id: "/flows/F:Startup" }
+}
+
+// TODO: This type should not be exposed.
+pub struct Request<R: action::Request> {
+    pub name: String,
+    pub session_id: String,
+    pub request_id: u64,
+    pub data: R,
+}
+
+impl<R: action::Request> TryFrom<rrg_proto::GrrMessage> for Request<R> {
+
+    type Error = Box<dyn std::error::Error>; // TODO: More specific error type.
+
+    fn try_from(message: rrg_proto::GrrMessage)
+    -> std::result::Result<Request<R>, Box<dyn std::error::Error>>
+    {
+        let name = match message.name {
+            Some(name) => name,
+            None => Err(String::from("request without an action name"))?,
+        };
+
+        let session_id = match message.session_id {
+            Some(session_id) => session_id,
+            None => Err(String::from("request without session id"))?,
+        };
+
+        let request_id = match message.request_id {
+            Some(request_id) => request_id,
+            None => Err(String::from("request without request id"))?,
+        };
+
+        let proto = match message.args {
+            Some(bytes) => prost::Message::decode(&bytes[..])?,
+            None => Default::default(),
+        };
+
+        Ok(Request {
+            name: name,
+            session_id: session_id,
+            request_id: request_id,
+            data: R::from_proto(proto),
+        })
+    }
 }
 
 struct Response<R: action::Response> {
