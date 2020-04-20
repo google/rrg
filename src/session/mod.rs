@@ -2,13 +2,13 @@ mod error;
 
 use fleetspeak::Packet;
 
-use crate::action::Response;
+use crate::action;
 pub use self::error::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait Session {
-    fn send<R: Response>(&mut self, response: R) -> Result<()>;
+    fn send<R: action::Response>(&mut self, response: R) -> Result<()>;
 }
 
 pub struct Action {
@@ -30,8 +30,8 @@ impl Action {
 
 impl Session for Action {
 
-    fn send<R: Response>(&mut self, response: R) -> Result<()> {
-        Message {
+    fn send<R: action::Response>(&mut self, response: R) -> Result<()> {
+        Response {
             session_id: self.id.clone(),
             request_id: Some(self.request_id),
             response_id: Some(self.next_response_id),
@@ -50,8 +50,8 @@ pub struct Sink {
 
 impl Session for Sink {
 
-    fn send<R: Response>(&mut self, response: R) -> Result<()> {
-        Message {
+    fn send<R: action::Response>(&mut self, response: R) -> Result<()> {
+        Response {
             session_id: String::from(self.id),
             request_id: None,
             response_id: None,
@@ -64,14 +64,14 @@ pub fn startup() -> Sink {
     Sink { id: "/flows/F:Startup" }
 }
 
-struct Message<R: Response> {
+struct Response<R: action::Response> {
     session_id: String,
     request_id: Option<u64>,
     response_id: Option<u64>,
     data: R,
 }
 
-impl<R: Response> Message<R> {
+impl<R: action::Response> Response<R> {
 
     fn send(self) -> Result<()> {
         let mut data = Vec::new();
