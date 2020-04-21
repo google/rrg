@@ -8,7 +8,6 @@ use std::fmt::{Display, Formatter};
 pub enum Error {
     Action(Box<dyn std::error::Error>),
     Dispatch(Option<String>),
-    Send(std::io::Error),
     Encode(prost::EncodeError),
     Parse(ParseError),
 }
@@ -38,9 +37,6 @@ impl Display for Error {
             Dispatch(None) => {
                 write!(fmt, "missing action")
             }
-            Send(ref error) => {
-                write!(fmt, "Fleetspeak message delivery error: {}", error)
-            }
             Encode(ref error) => {
                 write!(fmt, "failure during encoding proto message: {}", error)
             }
@@ -59,20 +55,8 @@ impl std::error::Error for Error {
         match *self {
             Action(ref error) => Some(error.as_ref()),
             Dispatch(_) => None,
-            Send(ref error) => Some(error),
             Encode(ref error) => Some(error),
             Parse(ref error) => Some(error),
-        }
-    }
-}
-
-impl From<fleetspeak::WriteError> for Error {
-
-    fn from(error: fleetspeak::WriteError) -> Error {
-        use fleetspeak::WriteError::*;
-        match error {
-            Output(error) => Error::Send(error),
-            Encode(error) => Error::Encode(error),
         }
     }
 }

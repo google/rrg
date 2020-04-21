@@ -25,11 +25,6 @@ fn main() -> Result<()> {
             error!("failed to collect startup metadata: {}", error);
         }
         Err(Dispatch(_)) => panic!(),
-        Err(Send(error)) => {
-            // Fleetspeak errors are critical, better to fail hard and
-            // force agent restart.
-            return Err(error.into());
-        }
         Err(Encode(error)) => {
             error!("failed to encode startup metadata: {}", error);
         }
@@ -101,9 +96,6 @@ fn handle(message: rrg_proto::GrrMessage) {
         }
         Err(Error::Dispatch(None)) => {
             error!("missing action to call");
-        }
-        Err(Error::Send(error)) => {
-            panic!("failed to send action response: {}", error);
         }
         Err(Error::Encode(error)) => {
             error!("failed to encode action response: {}", error);
