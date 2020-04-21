@@ -124,10 +124,29 @@ struct Response<R: action::Response> {
 impl<R: action::Response> Response<R> {
 
     fn send(self) -> Result<()> {
+        let message: rrg_proto::GrrMessage = self.try_into()?;
+
+        fleetspeak::send(Packet {
+            service: String::from("GRR"),
+            kind: Some(String::from("GrrMessage")),
+            data: message,
+        })?;
+
+        Ok(())
+    }
+}
+
+impl<R: action::Response> TryInto<rrg_proto::GrrMessage> for Response<R> {
+
+    type Error = prost::EncodeError;
+
+    fn try_into(self)
+    -> std::result::Result<rrg_proto::GrrMessage, prost::EncodeError>
+    {
         let mut data = Vec::new();
         prost::Message::encode(&self.data.into_proto(), &mut data)?;
 
-        let proto = rrg_proto::GrrMessage {
+        Ok(rrg_proto::GrrMessage {
             session_id: Some(self.session_id),
             response_id: self.response_id,
             request_id: self.request_id,
@@ -135,14 +154,6 @@ impl<R: action::Response> Response<R> {
             args_rdf_name: R::RDF_NAME.map(String::from),
             args: Some(data),
             ..Default::default()
-        };
-
-        fleetspeak::send(Packet {
-            service: String::from("GRR"),
-            kind: Some(String::from("GrrMessage")),
-            data: proto,
-        })?;
-
-        Ok(())
+        })
     }
 }
