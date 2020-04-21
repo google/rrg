@@ -9,6 +9,7 @@ pub enum Error {
     Action(Box<dyn std::error::Error>),
     Send(std::io::Error),
     Encode(prost::EncodeError),
+    Parse(ParseError),
 }
 
 impl Error {
@@ -36,6 +37,9 @@ impl Display for Error {
             Encode(ref error) => {
                 write!(fmt, "failure during encoding proto message: {}", error)
             }
+            Parse(ref error) => {
+                write!(fmt, "malformed proto message: {}", error)
+            }
         }
     }
 }
@@ -49,6 +53,7 @@ impl std::error::Error for Error {
             Action(ref error) => Some(error.as_ref()),
             Send(ref error) => Some(error),
             Encode(ref error) => Some(error),
+            Parse(ref error) => Some(error),
         }
     }
 }
@@ -68,5 +73,53 @@ impl From<prost::EncodeError> for Error {
 
     fn from(error: prost::EncodeError) -> Error {
         Error::Encode(error)
+    }
+}
+
+impl From<ParseError> for Error {
+
+    fn from(error: ParseError) -> Error {
+        Error::Parse(error)
+    }
+}
+
+#[derive(Debug)]
+pub enum ParseError {
+    MissingField(&'static str),
+    Decode(prost::DecodeError),
+}
+
+impl Display for ParseError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        use ParseError::*;
+
+        match *self {
+            MissingField(name) => {
+                write!(fmt, "required field is missing: {}", name)
+            }
+            Decode(ref error) => {
+                write!(fmt, "failed to decode proto message: {}", error)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParseError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use ParseError::*;
+
+        match *self {
+            MissingField(_) => None,
+            Decode(ref error) => Some(error),
+        }
+    }
+}
+
+impl From<prost::DecodeError> for ParseError {
+
+    fn from(error: prost::DecodeError) -> ParseError {
+        ParseError::Decode(error)
     }
 }

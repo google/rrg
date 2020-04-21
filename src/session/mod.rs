@@ -5,7 +5,7 @@ use std::convert::{TryFrom, TryInto};
 use fleetspeak::Packet;
 
 use crate::action;
-pub use self::error::Error;
+pub use self::error::{Error, ParseError};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -14,9 +14,9 @@ pub type Handler<R> = fn(&mut Action, R) -> Result<()>;
 pub fn handle<R, M>(handler: Handler<R>, message: M) -> Result<()>
 where
     R: action::Request,
-    M: TryInto<Request<R>, Error=Box<dyn std::error::Error>>,
+    M: TryInto<Request<R>, Error=ParseError>,
 {
-    let request = message.try_into().unwrap(); // TODO: Proper error handling.
+    let request = message.try_into()?;
 
     let mut session = Action::new(request.session_id, request.request_id);
     handler(&mut session, request.data)
@@ -89,25 +89,16 @@ pub struct Request<R: action::Request> {
 
 impl<R: action::Request> TryFrom<rrg_proto::GrrMessage> for Request<R> {
 
-    type Error = Box<dyn std::error::Error>; // TODO: More specific error type.
+    type Error = ParseError;
 
     fn try_from(message: rrg_proto::GrrMessage)
-    -> std::result::Result<Request<R>, Box<dyn std::error::Error>>
+    -> std::result::Result<Request<R>, ParseError>
     {
-        let name = match message.name {
-            Some(name) => name,
-            None => Err(String::from("request without an action name"))?,
-        };
+        use ParseError::*;
 
-        let session_id = match message.session_id {
-            Some(session_id) => session_id,
-            None => Err(String::from("request without session id"))?,
-        };
-
-        let request_id = match message.request_id {
-            Some(request_id) => request_id,
-            None => Err(String::from("request without request id"))?,
-        };
+        let name = message.name.ok_or(MissingField("action name"))?;
+        let session_id = message.session_id.ok_or(MissingField("session id"))?;
+        let request_id = message.request_id.ok_or(MissingField("request id"))?;
 
         let proto = match message.args {
             Some(bytes) => prost::Message::decode(&bytes[..])?,

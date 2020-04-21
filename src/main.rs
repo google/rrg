@@ -32,6 +32,9 @@ fn main() -> Result<()> {
         Err(Encode(error)) => {
             error!("failed to encode startup metadata: {}", error);
         }
+        Err(Parse(error)) => {
+            error!("malformed action input: {}", error);
+        }
         Ok(()) => (),
     }
 
@@ -115,6 +118,10 @@ fn handle(message: rrg_proto::GrrMessage) {
         }
         Err(Error::Encode(error)) => {
             error!("failed to encode a response for the '{}' action: {}",
+                   name, error);
+        }
+        Err(Error::Parse(error)) => {
+            error!("malformed input for the '{}' action: {}",
                    name, error);
         }
     }
