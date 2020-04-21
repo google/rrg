@@ -9,6 +9,19 @@ pub use self::error::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub type Handler<R> = fn(&mut Action, R) -> Result<()>;
+
+pub fn handle<R, M>(handler: Handler<R>, message: M) -> Result<()>
+where
+    R: action::Request,
+    M: TryInto<Request<R>, Error=Box<dyn std::error::Error>>,
+{
+    let request = message.try_into().unwrap(); // TODO: Proper error handling.
+
+    let mut session = Action::new(request.session_id, request.request_id);
+    handler(&mut session, request.data)
+}
+
 pub trait Session {
     fn send<R: action::Response>(&mut self, response: R) -> Result<()>;
 }
@@ -72,19 +85,6 @@ pub struct Request<R: action::Request> {
     pub session_id: String,
     pub request_id: u64,
     pub data: R,
-}
-
-type Handler<R> = fn(&mut Action, R) -> Result<()>;
-
-pub fn handle<R, M>(handler: Handler<R>, message: M) -> Result<()>
-where
-    R: action::Request,
-    M: TryInto<Request<R>, Error=Box<dyn std::error::Error>>,
-{
-    let request = message.try_into().unwrap(); // TODO: Proper error handling.
-
-    let mut session = Action::new(request.session_id, request.request_id);
-    handler(&mut session, request.data)
 }
 
 impl<R: action::Request> TryFrom<rrg_proto::GrrMessage> for Request<R> {
