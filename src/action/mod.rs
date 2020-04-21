@@ -5,9 +5,6 @@
 
 pub mod startup;
 
-// TODO: Have a more specific error type.
-type Error = Box<dyn std::error::Error>;
-
 pub trait Request {
     type Proto: prost::Message + Default;
     fn from_proto(proto: Self::Proto) -> Self;
