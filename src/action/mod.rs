@@ -5,6 +5,8 @@
 
 pub mod startup;
 
+use crate::session;
+
 pub trait Request {
     type Proto: prost::Message + Default;
     fn from_proto(proto: Self::Proto) -> Self;
@@ -31,5 +33,13 @@ impl Response for () {
     type Proto = ();
 
     fn into_proto(self) {
+    }
+}
+
+pub fn dispatch(message: rrg_proto::GrrMessage) -> session::Result<()> {
+    let name = message.name.clone().ok_or(session::Error::Dispatch(None))?;
+    match name.as_ref() {
+        "SendStartupInfo" => session::handle(self::startup::handle, message),
+        name => return Err(session::Error::Dispatch(Some(String::from(name)))),
     }
 }

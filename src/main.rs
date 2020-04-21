@@ -24,6 +24,7 @@ fn main() -> Result<()> {
         Err(Action(error)) => {
             error!("failed to collect startup metadata: {}", error);
         }
+        Err(Dispatch(_)) => panic!(),
         Err(Send(error)) => {
             // Fleetspeak errors are critical, better to fail hard and
             // force agent restart.
@@ -89,40 +90,26 @@ fn init_log(opts: &Opts) {
 }
 
 fn handle(message: rrg_proto::GrrMessage) {
-    let name = match &message.name {
-        Some(name) => name.clone(),
-        None => {
-            error!("unspecified action to execute");
-            return;
-        }
-    };
-
-    let result = match name.as_str() {
-        "SendStartupInfo" => session::handle(action::startup::handle, message),
-        _ => {
-            error!("unsupported action: {}", name);
-            return;
-        }
-    };
-
     use session::Error;
-    match result {
+    match action::dispatch(message) {
         Ok(()) => (),
         Err(Error::Action(error)) => {
-            error!("failed to execute the '{}' action: {}",
-                   name, error);
+            error!("failed to execute the action: {}", error);
+        }
+        Err(Error::Dispatch(Some(name))) => {
+            error!("unknown action to call: {}", name);
+        }
+        Err(Error::Dispatch(None)) => {
+            error!("missing action to call");
         }
         Err(Error::Send(error)) => {
-            panic!("failed to send a response for the '{}' action: {}",
-                   name, error);
+            panic!("failed to send action response: {}", error);
         }
         Err(Error::Encode(error)) => {
-            error!("failed to encode a response for the '{}' action: {}",
-                   name, error);
+            error!("failed to encode action response: {}", error);
         }
         Err(Error::Parse(error)) => {
-            error!("malformed input for the '{}' action: {}",
-                   name, error);
+            error!("malformed action input: {}", error);
         }
     }
 }
