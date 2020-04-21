@@ -19,17 +19,9 @@ fn main() -> Result<()> {
 
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))?;
 
-    use session::Error::*;
     match action::startup::handle(&mut session::startup(), ()) {
-        Err(Action(error)) => {
-            error!("failed to collect startup metadata: {}", error);
-        }
-        Err(Dispatch(_)) => panic!(),
-        Err(Encode(error)) => {
-            error!("failed to encode startup metadata: {}", error);
-        }
-        Err(Parse(error)) => {
-            error!("malformed action input: {}", error);
+        Err(error) => {
+            error!("failed to collect startup information: {}", error);
         }
         Ok(()) => (),
     }
@@ -85,23 +77,10 @@ fn init_log(opts: &Opts) {
 }
 
 fn handle(message: rrg_proto::GrrMessage) {
-    use session::Error;
     match action::dispatch(message) {
         Ok(()) => (),
-        Err(Error::Action(error)) => {
+        Err(error) => {
             error!("failed to execute the action: {}", error);
-        }
-        Err(Error::Dispatch(Some(name))) => {
-            error!("unknown action to call: {}", name);
-        }
-        Err(Error::Dispatch(None)) => {
-            error!("missing action to call");
-        }
-        Err(Error::Encode(error)) => {
-            error!("failed to encode action response: {}", error);
-        }
-        Err(Error::Parse(error)) => {
-            error!("malformed action input: {}", error);
         }
     }
 }
