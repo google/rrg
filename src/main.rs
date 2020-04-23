@@ -77,7 +77,8 @@ fn init_log(opts: &Opts) {
 }
 
 fn handle(message: rrg_proto::GrrMessage) {
-    match action::dispatch(message) {
+    let name = message.name.clone().unwrap_or_else(String::new);
+    match action::dispatch(&name, message) {
         Ok(()) => (),
         Err(error) => {
             error!("failed to execute the action: {}", error);

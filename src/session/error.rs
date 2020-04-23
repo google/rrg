@@ -7,7 +7,7 @@ use std::fmt::{Display, Formatter};
 #[derive(Debug)]
 pub enum Error {
     Action(Box<dyn std::error::Error>),
-    Dispatch(Option<String>),
+    Dispatch(String),
     Encode(prost::EncodeError),
     Parse(ParseError),
 }
@@ -31,11 +31,11 @@ impl Display for Error {
             Action(ref error) => {
                 write!(fmt, "action error: {}", error)
             }
-            Dispatch(Some(ref name)) => {
-                write!(fmt, "unknown action: {}", name)
-            }
-            Dispatch(None) => {
+            Dispatch(ref name) if name.is_empty() => {
                 write!(fmt, "missing action")
+            }
+            Dispatch(ref name) => {
+                write!(fmt, "unknown action: {}", name)
             }
             Encode(ref error) => {
                 write!(fmt, "failure during encoding proto message: {}", error)
