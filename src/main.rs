@@ -41,7 +41,8 @@ fn main() -> Result<()> {
             Err(error) => return Err(error.into()),
         };
 
-        handle(packet.data);
+        let message: rrg_proto::GrrMessage = packet.data;
+        session::handle(message);
     }
 }
 
@@ -74,14 +75,4 @@ fn init_log(opts: &Opts) {
 
     simplelog::CombinedLogger::init(loggers)
         .expect("failed to init logging");
-}
-
-fn handle(message: rrg_proto::GrrMessage) {
-    let name = message.name.clone().unwrap_or_else(String::new);
-    match action::dispatch(&name, message) {
-        Ok(()) => (),
-        Err(error) => {
-            error!("failed to execute the action: {}", error);
-        }
-    }
 }

@@ -36,10 +36,14 @@ impl Response for () {
     }
 }
 
-pub fn dispatch(name: &str, message: rrg_proto::GrrMessage)
--> session::Result<()> {
-    match name {
-        "SendStartupInfo" => session::execute(self::startup::handle, message),
-        name => return Err(session::Error::Dispatch(String::from(name))),
+pub fn dispatch<S>(action: &str, session: &mut S, payload: session::Payload) -> session::Result<()>
+where
+    S: session::Session,
+{
+    use session::execute;
+
+    match action {
+        "SendStartupInfo" => execute(session, self::startup::handle, payload),
+        action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }

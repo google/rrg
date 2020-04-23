@@ -3,23 +3,38 @@ mod error;
 use std::convert::{TryFrom, TryInto};
 
 use fleetspeak::Packet;
+use log::error;
 
 use crate::action;
 pub use self::error::{Error, ParseError};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub type Handler<R> = fn(&mut Action, R) -> Result<()>;
-
-pub fn execute<R, M>(handler: Handler<R>, message: M) -> Result<()>
+pub fn execute<S, R, H>(session: &mut S, handler: H, payload: Payload) -> Result<()>
 where
+    S: Session,
     R: action::Request,
-    M: TryInto<Request<R>, Error=ParseError>,
+    H: FnOnce(&mut S, R) -> Result<()>,
 {
-    let request = message.try_into()?;
+    handler(session, payload.parse()?)
+}
 
-    let mut session = Action::new(request.session_id, request.request_id);
-    handler(&mut session, request.data)
+pub fn handle<M>(message: M)
+where
+    M: TryInto<Demand, Error=ParseError>,
+{
+    let demand = match message.try_into() {
+        Ok(demand) => demand,
+        Err(error) => {
+            error!("failed to parse the message: {}", error);
+            return;
+        }
+    };
+
+    let mut session = Action::new(demand.header.clone());
+
+    // TODO: Send status message.
+    let _result = action::dispatch(&demand.action, &mut session, demand.payload);
 }
 
 pub trait Session {
@@ -27,17 +42,15 @@ pub trait Session {
 }
 
 pub struct Action {
-    id: String,
-    request_id: u64,
+    header: Header,
     next_response_id: u64,
 }
 
 impl Action {
 
-    pub fn new(session_id: String, request_id: u64) -> Action {
+    pub fn new(header: Header) -> Action {
         Action {
-            id: session_id,
-            request_id: request_id,
+            header: header,
             next_response_id: 0,
         }
     }
@@ -47,8 +60,8 @@ impl Session for Action {
 
     fn send<R: action::Response>(&mut self, response: R) -> Result<()> {
         Response {
-            session_id: self.id.clone(),
-            request_id: Some(self.request_id),
+            session_id: self.header.session_id.clone(),
+            request_id: Some(self.header.request_id),
             response_id: Some(self.next_response_id),
             data: response,
         }.send()?;
@@ -77,6 +90,58 @@ impl Session for Sink {
 
 pub fn startup() -> Sink {
     Sink { id: "/flows/F:Startup" }
+}
+
+pub struct Demand {
+    pub action: String,
+    pub header: Header,
+    pub payload: Payload,
+}
+
+impl TryFrom<rrg_proto::GrrMessage> for Demand {
+
+    type Error = ParseError;
+
+    fn try_from(message: rrg_proto::GrrMessage)
+    -> std::result::Result<Demand, ParseError>
+    {
+        use ParseError::*;
+
+        let header = Header {
+            session_id: message.session_id.ok_or(MissingField("session id"))?,
+            request_id: message.request_id.ok_or(MissingField("request id"))?,
+        };
+
+        Ok(Demand {
+            action: message.name.ok_or(MissingField("action name"))?,
+            header: header,
+            payload: Payload(message.args),
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Header {
+    pub session_id: String,
+    pub request_id: u64,
+}
+
+#[derive(Debug)]
+pub struct Payload(Option<Vec<u8>>);
+
+impl Payload {
+
+    pub fn parse<R>(&self) -> std::result::Result<R, ParseError>
+    where
+        R: action::Request,
+    {
+        let proto = match self {
+            Payload(Some(bytes)) => prost::Message::decode(&bytes[..])?,
+            Payload(None) => Default::default(),
+        };
+
+        Ok(R::from_proto(proto))
+    }
 }
 
 // TODO: This type should not be exposed.
