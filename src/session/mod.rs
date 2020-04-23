@@ -167,3 +167,41 @@ impl<R: action::Response> TryInto<rrg_proto::GrrMessage> for Response<R> {
         })
     }
 }
+
+struct Status {
+    session_id: String,
+    request_id: u64,
+    result: Result<()>,
+}
+
+impl TryInto<rrg_proto::GrrMessage> for Status {
+
+    type Error = prost::EncodeError;
+
+    fn try_into(self)
+    -> std::result::Result<rrg_proto::GrrMessage, prost::EncodeError> {
+        let status = match self.result {
+            Ok(()) => rrg_proto::GrrStatus {
+                status: Some(rrg_proto::grr_status::ReturnedStatus::Ok.into()),
+                ..Default::default()
+            },
+            Err(error) => rrg_proto::GrrStatus {
+                status: Some(rrg_proto::grr_status::ReturnedStatus::GenericError.into()),
+                error_message: Some(error.to_string()),
+                ..Default::default()
+            },
+        };
+
+        let mut data = Vec::new();
+        prost::Message::encode(&status, &mut data)?;
+
+        Ok(rrg_proto::GrrMessage {
+            session_id: Some(self.session_id),
+            response_id: Some(self.request_id),
+            r#type: Some(rrg_proto::grr_message::Type::Status.into()),
+            args_rdf_name: Some(String::from("GrrStatus")),
+            args: Some(data),
+            ..Default::default()
+        })
+    }
+}
