@@ -39,7 +39,7 @@ impl Response for () {
 pub fn dispatch(name: &str, message: rrg_proto::GrrMessage)
 -> session::Result<()> {
     match name {
-        "SendStartupInfo" => session::handle(self::startup::handle, message),
+        "SendStartupInfo" => session::execute(self::startup::handle, message),
         name => return Err(session::Error::Dispatch(String::from(name))),
     }
 }

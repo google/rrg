@@ -11,7 +11,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub type Handler<R> = fn(&mut Action, R) -> Result<()>;
 
-pub fn handle<R, M>(handler: Handler<R>, message: M) -> Result<()>
+pub fn execute<R, M>(handler: Handler<R>, message: M) -> Result<()>
 where
     R: action::Request,
     M: TryInto<Request<R>, Error=ParseError>,
