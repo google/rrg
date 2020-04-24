@@ -6,6 +6,7 @@
 mod demand;
 mod error;
 mod response;
+pub mod sink;
 
 use std::convert::TryInto;
 
@@ -16,6 +17,7 @@ use crate::message;
 pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError};
 use self::response::{Response, Status};
+pub use self::sink::{Sink};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -141,23 +143,3 @@ impl Session for Action {
     }
 }
 
-pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
-
-pub struct Sink {
-    id: &'static str,
-}
-
-impl Sink {
-
-    fn wrap<R>(&self, response: R) -> Response<R>
-    where
-        R: action::Response,
-    {
-        Response {
-            session_id: String::from(self.id),
-            request_id: None,
-            response_id: None,
-            data: response,
-        }
-    }
-}
