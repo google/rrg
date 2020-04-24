@@ -59,7 +59,7 @@ pub struct Response {
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     let boot_time = boot_time()?;
 
-    session.reply(Response {
+    session.send(session::STARTUP, Response {
         boot_time: boot_time,
         name: String::from(env!("CARGO_PKG_NAME")),
         description: String::from(env!("CARGO_PKG_DESCRIPTION")),

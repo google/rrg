@@ -20,7 +20,7 @@ fn main() -> Result<()> {
 
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))?;
 
-    match action::startup::handle(&mut session::startup(), ()) {
+    match action::startup::handle(&mut session::Adhoc, ()) {
         Err(error) => {
             error!("failed to collect startup information: {}", error);
         }

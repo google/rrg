@@ -60,6 +60,37 @@ where
 
 pub trait Session {
     fn reply<R: action::Response>(&mut self, response: R) -> Result<()>;
+    fn send<R: action::Response>(&mut self, sink: Sink, response: R) -> Result<()>;
+}
+
+pub struct Adhoc;
+
+impl Session for Adhoc {
+
+    // TODO: Session trait should be probably split into two traits and then
+    // make the actions that do not care about the `reply` method implement the
+    // simpler one.
+    fn reply<R>(&mut self, response: R) -> Result<()>
+    where
+        R: action::Response,
+    {
+        error!("attempted to reply to an ad-hoc session, dropping response");
+        drop(response);
+
+        Ok(())
+    }
+
+    fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
+    where
+        R: action::Response,
+    {
+        Response {
+            session_id: String::from(sink.id),
+            request_id: None,
+            response_id: None,
+            data: response,
+        }.send()
+    }
 }
 
 pub struct Action {
@@ -91,17 +122,13 @@ impl Session for Action {
 
         Ok(())
     }
-}
 
-pub struct Sink {
-    id: &'static str,
-}
-
-impl Session for Sink {
-
-    fn reply<R: action::Response>(&mut self, response: R) -> Result<()> {
+    fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
+    where
+        R: action::Response,
+    {
         Response {
-            session_id: String::from(self.id),
+            session_id: String::from(sink.id),
             request_id: None,
             response_id: None,
             data: response,
@@ -109,9 +136,11 @@ impl Session for Sink {
     }
 }
 
-pub fn startup() -> Sink {
-    Sink { id: "/flows/F:Startup" }
+pub struct Sink {
+    id: &'static str,
 }
+
+pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
 
 pub struct Demand {
     pub action: String,
