@@ -5,6 +5,7 @@
 
 mod action;
 mod message;
+mod metadata;
 mod opts;
 mod session;
 

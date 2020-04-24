@@ -15,6 +15,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use log::error;
 
+use crate::metadata::{Metadata, Version};
 use crate::session::{self, Session};
 
 #[derive(Debug)]
@@ -47,12 +48,8 @@ impl From<Error> for session::Error {
 pub struct Response {
     /// Time of last system boot.
     boot_time: SystemTime,
-    /// Name of the GRR agent.
-    name: String,
-    /// Description of the GRR agent.
-    description: String,
-    /// Version of the GRR agent.
-    version: Version,
+    /// Metadata about the RRG agent.
+    metadata: Metadata,
 }
 
 /// Handles requests for the startup action.
@@ -61,9 +58,11 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 
     session.send(session::Sink::STARTUP, Response {
         boot_time: boot_time,
-        name: String::from(env!("CARGO_PKG_NAME")),
-        description: String::from(env!("CARGO_PKG_DESCRIPTION")),
-        version: Version::from_crate(),
+        metadata: Metadata {
+            name: String::from(env!("CARGO_PKG_NAME")),
+            description: String::from(env!("CARGO_PKG_DESCRIPTION")),
+            version: Version::from_crate(),
+        },
     })?;
 
     Ok(())
@@ -85,59 +84,6 @@ fn boot_time() -> std::result::Result<SystemTime, Error> {
     Ok(UNIX_EPOCH + Duration::from_secs(secs) + Duration::from_micros(micros))
 }
 
-/// A type for representing version metadata.
-struct Version {
-    pub major: u8,
-    pub minor: u8,
-    pub patch: u8,
-    pub revision: u8,
-}
-
-impl Version {
-
-    /// Constructs version metadata from Crate information.
-    ///
-    /// This function assumes that are relevant crate information is correctly
-    /// specified in the `Cargo.toml` file.
-    fn from_crate() -> Version {
-        Version {
-            major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap_or(0),
-            minor: env!("CARGO_PKG_VERSION_MINOR").parse().unwrap_or(0),
-            patch: env!("CARGO_PKG_VERSION_PATCH").parse().unwrap_or(0),
-            revision: env!("CARGO_PKG_VERSION_PRE").parse().unwrap_or(0),
-        }
-    }
-
-    /// Returns a numeric representation of version metadata.
-    ///
-    /// This function assumes that all version components are smaller than 10.
-    /// In other cases, the output is undefined (but the function call itself
-    /// does not panic).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use rrg::action::startup::Version;
-    ///
-    /// let version = Version {
-    ///     major: 1,
-    ///     minor: 2,
-    ///     patch: 3,
-    ///     revision: 4,
-    /// };
-    ///
-    /// assert_eq!(version.as_numeric(), 1234)
-    /// ```
-    fn as_numeric(&self) -> u32 {
-        let mut result = 0;
-        result = 10 * result + self.major as u32;
-        result = 10 * result + self.minor as u32;
-        result = 10 * result + self.patch as u32;
-        result = 10 * result + self.revision as u32;
-        result
-    }
-}
-
 impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("StartupInfo");
@@ -155,9 +101,9 @@ impl super::Response for Response {
 
         rrg_proto::StartupInfo {
             client_info: Some(rrg_proto::ClientInformation {
-                client_name: Some(self.name),
-                client_version: Some(self.version.as_numeric()),
-                client_description: Some(self.description),
+                client_name: Some(self.metadata.name),
+                client_version: Some(self.metadata.version.as_numeric()),
+                client_description: Some(self.metadata.description),
                 ..Default::default()
             }),
             boot_time: Some(boot_time_micros),
