@@ -4,6 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 mod action;
+mod message;
 mod opts;
 mod session;
 
@@ -27,22 +28,9 @@ fn main() -> Result<()> {
     }
 
     loop {
-        use fleetspeak::ReadError::*;
-        let packet = match fleetspeak::collect(opts.heartbeat_rate) {
-            Ok(packet) => packet,
-            Err(Malformed(error)) => {
-                error!("received a malformed message: {}", error);
-                continue;
-            }
-            Err(Decode(error)) => {
-                error!("failed to decode the message: {}", error);
-                continue;
-            }
-            Err(error) => return Err(error.into()),
-        };
-
-        let message: rrg_proto::GrrMessage = packet.data;
-        session::handle(message);
+        if let Some(message) = message::collect(&opts) {
+            session::handle(message);
+        }
     }
 }
 

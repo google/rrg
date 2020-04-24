@@ -7,10 +7,10 @@ mod error;
 
 use std::convert::{TryFrom, TryInto};
 
-use fleetspeak::Packet;
 use log::error;
 
 use crate::action;
+use crate::message;
 pub use self::error::{Error, ParseError};
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -55,7 +55,7 @@ where
         }
     };
 
-    send(message);
+    message::send(message);
 }
 
 pub trait Session {
@@ -176,7 +176,7 @@ impl<R: action::Response> Response<R> {
 
     fn send(self) -> Result<()> {
         let message = self.try_into()?;
-        send(message);
+        message::send(message);
 
         Ok(())
     }
@@ -239,19 +239,4 @@ impl TryInto<rrg_proto::GrrMessage> for Status {
             ..Default::default()
         })
     }
-}
-
-fn send(message: rrg_proto::GrrMessage) {
-        let packet = Packet {
-            service: String::from("GRR"),
-            kind: Some(String::from("GrrMessage")),
-            data: message,
-        };
-
-        if let Err(error) = fleetspeak::send(packet) {
-            // If we failed to deliver the message through Fleetspeak, it means
-            // that our communication is broken (e.g. the pipe was closed) and
-            // the agent should be killed.
-            panic!("message delivery failure: {}", error)
-        };
 }
