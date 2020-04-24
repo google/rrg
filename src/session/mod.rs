@@ -32,9 +32,25 @@ where
     };
 
     let mut session = Action::new(demand.header.clone());
+    let result = action::dispatch(&demand.action, &mut session, demand.payload);
 
-    // TODO: Send status message.
-    let _result = action::dispatch(&demand.action, &mut session, demand.payload);
+    let status = Status {
+        header: demand.header,
+        result: result,
+    };
+
+    let message = match status.try_into() {
+        Ok(message) => message,
+        Err(error) => {
+            // If we cannot encode the final status message, there is nothing
+            // we can do to notify the server, as status is responsible for
+            // reporting errors. We can only log the error and carry on.
+            error!("failed to encode status message: {}", error);
+            return;
+        }
+    };
+
+    send(message);
 }
 
 pub trait Session {
@@ -219,8 +235,7 @@ impl<R: action::Response> TryInto<rrg_proto::GrrMessage> for Response<R> {
 }
 
 struct Status {
-    session_id: String,
-    request_id: u64,
+    header: Header,
     result: Result<()>,
 }
 
@@ -246,8 +261,8 @@ impl TryInto<rrg_proto::GrrMessage> for Status {
         prost::Message::encode(&status, &mut data)?;
 
         Ok(rrg_proto::GrrMessage {
-            session_id: Some(self.session_id),
-            response_id: Some(self.request_id),
+            session_id: Some(self.header.session_id),
+            response_id: Some(self.header.request_id),
             r#type: Some(rrg_proto::grr_message::Type::Status.into()),
             args_rdf_name: Some(String::from("GrrStatus")),
             args: Some(data),
