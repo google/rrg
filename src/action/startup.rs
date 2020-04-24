@@ -15,7 +15,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use log::error;
 
-use crate::metadata::{Metadata, Version};
+use crate::metadata::{Metadata};
 use crate::session::{self, Session};
 
 #[derive(Debug)]
@@ -58,11 +58,7 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 
     session.send(session::Sink::STARTUP, Response {
         boot_time: boot_time,
-        metadata: Metadata {
-            name: String::from(env!("CARGO_PKG_NAME")),
-            description: String::from(env!("CARGO_PKG_DESCRIPTION")),
-            version: Version::from_cargo(),
-        },
+        metadata: Metadata::from_cargo(),
     })?;
 
     Ok(())

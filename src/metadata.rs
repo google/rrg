@@ -13,6 +13,21 @@ pub struct Metadata {
     pub version: Version,
 }
 
+impl Metadata {
+
+    /// Constructs metadata object from Cargo information.
+    ///
+    /// This function assumes that are relevant crate information is correctly
+    /// specified in the `Cargo.toml` file.
+    pub fn from_cargo() -> Metadata {
+        Metadata {
+            name: String::from(env!("CARGO_PKG_NAME")),
+            description: String::from(env!("CARGO_PKG_DESCRIPTION")),
+            version: Version::from_cargo(),
+        }
+    }
+}
+
 /// A type for representing version metadata.
 pub struct Version {
     pub major: u8,
