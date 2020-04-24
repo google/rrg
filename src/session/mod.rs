@@ -160,41 +160,6 @@ impl Payload {
     }
 }
 
-// TODO: This type should not be exposed.
-pub struct Request<R: action::Request> {
-    pub name: String,
-    pub session_id: String,
-    pub request_id: u64,
-    pub data: R,
-}
-
-impl<R: action::Request> TryFrom<rrg_proto::GrrMessage> for Request<R> {
-
-    type Error = ParseError;
-
-    fn try_from(message: rrg_proto::GrrMessage)
-    -> std::result::Result<Request<R>, ParseError>
-    {
-        use ParseError::*;
-
-        let name = message.name.ok_or(MissingField("action name"))?;
-        let session_id = message.session_id.ok_or(MissingField("session id"))?;
-        let request_id = message.request_id.ok_or(MissingField("request id"))?;
-
-        let proto = match message.args {
-            Some(bytes) => prost::Message::decode(&bytes[..])?,
-            None => Default::default(),
-        };
-
-        Ok(Request {
-            name: name,
-            session_id: session_id,
-            request_id: request_id,
-            data: R::from_proto(proto),
-        })
-    }
-}
-
 struct Response<R: action::Response> {
     session_id: String,
     request_id: Option<u64>,
