@@ -10,9 +10,38 @@
 //! special in a sense that generally it should be not invoked by flows, but be
 //! called explicitly during agent startup.
 
+use std::fmt::{Display, Formatter};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use log::error;
+
+use crate::session::{self, Session};
+
+#[derive(Debug)]
+struct Error {
+    boot_time_error: sys_info::Error,
+}
+
+impl std::error::Error for Error {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.boot_time_error)
+    }
+}
+
+impl Display for Error {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "failed to obtain boot time: {}", self.boot_time_error)
+    }
+}
+
+impl From<Error> for session::Error {
+
+    fn from(error: Error) -> session::Error {
+        session::Error::action(error)
+    }
+}
 
 /// A response type for the startup action.
 pub struct Response {
@@ -27,18 +56,28 @@ pub struct Response {
 }
 
 /// Handles requests for the startup action.
-pub fn handle(_: ()) -> Result<Response, super::Error> {
-    Ok(Response {
-        boot_time: boot_time()?,
+pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
+    let boot_time = boot_time()?;
+
+    session.send(session::Sink::STARTUP, Response {
+        boot_time: boot_time,
         name: String::from(env!("CARGO_PKG_NAME")),
         description: String::from(env!("CARGO_PKG_DESCRIPTION")),
         version: Version::from_crate(),
-    })
+    })?;
+
+    Ok(())
 }
 
 /// Returns information about the system boot time.
-fn boot_time() -> Result<SystemTime, sys_info::Error> {
-    let timeval = sys_info::boottime()?;
+fn boot_time() -> std::result::Result<SystemTime, Error> {
+    // TODO: Consider not failing on failures to obtain the boot time. This is
+    // really not that critical and sending the rest of the client metadata is
+    // more important.
+    let timeval = match sys_info::boottime() {
+        Ok(timeval) => timeval,
+        Err(error) => return Err(Error { boot_time_error: error }),
+    };
 
     let secs = timeval.tv_sec as u64;
     let micros = timeval.tv_usec as u64;
