@@ -23,11 +23,11 @@ pub struct Version {
 
 impl Version {
 
-    /// Constructs version metadata from Crate information.
+    /// Constructs version metadata from Cargo information.
     ///
     /// This function assumes that are relevant crate information is correctly
     /// specified in the `Cargo.toml` file.
-    pub fn from_crate() -> Version {
+    pub fn from_cargo() -> Version {
         Version {
             major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap_or(0),
             minor: env!("CARGO_PKG_VERSION_MINOR").parse().unwrap_or(0),

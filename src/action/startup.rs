@@ -61,7 +61,7 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
         metadata: Metadata {
             name: String::from(env!("CARGO_PKG_NAME")),
             description: String::from(env!("CARGO_PKG_DESCRIPTION")),
-            version: Version::from_crate(),
+            version: Version::from_cargo(),
         },
     })?;
 
