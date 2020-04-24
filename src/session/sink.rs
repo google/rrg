@@ -8,6 +8,7 @@ use crate::session;
 
 pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Sink {
     id: &'static str,
 }
