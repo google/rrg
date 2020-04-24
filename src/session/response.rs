@@ -8,16 +8,32 @@ use std::convert::TryInto;
 use crate::action;
 use crate::session;
 
+/// Individual action response.
+///
+/// This type can be used both for action replies (for a particular session) and
+/// responses sent to sinks.
 pub struct Response<R: action::Response> {
+    /// A server-issued identifier, usually corresponding to a flow.
     pub session_id: String,
+    /// A server-issued identifier for the current action request (if any).
     pub request_id: Option<u64>,
+    /// An unique (to the current action request) identifier of the response.
     pub response_id: Option<u64>,
+    /// An action-specific response.
     pub data: R,
 }
 
+/// Final session response indicating success or failure of action execution.
+///
+/// Each session is supposed to send this final response and communicate to the
+/// server that it has finished working (whether it is because of all work that
+/// was supposed to be done is done or because an error has occurred).
 pub struct Status {
+    /// A server-issued identifier, usually corresponding to a flow.
     pub session_id: String,
+    /// A server-issued identifier for the current action request.
     pub request_id: u64,
+    /// A result of action execution.
     pub result: session::Result<()>,
 }
 

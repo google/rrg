@@ -36,6 +36,13 @@ impl Response for () {
     }
 }
 
+/// Dispatches `task` to a handler appropriate for the given `action`.
+///
+/// This method is a mapping between action names (as specified in the protocol)
+/// and action handlers (implemented on the agent).
+///
+/// If the given action is unknown (or not yet implemented), this function will
+/// return an error.
 pub fn dispatch<'s, S>(action: &str, task: Task<'s, S>) -> session::Result<()>
 where
     S: Session,

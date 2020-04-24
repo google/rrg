@@ -4,16 +4,25 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::fmt::{Display, Formatter};
 
+/// An error type for failures that can occur during a session.
 #[derive(Debug)]
 pub enum Error {
+    /// Action-specific failure.
     Action(Box<dyn std::error::Error>),
+    /// Attempted to call an unknown or not implemented action.
     Dispatch(String),
+    /// An error occurred when encoding bytes of a proto message.
     Encode(prost::EncodeError),
+    /// An error occurred when parsing a proto message.
     Parse(ParseError),
 }
 
 impl Error {
 
+    /// Converts an arbitrary action-issued error to a session error.
+    ///
+    /// This function should be used to construct session errors from action
+    /// specific error types and propagate them further in the session pipeline.
     pub fn action<E>(error: E) -> Error
     where
         E: std::error::Error + 'static
@@ -75,9 +84,12 @@ impl From<ParseError> for Error {
     }
 }
 
+/// An error type for failures that can occur when parsing proto messages.
 #[derive(Debug)]
 pub enum ParseError {
+    /// A required field of a proto message is missing.
     MissingField(&'static str),
+    /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
 }
 
