@@ -5,7 +5,7 @@
 
 pub mod startup;
 
-use crate::session;
+use crate::session::{self, Session, Task};
 
 pub trait Request {
     type Proto: prost::Message + Default;
@@ -36,14 +36,12 @@ impl Response for () {
     }
 }
 
-pub fn dispatch<S>(action: &str, session: &mut S, payload: session::Payload) -> session::Result<()>
+pub fn dispatch<'s, S>(action: &str, task: Task<'s, S>) -> session::Result<()>
 where
-    S: session::Session,
+    S: Session,
 {
-    use session::execute;
-
     match action {
-        "SendStartupInfo" => execute(session, self::startup::handle, payload),
+        "SendStartupInfo" => task.execute(self::startup::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }

@@ -21,13 +21,21 @@ pub use self::sink::{Sink};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn execute<S, R, H>(session: &mut S, handler: H, payload: Payload) -> Result<()>
-where
-    S: Session,
-    R: action::Request,
-    H: FnOnce(&mut S, R) -> Result<()>,
-{
-    handler(session, payload.parse()?)
+pub struct Task<'s, S: Session> {
+    pub session: &'s mut S,
+    pub payload: Payload,
+}
+
+impl<'s, S: Session> Task<'s, S> {
+
+    pub fn execute<R, H>(self, handler: H) -> Result<()>
+    where
+        R: action::Request,
+        H: FnOnce(&mut S, R) -> Result<()>,
+    {
+        let request = self.payload.parse()?;
+        handler(self.session, request)
+    }
 }
 
 pub fn handle<M>(message: M)
@@ -42,8 +50,10 @@ where
         }
     };
 
-    let mut session = Action::from_demand(&demand);
-    let result = action::dispatch(&demand.action, &mut session, demand.payload);
+    let result = action::dispatch(&demand.action, Task {
+        session: &mut Action::from_demand(&demand),
+        payload: demand.payload,
+    });
 
     let status = Status {
         session_id: demand.header.session_id,
@@ -66,8 +76,11 @@ where
 }
 
 pub trait Session {
-    fn reply<R: action::Response>(&mut self, response: R) -> Result<()>;
-    fn send<R: action::Response>(&mut self, sink: Sink, response: R) -> Result<()>;
+    fn reply<R>(&mut self, response: R) -> Result<()>
+    where R: action::Response;
+
+    fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
+    where R: action::Response;
 }
 
 pub struct Adhoc;
