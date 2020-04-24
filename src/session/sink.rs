@@ -16,9 +16,6 @@
 use crate::action;
 use crate::session;
 
-/// A handle to the sink expecting startup information.
-pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
-
 /// Handle to a specific sink.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Sink {
@@ -27,6 +24,9 @@ pub struct Sink {
 }
 
 impl Sink {
+
+    /// A handle to the sink expecting startup information.
+    pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
 
     /// Wraps an action response to a sink-specific session response.
     pub fn wrap<R>(&self, response: R) -> session::Response<R>

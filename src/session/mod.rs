@@ -17,7 +17,7 @@
 mod demand;
 mod error;
 mod response;
-pub mod sink;
+mod sink;
 
 use std::convert::TryInto;
 
