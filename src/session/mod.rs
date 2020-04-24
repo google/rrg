@@ -36,7 +36,7 @@ where
         }
     };
 
-    let mut session = Action::new(demand.header.clone());
+    let mut session = Action::from_demand(&demand);
     let result = action::dispatch(&demand.action, &mut session, demand.payload);
 
     let status = Status {
@@ -95,10 +95,22 @@ pub struct Action {
 
 impl Action {
 
-    pub fn new(header: Header) -> Action {
+    pub fn from_demand(demand: &Demand) -> Action {
         Action {
-            header: header,
+            header: demand.header.clone(),
             next_response_id: 0,
+        }
+    }
+
+    fn wrap<R>(&self, response: R) -> Response<R>
+    where
+        R: action::Response
+    {
+        Response {
+            session_id: self.header.session_id.clone(),
+            request_id: Some(self.header.request_id),
+            response_id: Some(self.next_response_id),
+            data: response,
         }
     }
 }
@@ -106,13 +118,7 @@ impl Action {
 impl Session for Action {
 
     fn reply<R: action::Response>(&mut self, response: R) -> Result<()> {
-        Response {
-            session_id: self.header.session_id.clone(),
-            request_id: Some(self.header.request_id),
-            response_id: Some(self.next_response_id),
-            data: response,
-        }.send()?;
-
+        self.wrap(response).send()?;
         self.next_response_id += 1;
 
         Ok(())
