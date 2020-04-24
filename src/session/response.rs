@@ -6,7 +6,6 @@
 use std::convert::TryInto;
 
 use crate::action;
-use crate::message;
 use crate::session;
 
 pub struct Response<R: action::Response> {
@@ -20,16 +19,6 @@ pub struct Status {
     pub session_id: String,
     pub request_id: u64,
     pub result: session::Result<()>,
-}
-
-impl<R: action::Response> Response<R> {
-
-    pub fn send(self) -> Result<(), prost::EncodeError> {
-        let message = self.try_into()?;
-        message::send(message);
-
-        Ok(())
-    }
 }
 
 impl<R: action::Response> TryInto<rrg_proto::GrrMessage> for Response<R> {

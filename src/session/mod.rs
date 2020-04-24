@@ -91,7 +91,7 @@ impl Session for Adhoc {
     where
         R: action::Response,
     {
-        sink.wrap(response).send()?;
+        send(sink.wrap(response))?;
 
         Ok(())
     }
@@ -127,7 +127,7 @@ impl Action {
 impl Session for Action {
 
     fn reply<R: action::Response>(&mut self, response: R) -> Result<()> {
-        self.wrap(response).send()?;
+        send(self.wrap(response))?;
         self.next_response_id += 1;
 
         Ok(())
@@ -137,9 +137,18 @@ impl Session for Action {
     where
         R: action::Response,
     {
-        sink.wrap(response).send()?;
+        send(sink.wrap(response))?;
 
         Ok(())
     }
 }
 
+fn send<R>(response: Response<R>) -> Result<()>
+where
+    R: action::Response,
+{
+    let message = response.try_into()?;
+    message::send(message);
+
+    Ok(())
+}
