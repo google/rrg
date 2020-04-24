@@ -30,9 +30,13 @@ impl Metadata {
 
 /// A type for representing version metadata.
 pub struct Version {
+    /// Major version of the RRG agent (`x` in `x.y.z.r`).
     pub major: u8,
+    /// Minor version of the RRG agent (`y` in `x.y.z.r`).
     pub minor: u8,
+    /// Patch version of the RRG agent (`z` in `x.y.z.r`).
     pub patch: u8,
+    /// Revision version of the RRG agent (`r` in `x.y.z.r`).
     pub revision: u8,
 }
 
@@ -78,5 +82,18 @@ impl Version {
         result = 10 * result + self.patch as u32;
         result = 10 * result + self.revision as u32;
         result
+    }
+}
+
+impl Into<rrg_proto::ClientInformation> for Metadata {
+
+    fn into(self) -> rrg_proto::ClientInformation {
+        // TODO: Add support for labels.
+        rrg_proto::ClientInformation {
+            client_name: Some(self.name),
+            client_version: Some(self.version.as_numeric()),
+            client_description: Some(self.description),
+            ..Default::default()
+        }
     }
 }

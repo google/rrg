@@ -96,12 +96,7 @@ impl super::Response for Response {
         };
 
         rrg_proto::StartupInfo {
-            client_info: Some(rrg_proto::ClientInformation {
-                client_name: Some(self.metadata.name),
-                client_version: Some(self.metadata.version.as_numeric()),
-                client_description: Some(self.metadata.description),
-                ..Default::default()
-            }),
+            client_info: Some(self.metadata.into()),
             boot_time: Some(boot_time_micros),
         }
     }
