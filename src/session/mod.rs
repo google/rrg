@@ -3,14 +3,16 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+mod demand;
 mod error;
 
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 
 use log::error;
 
 use crate::action;
 use crate::message;
+pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError};
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -150,58 +152,6 @@ impl Sink {
             response_id: None,
             data: response,
         }
-    }
-}
-
-pub struct Demand {
-    pub action: String,
-    pub header: Header,
-    pub payload: Payload,
-}
-
-impl TryFrom<rrg_proto::GrrMessage> for Demand {
-
-    type Error = ParseError;
-
-    fn try_from(message: rrg_proto::GrrMessage)
-    -> std::result::Result<Demand, ParseError>
-    {
-        use ParseError::*;
-
-        let header = Header {
-            session_id: message.session_id.ok_or(MissingField("session id"))?,
-            request_id: message.request_id.ok_or(MissingField("request id"))?,
-        };
-
-        Ok(Demand {
-            action: message.name.ok_or(MissingField("action name"))?,
-            header: header,
-            payload: Payload(message.args),
-        })
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Header {
-    pub session_id: String,
-    pub request_id: u64,
-}
-
-#[derive(Debug)]
-pub struct Payload(Option<Vec<u8>>);
-
-impl Payload {
-
-    pub fn parse<R>(&self) -> std::result::Result<R, ParseError>
-    where
-        R: action::Request,
-    {
-        let proto = match self {
-            Payload(Some(bytes)) => prost::Message::decode(&bytes[..])?,
-            Payload(None) => Default::default(),
-        };
-
-        Ok(R::from_proto(proto))
     }
 }
 
