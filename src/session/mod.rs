@@ -5,6 +5,7 @@
 
 mod demand;
 mod error;
+mod response;
 
 use std::convert::TryInto;
 
@@ -14,6 +15,7 @@ use crate::action;
 use crate::message;
 pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError};
+use self::response::{Response, Status};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -42,7 +44,8 @@ where
     let result = action::dispatch(&demand.action, &mut session, demand.payload);
 
     let status = Status {
-        header: demand.header,
+        session_id: demand.header.session_id,
+        request_id: demand.header.request_id,
         result: result,
     };
 
@@ -86,7 +89,9 @@ impl Session for Adhoc {
     where
         R: action::Response,
     {
-        sink.wrap(response).send()
+        sink.wrap(response).send()?;
+
+        Ok(())
     }
 }
 
@@ -130,7 +135,9 @@ impl Session for Action {
     where
         R: action::Response,
     {
-        sink.wrap(response).send()
+        sink.wrap(response).send()?;
+
+        Ok(())
     }
 }
 
@@ -152,81 +159,5 @@ impl Sink {
             response_id: None,
             data: response,
         }
-    }
-}
-
-struct Response<R: action::Response> {
-    session_id: String,
-    request_id: Option<u64>,
-    response_id: Option<u64>,
-    data: R,
-}
-
-impl<R: action::Response> Response<R> {
-
-    fn send(self) -> Result<()> {
-        let message = self.try_into()?;
-        message::send(message);
-
-        Ok(())
-    }
-}
-
-impl<R: action::Response> TryInto<rrg_proto::GrrMessage> for Response<R> {
-
-    type Error = prost::EncodeError;
-
-    fn try_into(self)
-    -> std::result::Result<rrg_proto::GrrMessage, prost::EncodeError>
-    {
-        let mut data = Vec::new();
-        prost::Message::encode(&self.data.into_proto(), &mut data)?;
-
-        Ok(rrg_proto::GrrMessage {
-            session_id: Some(self.session_id),
-            response_id: self.response_id,
-            request_id: self.request_id,
-            r#type: Some(rrg_proto::grr_message::Type::Message.into()),
-            args_rdf_name: R::RDF_NAME.map(String::from),
-            args: Some(data),
-            ..Default::default()
-        })
-    }
-}
-
-struct Status {
-    header: Header,
-    result: Result<()>,
-}
-
-impl TryInto<rrg_proto::GrrMessage> for Status {
-
-    type Error = prost::EncodeError;
-
-    fn try_into(self)
-    -> std::result::Result<rrg_proto::GrrMessage, prost::EncodeError> {
-        let status = match self.result {
-            Ok(()) => rrg_proto::GrrStatus {
-                status: Some(rrg_proto::grr_status::ReturnedStatus::Ok.into()),
-                ..Default::default()
-            },
-            Err(error) => rrg_proto::GrrStatus {
-                status: Some(rrg_proto::grr_status::ReturnedStatus::GenericError.into()),
-                error_message: Some(error.to_string()),
-                ..Default::default()
-            },
-        };
-
-        let mut data = Vec::new();
-        prost::Message::encode(&status, &mut data)?;
-
-        Ok(rrg_proto::GrrMessage {
-            session_id: Some(self.header.session_id),
-            response_id: Some(self.header.request_id),
-            r#type: Some(rrg_proto::grr_message::Type::Status.into()),
-            args_rdf_name: Some(String::from("GrrStatus")),
-            args: Some(data),
-            ..Default::default()
-        })
     }
 }
