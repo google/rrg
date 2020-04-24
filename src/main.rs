@@ -5,13 +5,14 @@
 
 mod action;
 mod message;
+mod metadata;
 mod opts;
 mod session;
 
 use std::fs::File;
 use std::io::Result;
 
-use log::error;
+use log::{error, info};
 use opts::{Opts};
 
 fn main() -> Result<()> {
@@ -24,7 +25,9 @@ fn main() -> Result<()> {
         Err(error) => {
             error!("failed to collect startup information: {}", error);
         }
-        Ok(()) => (),
+        Ok(()) => {
+            info!("successfully sent startup information");
+        }
     }
 
     loop {
