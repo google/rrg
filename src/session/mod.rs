@@ -84,12 +84,7 @@ impl Session for Adhoc {
     where
         R: action::Response,
     {
-        Response {
-            session_id: String::from(sink.id),
-            request_id: None,
-            response_id: None,
-            data: response,
-        }.send()
+        sink.wrap(response).send()
     }
 }
 
@@ -127,20 +122,30 @@ impl Session for Action {
     where
         R: action::Response,
     {
-        Response {
-            session_id: String::from(sink.id),
-            request_id: None,
-            response_id: None,
-            data: response,
-        }.send()
+        sink.wrap(response).send()
     }
 }
+
+pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
 
 pub struct Sink {
     id: &'static str,
 }
 
-pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
+impl Sink {
+
+    fn wrap<R>(&self, response: R) -> Response<R>
+    where
+        R: action::Response,
+    {
+        Response {
+            session_id: String::from(self.id),
+            request_id: None,
+            response_id: None,
+            data: response,
+        }
+    }
+}
 
 pub struct Demand {
     pub action: String,
