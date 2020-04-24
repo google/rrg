@@ -59,7 +59,7 @@ where
 }
 
 pub trait Session {
-    fn send<R: action::Response>(&mut self, response: R) -> Result<()>;
+    fn reply<R: action::Response>(&mut self, response: R) -> Result<()>;
 }
 
 pub struct Action {
@@ -79,7 +79,7 @@ impl Action {
 
 impl Session for Action {
 
-    fn send<R: action::Response>(&mut self, response: R) -> Result<()> {
+    fn reply<R: action::Response>(&mut self, response: R) -> Result<()> {
         Response {
             session_id: self.header.session_id.clone(),
             request_id: Some(self.header.request_id),
@@ -99,7 +99,7 @@ pub struct Sink {
 
 impl Session for Sink {
 
-    fn send<R: action::Response>(&mut self, response: R) -> Result<()> {
+    fn reply<R: action::Response>(&mut self, response: R) -> Result<()> {
         Response {
             session_id: String::from(self.id),
             request_id: None,
