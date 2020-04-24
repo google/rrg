@@ -57,13 +57,15 @@ impl TryInto<rrg_proto::GrrMessage> for Status {
     type Error = prost::EncodeError;
 
     fn try_into(self) -> Result<rrg_proto::GrrMessage, prost::EncodeError> {
+        use rrg_proto::grr_status::ReturnedStatus;
+
         let status = match self.result {
             Ok(()) => rrg_proto::GrrStatus {
-                status: Some(rrg_proto::grr_status::ReturnedStatus::Ok.into()),
+                status: Some(ReturnedStatus::Ok.into()),
                 ..Default::default()
             },
             Err(error) => rrg_proto::GrrStatus {
-                status: Some(rrg_proto::grr_status::ReturnedStatus::GenericError.into()),
+                status: Some(ReturnedStatus::GenericError.into()),
                 error_message: Some(error.to_string()),
                 ..Default::default()
             },
