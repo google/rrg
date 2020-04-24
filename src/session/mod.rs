@@ -189,25 +189,10 @@ struct Response<R: action::Response> {
 impl<R: action::Response> Response<R> {
 
     fn send(self) -> Result<()> {
-        let message: rrg_proto::GrrMessage = self.try_into()?;
+        let message = self.try_into()?;
+        send(message);
 
-        let packet = Packet {
-            service: String::from("GRR"),
-            kind: Some(String::from("GrrMessage")),
-            data: message,
-        };
-
-        use fleetspeak::WriteError::*;
-        match fleetspeak::send(packet) {
-            Ok(()) => Ok(()),
-            Err(Encode(error)) => Err(error.into()),
-            Err(Output(error)) => {
-                // If we failed to deliver the message through Fleetspeak, it
-                // means that our communication is broken (e.g. the pipe was
-                // closed) and the agent should be killed.
-                panic!("message delivery failure: {}", error)
-            }
-        }
+        Ok(())
     }
 }
 
@@ -269,4 +254,19 @@ impl TryInto<rrg_proto::GrrMessage> for Status {
             ..Default::default()
         })
     }
+}
+
+fn send(message: rrg_proto::GrrMessage) {
+        let packet = Packet {
+            service: String::from("GRR"),
+            kind: Some(String::from("GrrMessage")),
+            data: message,
+        };
+
+        if let Err(error) = fleetspeak::send(packet) {
+            // If we failed to deliver the message through Fleetspeak, it means
+            // that our communication is broken (e.g. the pipe was closed) and
+            // the agent should be killed.
+            panic!("message delivery failure: {}", error)
+        };
 }
