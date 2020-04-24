@@ -10,7 +10,7 @@ pub mod sink;
 
 use std::convert::TryInto;
 
-use log::error;
+use log::{error, info};
 
 use crate::action;
 use crate::message;
@@ -43,7 +43,10 @@ where
     M: TryInto<Demand, Error=ParseError>,
 {
     let demand = match message.try_into() {
-        Ok(demand) => demand,
+        Ok(demand) => {
+            info!("requested to execute the '{}' action", demand.action);
+            demand
+        }
         Err(error) => {
             error!("failed to parse the message: {}", error);
             return;
@@ -54,6 +57,10 @@ where
         session: &mut Action::from_demand(&demand),
         payload: demand.payload,
     });
+
+    if let Err(ref error) = result {
+        error!("failed to execute the '{}' action: {}", demand.action, error);
+    };
 
     let status = Status {
         session_id: demand.header.session_id,
