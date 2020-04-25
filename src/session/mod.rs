@@ -100,14 +100,7 @@ where
         info!("finished executing the '{}' action", demand.action);
     }
 
-    let status = Status {
-        session_id: demand.header.session_id,
-        request_id: demand.header.request_id,
-        response_id: session.next_response_id,
-        result: result,
-    };
-
-    let message = match status.try_into() {
+    let message = match session.status(result).try_into() {
         Ok(message) => message,
         Err(error) => {
             // If we cannot encode the final status message, there is nothing
@@ -195,6 +188,20 @@ impl Action {
             request_id: Some(self.header.request_id),
             response_id: Some(self.next_response_id),
             data: response,
+        }
+    }
+
+    /// Wraps an action result to a session-specific status response.
+    ///
+    /// Note that this method consumes the session. The reason for this is that
+    /// status response should be obtained as the very last response and no
+    /// further replies should be possible after that.
+    fn status(self, result: Result<()>) -> Status {
+        Status {
+            session_id: self.header.session_id,
+            request_id: self.header.request_id,
+            response_id: self.next_response_id,
+            result: result,
         }
     }
 }
