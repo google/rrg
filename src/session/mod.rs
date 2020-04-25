@@ -172,7 +172,7 @@ impl Action {
 
     /// Constructs a new session for the given `demand` object.
     pub fn from_demand(demand: &Demand) -> Action {
-        // Response identifiers that GRR agents use start at 0. Unfortunately,
+        // Response identifiers that GRR agents use start at 1. Unfortunately,
         // the server uses this assumption (to determine the number of expected
         // responses when status message is received), so we have to follow this
         // behaviour in RRG as well.
