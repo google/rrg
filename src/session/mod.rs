@@ -96,7 +96,9 @@ where
 
     if let Err(ref error) = result {
         error!("failed to execute the '{}' action: {}", demand.action, error);
-    };
+    } else {
+        info!("finished executing the '{}' action", demand.action);
+    }
 
     let status = Status {
         session_id: demand.header.session_id,
