@@ -87,8 +87,10 @@ where
         }
     };
 
+    let mut session = Action::from_demand(&demand);
+
     let result = action::dispatch(&demand.action, Task {
-        session: &mut Action::from_demand(&demand),
+        session: &mut session,
         payload: demand.payload,
     });
 
@@ -99,6 +101,7 @@ where
     let status = Status {
         session_id: demand.header.session_id,
         request_id: demand.header.request_id,
+        response_id: session.next_response_id,
         result: result,
     };
 

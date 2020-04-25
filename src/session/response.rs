@@ -33,6 +33,8 @@ pub struct Status {
     pub session_id: String,
     /// A server-issued identifier for the current action request.
     pub request_id: u64,
+    /// An unique (to the current action request) identifier of status response.
+    pub response_id: u64,
     /// A result of action execution.
     pub result: session::Result<()>,
 }
@@ -81,7 +83,8 @@ impl TryInto<rrg_proto::GrrMessage> for Status {
 
         Ok(rrg_proto::GrrMessage {
             session_id: Some(self.session_id),
-            response_id: Some(self.request_id),
+            request_id: Some(self.request_id),
+            response_id: Some(self.response_id),
             r#type: Some(rrg_proto::grr_message::Type::Status.into()),
             args_rdf_name: Some(String::from("GrrStatus")),
             args: Some(data),
