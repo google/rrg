@@ -29,9 +29,9 @@ pub struct Opts {
     pub log_verbosity: Verbosity,
 
     /// A standard stream to log into.
-    #[structopt(long="log-std", name="STD",
+    #[structopt(long="log-stream", name="STREAM",
                 help="Enables logging to the specified standard stream")]
-    pub log_std: Option<Std>,
+    pub log_stream: Option<Stream>,
 
     /// A path to the file to log into.
     #[structopt(long="log-file", name="FILE",
@@ -98,11 +98,11 @@ impl std::str::FromStr for Verbosity {
 // like that.
 /// A type listing different options for logging to standard streams.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Std {
+pub struct Stream {
     mode: simplelog::TerminalMode,
 }
 
-impl Std {
+impl Stream {
 
     /// Yields a corresponding terminal mode.
     pub fn mode(&self) -> simplelog::TerminalMode {
@@ -110,21 +110,21 @@ impl Std {
     }
 }
 
-impl std::str::FromStr for Std {
+impl std::str::FromStr for Stream {
 
     type Err = String; // TODO.
 
-    fn from_str(string: &str) -> std::result::Result<Std, String> {
+    fn from_str(string: &str) -> std::result::Result<Stream, String> {
         use simplelog::TerminalMode::*;
 
         let mode = match string {
-            "out" => Stdout,
-            "err" => Stderr,
-            "mix" => Mixed,
-            _ => return Err(format!("invalid std choice '{}'", string)),
+            "stdout" => Stdout,
+            "stderr" => Stderr,
+            "mixed" => Mixed,
+            _ => return Err(format!("invalid stream choice '{}'", string)),
         };
 
-        Ok(Std {
+        Ok(Stream {
             mode: mode,
         })
     }

@@ -39,9 +39,9 @@ fn init_log(opts: &Opts) {
 
     let mut loggers = Vec::<Box<dyn simplelog::SharedLogger>>::new();
 
-    if let Some(std) = &opts.log_std {
+    if let Some(stream) = &opts.log_stream {
         let config = Default::default();
-        let logger = simplelog::TermLogger::new(level, config, std.mode())
+        let logger = simplelog::TermLogger::new(level, config, stream.mode())
             .expect("failed to create a terminal logger");
 
         loggers.push(logger);
