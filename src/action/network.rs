@@ -58,7 +58,7 @@ impl From<netstat2::error::Error> for Error {
     }
 }
 
-/// A request type for `ListNetworkConnections` action.
+/// A request type for the network connections action.
 pub struct Request {
     listening_only: bool
 }
@@ -71,7 +71,7 @@ struct ProcessInfo {
     name: Option<String>
 }
 
-/// A response type for `ListNetworkConnections` action.
+/// A response type for the network connections action.
 pub struct Response<'a> {
     /// Information about the socket which is used by connection.
     socket_info: &'a ProtocolSocketInfo,
@@ -95,7 +95,10 @@ fn make_network_endpoint(addr: &IpAddr, port: u16) -> NetworkEndpoint {
     }
 }
 
-/// Converts `netstat2::TcpState` to `State` enum used in the protobuf
+/// Converts [netstat2::TcpState][tcp_state] to `State`
+/// enum used in the protobuf
+///
+/// [tcp_state]: ../../../netstat2/enum.TcpState.html
 fn make_state(state: &TcpState) -> State {
     match state {
         TcpState::Unknown     => State::Unknown,
@@ -115,8 +118,10 @@ fn make_state(state: &TcpState) -> State {
 }
 
 /// Creates `NetworkConnection` protobuf message from
-/// `netstat2::ProtocolSocketInfo`. The fields that are impossible to fill
-/// using the socket information are set to `None`.
+/// [netstat2::ProtocolSocketInfo][protocol_socket_info]. The fields that are
+/// impossible to fill using the socket information are set to `None`.
+///
+/// [protocol_socket_info]: ../../../netstat2/enum.ProtocolSocketInfo.html
 fn make_connection_from_socket_info<'a>(
     socket_info: &'a ProtocolSocketInfo
 ) -> NetworkConnection {
