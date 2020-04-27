@@ -216,8 +216,18 @@ pub fn handle<S: Session>(
     let mut system = System::new();
     system.refresh_processes();
 
+    let addr_family_flags = netstat2::AddressFamilyFlags::all();
+    // Optimization: when we are asked only for listening connections,
+    // we need only TCP protocol.
+    let protocol_flags = if request.listening_only {
+        netstat2::ProtocolFlags::TCP
+    } else {
+        netstat2::ProtocolFlags::all()
+    };
+
     let connection_iter = netstat2::iterate_sockets_info(
-        netstat2::AddressFamilyFlags::all(), netstat2::ProtocolFlags::all()
+        addr_family_flags,
+        protocol_flags
     );
     let connection_iter = match connection_iter {
         Ok(val) => val,
