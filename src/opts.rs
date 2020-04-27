@@ -98,26 +98,15 @@ impl std::str::FromStr for Verbosity {
 // like that.
 /// A type listing different options for logging to standard streams.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Std {
-    /// Log to the standard output.
-    Out,
-    /// Log to the standard error.
-    Err,
-    /// Log errors to the standard error, not-errors to the standard output.
-    Mix,
+pub struct Std {
+    mode: simplelog::TerminalMode,
 }
 
 impl Std {
 
     /// Yields a corresponding terminal mode.
     pub fn mode(&self) -> simplelog::TerminalMode {
-        use simplelog::TerminalMode::*;
-
-        match self {
-            Std::Out => Stdout,
-            Std::Err => Stderr,
-            Std::Mix => Mixed,
-        }
+        self.mode
     }
 }
 
@@ -126,11 +115,17 @@ impl std::str::FromStr for Std {
     type Err = String; // TODO.
 
     fn from_str(string: &str) -> std::result::Result<Std, String> {
-        match string {
-            "out" => Ok(Std::Out),
-            "err" => Ok(Std::Err),
-            "mix" => Ok(Std::Mix),
-            _ => Err(format!("invalid std choice '{}'", string)),
-        }
+        use simplelog::TerminalMode::*;
+
+        let mode = match string {
+            "out" => Stdout,
+            "err" => Stderr,
+            "mix" => Mixed,
+            _ => return Err(format!("invalid std choice '{}'", string)),
+        };
+
+        Ok(Std {
+            mode: mode,
+        })
     }
 }
