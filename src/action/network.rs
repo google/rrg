@@ -3,6 +3,12 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+//! A handler and associated types for the network connection action.
+//!
+//! The network connection action lists all the opened connections on the
+//! client and the information about them (e.g. type of the connection, source
+//! and target IP addresses, the process that owns the connection)
+
 use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
 
@@ -52,20 +58,28 @@ impl From<netstat2::error::Error> for Error {
     }
 }
 
+/// A request type for `ListNetworkConnections` action.
 pub struct Request {
     listening_only: bool
 }
 
+/// A type that holds brief information about the process.
 struct ProcessInfo {
+    /// Process ID.
     pid: u32,
+    /// Process name.
     name: Option<String>
 }
 
+/// A response type for `ListNetworkConnections` action.
 pub struct Response<'a> {
+    /// Information about the socket which is used by connection.
     socket_info: &'a ProtocolSocketInfo,
+    /// Information about the process that owns the connection.
     process_info: Option<ProcessInfo>
 }
 
+/// Gets the IP address type from a given address.
 fn make_family(addr: &IpAddr) -> Family {
     match addr {
         IpAddr::V4(_) => Family::Inet,
@@ -73,6 +87,7 @@ fn make_family(addr: &IpAddr) -> Family {
     }
 }
 
+/// Contructs NetworkEndpoint from the specified address and port.
 fn make_network_endpoint(addr: &IpAddr, port: u16) -> NetworkEndpoint {
     NetworkEndpoint {
         ip: Some(addr.to_string()),
@@ -80,6 +95,7 @@ fn make_network_endpoint(addr: &IpAddr, port: u16) -> NetworkEndpoint {
     }
 }
 
+/// Converts `netstat2::TcpState` to `State` enum used in the protobuf
 fn make_state(state: &TcpState) -> State {
     match state {
         TcpState::Unknown     => State::Unknown,
@@ -98,6 +114,9 @@ fn make_state(state: &TcpState) -> State {
     }
 }
 
+/// Creates `NetworkConnection` protobuf message from
+/// `netstat2::ProtocolSocketInfo`. The fields that are impossible to fill
+/// using the socket information are set to `None`.
 fn make_connection_from_socket_info<'a>(
     socket_info: &'a ProtocolSocketInfo
 ) -> NetworkConnection {
@@ -170,6 +189,8 @@ impl From<&Process> for ProcessInfo {
 
 impl ProcessInfo {
 
+    /// Constucts a ProcessInfo system from a given process ID. The process
+    /// name will not be set.
     fn from_pid(pid: u32) -> ProcessInfo {
         ProcessInfo {
             pid,
@@ -177,6 +198,8 @@ impl ProcessInfo {
         }
     }
 
+    /// Constucts a ProcessInfo system from a given process ID. The process
+    /// name will be retrieved from the system using `system` parameter.
     fn from_system<S: SystemExt>(system: &S, pid: u32) -> ProcessInfo {
         match system.get_process(pid as i32) {
             Some(process) => ProcessInfo::from(process),
@@ -185,6 +208,7 @@ impl ProcessInfo {
     }
 }
 
+/// Handles requests for the network connection action.
 pub fn handle<S: Session>(
     session: &mut S,
     request: Request
@@ -225,7 +249,12 @@ pub fn handle<S: Session>(
         }
 
         let pids = &connection.associated_pids;
+
         if pids.is_empty() {
+            // If the process ID is not associated, we send a response
+            // without it. The behavior is different from Python implementation,
+            // because the latter lists only the connections associated with a
+            // process.
             session.reply(Response {
                 socket_info: &socket_info,
                 process_info: None
@@ -233,6 +262,13 @@ pub fn handle<S: Session>(
             continue;
         }
 
+        // Otherwise, we have one or more processes associated with the
+        // connection. Since the protocol allows to specify only one process
+        // for connection, we report this connection multiple times, as if the
+        // associated processes had different connections. This behavior is
+        // also compatible with the Python implementation, which iterates over
+        // all the processes and then iterates over the connections for each
+        // of them.
         for pid in pids {
             session.reply(Response {
                 socket_info: &socket_info,
