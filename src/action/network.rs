@@ -7,8 +7,17 @@ use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
 
 use log::error;
-use netstat2::{self, ProtocolSocketInfo, TcpSocketInfo, TcpState};
-use rrg_proto::network_connection;
+use netstat2::{
+    self,
+    ProtocolSocketInfo::{self, Tcp, Udp},
+    TcpState
+};
+use rrg_proto::{
+    ListNetworkConnectionsArgs,
+    NetworkConnection,
+    NetworkEndpoint,
+    network_connection::{Family, Type, State}
+};
 use sysinfo::{System, SystemExt, Process, ProcessExt};
 
 use crate::session::{self, Session};
@@ -53,42 +62,42 @@ pub struct Response<'a> {
 
 struct SocketInfoWrapper<'a>(&'a ProtocolSocketInfo);
 
-fn make_family(addr: &IpAddr) -> network_connection::Family {
+fn make_family(addr: &IpAddr) -> Family {
     match addr {
-        IpAddr::V4(_) => network_connection::Family::Inet,
-        IpAddr::V6(_) => network_connection::Family::Inet6
+        IpAddr::V4(_) => Family::Inet,
+        IpAddr::V6(_) => Family::Inet6
     }
 }
 
-fn make_network_endpoint(addr: &IpAddr, port: u16) -> rrg_proto::NetworkEndpoint {
-    rrg_proto::NetworkEndpoint {
+fn make_network_endpoint(addr: &IpAddr, port: u16) -> NetworkEndpoint {
+    NetworkEndpoint {
         ip: Some(addr.to_string()),
         port: Some(port as i32)
     }
 }
 
-fn make_state(state: &TcpState) -> network_connection::State {
+fn make_state(state: &TcpState) -> State {
     match state {
-        TcpState::Unknown     => network_connection::State::Unknown,
-        TcpState::Closed      => network_connection::State::Closed,
-        TcpState::Listen      => network_connection::State::Listen,
-        TcpState::SynSent     => network_connection::State::SynSent,
-        TcpState::SynReceived => network_connection::State::SynRecv,
-        TcpState::Established => network_connection::State::Established,
-        TcpState::FinWait1    => network_connection::State::FinWait1,
-        TcpState::FinWait2    => network_connection::State::FinWait2,
-        TcpState::CloseWait   => network_connection::State::CloseWait,
-        TcpState::Closing     => network_connection::State::Closing,
-        TcpState::LastAck     => network_connection::State::LastAck,
-        TcpState::TimeWait    => network_connection::State::TimeWait,
-        TcpState::DeleteTcb   => network_connection::State::DeleteTcb
+        TcpState::Unknown     => State::Unknown,
+        TcpState::Closed      => State::Closed,
+        TcpState::Listen      => State::Listen,
+        TcpState::SynSent     => State::SynSent,
+        TcpState::SynReceived => State::SynRecv,
+        TcpState::Established => State::Established,
+        TcpState::FinWait1    => State::FinWait1,
+        TcpState::FinWait2    => State::FinWait2,
+        TcpState::CloseWait   => State::CloseWait,
+        TcpState::Closing     => State::Closing,
+        TcpState::LastAck     => State::LastAck,
+        TcpState::TimeWait    => State::TimeWait,
+        TcpState::DeleteTcb   => State::DeleteTcb
     }
 }
 
 impl super::Request for Request {
-    type Proto = rrg_proto::ListNetworkConnectionsArgs;
+    type Proto = ListNetworkConnectionsArgs;
 
-    fn from_proto(proto: Self::Proto) -> Request {
+    fn from_proto(proto: ListNetworkConnectionsArgs) -> Request {
         Request {
             listening_only: proto.listening_only.unwrap_or(false)
         }
@@ -96,13 +105,13 @@ impl super::Request for Request {
 }
 
 impl<'a> super::Response for Response<'a> {
-    
+
     const RDF_NAME: Option<&'static str> = Some("NetworkConnection");
 
-    type Proto = rrg_proto::NetworkConnection;
+    type Proto = NetworkConnection;
 
     fn into_proto(self) -> Self::Proto {
-        let mut result: rrg_proto::NetworkConnection;
+        let mut result: NetworkConnection;
         result = SocketInfoWrapper(self.socket_info).into();
         if let Some(process_info) = self.process_info {
             result.pid = Some(process_info.pid);
@@ -112,35 +121,34 @@ impl<'a> super::Response for Response<'a> {
     }
 }
 
-impl<'a> Into<rrg_proto::NetworkConnection> for SocketInfoWrapper<'a> {
+impl<'a> Into<NetworkConnection> for SocketInfoWrapper<'a> {
 
-    fn into(self) -> rrg_proto::NetworkConnection {
+    fn into(self) -> NetworkConnection {
         match self.0 {
-            ProtocolSocketInfo::Tcp(tcp_info) => {
-                rrg_proto::NetworkConnection {
-                    family: Some(make_family(&tcp_info.local_addr) as i32),
-                    r#type: Some(network_connection::Type::SockStream as i32),
-                    local_address:
-                        Some(make_network_endpoint(&tcp_info.local_addr,
-                                                   tcp_info.local_port)),
-                    remote_address:
-                        Some(make_network_endpoint(&tcp_info.remote_addr,
-                                                   tcp_info.remote_port)),
-                    state: Some(make_state(&tcp_info.state) as i32),
-                    ..Default::default()
-                }
+            Tcp(tcp_info) => NetworkConnection {
+                family: Some(make_family(&tcp_info.local_addr) as i32),
+                r#type: Some(Type::SockStream as i32),
+                local_address: Some(make_network_endpoint(
+                    &tcp_info.local_addr,
+                    tcp_info.local_port
+                )),
+                remote_address: Some(make_network_endpoint(
+                    &tcp_info.remote_addr,
+                    tcp_info.remote_port
+                )),
+                state: Some(make_state(&tcp_info.state) as i32),
+                ..Default::default()
             },
-            ProtocolSocketInfo::Udp(udp_info) => {
-                rrg_proto::NetworkConnection {
-                    family: Some(make_family(&udp_info.local_addr) as i32),
-                    r#type: Some(network_connection::Type::SockDgram as i32),
-                    local_address:
-                        Some(make_network_endpoint(&udp_info.local_addr,
-                                                   udp_info.local_port)),
-                    remote_address: None,
-                    state: None,
-                    ..Default::default()
-                }
+            Udp(udp_info) => NetworkConnection {
+                family: Some(make_family(&udp_info.local_addr) as i32),
+                r#type: Some(Type::SockDgram as i32),
+                local_address: Some(make_network_endpoint(
+                    &udp_info.local_addr,
+                    udp_info.local_port
+                )),
+                remote_address: None,
+                state: None,
+                ..Default::default()
             }
         }
     }
@@ -162,7 +170,7 @@ impl ProcessInfo {
             name: None
         }
     }
-    
+
     fn from_system<S: SystemExt>(system: &S, pid: u32) -> ProcessInfo {
         match system.get_process(pid as i32) {
             Some(process) => ProcessInfo::from(process),
@@ -175,14 +183,15 @@ pub fn handle<S: Session>(session: &mut S,
                           request: Request) -> session::Result<()> {
     let mut system = System::new();
     system.refresh_processes();
-    
+
     let connection_iter = netstat2::iterate_sockets_info(
-        netstat2::AddressFamilyFlags::all(), netstat2::ProtocolFlags::all());
+        netstat2::AddressFamilyFlags::all(), netstat2::ProtocolFlags::all()
+    );
     let connection_iter = match connection_iter {
         Ok(val) => val,
         Err(err) => return Err(session::Error::action(Error::from(err)))
     };
-    
+
     for connection in connection_iter {
         let connection = match connection {
             Ok(val) => val,
@@ -192,14 +201,21 @@ pub fn handle<S: Session>(session: &mut S,
             }
         };
         let socket_info = connection.protocol_socket_info;
+
         if request.listening_only {
-            // TODO: line is toooo long, deal with it somehow
-            if let ProtocolSocketInfo::Tcp(TcpSocketInfo { state: TcpState::Listen, .. }) = socket_info {
-                // we have a listening connection, do nothing
-            } else {
+            let tcp_info = match &socket_info {
+                Tcp(tcp_info) => tcp_info,
+                Udp(_) => {
+                    // we are interested only in TCP connections
+                    continue;
+                }
+            };
+            if tcp_info.state != TcpState::Listen {
+                // we are interested only in listening connections
                 continue;
             }
         }
+
         let pids = &connection.associated_pids;
         if pids.is_empty() {
             session.reply(Response {
@@ -208,6 +224,7 @@ pub fn handle<S: Session>(session: &mut S,
             })?;
             continue;
         }
+
         for pid in pids {
             session.reply(Response {
                 socket_info: &socket_info,
