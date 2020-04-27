@@ -38,7 +38,7 @@ pub struct Opts {
                 help="Enables logging to the specified file")]
     pub log_file: Option<PathBuf>,
 
-    /// A frequence of heartbeat messages to send to the Fleetspeak client.
+    /// A frequency of heartbeat messages to send to the Fleetspeak client.
     #[structopt(long="heartbeat-rate", name="DURATION", default_value="5s",
                 parse(try_from_str = humantime::parse_duration),
                 help="Specifies the frequency of heartbeat messages")]
