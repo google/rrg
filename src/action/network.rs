@@ -37,8 +37,11 @@ impl std::error::Error for Error {
 impl Display for Error {
 
     fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "failed to list network connections: {}",
-               self.connection_info_error)
+        write!(
+            fmt,
+            "failed to list network connections: {}",
+            self.connection_info_error
+        )
     }
 }
 
@@ -62,8 +65,6 @@ pub struct Response<'a> {
     socket_info: &'a ProtocolSocketInfo,
     process_info: Option<ProcessInfo>
 }
-
-struct SocketInfoWrapper<'a>(&'a ProtocolSocketInfo);
 
 fn make_family(addr: &IpAddr) -> Family {
     match addr {
@@ -97,6 +98,38 @@ fn make_state(state: &TcpState) -> State {
     }
 }
 
+fn make_connection_from_socket_info<'a>(
+    socket_info: &'a ProtocolSocketInfo
+) -> NetworkConnection {
+    match socket_info {
+        Tcp(tcp_info) => NetworkConnection {
+            family: Some(make_family(&tcp_info.local_addr) as i32),
+            r#type: Some(Type::SockStream as i32),
+            local_address: Some(make_network_endpoint(
+                &tcp_info.local_addr,
+                tcp_info.local_port
+            )),
+            remote_address: Some(make_network_endpoint(
+                &tcp_info.remote_addr,
+                tcp_info.remote_port
+            )),
+            state: Some(make_state(&tcp_info.state) as i32),
+            ..Default::default()
+        },
+        Udp(udp_info) => NetworkConnection {
+            family: Some(make_family(&udp_info.local_addr) as i32),
+            r#type: Some(Type::SockDgram as i32),
+            local_address: Some(make_network_endpoint(
+                &udp_info.local_addr,
+                udp_info.local_port
+            )),
+            remote_address: None,
+            state: None,
+            ..Default::default()
+        }
+    }
+}
+
 impl super::Request for Request {
 
     type Proto = ListNetworkConnectionsArgs;
@@ -116,45 +149,12 @@ impl<'a> super::Response for Response<'a> {
 
     fn into_proto(self) -> Self::Proto {
         let mut result: NetworkConnection;
-        result = SocketInfoWrapper(self.socket_info).into();
+        result = make_connection_from_socket_info(self.socket_info);
         if let Some(process_info) = self.process_info {
             result.pid = Some(process_info.pid);
             result.process_name = process_info.name;
         }
         result
-    }
-}
-
-impl<'a> Into<NetworkConnection> for SocketInfoWrapper<'a> {
-
-    fn into(self) -> NetworkConnection {
-        match self.0 {
-            Tcp(tcp_info) => NetworkConnection {
-                family: Some(make_family(&tcp_info.local_addr) as i32),
-                r#type: Some(Type::SockStream as i32),
-                local_address: Some(make_network_endpoint(
-                    &tcp_info.local_addr,
-                    tcp_info.local_port
-                )),
-                remote_address: Some(make_network_endpoint(
-                    &tcp_info.remote_addr,
-                    tcp_info.remote_port
-                )),
-                state: Some(make_state(&tcp_info.state) as i32),
-                ..Default::default()
-            },
-            Udp(udp_info) => NetworkConnection {
-                family: Some(make_family(&udp_info.local_addr) as i32),
-                r#type: Some(Type::SockDgram as i32),
-                local_address: Some(make_network_endpoint(
-                    &udp_info.local_addr,
-                    udp_info.local_port
-                )),
-                remote_address: None,
-                state: None,
-                ..Default::default()
-            }
-        }
     }
 }
 
