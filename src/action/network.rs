@@ -7,6 +7,7 @@ use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
 
 use log::error;
+use sysinfo::{System, SystemExt, Process, ProcessExt};
 use netstat2::{
     self,
     ProtocolSocketInfo::{self, Tcp, Udp},
@@ -18,7 +19,6 @@ use rrg_proto::{
     NetworkEndpoint,
     network_connection::{Family, Type, State}
 };
-use sysinfo::{System, SystemExt, Process, ProcessExt};
 
 use crate::session::{self, Session};
 
@@ -28,12 +28,14 @@ struct Error {
 }
 
 impl std::error::Error for Error {
+
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.connection_info_error)
     }
 }
 
 impl Display for Error {
+
     fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
         write!(fmt, "failed to list network connections: {}",
                self.connection_info_error)
@@ -41,6 +43,7 @@ impl Display for Error {
 }
 
 impl From<netstat2::error::Error> for Error {
+
     fn from(error: netstat2::error::Error) -> Error {
         Error { connection_info_error: error }
     }
@@ -95,6 +98,7 @@ fn make_state(state: &TcpState) -> State {
 }
 
 impl super::Request for Request {
+
     type Proto = ListNetworkConnectionsArgs;
 
     fn from_proto(proto: ListNetworkConnectionsArgs) -> Request {
@@ -155,6 +159,7 @@ impl<'a> Into<NetworkConnection> for SocketInfoWrapper<'a> {
 }
 
 impl From<&Process> for ProcessInfo {
+
     fn from(process: &Process) -> ProcessInfo {
         ProcessInfo {
             pid: process.pid() as u32,
@@ -164,6 +169,7 @@ impl From<&Process> for ProcessInfo {
 }
 
 impl ProcessInfo {
+
     fn from_pid(pid: u32) -> ProcessInfo {
         ProcessInfo {
             pid,
@@ -179,8 +185,10 @@ impl ProcessInfo {
     }
 }
 
-pub fn handle<S: Session>(session: &mut S,
-                          request: Request) -> session::Result<()> {
+pub fn handle<S: Session>(
+    session: &mut S,
+    request: Request
+) -> session::Result<()> {
     let mut system = System::new();
     system.refresh_processes();
 
