@@ -3,23 +3,20 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-mod action;
-mod message;
-mod metadata;
-mod opts;
-mod session;
-
 use std::fs::File;
-use std::io::Result;
 
 use log::{error, info};
-use opts::{Opts};
 
-fn main() -> Result<()> {
+use rrg::action;
+use rrg::session;
+use rrg::opts::{self, Opts};
+
+fn main() {
     let opts = opts::from_args();
     init(&opts);
 
-    fleetspeak::startup(env!("CARGO_PKG_VERSION"))?;
+    fleetspeak::startup(env!("CARGO_PKG_VERSION"))
+        .expect("failed to initialize Fleetspeak connection");
 
     match action::startup::handle(&mut session::Adhoc, ()) {
         Err(error) => {
@@ -30,11 +27,7 @@ fn main() -> Result<()> {
         }
     }
 
-    loop {
-        if let Some(message) = message::collect(&opts) {
-            session::handle(message);
-        }
-    }
+    rrg::listen(&opts);
 }
 
 fn init(opts: &Opts) {
@@ -46,9 +39,9 @@ fn init_log(opts: &Opts) {
 
     let mut loggers = Vec::<Box<dyn simplelog::SharedLogger>>::new();
 
-    if let Some(std) = &opts.log_std {
+    if let Some(stream) = &opts.log_stream {
         let config = Default::default();
-        let logger = simplelog::TermLogger::new(level, config, std.mode())
+        let logger = simplelog::TermLogger::new(level, config, stream.mode())
             .expect("failed to create a terminal logger");
 
         loggers.push(logger);
