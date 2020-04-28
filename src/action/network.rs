@@ -127,8 +127,8 @@ fn make_connection_from_socket_info<'a>(
 ) -> NetworkConnection {
     match socket_info {
         Tcp(tcp_info) => NetworkConnection {
-            family: Some(make_family(&tcp_info.local_addr) as i32),
-            r#type: Some(Type::SockStream as i32),
+            family: Some(make_family(&tcp_info.local_addr).into()),
+            r#type: Some(Type::SockStream.into()),
             local_address: Some(make_network_endpoint(
                 &tcp_info.local_addr,
                 tcp_info.local_port
@@ -137,12 +137,12 @@ fn make_connection_from_socket_info<'a>(
                 &tcp_info.remote_addr,
                 tcp_info.remote_port
             )),
-            state: Some(make_state(&tcp_info.state) as i32),
+            state: Some(make_state(&tcp_info.state).into()),
             ..Default::default()
         },
         Udp(udp_info) => NetworkConnection {
-            family: Some(make_family(&udp_info.local_addr) as i32),
-            r#type: Some(Type::SockDgram as i32),
+            family: Some(make_family(&udp_info.local_addr).into()),
+            r#type: Some(Type::SockDgram.into()),
             local_address: Some(make_network_endpoint(
                 &udp_info.local_addr,
                 udp_info.local_port
