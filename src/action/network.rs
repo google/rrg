@@ -14,11 +14,7 @@ use std::net::IpAddr;
 
 use log::error;
 use sysinfo::{System, SystemExt, Process, ProcessExt};
-use netstat2::{
-    self,
-    ProtocolSocketInfo::{self, Tcp, Udp},
-    TcpState,
-};
+use netstat2::{self, ProtocolSocketInfo, TcpState};
 use rrg_proto::{
     ListNetworkConnectionsArgs,
     NetworkConnection,
@@ -125,6 +121,8 @@ fn make_state(state: &TcpState) -> State {
 fn make_connection_from_socket_info<'a>(
     socket_info: &'a ProtocolSocketInfo
 ) -> NetworkConnection {
+    use ProtocolSocketInfo::{Tcp, Udp};
+
     match socket_info {
         Tcp(tcp_info) => NetworkConnection {
             family: Some(make_family(&tcp_info.local_addr).into()),
@@ -250,6 +248,8 @@ where
         let socket_info = connection.protocol_socket_info;
 
         if request.listening_only {
+            use ProtocolSocketInfo::{Tcp, Udp};
+
             let tcp_info = match &socket_info {
                 Tcp(tcp_info) => tcp_info,
                 Udp(_) => {
