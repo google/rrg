@@ -17,13 +17,13 @@ use sysinfo::{System, SystemExt, Process, ProcessExt};
 use netstat2::{
     self,
     ProtocolSocketInfo::{self, Tcp, Udp},
-    TcpState
+    TcpState,
 };
 use rrg_proto::{
     ListNetworkConnectionsArgs,
     NetworkConnection,
     NetworkEndpoint,
-    network_connection::{Family, Type, State}
+    network_connection::{Family, Type, State},
 };
 
 use crate::session::{self, Session};
@@ -60,7 +60,7 @@ impl From<netstat2::error::Error> for Error {
 
 /// A request type for the network connections action.
 pub struct Request {
-    listening_only: bool
+    listening_only: bool,
 }
 
 /// A type that holds brief information about the process.
@@ -68,7 +68,7 @@ struct ProcessInfo {
     /// Process ID.
     pid: u32,
     /// Process name.
-    name: Option<String>
+    name: Option<String>,
 }
 
 /// A response type for the network connections action.
@@ -76,14 +76,14 @@ pub struct Response<'a> {
     /// Information about the socket which is used by connection.
     socket_info: &'a ProtocolSocketInfo,
     /// Information about the process that owns the connection.
-    process_info: Option<ProcessInfo>
+    process_info: Option<ProcessInfo>,
 }
 
 /// Gets the IP address type from a given address.
 fn make_family(addr: &IpAddr) -> Family {
     match addr {
         IpAddr::V4(_) => Family::Inet,
-        IpAddr::V6(_) => Family::Inet6
+        IpAddr::V6(_) => Family::Inet6,
     }
 }
 
@@ -91,7 +91,7 @@ fn make_family(addr: &IpAddr) -> Family {
 fn make_network_endpoint(addr: &IpAddr, port: u16) -> NetworkEndpoint {
     NetworkEndpoint {
         ip: Some(addr.to_string()),
-        port: Some(port as i32)
+        port: Some(port as i32),
     }
 }
 
@@ -113,7 +113,7 @@ fn make_state(state: &TcpState) -> State {
         TcpState::Closing => State::Closing,
         TcpState::LastAck => State::LastAck,
         TcpState::TimeWait => State::TimeWait,
-        TcpState::DeleteTcb => State::DeleteTcb
+        TcpState::DeleteTcb => State::DeleteTcb,
     }
 }
 
@@ -150,7 +150,7 @@ fn make_connection_from_socket_info<'a>(
             remote_address: None,
             state: None,
             ..Default::default()
-        }
+        },
     }
 }
 
@@ -160,7 +160,7 @@ impl super::Request for Request {
 
     fn from_proto(proto: ListNetworkConnectionsArgs) -> Request {
         Request {
-            listening_only: proto.listening_only.unwrap_or(false)
+            listening_only: proto.listening_only.unwrap_or(false),
         }
     }
 }
@@ -187,7 +187,7 @@ impl From<&Process> for ProcessInfo {
     fn from(process: &Process) -> ProcessInfo {
         ProcessInfo {
             pid: process.pid() as u32,
-            name: Some(process.name().to_string())
+            name: Some(process.name().to_string()),
         }
     }
 }
@@ -199,7 +199,7 @@ impl ProcessInfo {
     fn from_pid(pid: u32) -> ProcessInfo {
         ProcessInfo {
             pid,
-            name: None
+            name: None,
         }
     }
 
@@ -208,7 +208,7 @@ impl ProcessInfo {
     fn from_system<S: SystemExt>(system: &S, pid: u32) -> ProcessInfo {
         match system.get_process(pid as i32) {
             Some(process) => ProcessInfo::from(process),
-            None => ProcessInfo::from_pid(pid)
+            None => ProcessInfo::from_pid(pid),
         }
     }
 }
@@ -236,7 +236,7 @@ where
     );
     let connection_iter = match connection_iter {
         Ok(val) => val,
-        Err(err) => return Err(session::Error::action(Error::from(err)))
+        Err(err) => return Err(session::Error::action(Error::from(err))),
     };
 
     for connection in connection_iter {
@@ -245,7 +245,7 @@ where
             Err(err) => {
                 error!("unable to get socket information: {}", err);
                 continue;
-            }
+            },
         };
         let socket_info = connection.protocol_socket_info;
 
@@ -255,7 +255,7 @@ where
                 Udp(_) => {
                     // We are interested only in TCP connections.
                     continue;
-                }
+                },
             };
             if tcp_info.state != TcpState::Listen {
                 // We are interested only in listening connections.
@@ -272,7 +272,7 @@ where
             // process.
             session.reply(Response {
                 socket_info: &socket_info,
-                process_info: None
+                process_info: None,
             })?;
             continue;
         }
@@ -287,7 +287,7 @@ where
         for pid in pids {
             session.reply(Response {
                 socket_info: &socket_info,
-                process_info: Some(ProcessInfo::from_system(&system, *pid))
+                process_info: Some(ProcessInfo::from_system(&system, *pid)),
             })?;
         }
     }
