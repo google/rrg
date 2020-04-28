@@ -61,7 +61,10 @@ fn entry_from_stat<M: MetadataExt>(md: &M, p: &PathBuf) -> rrg_proto::TimelineEn
 impl RecurseState {
     /// Recursively traverses path specified as root, sends gzchunked stat data to session.
     fn recurse<S: Session>(&mut self, root: &PathBuf, session: &mut S) -> session::Result<()> {
-        let statentry = fs::symlink_metadata(&root)?;
+        let statentry = match fs::symlink_metadata(&root) {
+            Ok(v) => v,
+            Err(_) => return Ok(())
+        };
         let statproto = entry_from_stat(&statentry, root);
         let mut statdata: Vec<u8> = Vec::new();
         prost::Message::encode(&statproto, &mut statdata)?;
@@ -72,7 +75,10 @@ impl RecurseState {
             self.flush(session)?;
         }
         if statentry.is_dir() && statentry.dev() == self.device {
-            for entry in fs::read_dir(root)? {
+            for entry in match fs::read_dir(root) {
+                Ok(v) => v,
+                Err(_) => return Ok(())
+            } {
                 self.recurse(&entry?.path(), session)?;
             }
         }
@@ -85,6 +91,7 @@ impl RecurseState {
         let data = self.encoder.get_ref().clone();
         self.ids.push(Vec::from(Sha256::digest(data.as_slice()).as_slice()));
         session.send(session::Sink::TRANSFER_STORE, ChunkResponse{ data })?;
+        // TODO(xtsm) add session.progress here
         self.encoder = GzEncoder::new(Vec::new(), Compression::default());
         Ok(())
     }
@@ -94,7 +101,13 @@ impl RecurseState {
 pub fn handle<S: Session>(sess: &mut S, request: Request) -> session::Result<()> {
 
     let mut rs = RecurseState {
-        device: fs::symlink_metadata(&request.root)?.dev(),
+        device: match fs::symlink_metadata(&request.root) {
+            Ok(v) => v.dev(),
+            Err(_) => {
+                sess.reply(Response {ids : Vec::new()})?;
+                return Ok(());
+            }
+        },
         ids: Vec::new(),
         encoder: GzEncoder::new(Vec::new(), flate2::Compression::default()),
     };
