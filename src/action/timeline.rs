@@ -32,9 +32,9 @@ pub struct ChunkResponse {
 }
 
 struct RecurseState {
-    dev: u64,
+    device: u64,
     ids: Vec<Vec<u8>>,
-    enc: GzEncoder<Vec<u8>>
+    encoder: GzEncoder<Vec<u8>>
 }
 
 impl From<std::io::Error> for Error {
@@ -45,7 +45,6 @@ impl From<std::io::Error> for Error {
 
 fn entry_from_stat<M: MetadataExt>(md: &M, p: &PathBuf) -> rrg_proto::TimelineEntry {
     rrg_proto::TimelineEntry {
-        // TODO path -> bytes = ???, how to non-unicode?
         path: Some(Vec::from(p.to_string_lossy().as_bytes())),
         mode: Some(md.mode()),
         size: Some(md.size()),
@@ -60,30 +59,33 @@ fn entry_from_stat<M: MetadataExt>(md: &M, p: &PathBuf) -> rrg_proto::TimelineEn
 }
 
 impl RecurseState {
-    fn recurse<S: Session>(&mut self, root: &PathBuf, sess: &mut S) -> session::Result<()> {
+    /// Recursively traverses path specified as root, sends gzchunked stat data to session.
+    fn recurse<S: Session>(&mut self, root: &PathBuf, session: &mut S) -> session::Result<()> {
         let statentry = fs::symlink_metadata(&root)?;
         let statproto = entry_from_stat(&statentry, root);
         let mut statdata: Vec<u8> = Vec::new();
         prost::Message::encode(&statproto, &mut statdata)?;
-        self.enc.write_all(&(statdata.len() as u64).to_be_bytes())?;
-        self.enc.write_all(statdata.as_slice())?;
-        self.enc.flush()?;
-        if self.enc.get_ref().len() >= BLOCK_SIZE {
-            self.flush(sess)?;
+        self.encoder.write_all(&(statdata.len() as u64).to_be_bytes())?;
+        self.encoder.write_all(statdata.as_slice())?;
+        self.encoder.flush()?;
+        if self.encoder.get_ref().len() >= BLOCK_SIZE {
+            self.flush(session)?;
         }
-        if statentry.is_dir() && statentry.dev() == self.dev {
+        if statentry.is_dir() && statentry.dev() == self.device {
             for entry in fs::read_dir(root)? {
-                self.recurse(&entry?.path(), sess)?;
+                self.recurse(&entry?.path(), session)?;
             }
         }
         Ok(())
     }
-    fn flush<S: Session>(&mut self, sess: &mut S) -> session::Result<()> {
-        self.enc.try_finish()?;
-        let data = self.enc.get_ref().clone();
+
+    /// Sends currently accumulated gzchunked data to transfer store.
+    fn flush<S: Session>(&mut self, session: &mut S) -> session::Result<()> {
+        self.encoder.try_finish()?;
+        let data = self.encoder.get_ref().clone();
         self.ids.push(Vec::from(Sha256::digest(data.as_slice()).as_slice()));
-        sess.send(session::Sink::TRANSFER_STORE, ChunkResponse{ data })?;
-        self.enc = GzEncoder::new(Vec::new(), Compression::default());
+        session.send(session::Sink::TRANSFER_STORE, ChunkResponse{ data })?;
+        self.encoder = GzEncoder::new(Vec::new(), Compression::default());
         Ok(())
     }
 }
@@ -92,9 +94,9 @@ impl RecurseState {
 pub fn handle<S: Session>(sess: &mut S, request: Request) -> session::Result<()> {
 
     let mut rs = RecurseState {
-        dev: fs::symlink_metadata(&request.root)?.dev(),
+        device: fs::symlink_metadata(&request.root)?.dev(),
         ids: Vec::new(),
-        enc: GzEncoder::new(Vec::new(), flate2::Compression::default()),
+        encoder: GzEncoder::new(Vec::new(), flate2::Compression::default()),
     };
     rs.recurse(&request.root, sess)?;
     rs.flush(sess)?;
@@ -147,7 +149,6 @@ impl super::Response for ChunkResponse {
             rdf_value: None,
             float: None,
             set: None,
-            // but it's gzipped...
             compression: None
         }
     }
