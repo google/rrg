@@ -7,7 +7,7 @@
 //!
 //! The network connection action lists all the opened connections on the
 //! client and the information about them (e.g. type of the connection, source
-//! and target IP addresses, the process that owns the connection)
+//! and target IP addresses, the process that owns the connection).
 
 use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
@@ -87,7 +87,7 @@ fn make_family(addr: &IpAddr) -> Family {
     }
 }
 
-/// Contructs NetworkEndpoint from the specified address and port.
+/// Contructs `NetworkEndpoint` from the specified address and port.
 fn make_network_endpoint(addr: &IpAddr, port: u16) -> NetworkEndpoint {
     NetworkEndpoint {
         ip: Some(addr.to_string()),
@@ -101,19 +101,19 @@ fn make_network_endpoint(addr: &IpAddr, port: u16) -> NetworkEndpoint {
 /// [tcp_state]: ../../../netstat2/enum.TcpState.html
 fn make_state(state: &TcpState) -> State {
     match state {
-        TcpState::Unknown     => State::Unknown,
-        TcpState::Closed      => State::Closed,
-        TcpState::Listen      => State::Listen,
-        TcpState::SynSent     => State::SynSent,
+        TcpState::Unknown => State::Unknown,
+        TcpState::Closed => State::Closed,
+        TcpState::Listen => State::Listen,
+        TcpState::SynSent => State::SynSent,
         TcpState::SynReceived => State::SynRecv,
         TcpState::Established => State::Established,
-        TcpState::FinWait1    => State::FinWait1,
-        TcpState::FinWait2    => State::FinWait2,
-        TcpState::CloseWait   => State::CloseWait,
-        TcpState::Closing     => State::Closing,
-        TcpState::LastAck     => State::LastAck,
-        TcpState::TimeWait    => State::TimeWait,
-        TcpState::DeleteTcb   => State::DeleteTcb
+        TcpState::FinWait1 => State::FinWait1,
+        TcpState::FinWait2 => State::FinWait2,
+        TcpState::CloseWait => State::CloseWait,
+        TcpState::Closing => State::Closing,
+        TcpState::LastAck => State::LastAck,
+        TcpState::TimeWait => State::TimeWait,
+        TcpState::DeleteTcb => State::DeleteTcb
     }
 }
 
@@ -214,10 +214,10 @@ impl ProcessInfo {
 }
 
 /// Handles requests for the network connection action.
-pub fn handle<S: Session>(
-    session: &mut S,
-    request: Request
-) -> session::Result<()> {
+pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
+where
+    S: Session
+{
     let mut system = System::new();
     system.refresh_processes();
 
@@ -243,7 +243,7 @@ pub fn handle<S: Session>(
         let connection = match connection {
             Ok(val) => val,
             Err(err) => {
-                error!("Unable to get socket information: {}", err);
+                error!("unable to get socket information: {}", err);
                 continue;
             }
         };
@@ -253,12 +253,12 @@ pub fn handle<S: Session>(
             let tcp_info = match &socket_info {
                 Tcp(tcp_info) => tcp_info,
                 Udp(_) => {
-                    // we are interested only in TCP connections
+                    // We are interested only in TCP connections.
                     continue;
                 }
             };
             if tcp_info.state != TcpState::Listen {
-                // we are interested only in listening connections
+                // We are interested only in listening connections.
                 continue;
             }
         }
