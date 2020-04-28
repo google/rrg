@@ -54,6 +54,13 @@ impl From<netstat2::error::Error> for Error {
     }
 }
 
+impl Into<session::Error> for Error {
+
+    fn into(self) -> session::Error {
+        session::Error::action(self)
+    }
+}
+
 /// A request type for the network connections action.
 pub struct Request {
     listening_only: bool,
@@ -234,7 +241,7 @@ where
     );
     let connection_iter = match connection_iter {
         Ok(val) => val,
-        Err(err) => return Err(session::Error::action(Error::from(err))),
+        Err(err) => return Err(Error::from(err).into()),
     };
 
     for connection in connection_iter {
