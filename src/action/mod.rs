@@ -3,6 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+pub mod interfaces;
 pub mod metadata;
 pub mod startup;
 
@@ -51,6 +52,7 @@ where
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
+        "EnumerateInterfaces" => task.execute(self::interfaces::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
