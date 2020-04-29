@@ -60,7 +60,7 @@ impl Payload {
             None => Default::default(),
         };
 
-        Ok(R::from_proto(proto))
+        R::from_proto(proto)
     }
 }
 
