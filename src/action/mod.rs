@@ -8,12 +8,12 @@ pub mod startup;
 
 use crate::session::{self, Session, Task};
 
-pub trait Request {
+pub trait Request: Sized {
     type Proto: prost::Message + Default;
-    fn from_proto(proto: Self::Proto) -> Self;
+    fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError>;
 }
 
-pub trait Response {
+pub trait Response: Sized {
     const RDF_NAME: Option<&'static str>;
     type Proto: prost::Message + Default;
     fn into_proto(self) -> Self::Proto;
@@ -23,7 +23,8 @@ impl Request for () {
 
     type Proto = ();
 
-    fn from_proto(_: ()) {
+    fn from_proto(unit: ()) -> Result<(), session::ParseError> {
+        Ok(unit)
     }
 }
 
