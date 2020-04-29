@@ -8,14 +8,12 @@
 //! The interfaces action lists all network interfaces available for the client,
 //! collecting their names, MAC and IP addresses.
 
-use std::net::IpAddr;
-
 use ipnetwork::IpNetwork;
 use pnet::{
     datalink::{self, NetworkInterface},
     util::MacAddr,
 };
-use rrg_proto::{Interface, NetworkAddress, network_address::Family};
+use rrg_proto::{Interface, NetworkAddress};
 
 use crate::session::{self, Session};
 
@@ -49,13 +47,16 @@ fn mac_to_vec(mac: MacAddr) -> Vec<u8> {
 ///
 /// [ip_network]: ../../../ipnetwork/enum.IpNetwork.html
 fn ip_to_proto(ip_network: IpNetwork) -> NetworkAddress {
+    use rrg_proto::network_address::Family;
+    use std::net::IpAddr::{V4, V6};
+
     match ip_network.ip() {
-        IpAddr::V4(ipv4) => NetworkAddress {
+        V4(ipv4) => NetworkAddress {
             address_type: Some(Family::Inet.into()),
             packed_bytes: Some(ipv4.octets().to_vec()),
             ..Default::default()
         },
-        IpAddr::V6(ipv6) => NetworkAddress {
+        V6(ipv6) => NetworkAddress {
             address_type: Some(Family::Inet6.into()),
             packed_bytes: Some(ipv6.octets().to_vec()),
             ..Default::default()
