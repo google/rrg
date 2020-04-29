@@ -147,13 +147,16 @@ impl From<prost::DecodeError> for ParseError {
     }
 }
 
+/// An error type for situations where required proto field is missing.
 #[derive(Debug)]
 pub struct MissingFieldError {
+    /// A name of the missing field.
     name: &'static str,
 }
 
 impl MissingFieldError {
 
+    /// Creates a new error indicating that required field `name` is missing.
     pub fn new(name: &'static str) -> MissingFieldError {
         MissingFieldError {
             name: name,
