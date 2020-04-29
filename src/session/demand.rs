@@ -69,15 +69,15 @@ impl TryFrom<rrg_proto::GrrMessage> for Demand {
     type Error = session::ParseError;
 
     fn try_from(message: rrg_proto::GrrMessage) -> Result<Demand, Self::Error> {
-        use session::ParseError::*;
+        use session::ParseError;
 
         let header = Header {
-            session_id: message.session_id.ok_or(MissingField("session id"))?,
-            request_id: message.request_id.ok_or(MissingField("request id"))?,
+            session_id: message.session_id.ok_or(ParseError::missing_field("session id"))?,
+            request_id: message.request_id.ok_or(ParseError::missing_field("request id"))?,
         };
 
         Ok(Demand {
-            action: message.name.ok_or(MissingField("action name"))?,
+            action: message.name.ok_or(ParseError::missing_field("action name"))?,
             header: header,
             payload: Payload {
                 data: message.args,

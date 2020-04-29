@@ -87,10 +87,26 @@ impl From<ParseError> for Error {
 /// An error type for failures that can occur when parsing proto messages.
 #[derive(Debug)]
 pub enum ParseError {
-    /// A required field of a proto message is missing.
-    MissingField(&'static str),
+    Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
+}
+
+impl ParseError {
+
+    pub fn malformed<E>(error: E) -> ParseError
+    where
+        E: Into<Box<dyn std::error::Error + Send + Sync>>,
+    {
+        ParseError::Malformed(error.into())
+    }
+
+    pub fn missing_field(name: &'static str) -> ParseError {
+        // TODO: A custom error type for missing field errors could be created
+        // to avoid allocating a string.
+        let error = format!("required field '{}' is missing", name);
+        ParseError::malformed(error)
+    }
 }
 
 impl Display for ParseError {
@@ -99,8 +115,8 @@ impl Display for ParseError {
         use ParseError::*;
 
         match *self {
-            MissingField(name) => {
-                write!(fmt, "required field is missing: {}", name)
+            Malformed(ref error) => {
+                write!(fmt, "invalid proto message: {}", error)
             }
             Decode(ref error) => {
                 write!(fmt, "failed to decode proto message: {}", error)
@@ -115,7 +131,7 @@ impl std::error::Error for ParseError {
         use ParseError::*;
 
         match *self {
-            MissingField(_) => None,
+            Malformed(ref error) => Some(error.as_ref()),
             Decode(ref error) => Some(error),
         }
     }
