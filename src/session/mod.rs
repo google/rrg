@@ -123,6 +123,11 @@ pub trait Session {
     /// Sends a message to a particular sink.
     fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
     where R: action::Response;
+
+    /// Sends a heartbeat signal to the Fleetspeak process.
+    fn heartbeat(&mut self) {
+        // TODO: Create a real implementation.
+    }
 }
 
 /// A session type for unrequested action executions.
