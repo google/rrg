@@ -108,10 +108,7 @@ impl ParseError {
 
     /// Creates `ParseError` indicating that required field `name` is missing.
     pub fn missing_field(name: &'static str) -> ParseError {
-        // TODO: A custom error type for missing field errors could be created
-        // to avoid allocating a string.
-        let error = format!("required field '{}' is missing", name);
-        ParseError::malformed(error)
+        MissingFieldError::new(name).into()
     }
 }
 
@@ -147,5 +144,40 @@ impl From<prost::DecodeError> for ParseError {
 
     fn from(error: prost::DecodeError) -> ParseError {
         ParseError::Decode(error)
+    }
+}
+
+#[derive(Debug)]
+pub struct MissingFieldError {
+    name: &'static str,
+}
+
+impl MissingFieldError {
+
+    pub fn new(name: &'static str) -> MissingFieldError {
+        MissingFieldError {
+            name: name,
+        }
+    }
+}
+
+impl Display for MissingFieldError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "required field '{}' is missing", self.name)
+    }
+}
+
+impl std::error::Error for MissingFieldError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl Into<ParseError> for MissingFieldError {
+
+    fn into(self) -> ParseError {
+        ParseError::malformed(self)
     }
 }
