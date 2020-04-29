@@ -69,7 +69,7 @@ impl TryFrom<rrg_proto::GrrMessage> for Demand {
     type Error = session::ParseError;
 
     fn try_from(message: rrg_proto::GrrMessage) -> Result<Demand, Self::Error> {
-        let missing = session::ParseError::missing_field;
+        let missing = session::MissingFieldError::new;
 
         let header = Header {
             session_id: message.session_id.ok_or(missing("session id"))?,

@@ -105,11 +105,6 @@ impl ParseError {
     {
         ParseError::Malformed(error.into())
     }
-
-    /// Creates `ParseError` indicating that required field `name` is missing.
-    pub fn missing_field(name: &'static str) -> ParseError {
-        MissingFieldError::new(name).into()
-    }
 }
 
 impl Display for ParseError {
