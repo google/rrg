@@ -178,9 +178,9 @@ impl std::error::Error for MissingFieldError {
     }
 }
 
-impl Into<ParseError> for MissingFieldError {
+impl From<MissingFieldError> for ParseError {
 
-    fn into(self) -> ParseError {
-        ParseError::malformed(self)
+    fn from(error: MissingFieldError) -> ParseError {
+        ParseError::malformed(error)
     }
 }
