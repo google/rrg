@@ -51,12 +51,12 @@ fn mac_to_vec(mac: MacAddr) -> Vec<u8> {
 fn ip_to_proto(ip_network: IpNetwork) -> NetworkAddress {
     match ip_network.ip() {
         IpAddr::V4(ipv4) => NetworkAddress {
-            address_type: Some(Family::Inet as i32),
+            address_type: Some(Family::Inet.into()),
             packed_bytes: Some(ipv4.octets().to_vec()),
             ..Default::default()
         },
         IpAddr::V6(ipv6) => NetworkAddress {
-            address_type: Some(Family::Inet6 as i32),
+            address_type: Some(Family::Inet6.into()),
             packed_bytes: Some(ipv6.octets().to_vec()),
             ..Default::default()
         },
