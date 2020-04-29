@@ -25,32 +25,26 @@ use rrg_proto::{
 use crate::session::{self, Session};
 
 #[derive(Debug)]
-struct Error {
-    connection_info_error: netstat2::error::Error,
-}
+struct Error(netstat2::error::Error);
 
 impl std::error::Error for Error {
 
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.connection_info_error)
+        Some(&self.0)
     }
 }
 
 impl Display for Error {
 
     fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(
-            fmt,
-            "failed to list network connections: {}",
-            self.connection_info_error
-        )
+        write!(fmt, "failed to list network connections: {}", self.0)
     }
 }
 
 impl From<netstat2::error::Error> for Error {
 
     fn from(error: netstat2::error::Error) -> Error {
-        Error { connection_info_error: error }
+        Error(error)
     }
 }
 
