@@ -87,6 +87,7 @@ impl From<ParseError> for Error {
 /// An error type for failures that can occur when parsing proto messages.
 #[derive(Debug)]
 pub enum ParseError {
+    /// An error occurred because the decoded proto message was malformed.
     Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
@@ -94,6 +95,10 @@ pub enum ParseError {
 
 impl ParseError {
 
+    /// Converts a detailed error indicating a malformed proto to `ParseError`.
+    ///
+    /// This is just a convenience function for lifting custom error types that
+    /// contain more specific information to generic `ParseError`.
     pub fn malformed<E>(error: E) -> ParseError
     where
         E: Into<Box<dyn std::error::Error + Send + Sync>>,
@@ -101,6 +106,7 @@ impl ParseError {
         ParseError::Malformed(error.into())
     }
 
+    /// Creates `ParseError` indicating that required field `name` is missing.
     pub fn missing_field(name: &'static str) -> ParseError {
         // TODO: A custom error type for missing field errors could be created
         // to avoid allocating a string.
