@@ -5,7 +5,7 @@
 
 //! A handler and associated types for the interfaces action.
 //!
-//! The interfaces action lists all network interfaces available for the client,
+//! The interfaces action lists all network interfaces available on the client,
 //! collecting their names, MAC and IP addresses.
 
 use ipnetwork::IpNetwork;
