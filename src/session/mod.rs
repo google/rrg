@@ -26,7 +26,7 @@ use log::{error, info};
 use crate::action;
 use crate::message;
 pub use self::demand::{Demand, Header, Payload};
-pub use self::error::{Error, ParseError};
+pub use self::error::{Error, ParseError, MissingFieldError};
 use self::response::{Response, Status};
 pub use self::sink::{Sink};
 
@@ -123,6 +123,11 @@ pub trait Session {
     /// Sends a message to a particular sink.
     fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
     where R: action::Response;
+
+    /// Sends a heartbeat signal to the Fleetspeak process.
+    fn heartbeat(&mut self) {
+        // TODO: Create a real implementation.
+    }
 }
 
 /// A session type for unrequested action executions.
