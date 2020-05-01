@@ -157,10 +157,10 @@ impl super::Request for Request {
 
     type Proto = ListNetworkConnectionsArgs;
 
-    fn from_proto(proto: ListNetworkConnectionsArgs) -> Request {
-        Request {
+    fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
+        Ok(Request {
             listening_only: proto.listening_only.unwrap_or(false),
-        }
+        })
     }
 }
 
