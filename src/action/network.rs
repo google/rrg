@@ -119,8 +119,8 @@ fn make_state(state: &TcpState) -> State {
 /// impossible to fill using the socket information are set to `None`.
 ///
 /// [protocol_socket_info]: ../../../netstat2/enum.ProtocolSocketInfo.html
-fn make_connection_from_socket_info<'a>(
-    socket_info: &'a ProtocolSocketInfo
+fn make_connection_from_socket_info(
+    socket_info: &ProtocolSocketInfo
 ) -> NetworkConnection {
     use ProtocolSocketInfo::{Tcp, Udp};
 
