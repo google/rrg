@@ -3,6 +3,18 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+//! Handlers and types for agent's actions.
+//!
+//! The basic functionality that a GRR agent exposes is called an _action_.
+//! Actions are invoked by the server (when running a _flow_), should gather
+//! requested information and report back to the server.
+//!
+//! In RRG each action consists of three components: a request type, a response
+//! type and an action handler. Request and response types wrap lower-level
+//! Protocol Buffer messages sent by and to the GRR server. Handlers accept one
+//! instance of the corresponding request type and send some (zero or more)
+//! instances of the corresponding response type.
+
 pub mod metadata;
 pub mod startup;
 
