@@ -10,14 +10,11 @@ use std::ffi::OsString;
 use std::result::Result;
 use std::path::PathBuf;
 use std::fs;
-use std::io::Write;
 use std::fmt::{Display, Formatter};
 use std::os::unix::{fs::MetadataExt, ffi::OsStringExt};
 use sha2::{Digest, Sha256};
-use flate2::{write::GzEncoder, Compression};
 use crate::session::{self, Session, Error, ParseError};
-
-const BLOCK_SIZE: usize = 10 << 20;
+use crate::gzchunked::GzChunked;
 
 /// A request type for the timeline action.
 pub struct Request {
@@ -39,7 +36,7 @@ pub struct ChunkResponse {
 struct RecurseState {
     device: u64,
     ids: Vec<ChunkDigest>,
-    encoder: GzEncoder<Vec<u8>>,
+    encoder: GzChunked,
 }
 
 impl From<std::io::Error> for Error {
@@ -79,6 +76,16 @@ fn entry_from_metadata<M>(metadata: &M, path: &PathBuf) -> rrg_proto::TimelineEn
     }
 }
 
+
+fn send_data<S>(session: &mut S, data: Vec<u8>) -> session::Result<ChunkDigest>
+    where S: Session
+{
+    let digest = ChunkDigest(Sha256::digest(data.as_slice()).into());
+    session.send(session::Sink::TRANSFER_STORE, ChunkResponse { data })?;
+    session.heartbeat();
+    Ok(digest)
+}
+
 impl RecurseState {
     /// Recursively traverses path specified as root, sends gzchunked stat data to session.
     fn recurse<S: Session>(&mut self, root: &PathBuf, session: &mut S) -> session::Result<()> {
@@ -89,11 +96,9 @@ impl RecurseState {
         let entry_proto = entry_from_metadata(&metadata, root);
         let mut entry_data: Vec<u8> = Vec::new();
         prost::Message::encode(&entry_proto, &mut entry_data)?;
-        self.encoder.write_all(&(entry_data.len() as u64).to_be_bytes())?;
-        self.encoder.write_all(entry_data.as_slice())?;
-        self.encoder.flush()?;
-        if self.encoder.get_ref().len() >= BLOCK_SIZE {
-            self.flush(session)?;
+        self.encoder.write(entry_data.as_slice())?;
+        if let Some(data) = self.encoder.try_next_chunk()? {
+            self.ids.push(send_data(session, data)?);
         }
         if metadata.is_dir() && metadata.dev() == self.device {
             let entry_iter = match fs::read_dir(root) {
@@ -104,17 +109,6 @@ impl RecurseState {
                 self.recurse(&entry?.path(), session)?;
             }
         }
-        Ok(())
-    }
-
-    /// Sends currently accumulated gzchunked data to transfer store.
-    fn flush<S: Session>(&mut self, session: &mut S) -> session::Result<()> {
-        self.encoder.try_finish()?;
-        let data = self.encoder.get_ref().clone();
-        self.ids.push(ChunkDigest(Sha256::digest(data.as_slice()).into()));
-        session.send(session::Sink::TRANSFER_STORE, ChunkResponse { data })?;
-        session.heartbeat();
-        self.encoder = GzEncoder::new(Vec::new(), Compression::default());
         Ok(())
     }
 }
@@ -131,10 +125,10 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
             }
         },
         ids: Vec::new(),
-        encoder: GzEncoder::new(Vec::new(), flate2::Compression::default()),
+        encoder: GzChunked::new(),
     };
     state.recurse(&request.root, session)?;
-    state.flush(session)?;
+    state.ids.push(send_data(session, state.encoder.next_chunk()?)?);
     session.reply(Response {ids: state.ids})?;
 
     Ok(())
