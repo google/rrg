@@ -9,6 +9,7 @@ edition = "2018"
 fleetspeak = { version = "0.1.1" }
 humantime = { version = "2.0.0" }
 log = { version = "0.4.8" }
+proc-mounts = { version = "0.2.4" }
 prost = { version = "0.6.1" }
 prost-types = { version = "0.6.1" }
 rrg-proto = { path = "proto/" }

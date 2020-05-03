@@ -3,6 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+pub mod filesystems;
 pub mod metadata;
 pub mod startup;
 
@@ -52,6 +53,7 @@ where
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
+        "EnumerateFilesystems" => task.execute(self::filesystems::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
