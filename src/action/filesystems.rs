@@ -11,7 +11,16 @@ pub struct Response {
 }
 
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
-    for mount_info in proc_mounts::MountIter::new().unwrap() {
+    use proc_mounts::MountIter;
+    let mount_iter = match MountIter::new() {
+        Ok(mount_iter) => mount_iter,
+        Err(_) => {
+            // /etc/mtab must exist for sure.
+            MountIter::new_from_file("/etc/mtab").expect("/etc/mtab not found")
+        },
+    };
+
+    for mount_info in mount_iter {
         session.reply(Response {
             mount_info: mount_info.unwrap(),
         })?;
