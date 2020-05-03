@@ -269,8 +269,12 @@ impl Fake {
     where
         R: action::Response + 'static
     {
-        let reply = &self.replies[index];
-        reply.downcast_ref().unwrap()
+        let reply = match self.replies.get(index) {
+            Some(reply) => reply,
+            None => panic!("no reply #{}", index),
+        };
+
+        reply.downcast_ref().expect("unexpected reply type")
     }
 
     pub fn get_sink<R>(&self, sink: Sink, index: usize) -> &R
@@ -282,8 +286,15 @@ impl Fake {
             None => panic!("no responses for sink '{:?}'", sink),
         };
 
-        let response = &responses[index];
-        response.downcast_ref().unwrap()
+        let response = match responses.get(index) {
+            Some(response) => response,
+            None => panic!("no response #{} for sink '{:?}'", index, sink),
+        };
+
+        match response.downcast_ref() {
+            Some(response) => response,
+            None => panic!("unexpected response type for sink '{:?}'", sink),
+        }
     }
 }
 
