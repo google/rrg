@@ -248,3 +248,63 @@ where
 
     Ok(())
 }
+
+#[cfg(test)]
+struct Fake {
+    replies: Vec<Box<dyn std::any::Any>>,
+    responses: std::collections::HashMap<Sink, Vec<Box<dyn std::any::Any>>>,
+}
+
+#[cfg(test)]
+impl Fake {
+
+    pub fn new() -> Fake {
+        Fake {
+            replies: Vec::new(),
+            responses: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn get<R>(&self, index: usize) -> &R
+    where
+        R: action::Response + 'static
+    {
+        let reply = &self.replies[index];
+        reply.downcast_ref().unwrap()
+    }
+
+    pub fn get_sink<R>(&self, sink: Sink, index: usize) -> &R
+    where
+        R: action::Response + 'static
+    {
+        let responses = match self.responses.get(&sink) {
+            Some(responses) => responses,
+            None => panic!("no responses for sink '{:?}'", sink),
+        };
+
+        let response = &responses[index];
+        response.downcast_ref().unwrap()
+    }
+}
+
+#[cfg(test)]
+impl Session for Fake {
+
+    fn reply<R>(&mut self, response: R) -> Result<()>
+    where
+        R: action::Response + 'static,
+    {
+        self.replies.push(Box::new(response));
+        Ok(())
+    }
+
+    fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
+    where
+        R: action::Response + 'static,
+    {
+        let responses = self.responses.entry(sink).or_insert_with(Vec::new);
+        responses.push(Box::new(response));
+
+        Ok(())
+    }
+}
