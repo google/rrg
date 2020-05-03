@@ -87,8 +87,8 @@ impl super::Response for Response {
 
     fn into_proto(self) -> Filesystem {
         // TODO: remove lossy conversion of PathBuf to String
-        //   when mount_point field of Filesystem message
-        //   will have bytes type instead of string.
+        // when mount_point field of Filesystem message
+        // will have bytes type instead of string.
         Filesystem {
             device: Some(self.mount_info.source.into_os_string()
                 .into_string().unwrap_or_default()),
