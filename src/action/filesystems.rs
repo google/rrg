@@ -3,15 +3,27 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+//! A handler and associated types for the filesystems action.
+//!
+//! The filesystems action lists all mounted filesystems on the client,
+//! collecting device name, mount point, filesystem type and its options.
+//! Current implementation works only in Linux systems.
+
 use rrg_proto::{Filesystem, KeyValue, AttributedDict, DataBlob};
 use crate::session::{self, Session};
 
+/// A response type for the filesystems action.
 pub struct Response {
+    /// Information about filesystem.
     mount_info: proc_mounts::MountInfo,
 }
 
+/// Handles requests for the filesystems action.
+/// Initially searches in `/proc/mounts`. If it's missed, fallbacks to
+/// `/etc/mtab`.
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     use proc_mounts::MountIter;
+
     let mount_iter = match MountIter::new() {
         Ok(mount_iter) => mount_iter,
         Err(_) => {
@@ -28,6 +40,8 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     Ok(())
 }
 
+/// Converts filesystem option in `String` representation to `grr`'s `KeyValue`
+/// protobuf struct representation.
 fn option_to_key_value(option: String) -> KeyValue {
     match &option.split('=').collect::<Vec<&str>>()[..] {
         &[key] => {
@@ -58,6 +72,8 @@ fn option_to_key_value(option: String) -> KeyValue {
     }
 }
 
+/// Converts a `Vec` of filesystem options in `String` representation to
+/// `grr`'s `AttributedDict` protobuf struct representation.
 fn options_to_dict(options: Vec<String>) -> AttributedDict {
     AttributedDict {
         dat: options.into_iter().map(option_to_key_value).collect(),
