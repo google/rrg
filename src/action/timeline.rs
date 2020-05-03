@@ -6,79 +6,101 @@
 //! A handler and associated types for the timeline action.
 
 use std::vec::Vec;
+use std::ffi::OsString;
+use std::result::Result;
 use std::path::PathBuf;
 use std::fs;
 use std::io::Write;
-use std::os::unix::fs::MetadataExt;
+use std::fmt::{Display, Formatter};
+use std::os::unix::{fs::MetadataExt, ffi::OsStringExt};
 use sha2::{Digest, Sha256};
 use flate2::{write::GzEncoder, Compression};
-use crate::session::{self, Session, Error};
+use crate::session::{self, Session, Error, ParseError};
 
 const BLOCK_SIZE: usize = 10 << 20;
 
 /// A request type for the timeline action.
 pub struct Request {
-    root: PathBuf
+    root: PathBuf,
 }
+
+struct ChunkDigest([u8; 32]);
 
 /// A response type for the timeline action (actual response).
 pub struct Response {
-    ids: Vec<Vec<u8>>
+    ids: Vec<ChunkDigest>,
 }
 
 /// A response type for the timeline action (transfer store chunks).
 pub struct ChunkResponse {
-    data: Vec<u8>
+    data: Vec<u8>,
 }
 
 struct RecurseState {
     device: u64,
-    ids: Vec<Vec<u8>>,
-    encoder: GzEncoder<Vec<u8>>
+    ids: Vec<ChunkDigest>,
+    encoder: GzEncoder<Vec<u8>>,
 }
 
 impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Error {
-        Error::action(e)
+    fn from(error: std::io::Error) -> Error {
+        Error::action(error)
     }
 }
 
-fn entry_from_stat<M: MetadataExt>(md: &M, p: &PathBuf) -> rrg_proto::TimelineEntry {
+#[derive(Debug)]
+struct NoneError {
+    field_name: String,
+}
+
+impl Display for NoneError {
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "expected value in field: {}", self.field_name)
+    }
+}
+
+impl std::error::Error for NoneError {
+}
+
+fn entry_from_metadata<M>(metadata: &M, path: &PathBuf) -> rrg_proto::TimelineEntry 
+    where M: MetadataExt
+{
     rrg_proto::TimelineEntry {
-        path: Some(Vec::from(p.to_string_lossy().as_bytes())),
-        mode: Some(md.mode()),
-        size: Some(md.size()),
-        dev: Some(md.dev()),
-        ino: Some(md.dev()),
-        uid: Some(md.uid() as i64),
-        gid: Some(md.gid() as i64),
-        atime_ns: Some(md.atime_nsec() as u64),
-        ctime_ns: Some(md.ctime_nsec() as u64),
-        mtime_ns: Some(md.mtime_nsec() as u64)
+        path: Some(path.clone().into_os_string().into_vec()),
+        mode: Some(metadata.mode()),
+        size: Some(metadata.size()),
+        dev: Some(metadata.dev()),
+        ino: Some(metadata.dev()),
+        uid: Some(metadata.uid() as i64),
+        gid: Some(metadata.gid() as i64),
+        atime_ns: Some(metadata.atime_nsec() as u64),
+        ctime_ns: Some(metadata.ctime_nsec() as u64),
+        mtime_ns: Some(metadata.mtime_nsec() as u64),
     }
 }
 
 impl RecurseState {
     /// Recursively traverses path specified as root, sends gzchunked stat data to session.
     fn recurse<S: Session>(&mut self, root: &PathBuf, session: &mut S) -> session::Result<()> {
-        let statentry = match fs::symlink_metadata(&root) {
-            Ok(v) => v,
-            Err(_) => return Ok(())
+        let metadata = match fs::symlink_metadata(&root) {
+            Ok(metadata) => metadata,
+            Err(_) => return Ok(()),
         };
-        let statproto = entry_from_stat(&statentry, root);
-        let mut statdata: Vec<u8> = Vec::new();
-        prost::Message::encode(&statproto, &mut statdata)?;
-        self.encoder.write_all(&(statdata.len() as u64).to_be_bytes())?;
-        self.encoder.write_all(statdata.as_slice())?;
+        let entry_proto = entry_from_metadata(&metadata, root);
+        let mut entry_data: Vec<u8> = Vec::new();
+        prost::Message::encode(&entry_proto, &mut entry_data)?;
+        self.encoder.write_all(&(entry_data.len() as u64).to_be_bytes())?;
+        self.encoder.write_all(entry_data.as_slice())?;
         self.encoder.flush()?;
         if self.encoder.get_ref().len() >= BLOCK_SIZE {
             self.flush(session)?;
         }
-        if statentry.is_dir() && statentry.dev() == self.device {
-            for entry in match fs::read_dir(root) {
-                Ok(v) => v,
-                Err(_) => return Ok(())
-            } {
+        if metadata.is_dir() && metadata.dev() == self.device {
+            let entry_iter = match fs::read_dir(root) {
+                Ok(iter) => iter,
+                Err(_) => return Ok(()),
+            };
+            for entry in entry_iter {
                 self.recurse(&entry?.path(), session)?;
             }
         }
@@ -89,31 +111,31 @@ impl RecurseState {
     fn flush<S: Session>(&mut self, session: &mut S) -> session::Result<()> {
         self.encoder.try_finish()?;
         let data = self.encoder.get_ref().clone();
-        self.ids.push(Vec::from(Sha256::digest(data.as_slice()).as_slice()));
-        session.send(session::Sink::TRANSFER_STORE, ChunkResponse{ data })?;
-        // TODO(xtsm) add session.progress here
+        self.ids.push(ChunkDigest(Sha256::digest(data.as_slice()).into()));
+        session.send(session::Sink::TRANSFER_STORE, ChunkResponse { data })?;
+        session.heartbeat();
         self.encoder = GzEncoder::new(Vec::new(), Compression::default());
         Ok(())
     }
 }
 
 /// Handles requests for the timeline action.
-pub fn handle<S: Session>(sess: &mut S, request: Request) -> session::Result<()> {
+pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
 
-    let mut rs = RecurseState {
+    let mut state = RecurseState {
         device: match fs::symlink_metadata(&request.root) {
-            Ok(v) => v.dev(),
+            Ok(metadata) => metadata.dev(),
             Err(_) => {
-                sess.reply(Response {ids : Vec::new()})?;
+                session.reply(Response {ids : Vec::new()})?;
                 return Ok(());
             }
         },
         ids: Vec::new(),
         encoder: GzEncoder::new(Vec::new(), flate2::Compression::default()),
     };
-    rs.recurse(&request.root, sess)?;
-    rs.flush(sess)?;
-    sess.reply(Response {ids: rs.ids})?;
+    state.recurse(&request.root, session)?;
+    state.flush(session)?;
+    session.reply(Response {ids: state.ids})?;
 
     Ok(())
 }
@@ -122,10 +144,14 @@ impl super::Request for Request {
 
     type Proto = rrg_proto::TimelineArgs;
 
-    fn from_proto(proto: rrg_proto::TimelineArgs) -> Request {
-        // TODO fix unwrap
-        Request {
-            root: PathBuf::from(String::from_utf8(proto.root.unwrap()).unwrap())
+    fn from_proto(proto: rrg_proto::TimelineArgs) -> Result<Request, ParseError> {
+        match proto.root {
+            Some(root) => Ok(Request {
+                root: PathBuf::from(OsString::from_vec(root)),
+            }),
+            None => Err(ParseError::malformed(NoneError {
+                field_name: String::from("root"),
+            })),
         }
     }
 }
@@ -138,7 +164,7 @@ impl super::Response for Response {
 
     fn into_proto(self) -> rrg_proto::TimelineResult {
         rrg_proto::TimelineResult {
-            entry_batch_blob_ids: self.ids
+            entry_batch_blob_ids: self.ids.iter().map(|i| i.0.to_vec()).collect()
         }
     }
 }
@@ -151,18 +177,8 @@ impl super::Response for ChunkResponse {
 
     fn into_proto(self) -> rrg_proto::DataBlob {
         rrg_proto::DataBlob {
-            integer: None,
             data: Some(self.data),
-            string: None,
-            proto_name: None,
-            none: None,
-            boolean: None,
-            list: None,
-            dict: None,
-            rdf_value: None,
-            float: None,
-            set: None,
-            compression: None
+            ..Default::default()
         }
     }
 }
