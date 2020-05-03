@@ -19,7 +19,7 @@ pub struct Response {
 }
 
 /// Handles requests for the filesystems action.
-/// Initially searches in `/proc/mounts`. If it's missed, fallbacks to
+/// Initially searches in `/proc/mounts`. If it's missed, falls back to
 /// `/etc/mtab`.
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     use proc_mounts::MountIter;
@@ -67,7 +67,7 @@ fn option_to_key_value(option: String) -> KeyValue {
         },
         _ => {
             // This is impossible.
-            panic!("Bad mount option")
+            panic!("Bad mount option");
         },
     }
 }
