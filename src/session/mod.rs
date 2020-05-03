@@ -118,11 +118,11 @@ where
 pub trait Session {
     /// Sends a reply to the flow that call the action.
     fn reply<R>(&mut self, response: R) -> Result<()>
-    where R: action::Response;
+    where R: action::Response + 'static;
 
     /// Sends a message to a particular sink.
     fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
-    where R: action::Response;
+    where R: action::Response + 'static;
 
     /// Sends a heartbeat signal to the Fleetspeak process.
     fn heartbeat(&mut self) {
