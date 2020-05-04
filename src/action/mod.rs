@@ -5,6 +5,7 @@
 
 pub mod metadata;
 pub mod startup;
+pub mod timeline;
 
 use crate::session::{self, Session, Task};
 
@@ -52,6 +53,7 @@ where
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
+        "Timeline" => task.execute(self::timeline::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }

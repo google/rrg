@@ -10,6 +10,7 @@ const PROTOS: &'static [&'static str] = &[
     "grr/grr/proto/grr_response_proto/semantic.proto",
     "grr/grr/proto/grr_response_proto/knowledge_base.proto",
     "grr/grr/proto/grr_response_proto/jobs.proto",
+    "grr/grr/proto/grr_response_proto/timeline.proto",
 ];
 
 const INCLUDES: &'static [&'static str] = &[
