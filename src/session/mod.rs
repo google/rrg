@@ -272,7 +272,7 @@ pub mod test {
 
         pub fn get<R>(&self, index: usize) -> &R
         where
-            R: action::Response + 'static
+            R: action::Response + 'static,
         {
             let reply = match self.replies.get(index) {
                 Some(reply) => reply,
@@ -284,7 +284,7 @@ pub mod test {
 
         pub fn get_sink<R>(&self, sink: Sink, index: usize) -> &R
         where
-            R: action::Response + 'static
+            R: action::Response + 'static,
         {
             let responses = match self.responses.get(&sink) {
                 Some(responses) => responses,
@@ -298,7 +298,7 @@ pub mod test {
 
             match response.downcast_ref() {
                 Some(response) => response,
-                None => panic!("unexpected response type for sink '{:?}'", sink),
+                None => panic!("unexpected response type in sink '{:?}'", sink),
             }
         }
     }
@@ -310,6 +310,7 @@ pub mod test {
             R: action::Response + 'static,
         {
             self.replies.push(Box::new(response));
+
             Ok(())
         }
 
