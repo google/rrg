@@ -256,7 +256,7 @@ pub mod test {
 
     use super::*;
 
-    struct Fake {
+    pub struct Fake {
         replies: Vec<Box<dyn Any>>,
         responses: HashMap<Sink, Vec<Box<dyn Any>>>,
     }
