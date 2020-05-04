@@ -250,72 +250,77 @@ where
 }
 
 #[cfg(test)]
-struct Fake {
-    replies: Vec<Box<dyn std::any::Any>>,
-    responses: std::collections::HashMap<Sink, Vec<Box<dyn std::any::Any>>>,
-}
+pub mod test {
+    use std::any::Any;
+    use std::collections::HashMap;
 
-#[cfg(test)]
-impl Fake {
+    use super::*;
 
-    pub fn new() -> Fake {
-        Fake {
-            replies: Vec::new(),
-            responses: std::collections::HashMap::new(),
+    struct Fake {
+        replies: Vec<Box<dyn Any>>,
+        responses: HashMap<Sink, Vec<Box<dyn Any>>>,
+    }
+
+    impl Fake {
+
+        pub fn new() -> Fake {
+            Fake {
+                replies: Vec::new(),
+                responses: std::collections::HashMap::new(),
+            }
+        }
+
+        pub fn get<R>(&self, index: usize) -> &R
+        where
+            R: action::Response + 'static
+        {
+            let reply = match self.replies.get(index) {
+                Some(reply) => reply,
+                None => panic!("no reply #{}", index),
+            };
+
+            reply.downcast_ref().expect("unexpected reply type")
+        }
+
+        pub fn get_sink<R>(&self, sink: Sink, index: usize) -> &R
+        where
+            R: action::Response + 'static
+        {
+            let responses = match self.responses.get(&sink) {
+                Some(responses) => responses,
+                None => panic!("no responses for sink '{:?}'", sink),
+            };
+
+            let response = match responses.get(index) {
+                Some(response) => response,
+                None => panic!("no response #{} for sink '{:?}'", index, sink),
+            };
+
+            match response.downcast_ref() {
+                Some(response) => response,
+                None => panic!("unexpected response type for sink '{:?}'", sink),
+            }
         }
     }
 
-    pub fn get<R>(&self, index: usize) -> &R
-    where
-        R: action::Response + 'static
-    {
-        let reply = match self.replies.get(index) {
-            Some(reply) => reply,
-            None => panic!("no reply #{}", index),
-        };
+    impl Session for Fake {
 
-        reply.downcast_ref().expect("unexpected reply type")
-    }
-
-    pub fn get_sink<R>(&self, sink: Sink, index: usize) -> &R
-    where
-        R: action::Response + 'static
-    {
-        let responses = match self.responses.get(&sink) {
-            Some(responses) => responses,
-            None => panic!("no responses for sink '{:?}'", sink),
-        };
-
-        let response = match responses.get(index) {
-            Some(response) => response,
-            None => panic!("no response #{} for sink '{:?}'", index, sink),
-        };
-
-        match response.downcast_ref() {
-            Some(response) => response,
-            None => panic!("unexpected response type for sink '{:?}'", sink),
+        fn reply<R>(&mut self, response: R) -> Result<()>
+        where
+            R: action::Response + 'static,
+        {
+            self.replies.push(Box::new(response));
+            Ok(())
         }
-    }
-}
 
-#[cfg(test)]
-impl Session for Fake {
+        fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
+        where
+            R: action::Response + 'static,
+        {
+            let responses = self.responses.entry(sink).or_insert_with(Vec::new);
+            responses.push(Box::new(response));
 
-    fn reply<R>(&mut self, response: R) -> Result<()>
-    where
-        R: action::Response + 'static,
-    {
-        self.replies.push(Box::new(response));
-        Ok(())
-    }
-
-    fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
-    where
-        R: action::Response + 'static,
-    {
-        let responses = self.responses.entry(sink).or_insert_with(Vec::new);
-        responses.push(Box::new(response));
-
-        Ok(())
+            Ok(())
+        }
     }
 }
