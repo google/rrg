@@ -112,6 +112,9 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
+        assert_eq!(session.reply_count(), 0);
+        assert_eq!(session.response_count(session::Sink::STARTUP), 1);
+
         let response = session.response::<Response>(session::Sink::STARTUP, 0);
         assert!(response.boot_time > std::time::UNIX_EPOCH);
         assert!(response.boot_time < std::time::SystemTime::now());
@@ -121,6 +124,9 @@ mod tests {
     fn test_metadata() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
+        assert_eq!(session.response_count(session::Sink::STARTUP), 1);
 
         let response = session.response::<Response>(session::Sink::STARTUP, 0);
         assert!(response.metadata.version.as_numeric() > 0);

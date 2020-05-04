@@ -270,6 +270,10 @@ pub mod test {
             }
         }
 
+        pub fn reply_count(&self) -> usize {
+            self.replies.len()
+        }
+
         pub fn reply<R>(&self, index: usize) -> &R
         where
             R: action::Response + 'static,
@@ -280,6 +284,13 @@ pub mod test {
             };
 
             reply.downcast_ref().expect("unexpected reply type")
+        }
+
+        pub fn response_count(&self, sink: Sink) -> usize {
+            match self.responses.get(&sink) {
+                Some(responses) => responses.len(),
+                None => 0,
+            }
         }
 
         pub fn response<R>(&self, sink: Sink, index: usize) -> &R
