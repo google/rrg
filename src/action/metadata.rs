@@ -36,3 +36,36 @@ impl super::Response for Response {
         self.metadata.into()
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_name() {
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        let metadata = &session.get::<Response>(0).metadata;
+        assert_eq!(metadata.name, "rrg");
+    }
+
+    #[test]
+    fn test_description() {
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        let metadata = &session.get::<Response>(0).metadata;
+        assert!(!metadata.description.is_empty());
+    }
+
+    #[test]
+    fn test_version() {
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        let metadata = &session.get::<Response>(0).metadata;
+        assert!(metadata.version.as_numeric() > 0);
+    }
+}
