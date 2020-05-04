@@ -270,7 +270,7 @@ pub mod test {
             }
         }
 
-        pub fn get<R>(&self, index: usize) -> &R
+        pub fn reply<R>(&self, index: usize) -> &R
         where
             R: action::Response + 'static,
         {
@@ -282,7 +282,7 @@ pub mod test {
             reply.downcast_ref().expect("unexpected reply type")
         }
 
-        pub fn get_sink<R>(&self, sink: Sink, index: usize) -> &R
+        pub fn response<R>(&self, sink: Sink, index: usize) -> &R
         where
             R: action::Response + 'static,
         {

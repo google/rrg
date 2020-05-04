@@ -112,7 +112,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
-        let response = session.get_sink::<Response>(session::Sink::STARTUP, 0);
+        let response = session.response::<Response>(session::Sink::STARTUP, 0);
         assert!(response.boot_time > std::time::UNIX_EPOCH);
         assert!(response.boot_time < std::time::SystemTime::now());
     }
@@ -122,7 +122,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
-        let response = session.get_sink::<Response>(session::Sink::STARTUP, 0);
+        let response = session.response::<Response>(session::Sink::STARTUP, 0);
         assert!(response.metadata.version.as_numeric() > 0);
         assert_eq!(response.metadata.name, "rrg");
     }

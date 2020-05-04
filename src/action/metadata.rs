@@ -47,7 +47,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
-        let metadata = &session.get::<Response>(0).metadata;
+        let metadata = &session.reply::<Response>(0).metadata;
         assert_eq!(metadata.name, "rrg");
     }
 
@@ -56,7 +56,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
-        let metadata = &session.get::<Response>(0).metadata;
+        let metadata = &session.reply::<Response>(0).metadata;
         assert!(!metadata.description.is_empty());
     }
 
@@ -65,7 +65,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
-        let metadata = &session.get::<Response>(0).metadata;
+        let metadata = &session.reply::<Response>(0).metadata;
         assert!(metadata.version.as_numeric() > 0);
     }
 }
