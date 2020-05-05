@@ -69,9 +69,9 @@ struct ProcessInfo {
 }
 
 /// A response type for the network connections action.
-pub struct Response<'a> {
+pub struct Response {
     /// Information about the socket which is used by connection.
-    socket_info: &'a ProtocolSocketInfo,
+    socket_info: ProtocolSocketInfo,
     /// Information about the process that owns the connection.
     process_info: Option<ProcessInfo>,
 }
@@ -164,7 +164,7 @@ impl super::Request for Request {
     }
 }
 
-impl<'a> super::Response for Response<'a> {
+impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("NetworkConnection");
 
@@ -172,7 +172,7 @@ impl<'a> super::Response for Response<'a> {
 
     fn into_proto(self) -> Self::Proto {
         let mut result: NetworkConnection;
-        result = make_connection_from_socket_info(self.socket_info);
+        result = make_connection_from_socket_info(&self.socket_info);
         if let Some(process_info) = self.process_info {
             result.pid = Some(process_info.pid);
             result.process_name = process_info.name;
@@ -272,7 +272,7 @@ where
             // because the latter lists only the connections associated with a
             // process.
             session.reply(Response {
-                socket_info: &socket_info,
+                socket_info: socket_info,
                 process_info: None,
             })?;
             continue;
@@ -287,7 +287,7 @@ where
         // of them.
         for pid in pids {
             session.reply(Response {
-                socket_info: &socket_info,
+                socket_info: socket_info.clone(),
                 process_info: Some(ProcessInfo::from_system(&system, *pid)),
             })?;
         }
