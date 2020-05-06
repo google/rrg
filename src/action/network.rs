@@ -24,6 +24,7 @@ use rrg_proto::{
 
 use crate::session::{self, Session};
 
+/// An error type for situations when the network connection action fails.
 #[derive(Debug)]
 struct Error(netstat2::error::Error);
 
@@ -193,8 +194,9 @@ impl From<&Process> for ProcessInfo {
 
 impl ProcessInfo {
 
-    /// Constucts a ProcessInfo system from a given process ID. The process
-    /// name will not be set.
+    /// Constructs a `ProcessInfo` from the given process ID.
+    ///
+    /// The process name will not be set.
     fn from_pid(pid: u32) -> ProcessInfo {
         ProcessInfo {
             pid,
@@ -202,8 +204,10 @@ impl ProcessInfo {
         }
     }
 
-    /// Constucts a ProcessInfo system from a given process ID. The process
-    /// name will be retrieved from the system using `system` parameter.
+    /// Constructs a `ProcessInfo` from the given process ID.
+    ///
+    /// The process name will be retrieved from the system using the `system`
+    /// parameter.
     fn from_system<S: SystemExt>(system: &S, pid: u32) -> ProcessInfo {
         match system.get_process(pid as i32) {
             Some(process) => ProcessInfo::from(process),
@@ -215,7 +219,7 @@ impl ProcessInfo {
 /// Handles requests for the network connection action.
 pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
 where
-    S: Session
+    S: Session,
 {
     let mut system = System::new();
     system.refresh_processes();
