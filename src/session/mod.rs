@@ -256,6 +256,15 @@ pub mod test {
 
     use super::*;
 
+    /// A session type intended to be used in tests.
+    ///
+    /// Testing actions with normal session objects can be quite hard, since
+    /// they communicate with the outside world (through Fleetspeak). Since we
+    /// want to keep the tests minimal and not waste resources on unneeded I/O,
+    /// using real sessions is not an option.
+    ///
+    /// Instead, one can use a `Fake` session. It simply accumulates responses
+    /// that the action sends and lets the creator inspect them later.
     pub struct Fake {
         replies: Vec<Box<dyn Any>>,
         responses: HashMap<Sink, Vec<Box<dyn Any>>>,
@@ -263,6 +272,7 @@ pub mod test {
 
     impl Fake {
 
+        /// Constructs a new fake session.
         pub fn new() -> Fake {
             Fake {
                 replies: Vec::new(),
@@ -270,22 +280,31 @@ pub mod test {
             }
         }
 
+        /// Yields the number of replies that this session sent so far.
         pub fn reply_count(&self) -> usize {
             self.replies.len()
         }
 
-        pub fn reply<R>(&self, index: usize) -> &R
+        /// Retrieves a reply corresponding to the given id.
+        ///
+        /// The identifier corresponding to the first response is 0, the second
+        /// one is 1 and so on.
+        ///
+        /// This method will panic if a reply with the specified `id` does not
+        /// exist or if it exists but has a wrong type.
+        pub fn reply<R>(&self, id: usize) -> &R
         where
             R: action::Response + 'static,
         {
-            let reply = match self.replies.get(index) {
+            let reply = match self.replies.get(id) {
                 Some(reply) => reply,
-                None => panic!("no reply #{}", index),
+                None => panic!("no reply #{}", id),
             };
 
             reply.downcast_ref().expect("unexpected reply type")
         }
 
+        /// Yields the number of responses sent so far to the specified sink.
         pub fn response_count(&self, sink: Sink) -> usize {
             match self.responses.get(&sink) {
                 Some(responses) => responses.len(),
@@ -293,7 +312,14 @@ pub mod test {
             }
         }
 
-        pub fn response<R>(&self, sink: Sink, index: usize) -> &R
+        /// Retrieves a response with the given id sent to a particular sink.
+        ///
+        /// The identifier corresponding to the first response to the particular
+        /// sink is 0, to the second one (to the same sink) is 1 and so on.
+        ///
+        /// This method will panic if a reply with the specified `id` to the
+        /// given `sink` does not exist or if it exists but has wrong type.
+        pub fn response<R>(&self, sink: Sink, id: usize) -> &R
         where
             R: action::Response + 'static,
         {
@@ -302,9 +328,9 @@ pub mod test {
                 None => panic!("no responses for sink '{:?}'", sink),
             };
 
-            let response = match responses.get(index) {
+            let response = match responses.get(id) {
                 Some(response) => response,
-                None => panic!("no response #{} for sink '{:?}'", index, sink),
+                None => panic!("no response #{} for sink '{:?}'", id, sink),
             };
 
             match response.downcast_ref() {
