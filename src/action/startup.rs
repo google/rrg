@@ -18,6 +18,7 @@ use log::error;
 use crate::metadata::{Metadata};
 use crate::session::{self, Session};
 
+/// An error type for failures that can occur when collecting startup data.
 #[derive(Debug)]
 struct Error {
     boot_time_error: sys_info::Error,
