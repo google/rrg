@@ -14,11 +14,12 @@ use crate::session::{self, Session};
 
 /// A response type for the filesystems action.
 pub struct Response {
-    /// Information about filesystem.
+    /// Information about the filesystem.
     mount_info: proc_mounts::MountInfo,
 }
 
 /// Handles requests for the filesystems action.
+///
 /// Initially searches in `/proc/mounts`. If it's missed, falls back to
 /// `/etc/mtab`.
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
@@ -27,7 +28,7 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     let mount_iter = match MountIter::new() {
         Ok(mount_iter) => mount_iter,
         Err(_) => {
-            // /etc/mtab must exist for sure.
+            // `/etc/mtab` must exist for sure.
             MountIter::new_from_file("/etc/mtab").expect("/etc/mtab not found")
         },
     };
@@ -40,8 +41,8 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     Ok(())
 }
 
-/// Converts filesystem option in `String` representation to `grr`'s `KeyValue`
-/// protobuf struct representation.
+/// Converts filesystem mount option in `String` representation to
+/// `GRR`'s `KeyValue` protobuf struct representation.
 fn option_to_key_value(option: String) -> KeyValue {
     match &option.split('=').collect::<Vec<&str>>()[..] {
         &[key] => {
@@ -72,8 +73,8 @@ fn option_to_key_value(option: String) -> KeyValue {
     }
 }
 
-/// Converts a `Vec` of filesystem options in `String` representation to
-/// `grr`'s `AttributedDict` protobuf struct representation.
+/// Converts a `Vec` of filesystem mount options in `String` representation to
+/// `GRR`'s `AttributedDict` protobuf struct representation.
 fn options_to_dict(options: Vec<String>) -> AttributedDict {
     AttributedDict {
         dat: options.into_iter().map(option_to_key_value).collect(),
@@ -81,14 +82,15 @@ fn options_to_dict(options: Vec<String>) -> AttributedDict {
 }
 
 impl super::Response for Response {
+
     const RDF_NAME: Option<&'static str> = Some("Filesystem");
 
     type Proto = rrg_proto::Filesystem;
 
     fn into_proto(self) -> Filesystem {
-        // TODO: remove lossy conversion of PathBuf to String
-        // when mount_point and device fields of Filesystem message
-        // will have bytes type instead of string.
+        // TODO: Remove lossy conversion of `PathBuf` to `String`
+        // when `mount_point` and `device` fields of `Filesystem` message
+        // will have `bytes` type instead of `string`.
         Filesystem {
             device: Some(self.mount_info.source.to_string_lossy()
                 .into_owned()),
