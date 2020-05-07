@@ -362,3 +362,162 @@ pub mod test {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_fake_reply_count() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.reply(()).unwrap();
+            session.reply(()).unwrap();
+            session.reply(()).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        assert_eq!(session.reply_count(), 3);
+    }
+
+    #[test]
+    fn test_fake_response_count() {
+
+        // TODO: Extend this test with more sinks (once we have some more sinks
+        // defined).
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.send(Sink::STARTUP, ()).unwrap();
+            session.send(Sink::STARTUP, ()).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        assert_eq!(session.response_count(Sink::STARTUP), 2);
+    }
+
+    #[test]
+    fn test_fake_reply_correct_response() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.reply(StringResponse::from("foo")).unwrap();
+            session.reply(StringResponse::from("bar")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        assert_eq!(session.reply::<StringResponse>(0).0, "foo");
+        assert_eq!(session.reply::<StringResponse>(1).0, "bar");
+    }
+
+    #[test]
+    #[should_panic(expected = "no reply #0")]
+    fn test_fake_reply_incorrect_response_id() {
+
+        fn handle<S: Session>(_: &mut S, _: ()) {
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        session.reply::<()>(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "unexpected reply type")]
+    fn test_fake_reply_incorrect_response_type() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.reply(StringResponse::from("quux")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        session.reply::<()>(0);
+    }
+
+    #[test]
+    fn test_fake_response_correct_response() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.send(Sink::STARTUP, StringResponse::from("foo")).unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("bar")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        let response_foo = session.response::<StringResponse>(Sink::STARTUP, 0);
+        let response_bar = session.response::<StringResponse>(Sink::STARTUP, 1);
+        assert_eq!(response_foo.0, "foo");
+        assert_eq!(response_bar.0, "bar");
+    }
+
+    #[test]
+    #[should_panic(expected = "no responses")]
+    fn test_fake_response_empty_sink() {
+
+        fn handle<S: Session>(_: &mut S, _: ()) {
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        session.response::<()>(Sink::STARTUP, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "no response #42")]
+    fn test_fake_response_incorrect_response_id() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.send(Sink::STARTUP, ()).unwrap();
+            session.send(Sink::STARTUP, ()).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        session.response::<()>(Sink::STARTUP, 42);
+    }
+
+    #[test]
+    #[should_panic(expected = "unexpected response type")]
+    fn test_fake_response_incorrect_response_type() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.send(Sink::STARTUP, StringResponse::from("quux")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        session.response::<()>(Sink::STARTUP, 0);
+    }
+
+    struct StringResponse(String);
+
+    impl<S: Into<String>> From<S> for StringResponse {
+
+        fn from(string: S) -> StringResponse {
+            StringResponse(string.into())
+        }
+    }
+
+    impl action::Response for StringResponse {
+
+        const RDF_NAME: Option<&'static str> = Some("RDFString");
+
+        type Proto = String;
+
+        fn into_proto(self) -> String {
+            self.0
+        }
+    }
+}
