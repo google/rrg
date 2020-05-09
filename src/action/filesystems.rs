@@ -12,6 +12,53 @@
 use rrg_proto::{Filesystem, KeyValue, AttributedDict, DataBlob};
 use crate::session::{self, Session};
 
+use log::error;
+use std::fmt::{Display, Formatter};
+
+/// Enum of possible errors, which can occur during collecting filesystems data.
+#[derive(Debug)]
+enum Error {
+    /// Missed mtab-like file error.
+    MissedFile(std::io::Error),
+    /// Parsing mtab-like file error.
+    MountInfoError(std::io::Error),
+}
+
+impl std::error::Error for Error {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use Error::*;
+
+        match *self {
+            MissedFile(ref error) => Some(error),
+            MountInfoError(ref error) => Some(error),
+        }
+    }
+}
+
+impl Display for Error {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        use Error::*;
+
+        match *self {
+            MissedFile(ref error) => {
+                write!(fmt, "missed file error: {}", error)
+            },
+            MountInfoError(ref error) => {
+                write!(fmt, "failed to obtain MountInfo: {}", error)
+            },
+        }
+    }
+}
+
+impl From<Error> for session::Error {
+
+    fn from(error: Error) -> session::Error {
+        session::Error::action(error)
+    }
+}
+
 /// A response type for the filesystems action.
 pub struct Response {
     /// Information about the filesystem.
@@ -25,18 +72,32 @@ pub struct Response {
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     use proc_mounts::MountIter;
 
+    // Check whether `/proc/mounts` exists.
     let mount_iter = match MountIter::new() {
         Ok(mount_iter) => mount_iter,
         Err(_) => {
-            // `/etc/mtab` must exist for sure.
-            MountIter::new_from_file("/etc/mtab").expect("/etc/mtab not found")
+            // `/proc/mounts` doesn't exist. Try to fall back to `/etc/mtab`.
+            match MountIter::new_from_file("/etc/mtab") {
+                Ok(mount_iter) => mount_iter,
+                Err(error) => {
+                    return Err(session::Error::from(Error::MissedFile(error)))
+                },
+            }
         },
     };
 
     for mount_info in mount_iter {
-        session.reply(Response {
-            mount_info: mount_info.unwrap(),
-        })?;
+        match mount_info {
+            Ok(mount_info) => {
+                session.reply(Response {
+                    mount_info,
+                })?;
+            },
+            Err(error) => {
+                return Err(session::Error::from(Error::MountInfoError(error)))
+            },
+        }
+
     }
     Ok(())
 }
@@ -67,8 +128,11 @@ fn option_to_key_value(option: String) -> KeyValue {
             }
         },
         _ => {
-            // This is impossible.
-            panic!("Bad mount option");
+            error!("invalid mount option syntax: {}", option);
+            KeyValue {
+                k: None,
+                v: None,
+            }
         },
     }
 }
