@@ -18,6 +18,7 @@ use rrg_proto::{Interface, NetworkAddress};
 use crate::session::{self, Session};
 
 /// A response type for the interfaces action.
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Response {
     /// Information about an interface.
     interface: NetworkInterface,
@@ -84,6 +85,41 @@ impl super::Response for Response {
             ifname: Some(self.interface.name),
             addresses: ips_to_protos(self.interface.ips),
             ..Default::default()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_loopback_presence() {
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        let mut is_loopback_present = false;
+        for i in 0..session.reply_count() {
+            let interface = &session.reply::<Response>(i).interface;
+            is_loopback_present |= interface.is_loopback();
+        }
+        assert!(is_loopback_present);
+    }
+
+    #[test]
+    fn test_response_uniqueness() {
+        use std::collections::hash_set::HashSet;
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        let mut responses =
+            HashSet::<&Response>::with_capacity(session.reply_count());
+        for i in 0..session.reply_count() {
+            let response = &session.reply::<Response>(i);
+            assert!(!responses.contains(response));
+            responses.insert(response);
         }
     }
 }
