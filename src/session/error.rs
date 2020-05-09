@@ -87,10 +87,24 @@ impl From<ParseError> for Error {
 /// An error type for failures that can occur when parsing proto messages.
 #[derive(Debug)]
 pub enum ParseError {
-    /// A required field of a proto message is missing.
-    MissingField(&'static str),
+    /// An error occurred because the decoded proto message was malformed.
+    Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
+}
+
+impl ParseError {
+
+    /// Converts a detailed error indicating a malformed proto to `ParseError`.
+    ///
+    /// This is just a convenience function for lifting custom error types that
+    /// contain more specific information to generic `ParseError`.
+    pub fn malformed<E>(error: E) -> ParseError
+    where
+        E: Into<Box<dyn std::error::Error + Send + Sync>>,
+    {
+        ParseError::Malformed(error.into())
+    }
 }
 
 impl Display for ParseError {
@@ -99,8 +113,8 @@ impl Display for ParseError {
         use ParseError::*;
 
         match *self {
-            MissingField(name) => {
-                write!(fmt, "required field is missing: {}", name)
+            Malformed(ref error) => {
+                write!(fmt, "invalid proto message: {}", error)
             }
             Decode(ref error) => {
                 write!(fmt, "failed to decode proto message: {}", error)
@@ -115,7 +129,7 @@ impl std::error::Error for ParseError {
         use ParseError::*;
 
         match *self {
-            MissingField(_) => None,
+            Malformed(ref error) => Some(error.as_ref()),
             Decode(ref error) => Some(error),
         }
     }
@@ -125,5 +139,43 @@ impl From<prost::DecodeError> for ParseError {
 
     fn from(error: prost::DecodeError) -> ParseError {
         ParseError::Decode(error)
+    }
+}
+
+/// An error type for situations where required proto field is missing.
+#[derive(Debug)]
+pub struct MissingFieldError {
+    /// A name of the missing field.
+    name: &'static str,
+}
+
+impl MissingFieldError {
+
+    /// Creates a new error indicating that required field `name` is missing.
+    pub fn new(name: &'static str) -> MissingFieldError {
+        MissingFieldError {
+            name: name,
+        }
+    }
+}
+
+impl Display for MissingFieldError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "required field '{}' is missing", self.name)
+    }
+}
+
+impl std::error::Error for MissingFieldError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl From<MissingFieldError> for ParseError {
+
+    fn from(error: MissingFieldError) -> ParseError {
+        ParseError::malformed(error)
     }
 }
