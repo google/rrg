@@ -122,13 +122,7 @@ impl RecurseState {
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
 
     let mut state = RecurseState {
-        device: match fs::symlink_metadata(&request.root) {
-            Ok(metadata) => metadata.dev(),
-            Err(_) => {
-                session.reply(Response {ids : Vec::new()})?;
-                return Ok(());
-            }
-        },
+        device: fs::symlink_metadata(&request.root)?.dev(),
         ids: Vec::new(),
         encoder: GzChunkedEncoder::new(flate2::Compression::default()),
     };
