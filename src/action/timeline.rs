@@ -25,12 +25,12 @@ pub struct Request {
 struct ChunkDigest([u8; 32]);
 
 /// A response type for the timeline action (actual response).
-pub struct Response {
+struct Response {
     ids: Vec<ChunkDigest>,
 }
 
 /// A response type for the timeline action (transfer store chunks).
-pub struct ChunkResponse {
+struct ChunkResponse {
     data: Vec<u8>,
 }
 
