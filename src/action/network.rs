@@ -309,7 +309,7 @@ mod tests {
     use super::*;
     use std::net::{TcpStream, TcpListener, UdpSocket, SocketAddr};
 
-    // TODO: docs
+    /// Returns all the responses whose `local_addr` is equal to `addr`.
     fn find_responses_by_addr<'a>(
         session: &'a session::test::Fake,
         addr: SocketAddr,
@@ -332,7 +332,9 @@ mod tests {
         responses
     }
 
-    // TODO: docs
+    /// Returns the state of TCP connection from `response`.
+    ///
+    /// This function panics if `response` doesn't represent a TCP connection.
     fn get_tcp_state(response: &Response) -> TcpState {
         match &response.socket_info {
             ProtocolSocketInfo::Tcp(tcp) => tcp.state,
@@ -342,7 +344,7 @@ mod tests {
         }
     }
 
-    // TODO: docs
+    /// Checks if `response` represents a UDP connection.
     fn is_udp(response: &Response) -> bool {
         match &response.socket_info {
             ProtocolSocketInfo::Udp(_) => true,
