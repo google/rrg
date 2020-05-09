@@ -16,3 +16,4 @@ simplelog = { version = "0.7.6" }
 structopt = { version = "0.3.12" }
 sys-info = { version = "0.5.1" }
 flate2 = { version = "1.0.14" }
+rand = { version = "0.7.3" }
