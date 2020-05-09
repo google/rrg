@@ -57,11 +57,13 @@ impl Into<session::Error> for Error {
 }
 
 /// A request type for the network connections action.
+#[derive(Debug)]
 pub struct Request {
     listening_only: bool,
 }
 
 /// A type that holds brief information about the process.
+#[derive(Debug)]
 struct ProcessInfo {
     /// Process ID.
     pid: u32,
@@ -70,6 +72,7 @@ struct ProcessInfo {
 }
 
 /// A response type for the network connections action.
+#[derive(Debug)]
 pub struct Response {
     /// Information about the socket which is used by connection.
     socket_info: ProtocolSocketInfo,
@@ -298,4 +301,177 @@ where
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use std::net::{TcpStream, TcpListener, UdpSocket, SocketAddr};
+
+    // TODO: docs
+    fn find_responses_by_addr<'a>(
+        session: &'a session::test::Fake,
+        addr: SocketAddr,
+    ) -> Vec<&'a Response> {
+        let mut responses = Vec::new();
+        for i in 0..session.reply_count() {
+            let resp: &Response = session.reply(i);
+            let matches = match &resp.socket_info {
+                ProtocolSocketInfo::Tcp(tcp) => {
+                    SocketAddr::new(tcp.local_addr, tcp.local_port) == addr
+                },
+                ProtocolSocketInfo::Udp(udp) => {
+                    SocketAddr::new(udp.local_addr, udp.local_port) == addr
+                },
+            };
+            if matches {
+                responses.push(resp);
+            }
+        }
+        responses
+    }
+
+    // TODO: docs
+    fn get_tcp_state(response: &Response) -> TcpState {
+        match &response.socket_info {
+            ProtocolSocketInfo::Tcp(tcp) => tcp.state,
+            ProtocolSocketInfo::Udp(_) => {
+                panic!("unexpected UDP socket in the response")
+            },
+        }
+    }
+
+    // TODO: docs
+    fn is_udp(response: &Response) -> bool {
+        match &response.socket_info {
+            ProtocolSocketInfo::Udp(_) => true,
+            _ => false,
+        }
+    }
+
+    #[test]
+    fn test_tcp() {
+        let server = TcpListener::bind("127.0.0.1:0").unwrap();
+        let server_addr = server.local_addr().unwrap();
+        let client = TcpStream::connect(server_addr).unwrap();
+        let client_addr = client.local_addr().unwrap();
+
+        let mut session = session::test::Fake::new();
+        let request = Request { listening_only: false };
+        assert!(handle(&mut session, request).is_ok());
+
+        let our_pid = std::process::id();
+
+        // We must get two responses for the server here: one for the
+        // listening server socket and one for the temporary connection
+        // between the client and the server
+        let server_resp = find_responses_by_addr(&session, server_addr);
+        assert_eq!(server_resp.len(), 2);
+
+        let listen_resp;
+        let connection_resp;
+        if get_tcp_state(&server_resp[0]) == TcpState::Listen {
+            listen_resp = server_resp[0];
+            connection_resp = server_resp[1];
+        } else {
+            assert_eq!(get_tcp_state(&server_resp[1]), TcpState::Listen);
+            listen_resp = server_resp[1];
+            connection_resp = server_resp[0];
+        }
+
+        // We don't check PID for `connection_resp`, because it is unset at
+        // least on Linux and I don't know whether it's set on other systems.
+        assert_eq!(listen_resp.process_info.as_ref().unwrap().pid, our_pid);
+
+        let connection_socket = match &connection_resp.socket_info {
+            ProtocolSocketInfo::Tcp(tcp) => tcp,
+            ProtocolSocketInfo::Udp(_) => {
+                panic!("expected TCP socket");
+            }
+        };
+        // Local addresses are tested already, because they are used to find
+        // the connections.
+        assert_eq!(connection_socket.remote_addr, client_addr.ip());
+        assert_eq!(connection_socket.remote_port, client_addr.port());
+        assert_eq!(connection_socket.state, TcpState::Established);
+
+        let client_resp = find_responses_by_addr(&session, client_addr);
+        assert_eq!(client_resp.len(), 1);
+        let client_resp = client_resp[0];
+
+        assert_eq!(client_resp.process_info.as_ref().unwrap().pid, our_pid);
+
+        let client_socket = match &client_resp.socket_info {
+            ProtocolSocketInfo::Tcp(tcp) => tcp,
+            ProtocolSocketInfo::Udp(_) => {
+                panic!("expected TCP socket");
+            }
+        };
+        // Again, we don't need to check the client address, because it is used
+        // to find the connection.
+        assert_eq!(client_socket.remote_addr, server_addr.ip());
+        assert_eq!(client_socket.remote_port, server_addr.port());
+        assert_eq!(client_socket.state, TcpState::Established);
+    }
+
+    #[test]
+    fn test_udp() {
+        let server = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let server_addr = server.local_addr().unwrap();
+        let client = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let client_addr = client.local_addr().unwrap();
+        client.connect(server_addr).unwrap();
+
+        let mut session = session::test::Fake::new();
+        let request = Request { listening_only: false };
+        assert!(handle(&mut session, request).is_ok());
+
+        let our_pid = std::process::id();
+
+        let server_resp = find_responses_by_addr(&session, server_addr);
+        assert_eq!(server_resp.len(), 1);
+        let server_resp = server_resp[0];
+        assert_eq!(server_resp.process_info.as_ref().unwrap().pid, our_pid);
+        assert!(is_udp(&server_resp));
+
+        let client_resp = find_responses_by_addr(&session, client_addr);
+        assert_eq!(client_resp.len(), 1);
+        let client_resp = client_resp[0];
+        assert_eq!(client_resp.process_info.as_ref().unwrap().pid, our_pid);
+        assert!(is_udp(&client_resp));
+    }
+
+    #[test]
+    fn test_tcp_listen_only() {
+        let server = TcpListener::bind("127.0.0.1:0").unwrap();
+        let server_addr = server.local_addr().unwrap();
+        let client = TcpStream::connect(server_addr).unwrap();
+        let client_addr = client.local_addr().unwrap();
+
+        let mut session = session::test::Fake::new();
+        let request = Request { listening_only: true };
+        assert!(handle(&mut session, request).is_ok());
+
+        let server_resp = find_responses_by_addr(&session, server_addr);
+        assert_eq!(server_resp.len(), 1);
+        let server_resp = server_resp[0];
+        assert_eq!(get_tcp_state(&server_resp), TcpState::Listen);
+
+        let client_resp = find_responses_by_addr(&session, client_addr);
+        assert_eq!(client_resp.len(), 0);
+    }
+
+    #[test]
+    fn test_udp_listen_only() {
+        let connection = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let connection_addr = connection.local_addr().unwrap();
+
+        let mut session = session::test::Fake::new();
+        let request = Request { listening_only: true };
+        assert!(handle(&mut session, request).is_ok());
+
+        let connection_resp = find_responses_by_addr(&session, connection_addr);
+        assert_eq!(connection_resp.len(), 0);
+    }
 }
