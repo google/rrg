@@ -6,26 +6,32 @@
 //! Utils for forming gzchunked streams.
 
 use std::vec::Vec;
+use std::collections::VecDeque;
 use std::io::Write;
-use flate2::{Compression, write::GzEncoder};
+use flate2::{Compression, write::{GzEncoder, GzDecoder}};
 
 /// Size of a gzchunked block.
 const BLOCK_SIZE: usize = 10 << 20;
 
 /// A gzchunked streaming encoder.
-pub struct GzChunked {
+pub struct GzChunkedEncoder {
     encoder: GzEncoder<Vec<u8>>,
 }
 
-impl GzChunked {
+/// A gzchunked streaming decoder.
+pub struct GzChunkedDecoder {
+    queue: VecDeque<Vec<u8>>,
+}
+
+impl GzChunkedEncoder {
     /// Creates a new encoder with specified gzip compression level.
-    pub fn new(compression: Compression) -> GzChunked {
-        GzChunked {
+    pub fn new(compression: Compression) -> GzChunkedEncoder {
+        GzChunkedEncoder {
             encoder: GzEncoder::new(Vec::new(), compression)
         }
     }
 
-    /// Attempts to write next data chunk into stream.
+    /// Writes next data chunk into the stream.
     pub fn write(&mut self, buf: &[u8]) -> std::io::Result<()> {
         self.encoder.write_all(&(buf.len() as u64).to_be_bytes())?;
         self.encoder.write_all(buf)?;
@@ -51,5 +57,38 @@ impl GzChunked {
         let ret = Ok(self.encoder.get_ref().clone());
         self.encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
         ret
+    }
+}
+
+impl GzChunkedDecoder {
+    /// Creates a new decoder.
+    pub fn new() -> GzChunkedDecoder {
+        GzChunkedDecoder {
+            queue: VecDeque::new()
+        }
+    }
+
+    /// Decodes next gzchunked block and puts all results into the internal queue.
+    pub fn write(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        let mut decoder = GzDecoder::new(Vec::new());
+        decoder.write(buf)?;
+        let chunked_data_vec = decoder.finish()?;
+        let mut chunked_data = chunked_data_vec.as_slice();
+        while !chunked_data.is_empty() {
+            let (length_slice, remainder) = chunked_data.split_at(8);
+            let mut length: [u8; 8] = Default::default();
+            length.copy_from_slice(length_slice);
+            let length = u64::from_be_bytes(length);
+            let (data_slice, remainder) = remainder.split_at(length as usize);
+            self.queue.push_back(Vec::from(data_slice));
+            chunked_data = remainder;
+        }
+        Ok(())
+    }
+
+    /// Attempts to retrieve next data piece from queue.
+    /// Returns `None` if the queue is empty.
+    pub fn try_next_data(&mut self) -> Option<Vec<u8>> {
+        self.queue.pop_front()
     }
 }
