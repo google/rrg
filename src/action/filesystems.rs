@@ -42,7 +42,7 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 }
 
 /// Converts filesystem mount option in `String` representation to
-/// `GRR`'s `KeyValue` protobuf struct representation.
+/// GRR's `KeyValue` protobuf struct representation.
 fn option_to_key_value(option: String) -> KeyValue {
     match &option.split('=').collect::<Vec<&str>>()[..] {
         &[key] => {
@@ -74,7 +74,7 @@ fn option_to_key_value(option: String) -> KeyValue {
 }
 
 /// Converts a `Vec` of filesystem mount options in `String` representation to
-/// `GRR`'s `AttributedDict` protobuf struct representation.
+/// GRR's `AttributedDict` protobuf struct representation.
 fn options_to_dict(options: Vec<String>) -> AttributedDict {
     AttributedDict {
         dat: options.into_iter().map(option_to_key_value).collect(),
