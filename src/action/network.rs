@@ -317,7 +317,7 @@ mod tests {
         let mut responses = Vec::new();
         for i in 0..session.reply_count() {
             let resp: &Response = session.reply(i);
-            let matches = match &resp.socket_info {
+            let ok = match &resp.socket_info {
                 ProtocolSocketInfo::Tcp(tcp) => {
                     SocketAddr::new(tcp.local_addr, tcp.local_port) == addr
                 },
@@ -325,7 +325,7 @@ mod tests {
                     SocketAddr::new(udp.local_addr, udp.local_port) == addr
                 },
             };
-            if matches {
+            if ok {
                 responses.push(resp);
             }
         }
@@ -339,7 +339,7 @@ mod tests {
         match &response.socket_info {
             ProtocolSocketInfo::Tcp(tcp) => tcp.state,
             ProtocolSocketInfo::Udp(_) => {
-                panic!("unexpected UDP socket in the response")
+                panic!("unexpected UDP connection in the response")
             },
         }
     }
@@ -389,8 +389,8 @@ mod tests {
         let connection_socket = match &connection_resp.socket_info {
             ProtocolSocketInfo::Tcp(tcp) => tcp,
             ProtocolSocketInfo::Udp(_) => {
-                panic!("expected TCP socket");
-            }
+                panic!("expected TCP connection");
+            },
         };
         // Local addresses are tested already, because they are used to find
         // the connections.
@@ -407,8 +407,8 @@ mod tests {
         let client_socket = match &client_resp.socket_info {
             ProtocolSocketInfo::Tcp(tcp) => tcp,
             ProtocolSocketInfo::Udp(_) => {
-                panic!("expected TCP socket");
-            }
+                panic!("expected TCP connection");
+            },
         };
         // Again, we don't need to check the client address, because it is used
         // to find the connection.
