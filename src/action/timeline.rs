@@ -21,6 +21,7 @@ pub struct Request {
     root: PathBuf,
 }
 
+/// A newtype wrapper for SHA-256 chunk digest.
 struct ChunkDigest([u8; 32]);
 
 /// A response type for the timeline action (actual response).
@@ -33,6 +34,8 @@ pub struct ChunkResponse {
     data: Vec<u8>,
 }
 
+/// An object for recursively traversing filesystem and gathering
+/// timeline info.
 struct RecurseState {
     device: u64,
     ids: Vec<ChunkDigest>,
@@ -60,7 +63,8 @@ impl std::error::Error for NoneError {
 }
 
 fn entry_from_metadata<M>(metadata: &M, path: &PathBuf) -> rrg_proto::TimelineEntry 
-    where M: MetadataExt
+where
+    M: MetadataExt,
 {
     rrg_proto::TimelineEntry {
         path: Some(path.clone().into_os_string().into_vec()),
@@ -78,7 +82,8 @@ fn entry_from_metadata<M>(metadata: &M, path: &PathBuf) -> rrg_proto::TimelineEn
 
 
 fn send_data<S>(session: &mut S, data: Vec<u8>) -> session::Result<ChunkDigest>
-    where S: Session
+where
+    S: Session,
 {
     let digest = ChunkDigest(Sha256::digest(data.as_slice()).into());
     session.send(session::Sink::TRANSFER_STORE, ChunkResponse { data })?;
@@ -158,7 +163,7 @@ impl super::Response for Response {
 
     fn into_proto(self) -> rrg_proto::TimelineResult {
         rrg_proto::TimelineResult {
-            entry_batch_blob_ids: self.ids.iter().map(|i| i.0.to_vec()).collect()
+            entry_batch_blob_ids: self.ids.iter().map(|id| id.0.to_vec()).collect()
         }
     }
 }
