@@ -118,11 +118,11 @@ where
 pub trait Session {
     /// Sends a reply to the flow that call the action.
     fn reply<R>(&mut self, response: R) -> Result<()>
-    where R: action::Response;
+    where R: action::Response + 'static;
 
     /// Sends a message to a particular sink.
     fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
-    where R: action::Response;
+    where R: action::Response + 'static;
 
     /// Sends a heartbeat signal to the Fleetspeak process.
     fn heartbeat(&mut self) {
@@ -247,4 +247,277 @@ where
     message::send(message);
 
     Ok(())
+}
+
+#[cfg(test)]
+pub mod test {
+    use std::any::Any;
+    use std::collections::HashMap;
+
+    use super::*;
+
+    /// A session type intended to be used in tests.
+    ///
+    /// Testing actions with normal session objects can be quite hard, since
+    /// they communicate with the outside world (through Fleetspeak). Since we
+    /// want to keep the tests minimal and not waste resources on unneeded I/O,
+    /// using real sessions is not an option.
+    ///
+    /// Instead, one can use a `Fake` session. It simply accumulates responses
+    /// that the action sends and lets the creator inspect them later.
+    pub struct Fake {
+        replies: Vec<Box<dyn Any>>,
+        responses: HashMap<Sink, Vec<Box<dyn Any>>>,
+    }
+
+    impl Fake {
+
+        /// Constructs a new fake session.
+        pub fn new() -> Fake {
+            Fake {
+                replies: Vec::new(),
+                responses: std::collections::HashMap::new(),
+            }
+        }
+
+        /// Yields the number of replies that this session sent so far.
+        pub fn reply_count(&self) -> usize {
+            self.replies.len()
+        }
+
+        /// Retrieves a reply corresponding to the given id.
+        ///
+        /// The identifier corresponding to the first response is 0, the second
+        /// one is 1 and so on.
+        ///
+        /// This method will panic if a reply with the specified `id` does not
+        /// exist or if it exists but has a wrong type.
+        pub fn reply<R>(&self, id: usize) -> &R
+        where
+            R: action::Response + 'static,
+        {
+            let reply = match self.replies.get(id) {
+                Some(reply) => reply,
+                None => panic!("no reply #{}", id),
+            };
+
+            reply.downcast_ref().expect("unexpected reply type")
+        }
+
+        /// Yields the number of responses sent so far to the specified sink.
+        pub fn response_count(&self, sink: Sink) -> usize {
+            match self.responses.get(&sink) {
+                Some(responses) => responses.len(),
+                None => 0,
+            }
+        }
+
+        /// Retrieves a response with the given id sent to a particular sink.
+        ///
+        /// The identifier corresponding to the first response to the particular
+        /// sink is 0, to the second one (to the same sink) is 1 and so on.
+        ///
+        /// This method will panic if a reply with the specified `id` to the
+        /// given `sink` does not exist or if it exists but has wrong type.
+        pub fn response<R>(&self, sink: Sink, id: usize) -> &R
+        where
+            R: action::Response + 'static,
+        {
+            let responses = match self.responses.get(&sink) {
+                Some(responses) => responses,
+                None => panic!("no responses for sink '{:?}'", sink),
+            };
+
+            let response = match responses.get(id) {
+                Some(response) => response,
+                None => panic!("no response #{} for sink '{:?}'", id, sink),
+            };
+
+            match response.downcast_ref() {
+                Some(response) => response,
+                None => panic!("unexpected response type in sink '{:?}'", sink),
+            }
+        }
+    }
+
+    impl Session for Fake {
+
+        fn reply<R>(&mut self, response: R) -> Result<()>
+        where
+            R: action::Response + 'static,
+        {
+            self.replies.push(Box::new(response));
+
+            Ok(())
+        }
+
+        fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
+        where
+            R: action::Response + 'static,
+        {
+            let responses = self.responses.entry(sink).or_insert_with(Vec::new);
+            responses.push(Box::new(response));
+
+            Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_fake_reply_count() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.reply(()).unwrap();
+            session.reply(()).unwrap();
+            session.reply(()).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        assert_eq!(session.reply_count(), 3);
+    }
+
+    #[test]
+    fn test_fake_response_count() {
+
+        // TODO: Extend this test with more sinks (once we have some more sinks
+        // defined).
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.send(Sink::STARTUP, ()).unwrap();
+            session.send(Sink::STARTUP, ()).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        assert_eq!(session.response_count(Sink::STARTUP), 2);
+    }
+
+    #[test]
+    fn test_fake_reply_correct_response() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.reply(StringResponse::from("foo")).unwrap();
+            session.reply(StringResponse::from("bar")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        assert_eq!(session.reply::<StringResponse>(0).0, "foo");
+        assert_eq!(session.reply::<StringResponse>(1).0, "bar");
+    }
+
+    #[test]
+    #[should_panic(expected = "no reply #0")]
+    fn test_fake_reply_incorrect_response_id() {
+
+        fn handle<S: Session>(_: &mut S, _: ()) {
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        session.reply::<()>(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "unexpected reply type")]
+    fn test_fake_reply_incorrect_response_type() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.reply(StringResponse::from("quux")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        session.reply::<()>(0);
+    }
+
+    #[test]
+    fn test_fake_response_correct_response() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.send(Sink::STARTUP, StringResponse::from("foo")).unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("bar")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        let response_foo = session.response::<StringResponse>(Sink::STARTUP, 0);
+        let response_bar = session.response::<StringResponse>(Sink::STARTUP, 1);
+        assert_eq!(response_foo.0, "foo");
+        assert_eq!(response_bar.0, "bar");
+    }
+
+    #[test]
+    #[should_panic(expected = "no responses")]
+    fn test_fake_response_empty_sink() {
+
+        fn handle<S: Session>(_: &mut S, _: ()) {
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        session.response::<()>(Sink::STARTUP, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "no response #42")]
+    fn test_fake_response_incorrect_response_id() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.send(Sink::STARTUP, ()).unwrap();
+            session.send(Sink::STARTUP, ()).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        session.response::<()>(Sink::STARTUP, 42);
+    }
+
+    #[test]
+    #[should_panic(expected = "unexpected response type")]
+    fn test_fake_response_incorrect_response_type() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.send(Sink::STARTUP, StringResponse::from("quux")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        session.response::<()>(Sink::STARTUP, 0);
+    }
+
+    struct StringResponse(String);
+
+    impl<S: Into<String>> From<S> for StringResponse {
+
+        fn from(string: S) -> StringResponse {
+            StringResponse(string.into())
+        }
+    }
+
+    impl action::Response for StringResponse {
+
+        const RDF_NAME: Option<&'static str> = Some("RDFString");
+
+        type Proto = String;
+
+        fn into_proto(self) -> String {
+            self.0
+        }
+    }
 }

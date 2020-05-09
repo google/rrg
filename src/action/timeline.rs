@@ -14,7 +14,7 @@ use std::fmt::{Display, Formatter};
 use std::os::unix::{fs::MetadataExt, ffi::OsStringExt};
 use sha2::{Digest, Sha256};
 use crate::session::{self, Session, Error, ParseError};
-use crate::gzchunked::GzChunked;
+use crate::gzchunked::GzChunkedEncoder;
 
 /// A request type for the timeline action.
 pub struct Request {
@@ -36,7 +36,7 @@ pub struct ChunkResponse {
 struct RecurseState {
     device: u64,
     ids: Vec<ChunkDigest>,
-    encoder: GzChunked,
+    encoder: GzChunkedEncoder,
 }
 
 impl From<std::io::Error> for Error {
@@ -125,7 +125,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
             }
         },
         ids: Vec::new(),
-        encoder: GzChunked::new(),
+        encoder: GzChunkedEncoder::new(flate2::Compression::default()),
     };
     state.recurse(&request.root, session)?;
     state.ids.push(send_data(session, state.encoder.next_chunk()?)?);
