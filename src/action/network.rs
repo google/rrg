@@ -307,6 +307,7 @@ where
 mod tests {
 
     use super::*;
+    use netstat2::TcpSocketInfo;
     use std::net::{TcpStream, TcpListener, UdpSocket, SocketAddr};
 
     /// Returns all the responses whose `local_addr` is equal to `addr`.
@@ -332,16 +333,23 @@ mod tests {
         responses
     }
 
+    /// Gets `TcpSocketInfo` from `response`.
+    ///
+    /// This function panics if `response` doesn't represent a TCP connection.
+    fn extract_tcp_info(response: &Response) -> &TcpSocketInfo {
+        match &response.socket_info {
+            ProtocolSocketInfo::Tcp(tcp) => tcp,
+            ProtocolSocketInfo::Udp(_) => {
+                panic!("expected TCP connection");
+            },
+        }
+    }
+
     /// Returns the state of TCP connection from `response`.
     ///
     /// This function panics if `response` doesn't represent a TCP connection.
     fn get_tcp_state(response: &Response) -> TcpState {
-        match &response.socket_info {
-            ProtocolSocketInfo::Tcp(tcp) => tcp.state,
-            ProtocolSocketInfo::Udp(_) => {
-                panic!("unexpected UDP connection in the response")
-            },
-        }
+        extract_tcp_info(&response).state
     }
 
     /// Checks if `response` represents a UDP connection.
@@ -386,12 +394,7 @@ mod tests {
         // least on Linux and I don't know whether it's set on other systems.
         assert_eq!(listen_resp.process_info.as_ref().unwrap().pid, our_pid);
 
-        let connection_socket = match &connection_resp.socket_info {
-            ProtocolSocketInfo::Tcp(tcp) => tcp,
-            ProtocolSocketInfo::Udp(_) => {
-                panic!("expected TCP connection");
-            },
-        };
+        let connection_socket = extract_tcp_info(&connection_resp);
         // Local addresses are tested already, because they are used to find
         // the connections.
         assert_eq!(connection_socket.remote_addr, client_addr.ip());
@@ -404,12 +407,7 @@ mod tests {
 
         assert_eq!(client_resp.process_info.as_ref().unwrap().pid, our_pid);
 
-        let client_socket = match &client_resp.socket_info {
-            ProtocolSocketInfo::Tcp(tcp) => tcp,
-            ProtocolSocketInfo::Udp(_) => {
-                panic!("expected TCP connection");
-            },
-        };
+        let client_socket = extract_tcp_info(&client_resp);
         // Again, we don't need to check the client address, because it is used
         // to find the connection.
         assert_eq!(client_socket.remote_addr, server_addr.ip());
