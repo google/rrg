@@ -94,7 +94,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
             get_linux_flags(file_path).unwrap_or_default() as u32,
             symlink: match umetadata.file_type().is_symlink() {
                 true => Some(fs::read_link(file_path).
-                    unwrap().to_str().unwrap().to_string()),
+                    unwrap().to_string_lossy().to_string()),
                 false => None
             },
             pathspec: PathSpec {
@@ -235,7 +235,7 @@ impl super::Response for Response {
                 path_options: get_int_path_options(&self.pathspec),
                 pathtype: get_int_path_type(&self.pathspec),
                 path: Some(self.pathspec.path.unwrap()
-                    .to_str().unwrap().to_string()),
+                    .to_string_lossy().to_string()),
                 mount_point: None,
                 stream_name: None,
                 file_size_override: None,
