@@ -1,3 +1,10 @@
+// Copyright 2020 Google LLC
+//
+// Use of this source code is governed by an MIT-style license that can be found
+// in the LICENSE file or at https://opensource.org/licenses/MIT.
+
+//! A handler and associated types for the list directory action.
+
 use crate::session::{self, Session, Error};
 use rrg_proto::{ListDirRequest, StatEntry};
 
@@ -14,6 +21,7 @@ impl From<std::io::Error> for Error {
     }
 }
 
+/// A response type for the list directory action.
 pub struct Response {
     st_mode: u64,
     st_ino: u32,
@@ -33,6 +41,7 @@ pub struct Response {
     pathspec: PathSpec,
 }
 
+/// A request type for the list directory action.
 pub struct Request {
     pathspec: Option<PathSpec>,
 }
@@ -98,6 +107,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
     Ok(())
 }
 
+/// Converts integer from proto to human-readable enum type
 fn get_enum_path_options(option: &Option<i32>) -> Option<PathOption> {
     match option {
         Some(poption) => match poption {
@@ -111,6 +121,7 @@ fn get_enum_path_options(option: &Option<i32>) -> Option<PathOption> {
     }
 }
 
+/// Converts integer from proto to human-readable enum type
 fn get_enum_path_type(option: &Option<i32>) -> Option<PathType> {
     match option {
         Some(ptype) => match ptype {
@@ -133,6 +144,7 @@ fn get_path(path: &Option<String>) -> Option<PathBuf> {
     }
 }
 
+/// Fills st_linux_flags field
 fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
     let file = match File::open(path) {
         Ok(file) => file,
@@ -149,6 +161,7 @@ fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
     Some(linux_flags)
 }
 
+/// Converts enum type back to integer to pass to the proto
 fn get_int_path_options(pathspec: &PathSpec) -> Option<i32> {
     match pathspec.path_options {
         Some(PathOption::CaseInsensitive) => Some(0),
@@ -159,6 +172,7 @@ fn get_int_path_options(pathspec: &PathSpec) -> Option<i32> {
     }
 }
 
+/// Converts enum type back to integer to pass to the proto
 fn get_int_path_type(pathspec: &PathSpec) -> Option<i32> {
     match pathspec.pathtype {
         Some(PathType::OS) => Some(0),
