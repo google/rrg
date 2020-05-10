@@ -70,8 +70,8 @@ struct PathSpec {
 
 pub fn handle<S: Session>(session: &mut S, request: Request)
                           -> session::Result<()> {
-    let path = &request.pathspec.unwrap().path.unwrap();
-    let mut paths: Vec<_> = path.read_dir().unwrap()
+    let dir_path = &request.pathspec.unwrap().path.unwrap();
+    let mut paths: Vec<_> = dir_path.read_dir().unwrap()
         .map(|entry| entry.unwrap().path()).collect();
     paths.sort();
     for file_path in &paths {
