@@ -10,10 +10,9 @@ use std::ffi::OsString;
 use std::result::Result;
 use std::path::PathBuf;
 use std::fs;
-use std::fmt::{Display, Formatter};
 use std::os::unix::{fs::MetadataExt, ffi::OsStringExt};
 use sha2::{Digest, Sha256};
-use crate::session::{self, Session, Error, ParseError};
+use crate::session::{self, Session, Error, ParseError, MissingFieldError};
 use crate::gzchunked::GzChunkedEncoder;
 
 /// A request type for the timeline action.
@@ -40,20 +39,6 @@ struct RecurseState {
     device: u64,
     ids: Vec<ChunkDigest>,
     encoder: GzChunkedEncoder,
-}
-
-#[derive(Debug)]
-struct NoneError {
-    field_name: String,
-}
-
-impl Display for NoneError {
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "expected value in field: {}", self.field_name)
-    }
-}
-
-impl std::error::Error for NoneError {
 }
 
 fn entry_from_metadata<M>(metadata: &M, path: &PathBuf) -> rrg_proto::TimelineEntry 
@@ -136,9 +121,7 @@ impl super::Request for Request {
             Some(root) => Ok(Request {
                 root: PathBuf::from(OsString::from_vec(root)),
             }),
-            None => Err(ParseError::malformed(NoneError {
-                field_name: String::from("root"),
-            })),
+            None => Err(ParseError::malformed(MissingFieldError::new("root"))),
         }
     }
 }
