@@ -64,7 +64,7 @@ impl Version {
     /// # Examples
     ///
     /// ```
-    /// use rrg::action::startup::Version;
+    /// use rrg::metadata::Version;
     ///
     /// let version = Version {
     ///     major: 1,

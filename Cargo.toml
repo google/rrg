@@ -12,6 +12,6 @@ log = { version = "0.4.8" }
 prost = { version = "0.6.1" }
 prost-types = { version = "0.6.1" }
 rrg-proto = { path = "proto/" }
-simplelog = { version = "0.7.5" }
+simplelog = { version = "0.7.6" }
 structopt = { version = "0.3.12" }
 sys-info = { version = "0.5.1" }

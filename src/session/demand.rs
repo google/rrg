@@ -60,7 +60,7 @@ impl Payload {
             None => Default::default(),
         };
 
-        Ok(R::from_proto(proto))
+        R::from_proto(proto)
     }
 }
 
@@ -69,15 +69,15 @@ impl TryFrom<rrg_proto::GrrMessage> for Demand {
     type Error = session::ParseError;
 
     fn try_from(message: rrg_proto::GrrMessage) -> Result<Demand, Self::Error> {
-        use session::ParseError::*;
+        let missing = session::MissingFieldError::new;
 
         let header = Header {
-            session_id: message.session_id.ok_or(MissingField("session id"))?,
-            request_id: message.request_id.ok_or(MissingField("request id"))?,
+            session_id: message.session_id.ok_or(missing("session id"))?,
+            request_id: message.request_id.ok_or(missing("request id"))?,
         };
 
         Ok(Demand {
-            action: message.name.ok_or(MissingField("action name"))?,
+            action: message.name.ok_or(missing("action name"))?,
             header: header,
             payload: Payload {
                 data: message.args,

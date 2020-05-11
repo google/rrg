@@ -1,0 +1,12 @@
+dist: xenial
+language: rust
+cache: cargo
+
+rust:
+  - stable
+  - nightly
+
+script:
+  - cargo build --verbose
+  - cargo test --verbose
+  - cargo run -- --version

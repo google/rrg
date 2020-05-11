@@ -17,7 +17,7 @@ use crate::action;
 use crate::session;
 
 /// Handle to a specific sink.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct Sink {
     /// An underlying identifier of the sink.
     id: &'static str,
