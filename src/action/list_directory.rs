@@ -5,7 +5,7 @@
 
 //! A handler and associated types for the list directory action.
 
-use crate::session::{self, Session, Error};
+use crate::session::{self, Session};
 use rrg_proto::{ListDirRequest, StatEntry};
 
 use ioctls;
@@ -14,12 +14,46 @@ use std::path::PathBuf;
 use std::os::raw::c_long;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::AsRawFd;
+use std::fmt::{Display, Formatter};
 
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Error {
-        Error::action(e)
+#[derive(Debug)]
+enum Error {
+    MissingFieldError(String),
+    ReadPathError(std::io::Error),
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use Error::*;
+
+        match *self {
+            MissingFieldError(ref _field) => None,
+            ReadPathError(ref error) => Some(error),
+        }
     }
 }
+
+impl Display for Error {
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        use Error::*;
+
+        match *self {
+            MissingFieldError(ref field) => {
+                write!(fmt, "{} field should be filled", field)
+            }
+            ReadPathError(ref error) => {
+                write!(fmt, "Unable to read path: {}", error)
+            }
+        }
+    }
+}
+
+impl From<Error> for session::Error {
+    fn from(error: Error) -> session::Error {
+        session::Error::action(error)
+    }
+}
+
 
 /// A response type for the list directory action.
 pub struct Response {
@@ -43,7 +77,7 @@ pub struct Response {
 
 /// A request type for the list directory action.
 pub struct Request {
-    pathspec: Option<PathSpec>,
+    pathspec: PathSpec,
 }
 
 enum PathType {
@@ -64,18 +98,27 @@ enum PathOption {
 
 struct PathSpec {
     path_options: Option<PathOption>,
-    pathtype: Option<PathType>,
-    path: Option<PathBuf>,
+    pathtype: PathType,
+    path: PathBuf,
 }
 
 pub fn handle<S: Session>(session: &mut S, request: Request)
                           -> session::Result<()> {
-    let dir_path = &request.pathspec.unwrap().path.unwrap();
-    let mut paths: Vec<_> = dir_path.read_dir().unwrap()
-        .map(|entry| entry.unwrap().path()).collect();
+    let dir_path = &request.pathspec.path;
+    let dir_iterator = match dir_path.read_dir() {
+        Ok(dir_iter) => dir_iter,
+        Err(error) =>
+            return Err(session::Error::from(Error::ReadPathError(error))),
+    };
+    let mut paths: Vec<_> = dir_iterator.map(|entry| entry
+        .unwrap().path()).collect();
     paths.sort();
     for file_path in &paths {
-        let umetadata = fs::symlink_metadata(file_path)?;
+        let umetadata = match fs::symlink_metadata(file_path) {
+            Ok(metadata) => metadata,
+            Err(error) =>
+                return Err(session::Error::from(Error::ReadPathError(error))),
+        };
         session.reply(Response {
             st_mode: umetadata.mode().into(),
             st_ino: umetadata.ino() as u32,
@@ -93,14 +136,16 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
             st_flags_linux:
             get_linux_flags(file_path).unwrap_or_default() as u32,
             symlink: match umetadata.file_type().is_symlink() {
-                true => Some(fs::read_link(file_path).
-                    unwrap().to_string_lossy().to_string()),
+                true => match fs::read_link(file_path) {
+                    Ok(file) => Some(file.to_string_lossy().to_string()),
+                    _ => None,
+                }
                 false => None
             },
             pathspec: PathSpec {
                 path_options: Some(PathOption::CaseLiteral),
-                pathtype: Some(PathType::OS),
-                path: Some(file_path.clone()),
+                pathtype: PathType::OS,
+                path: file_path.clone(),
             },
         })?;
     }
@@ -137,10 +182,16 @@ fn get_enum_path_type(option: &Option<i32>) -> Option<PathType> {
     }
 }
 
-fn get_path(path: &Option<String>) -> Option<PathBuf> {
+fn get_path(path: &Option<String>) -> PathBuf {
     match path {
-        Some(string_path) => Some(PathBuf::from(string_path)),
-        _ => None,
+        Some(string_path) => {
+            if string_path.is_empty() {
+                PathBuf::from("/")
+            } else {
+                PathBuf::from(string_path)
+            }
+        }
+        _ => PathBuf::from("/"),
     }
 }
 
@@ -175,31 +226,39 @@ fn get_int_path_options(pathspec: &PathSpec) -> Option<i32> {
 /// Converts enum type back to integer to pass to the proto
 fn get_int_path_type(pathspec: &PathSpec) -> Option<i32> {
     match pathspec.pathtype {
-        Some(PathType::OS) => Some(0),
-        Some(PathType::TSK) => Some(1),
-        Some(PathType::Registry) => Some(2),
-        Some(PathType::TMPFile) => Some(3),
-        Some(PathType::NTFS) => Some(4),
-        _ => Some(-1),
+        PathType::Unset => Some(-1),
+        PathType::OS => Some(0),
+        PathType::TSK => Some(1),
+        PathType::Registry => Some(2),
+        PathType::TMPFile => Some(3),
+        PathType::NTFS => Some(4),
     }
 }
 
 impl super::Request for Request {
     type Proto = ListDirRequest;
 
-    fn from_proto(proto: Self::Proto) -> Self {
-        Request {
+    fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
+        Ok(Request {
             pathspec: match proto.pathspec {
-                Some(pathspec) =>
-                    Some(PathSpec {
-                        path_options:
-                        get_enum_path_options(&pathspec.path_options),
-                        pathtype: get_enum_path_type(&pathspec.pathtype),
-                        path: get_path(&pathspec.path),
-                    }),
-                None => None,
+                Some(pathspec) => PathSpec {
+                    path_options:
+                    get_enum_path_options(&pathspec.path_options),
+                    pathtype: match
+                    get_enum_path_type(&pathspec.pathtype) {
+                        Some(path_type) => path_type,
+                        None => return
+                            Err(session::ParseError::malformed
+                                (Error::MissingFieldError
+                                    (String::from("path type"))))
+                    },
+                    path: get_path(&pathspec.path),
+                },
+                None => return Err(session::ParseError::malformed
+                    (Error::MissingFieldError
+                        (String::from("pathspec")))),
             }
-        }
+        })
     }
 }
 
@@ -234,8 +293,7 @@ impl super::Response for Response {
             pathspec: Some(rrg_proto::PathSpec {
                 path_options: get_int_path_options(&self.pathspec),
                 pathtype: get_int_path_type(&self.pathspec),
-                path: Some(self.pathspec.path.unwrap()
-                    .to_string_lossy().to_string()),
+                path: Some(self.pathspec.path.to_string_lossy().to_string()),
                 mount_point: None,
                 stream_name: None,
                 file_size_override: None,
