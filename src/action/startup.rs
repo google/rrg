@@ -18,6 +18,7 @@ use log::error;
 use crate::metadata::{Metadata};
 use crate::session::{self, Session};
 
+/// An error type for failures that can occur when collecting startup data.
 #[derive(Debug)]
 struct Error {
     boot_time_error: sys_info::Error,
@@ -99,5 +100,37 @@ impl super::Response for Response {
             client_info: Some(self.metadata.into()),
             boot_time: Some(boot_time_micros),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_boot_time() {
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
+        assert_eq!(session.response_count(session::Sink::STARTUP), 1);
+
+        let response = session.response::<Response>(session::Sink::STARTUP, 0);
+        assert!(response.boot_time > std::time::UNIX_EPOCH);
+        assert!(response.boot_time < std::time::SystemTime::now());
+    }
+
+    #[test]
+    fn test_metadata() {
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
+        assert_eq!(session.response_count(session::Sink::STARTUP), 1);
+
+        let response = session.response::<Response>(session::Sink::STARTUP, 0);
+        assert!(response.metadata.version.as_numeric() > 0);
+        assert_eq!(response.metadata.name, "rrg");
     }
 }
