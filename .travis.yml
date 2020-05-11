@@ -6,6 +6,10 @@ rust:
   - stable
   - nightly
 
+before_install:
+  - sudo apt-get update
+  - sudo apt-get install libfuse-dev
+
 script:
   - cargo build --verbose
   - cargo test --verbose
