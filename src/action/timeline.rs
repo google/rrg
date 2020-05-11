@@ -41,6 +41,7 @@ struct RecurseState {
     encoder: GzChunkedEncoder,
 }
 
+/// Encodes filesystem metadata into Timeline entry proto.
 fn entry_from_metadata<M>(metadata: &M, path: &PathBuf) -> rrg_proto::TimelineEntry 
 where
     M: MetadataExt,
@@ -59,31 +60,54 @@ where
     }
 }
 
-
-fn send_data<S>(session: &mut S, data: Vec<u8>) -> session::Result<ChunkDigest>
-where
-    S: Session,
-{
-    let digest = ChunkDigest(Sha256::digest(data.as_slice()).into());
-    session.send(session::Sink::TRANSFER_STORE, ChunkResponse { data })?;
-    session.heartbeat();
-    Ok(digest)
-}
-
 impl RecurseState {
-    /// Recursively traverses path specified as root, sends gzchunked stat data to session.
-    fn recurse<S: Session>(&mut self, root: &PathBuf, session: &mut S) -> session::Result<()> {
+    /// Constructs new state that would only traverse filesystems from `device`.
+    fn new(device: u64) -> RecurseState {
+        RecurseState {
+            device,
+            ids: Vec::new(),
+            encoder: GzChunkedEncoder::new(flate2::Compression::default()),
+        }
+    }
+
+    /// Sends block to transfer store and saves its digest.
+    fn send_block<S>(&mut self, block: Vec<u8>, session: &mut S) -> session::Result<()>
+    where
+        S: Session,
+    {
+        let digest = ChunkDigest(Sha256::digest(block.as_slice()).into());
+        self.ids.push(digest);
+        session.send(session::Sink::TRANSFER_STORE, ChunkResponse { data: block })?;
+        session.heartbeat();
+        Ok(())
+    }
+
+    /// Encodes the entry and sends next block to the session if needed.
+    fn process_entry<S>(&mut self, entry: rrg_proto::TimelineEntry, session: &mut S) -> session::Result<()>
+    where
+        S: Session,
+    {
+        let mut entry_data: Vec<u8> = Vec::new();
+        prost::Message::encode(&entry, &mut entry_data)?;
+        self.encoder.write(entry_data.as_slice()).map_err(Error::action)?;
+        if let Some(data) = self.encoder.try_next_chunk().map_err(Error::action)? {
+            self.send_block(data, session)?;
+        }
+        Ok(())
+    }
+
+    /// Recursively traverses path specified as root, sends gzchunked stat data to session in
+    /// process.
+    fn recurse<S>(&mut self, root: &PathBuf, session: &mut S) -> session::Result<()>
+    where
+        S: Session,
+    {
         let metadata = match fs::symlink_metadata(&root) {
             Ok(metadata) => metadata,
             Err(_) => return Ok(()),
         };
-        let entry_proto = entry_from_metadata(&metadata, root);
-        let mut entry_data: Vec<u8> = Vec::new();
-        prost::Message::encode(&entry_proto, &mut entry_data)?;
-        self.encoder.write(entry_data.as_slice()).map_err(Error::action)?;
-        if let Some(data) = self.encoder.try_next_chunk().map_err(Error::action)? {
-            self.ids.push(send_data(session, data)?);
-        }
+        let entry = entry_from_metadata(&metadata, root);
+        self.process_entry(entry, session)?;
         if metadata.is_dir() && metadata.dev() == self.device {
             let entry_iter = match fs::read_dir(root) {
                 Ok(iter) => iter,
@@ -95,19 +119,25 @@ impl RecurseState {
         }
         Ok(())
     }
+
+    /// Sends final pieces of data to the session.
+    fn finish<S: Session>(mut self, session: &mut S) -> session::Result<Vec<ChunkDigest>> {
+        let final_block = self.encoder.next_chunk().map_err(Error::action)?;
+        self.send_block(final_block, session)?;
+        Ok(self.ids)
+    }
 }
 
 /// Handles requests for the timeline action.
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
+    let target_device = fs::symlink_metadata(&request.root).map_err(Error::action)?.dev();
+    let mut state = RecurseState::new(target_device);
 
-    let mut state = RecurseState {
-        device: fs::symlink_metadata(&request.root).map_err(Error::action)?.dev(),
-        ids: Vec::new(),
-        encoder: GzChunkedEncoder::new(flate2::Compression::default()),
-    };
     state.recurse(&request.root, session)?;
-    state.ids.push(send_data(session, state.encoder.next_chunk().map_err(Error::action)?)?);
-    session.reply(Response {ids: state.ids})?;
+    let action_response = Response {
+        ids: state.finish(session)?,
+    };
+    session.reply(action_response)?;
 
     Ok(())
 }
