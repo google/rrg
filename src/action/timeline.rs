@@ -42,12 +42,6 @@ struct RecurseState {
     encoder: GzChunkedEncoder,
 }
 
-impl From<std::io::Error> for Error {
-    fn from(error: std::io::Error) -> Error {
-        Error::action(error)
-    }
-}
-
 #[derive(Debug)]
 struct NoneError {
     field_name: String,
@@ -101,8 +95,8 @@ impl RecurseState {
         let entry_proto = entry_from_metadata(&metadata, root);
         let mut entry_data: Vec<u8> = Vec::new();
         prost::Message::encode(&entry_proto, &mut entry_data)?;
-        self.encoder.write(entry_data.as_slice())?;
-        if let Some(data) = self.encoder.try_next_chunk()? {
+        self.encoder.write(entry_data.as_slice()).map_err(Error::action)?;
+        if let Some(data) = self.encoder.try_next_chunk().map_err(Error::action)? {
             self.ids.push(send_data(session, data)?);
         }
         if metadata.is_dir() && metadata.dev() == self.device {
@@ -111,7 +105,7 @@ impl RecurseState {
                 Err(_) => return Ok(()),
             };
             for entry in entry_iter {
-                self.recurse(&entry?.path(), session)?;
+                self.recurse(&entry.map_err(Error::action)?.path(), session)?;
             }
         }
         Ok(())
@@ -122,12 +116,12 @@ impl RecurseState {
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
 
     let mut state = RecurseState {
-        device: fs::symlink_metadata(&request.root)?.dev(),
+        device: fs::symlink_metadata(&request.root).map_err(Error::action)?.dev(),
         ids: Vec::new(),
         encoder: GzChunkedEncoder::new(flate2::Compression::default()),
     };
     state.recurse(&request.root, session)?;
-    state.ids.push(send_data(session, state.encoder.next_chunk()?)?);
+    state.ids.push(send_data(session, state.encoder.next_chunk().map_err(Error::action)?)?);
     session.reply(Response {ids: state.ids})?;
 
     Ok(())
