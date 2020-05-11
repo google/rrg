@@ -311,10 +311,10 @@ mod tests {
     use std::net::{TcpStream, TcpListener, UdpSocket, SocketAddr};
 
     /// Returns all the responses whose `local_addr` is equal to `addr`.
-    fn find_responses_by_addr<'a>(
-        session: &'a session::test::Fake,
+    fn find_responses_by_addr(
+        session: &session::test::Fake,
         addr: SocketAddr,
-    ) -> Vec<&'a Response> {
+    ) -> Vec<&Response> {
         let mut responses = Vec::new();
         for i in 0..session.reply_count() {
             let resp: &Response = session.reply(i);
