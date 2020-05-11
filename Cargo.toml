@@ -15,3 +15,4 @@ rrg-proto = { path = "proto/" }
 simplelog = { version = "0.7.6" }
 structopt = { version = "0.3.12" }
 sys-info = { version = "0.5.1" }
+libc = { version = "0.2" }
