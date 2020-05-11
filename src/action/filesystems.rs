@@ -97,7 +97,6 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
                 return Err(session::Error::from(Error::MountInfoError(error)))
             },
         }
-
     }
     Ok(())
 }
@@ -164,5 +163,94 @@ impl super::Response for Response {
             label: None,
             options: Some(options_to_dict(self.mount_info.options)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use std::path::PathBuf;
+    use users::{get_current_uid, get_current_gid};
+
+    #[test]
+    fn test_is_any_filesystem_exist() {
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+        assert_ne!(session.reply_count(), 0);
+    }
+
+    /// Returns all responses whose `source` is equal to `fs_name`.
+    fn find_filesystems_by_name<'a>(
+        session: &'a session::test::Fake,
+        fs_name: &'a PathBuf,
+    ) -> Vec<&'a Response> {
+        let mut responses = Vec::new();
+
+        for i in 0..session.reply_count() {
+            let response: &Response = session.reply(i);
+            if response.mount_info.source == *fs_name {
+                responses.push(response);
+            }
+        }
+
+        responses
+    }
+
+    /// Unit-like struct, representing a filesystem for testing with `fuse`.
+    struct FuseFilesystem;
+
+    impl fuse::Filesystem for FuseFilesystem {}
+
+    #[test]
+    fn test_fuse_filesystem() {
+        let fs_name = PathBuf::from("fuse-test-fs");
+
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let mountpoint = tmp_dir.path();
+
+        let fs_name_option = format!("fsname={}", fs_name.to_str().unwrap());
+        let options = [
+            "-o", "ro",
+            "-o", "nosuid",
+            "-o", "nodev",
+            "-o", "relatime",
+            "-o", &fs_name_option,
+        ];
+        let options = options.iter().map(|opt| opt.as_ref())
+            .collect::<Vec<&std::ffi::OsStr>>();
+
+        // Spawn a background thread to handle filesystem operations.
+        // When `_background_session` is dropped, filesystem will be unmounted.
+        let _background_session = unsafe {
+            fuse::spawn_mount(FuseFilesystem, &mountpoint, &options).unwrap()
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        let fuse_mounted_fs = find_filesystems_by_name(&session, &fs_name);
+        assert_eq!(fuse_mounted_fs.len(), 1);
+
+        let mount_info = &fuse_mounted_fs[0].mount_info;
+        assert_eq!(mount_info.source, fs_name);
+        assert_eq!(mount_info.dest, tmp_dir.path());
+        assert_eq!(mount_info.fstype, "fuse");
+
+        let options = &mount_info.options;
+        assert!(options.iter().any(|opt| opt == "ro"));
+        assert!(options.iter().any(|opt| opt == "nosuid"));
+        assert!(options.iter().any(|opt| opt == "nodev"));
+        assert!(options.iter().any(|opt| opt == "relatime"));
+
+        // `user_id` and `group_id` are set by libfuse.
+        // http://man7.org/linux/man-pages/man8/mount.fuse.8.html
+        let current_uid_option = format!(
+            "user_id={}", get_current_uid().to_string());
+        assert!(options.iter().any(|opt| *opt == current_uid_option));
+
+        let current_gid_option = format!(
+            "group_id={}", get_current_gid().to_string());
+        assert!(options.iter().any(|opt| *opt == current_gid_option));
     }
 }
