@@ -9,8 +9,6 @@ use std::vec::Vec;
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use flate2::{Compression, write::GzEncoder, read::GzDecoder};
-#[cfg(test)]
-use rand::{Rng, SeedableRng, rngs::StdRng};
 
 /// Size of a gzchunked block.
 const BLOCK_SIZE: usize = 10 << 20;
@@ -99,6 +97,7 @@ impl GzChunkedDecoder {
 mod tests {
 
     use super::*;
+    use rand::{Rng, SeedableRng, rngs::StdRng};
 
     #[test]
     fn test_encode_and_decode_random() {
