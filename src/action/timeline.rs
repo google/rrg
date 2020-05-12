@@ -194,6 +194,19 @@ mod tests {
     use crate::gzchunked::GzChunkedDecoder;
 
     #[test]
+    fn test_nonexistent_path() {
+        let dir = tempdir().unwrap();
+        let mut dir_path = PathBuf::from(dir.path());
+        dir_path.push("nonexistent_subdir");
+        let dir_path_bytes = dir_path.into_os_string().into_vec();
+
+        let args_proto = TimelineArgs { root: Some(dir_path_bytes) };
+        let request = Request::from_proto(args_proto).unwrap();
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_err());
+    }
+
+    #[test]
     fn test_one_empty_dir() {
         let dir = tempdir().unwrap();
         let dir_metadata = symlink_metadata(dir.path()).unwrap();
