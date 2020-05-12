@@ -182,3 +182,44 @@ impl super::Response for ChunkResponse {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use tempfile::tempdir;
+    use crate::action::Request;
+    use std::os::unix::ffi::OsStrExt;
+    use crate::gzchunked::GzChunkedDecoder;
+
+    #[test]
+    fn test_one_empty_dir() {
+        let dir = tempdir().unwrap();
+        let dir_metadata = fs::metadata(dir.path()).unwrap();
+        let dir_path_bytes = Vec::from(dir.path().as_os_str().as_bytes());
+
+        let expected_entry = entry_from_metadata(&dir_metadata, &PathBuf::from(dir.path()));
+
+        let args_proto = rrg_proto::TimelineArgs { root: Some(dir_path_bytes) };
+        let request = Request::from_proto(args_proto).unwrap();
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.response_count(session::Sink::TRANSFER_STORE), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.ids.len(), 1);
+        let response = session.response::<ChunkResponse>(session::Sink::TRANSFER_STORE, 0);
+        let response_digest = ChunkDigest(Sha256::digest(&response.data).into());
+        assert_eq!(response_digest.0, reply.ids[0].0);
+
+        let mut decoder = GzChunkedDecoder::new();
+        decoder.write(response.data.as_slice()).unwrap();
+        let entry_data = decoder.try_next_data().unwrap();
+        assert_eq!(decoder.try_next_data(), None);
+
+        let entry: rrg_proto::TimelineEntry = prost::Message::decode(entry_data.as_slice()).unwrap();
+        assert_eq!(entry, expected_entry);
+    }
+}
