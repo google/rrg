@@ -9,9 +9,10 @@ use std::vec::Vec;
 use std::ffi::OsString;
 use std::result::Result;
 use std::path::PathBuf;
-use std::fs;
+use std::fs::{symlink_metadata, read_dir};
 use std::os::unix::{fs::MetadataExt, ffi::OsStringExt};
 use sha2::{Digest, Sha256};
+use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
 use crate::session::{self, Session, Error, ParseError, MissingFieldError};
 use crate::gzchunked::GzChunkedEncoder;
 
@@ -42,11 +43,11 @@ struct RecurseState {
 }
 
 /// Encodes filesystem metadata into Timeline entry proto.
-fn entry_from_metadata<M>(metadata: &M, path: &PathBuf) -> rrg_proto::TimelineEntry 
+fn entry_from_metadata<M>(metadata: &M, path: &PathBuf) -> TimelineEntry 
 where
     M: MetadataExt,
 {
-    rrg_proto::TimelineEntry {
+    TimelineEntry {
         path: Some(path.clone().into_os_string().into_vec()),
         mode: Some(metadata.mode()),
         size: Some(metadata.size()),
@@ -83,7 +84,7 @@ impl RecurseState {
     }
 
     /// Encodes the entry and sends next block to the session if needed.
-    fn process_entry<S>(&mut self, entry: rrg_proto::TimelineEntry, session: &mut S) -> session::Result<()>
+    fn process_entry<S>(&mut self, entry: TimelineEntry, session: &mut S) -> session::Result<()>
     where
         S: Session,
     {
@@ -102,14 +103,14 @@ impl RecurseState {
     where
         S: Session,
     {
-        let metadata = match fs::symlink_metadata(&root) {
+        let metadata = match symlink_metadata(&root) {
             Ok(metadata) => metadata,
             Err(_) => return Ok(()),
         };
         let entry = entry_from_metadata(&metadata, root);
         self.process_entry(entry, session)?;
         if metadata.is_dir() && metadata.dev() == self.device {
-            let entry_iter = match fs::read_dir(root) {
+            let entry_iter = match read_dir(root) {
                 Ok(iter) => iter,
                 Err(_) => return Ok(()),
             };
@@ -130,7 +131,7 @@ impl RecurseState {
 
 /// Handles requests for the timeline action.
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let target_device = fs::symlink_metadata(&request.root).map_err(Error::action)?.dev();
+    let target_device = symlink_metadata(&request.root).map_err(Error::action)?.dev();
     let mut state = RecurseState::new(target_device);
 
     state.recurse(&request.root, session)?;
@@ -144,9 +145,9 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
 
 impl super::Request for Request {
 
-    type Proto = rrg_proto::TimelineArgs;
+    type Proto = TimelineArgs;
 
-    fn from_proto(proto: rrg_proto::TimelineArgs) -> Result<Request, ParseError> {
+    fn from_proto(proto: TimelineArgs) -> Result<Request, ParseError> {
         match proto.root {
             Some(root) => Ok(Request {
                 root: PathBuf::from(OsString::from_vec(root)),
@@ -160,10 +161,10 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("TimelineResult");
 
-    type Proto = rrg_proto::TimelineResult;
+    type Proto = TimelineResult;
 
-    fn into_proto(self) -> rrg_proto::TimelineResult {
-        rrg_proto::TimelineResult {
+    fn into_proto(self) -> TimelineResult {
+        TimelineResult {
             entry_batch_blob_ids: self.ids.iter().map(|id| id.0.to_vec()).collect()
         }
     }
@@ -173,10 +174,10 @@ impl super::Response for ChunkResponse {
 
     const RDF_NAME: Option<&'static str> = Some("DataBlob");
 
-    type Proto = rrg_proto::DataBlob;
+    type Proto = DataBlob;
 
-    fn into_proto(self) -> rrg_proto::DataBlob {
-        rrg_proto::DataBlob {
+    fn into_proto(self) -> DataBlob {
+        DataBlob {
             data: Some(self.data),
             ..Default::default()
         }
@@ -195,12 +196,12 @@ mod tests {
     #[test]
     fn test_one_empty_dir() {
         let dir = tempdir().unwrap();
-        let dir_metadata = fs::metadata(dir.path()).unwrap();
+        let dir_metadata = symlink_metadata(dir.path()).unwrap();
         let dir_path_bytes = Vec::from(dir.path().as_os_str().as_bytes());
 
         let expected_entry = entry_from_metadata(&dir_metadata, &PathBuf::from(dir.path()));
 
-        let args_proto = rrg_proto::TimelineArgs { root: Some(dir_path_bytes) };
+        let args_proto = TimelineArgs { root: Some(dir_path_bytes) };
         let request = Request::from_proto(args_proto).unwrap();
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
@@ -219,7 +220,7 @@ mod tests {
         let entry_data = decoder.try_next_data().unwrap();
         assert_eq!(decoder.try_next_data(), None);
 
-        let entry: rrg_proto::TimelineEntry = prost::Message::decode(entry_data.as_slice()).unwrap();
+        let entry: TimelineEntry = prost::Message::decode(entry_data.as_slice()).unwrap();
         assert_eq!(entry, expected_entry);
     }
 }
