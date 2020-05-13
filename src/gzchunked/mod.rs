@@ -6,6 +6,7 @@
 //! Utils for forming gzchunked streams.
 
 use std::vec::Vec;
+use std::mem;
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use flate2::{Compression, write::GzEncoder, read::GzDecoder};
@@ -52,11 +53,11 @@ impl GzChunkedEncoder {
     /// Retrieves next gzipped block without checking its size.
     pub fn next_chunk(&mut self) -> std::io::Result<Vec<u8>> {
         self.encoder.flush()?;
-        self.encoder.try_finish()?;
+        let new_encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
+        let old_encoder = mem::replace(&mut self.encoder, new_encoder);
+        let encoded_data = old_encoder.finish()?;
 
-        let ret = Ok(self.encoder.get_ref().clone());
-        self.encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
-        ret
+        Ok(encoded_data)
     }
 }
 
