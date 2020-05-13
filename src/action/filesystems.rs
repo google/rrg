@@ -161,7 +161,6 @@ mod tests {
 
     use super::*;
     use std::path::PathBuf;
-    use users::{get_current_uid, get_current_gid};
 
     #[test]
     fn test_if_any_filesystem_exist() {
@@ -188,12 +187,17 @@ mod tests {
     }
 
     /// Unit-like struct, representing a filesystem for testing with `fuse`.
+    #[cfg(target_os = "linux")]
     struct FuseFilesystem;
 
+    #[cfg(target_os = "linux")]
     impl fuse::Filesystem for FuseFilesystem {}
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_fuse_filesystem() {
+        use users::{get_current_uid, get_current_gid};
+
         let fs_name = PathBuf::from("fuse-test-fs");
 
         let tmp_dir = tempfile::tempdir().unwrap();
