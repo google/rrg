@@ -46,7 +46,7 @@ impl Display for Error {
                 write!(fmt, "missed file error: {}", error)
             },
             MountInfoParse(ref error) => {
-                write!(fmt, "failed to obtain MountInfo: {}", error)
+                write!(fmt, "failed to obtain mount information: {}", error)
             },
         }
     }
