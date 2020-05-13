@@ -216,7 +216,7 @@ mod tests {
 
         // Spawn a background thread to handle filesystem operations.
         // When `_background_session` is dropped, filesystem will be unmounted.
-        let _background_session = unsafe {
+        let background_session = unsafe {
             fuse::spawn_mount(FuseFilesystem, &mountpoint, &options).unwrap()
         };
 
@@ -246,5 +246,7 @@ mod tests {
         let current_gid_option = format!(
             "group_id={}", get_current_gid().to_string());
         assert!(options.iter().any(|opt| *opt == current_gid_option));
+
+        drop(background_session);
     }
 }
