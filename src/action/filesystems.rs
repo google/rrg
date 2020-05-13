@@ -19,9 +19,9 @@ use std::fmt::{Display, Formatter};
 #[derive(Debug)]
 enum Error {
     /// Missed mtab-like file error.
-    MissedFile(std::io::Error),
+    MissingFile(std::io::Error),
     /// Parsing mtab-like file error.
-    MountInfoError(std::io::Error),
+    MountInfoParse(std::io::Error),
 }
 
 impl std::error::Error for Error {
@@ -30,8 +30,8 @@ impl std::error::Error for Error {
         use Error::*;
 
         match *self {
-            MissedFile(ref error) => Some(error),
-            MountInfoError(ref error) => Some(error),
+            MissingFile(ref error) => Some(error),
+            MountInfoParse(ref error) => Some(error),
         }
     }
 }
@@ -42,10 +42,10 @@ impl Display for Error {
         use Error::*;
 
         match *self {
-            MissedFile(ref error) => {
+            MissingFile(ref error) => {
                 write!(fmt, "missed file error: {}", error)
             },
-            MountInfoError(ref error) => {
+            MountInfoParse(ref error) => {
                 write!(fmt, "failed to obtain MountInfo: {}", error)
             },
         }
@@ -80,7 +80,7 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
             match MountIter::new_from_file("/etc/mtab") {
                 Ok(mount_iter) => mount_iter,
                 Err(error) => {
-                    return Err(session::Error::from(Error::MissedFile(error)))
+                    return Err(session::Error::from(Error::MissingFile(error)))
                 },
             }
         },
@@ -94,7 +94,7 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
                 })?;
             },
             Err(error) => {
-                return Err(session::Error::from(Error::MountInfoError(error)))
+                return Err(session::Error::from(Error::MountInfoParse(error)))
             },
         }
     }
