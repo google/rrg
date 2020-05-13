@@ -72,12 +72,12 @@ impl GzChunkedDecoder {
     /// Decodes next gzchunked block and puts all results into the internal queue.
     pub fn write(&mut self, buf: &[u8]) -> std::io::Result<()> {
         let mut decoder = GzDecoder::new(buf);
-        let mut chunked_data_vec : Vec<u8> = Vec::new();
+        let mut chunked_data_vec: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut chunked_data_vec)?;
         let mut chunked_data = chunked_data_vec.as_slice();
         while !chunked_data.is_empty() {
             let (length_slice, remainder) = chunked_data.split_at(8);
-            let mut length : [u8; 8] = Default::default();
+            let mut length: [u8; 8] = Default::default();
             length.copy_from_slice(length_slice);
             let length = u64::from_be_bytes(length);
             let (data_slice, remainder) = remainder.split_at(length as usize);
@@ -105,11 +105,11 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(20200509);
         let mut encoder = GzChunkedEncoder::new(Compression::default());
         let mut decoder = GzChunkedDecoder::new();
-        let mut expected_data : Vec<Vec<u8>> = Vec::new();
-        let mut decoded_data : Vec<Vec<u8>> = Vec::new();
+        let mut expected_data: Vec<Vec<u8>> = Vec::new();
+        let mut decoded_data: Vec<Vec<u8>> = Vec::new();
         for _ in 0..256 {
             let size = rng.gen_range(128, 256);
-            let data : Vec<u8> = (0..size).map(|_| rng.gen()).collect();
+            let data: Vec<u8> = (0..size).map(|_| rng.gen()).collect();
             encoder.write(data.as_slice()).unwrap();
             if let Some(block) = encoder.try_next_chunk().unwrap() {
                 decoder.write(block.as_slice()).unwrap();
