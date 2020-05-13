@@ -174,7 +174,7 @@ mod tests {
     use users::{get_current_uid, get_current_gid};
 
     #[test]
-    fn test_is_any_filesystem_exist() {
+    fn test_if_any_filesystem_exist() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
         assert_ne!(session.reply_count(), 0);
