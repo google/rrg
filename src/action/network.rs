@@ -391,7 +391,7 @@ mod tests {
         }
 
         // We don't check PID for `connection_resp`, because it is unset at
-        // least on Linux and I don't know whether it's set on other systems.
+        // least on Linux and it's unclear whether PID is set on other systems.
         assert_eq!(listen_resp.process_info.as_ref().unwrap().pid, our_pid);
 
         let connection_socket = extract_tcp_info(&connection_resp);
