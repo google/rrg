@@ -77,27 +77,17 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
         Ok(mount_iter) => mount_iter,
         Err(_) => {
             // `/proc/mounts` doesn't exist. Try to fall back to `/etc/mtab`.
-            match MountIter::new_from_file("/etc/mtab") {
-                Ok(mount_iter) => mount_iter,
-                Err(error) => {
-                    return Err(session::Error::from(Error::MissingFile(error)))
-                },
-            }
+            MountIter::new_from_file("/etc/mtab").map_err(Error::MissingFile)?
         },
     };
 
     for mount_info in mount_iter {
-        match mount_info {
-            Ok(mount_info) => {
-                session.reply(Response {
-                    mount_info,
-                })?;
-            },
-            Err(error) => {
-                return Err(session::Error::from(Error::MountInfoParse(error)))
-            },
-        }
+        let mount_info = mount_info.map_err(Error::MountInfoParse)?;
+        session.reply(Response {
+           mount_info,
+        })?;
     }
+
     Ok(())
 }
 
