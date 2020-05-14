@@ -9,15 +9,20 @@ use std::vec::Vec;
 use std::mem;
 use std::collections::VecDeque;
 use std::io::{Read, Write};
+use std::default::Default;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::{Compression, write::GzEncoder, read::GzDecoder};
 
 /// Size of a gzchunked block.
 const BLOCK_SIZE: usize = 10 << 20;
 
+/// A wrapper type for gzip compression level.
+pub struct GzChunkedCompression(Compression);
+
 /// A gzchunked streaming encoder.
 pub struct GzChunkedEncoder {
     encoder: GzEncoder<Vec<u8>>,
+    compression: GzChunkedCompression,
 }
 
 /// A gzchunked streaming decoder.
@@ -25,11 +30,24 @@ pub struct GzChunkedDecoder {
     queue: VecDeque<Vec<u8>>,
 }
 
+impl GzChunkedCompression {
+    pub fn new(level: u32) -> GzChunkedCompression {
+        GzChunkedCompression(Compression::new(level))
+    }
+}
+
+impl Default for GzChunkedCompression {
+    fn default() -> GzChunkedCompression {
+        GzChunkedCompression(Compression::new(5))
+    }
+}
+
 impl GzChunkedEncoder {
     /// Creates a new encoder with specified gzip compression level.
-    pub fn new(compression: Compression) -> GzChunkedEncoder {
+    pub fn new(compression: GzChunkedCompression) -> GzChunkedEncoder {
         GzChunkedEncoder {
-            encoder: GzEncoder::new(Vec::new(), compression)
+            encoder: GzEncoder::new(Vec::new(), compression.0),
+            compression,
         }
     }
 
@@ -54,7 +72,7 @@ impl GzChunkedEncoder {
     /// Retrieves next gzipped block without checking its size.
     pub fn next_chunk(&mut self) -> std::io::Result<Vec<u8>> {
         self.encoder.flush()?;
-        let new_encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
+        let new_encoder = GzEncoder::new(Vec::new(), self.compression.0);
         let old_encoder = mem::replace(&mut self.encoder, new_encoder);
         let encoded_data = old_encoder.finish()?;
 
@@ -101,7 +119,7 @@ mod tests {
     #[test]
     fn test_encode_and_decode_random() {
         let mut rng = StdRng::seed_from_u64(20200509);
-        let mut encoder = GzChunkedEncoder::new(Compression::default());
+        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
         let mut decoder = GzChunkedDecoder::new();
         let mut expected_data: Vec<Vec<u8>> = Vec::new();
         let mut decoded_data: Vec<Vec<u8>> = Vec::new();
