@@ -239,12 +239,10 @@ mod tests {
 
         // `user_id` and `group_id` are set by libfuse.
         // http://man7.org/linux/man-pages/man8/mount.fuse.8.html
-        let current_uid_option = format!(
-            "user_id={}", get_current_uid().to_string());
+        let current_uid_option = format!("user_id={}", get_current_uid());
         assert!(options.iter().any(|opt| *opt == current_uid_option));
 
-        let current_gid_option = format!(
-            "group_id={}", get_current_gid().to_string());
+        let current_gid_option = format!("group_id={}", get_current_gid());
         assert!(options.iter().any(|opt| *opt == current_gid_option));
 
         drop(background_session);
