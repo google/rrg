@@ -9,6 +9,7 @@ use std::vec::Vec;
 use std::mem;
 use std::collections::VecDeque;
 use std::io::{Read, Write};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::{Compression, write::GzEncoder, read::GzDecoder};
 
 /// Size of a gzchunked block.
@@ -34,7 +35,7 @@ impl GzChunkedEncoder {
 
     /// Writes next data chunk into the stream.
     pub fn write(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.encoder.write_all(&(buf.len() as u64).to_be_bytes())?;
+        self.encoder.write_u64::<BigEndian>(buf.len() as u64)?;
         self.encoder.write_all(buf)?;
         Ok(())
     }
@@ -76,13 +77,10 @@ impl GzChunkedDecoder {
         decoder.read_to_end(&mut chunked_data_vec)?;
         let mut chunked_data = chunked_data_vec.as_slice();
         while !chunked_data.is_empty() {
-            let (length_slice, remainder) = chunked_data.split_at(8);
-            let mut length: [u8; 8] = Default::default();
-            length.copy_from_slice(length_slice);
-            let length = u64::from_be_bytes(length);
-            let (data_slice, remainder) = remainder.split_at(length as usize);
-            self.queue.push_back(Vec::from(data_slice));
-            chunked_data = remainder;
+            let length = chunked_data.read_u64::<BigEndian>()?;
+            let mut data = vec![0; length as usize];
+            chunked_data.read_exact(data.as_mut_slice())?;
+            self.queue.push_back(data);
         }
         Ok(())
     }
