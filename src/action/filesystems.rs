@@ -209,6 +209,7 @@ mod tests {
             "-o", "nosuid",
             "-o", "nodev",
             "-o", "relatime",
+            "-o", "subtype=custom-type",
             "-o", &fs_name_option,
         ];
         let options = options.iter().map(|opt| opt.as_ref())
@@ -229,7 +230,7 @@ mod tests {
         let mount_info = &fuse_mounted_fs[0].mount_info;
         assert_eq!(mount_info.source, fs_name);
         assert_eq!(mount_info.dest, tmp_dir.path());
-        assert_eq!(mount_info.fstype, "fuse");
+        assert_eq!(mount_info.fstype, "fuse.custom-type");
 
         let options = &mount_info.options;
         assert!(options.iter().any(|opt| opt == "ro"));
