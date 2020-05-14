@@ -14,7 +14,7 @@ use std::os::unix::{fs::MetadataExt, ffi::OsStringExt};
 use sha2::{Digest, Sha256};
 use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
 use crate::session::{self, Session, Error, ParseError, MissingFieldError};
-use crate::gzchunked::GzChunkedEncoder;
+use crate::gzchunked::{GzChunkedEncoder, GzChunkedCompression};
 
 /// A request type for the timeline action.
 pub struct Request {
@@ -67,7 +67,7 @@ impl RecurseState {
         RecurseState {
             device,
             ids: Vec::new(),
-            encoder: GzChunkedEncoder::new(flate2::Compression::default()),
+            encoder: GzChunkedEncoder::new(GzChunkedCompression::default()),
         }
     }
 
