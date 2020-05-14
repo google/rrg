@@ -11,10 +11,13 @@ use std::result::Result;
 use std::path::PathBuf;
 use std::fs::{symlink_metadata, read_dir};
 use std::os::unix::{fs::MetadataExt, ffi::OsStringExt};
+
 use sha2::{Digest, Sha256};
 use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
+
 use crate::session::{self, Session, Error, ParseError, MissingFieldError};
 use crate::gzchunked::{GzChunkedEncoder, GzChunkedCompression};
+
 
 /// A request type for the timeline action.
 pub struct Request {
@@ -42,7 +45,7 @@ struct RecurseState {
     encoder: GzChunkedEncoder,
 }
 
-/// Encodes filesystem metadata into Timeline entry proto.
+/// Encodes filesystem metadata into timeline entry proto.
 fn entry_from_metadata<M>(metadata: &M, path: &PathBuf) -> TimelineEntry 
 where
     M: MetadataExt,
