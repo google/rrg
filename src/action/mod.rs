@@ -18,6 +18,7 @@
 pub mod interfaces;
 pub mod metadata;
 pub mod startup;
+pub mod network;
 
 use crate::session::{self, Session, Task};
 
@@ -94,6 +95,7 @@ where
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
+        "ListNetworkConnections" => task.execute(self::network::handle),
         "EnumerateInterfaces" => task.execute(self::interfaces::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
