@@ -18,6 +18,7 @@
 pub mod metadata;
 pub mod startup;
 pub mod timeline;
+pub mod network;
 
 use crate::session::{self, Session, Task};
 
@@ -95,6 +96,7 @@ where
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
         "Timeline" => task.execute(self::timeline::handle),
+        "ListNetworkConnections" => task.execute(self::network::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
