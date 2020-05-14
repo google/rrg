@@ -10,11 +10,51 @@ extern crate libc;
 
 use sys_info::{linux_os_release, os_type, hostname};
 use libc::{uname, utsname, c_char};
+use crate::session::{self, Session};
 use std::ffi::CStr;
 use std::option::Option;
-use crate::session::{self, Session};
+use std::fmt::{Display, Formatter};
 
 use rrg_proto::Uname;
+
+#[derive(Debug)]
+enum Error {
+    CannotGetOSType(sys_info::Error),
+    CannotGetLinuxRelease(sys_info::Error)
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use Error::*;
+
+        match *self {
+            CannotGetOSType(ref error) => Some(error),
+            CannotGetLinuxRelease(ref error) => Some(error)
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        use Error::*;
+
+        match *self {
+            CannotGetOSType(ref error) => {
+                write!(fmt, "can't get OS type error: {}", error)
+            },
+
+            CannotGetLinuxRelease(ref error) => {
+                write!(fmt, "can't get Linux release info error: {}", error)
+            }
+        }
+    }
+}
+
+impl From<Error> for session::Error {
+    fn from(error: Error) -> session::Error {
+        session::Error::action(error)
+    }
+}
 
 /// Structure that contains information about client platform.
 #[derive(Default)]
@@ -44,13 +84,15 @@ fn convert_raw_string(c_string: &[c_char]) -> String {
 }
 
 /// Handles requests for `GetPlatformInfo` action.
+/// 
 /// Currently works fine only for Linux OS.
 pub fn handle<S: Session>(session:&mut S, _: ()) -> session::Result<()> {
-    let os_type = os_type().expect("Can't get os type");
+    let os_type = os_type().map_err(Error::CannotGetOSType)?;
     match os_type.as_str() {
         "Linux" => {
             let linux_release_info = linux_os_release()
-                                        .expect("Can't get info about linux system");
+                                        .map_err(Error::CannotGetLinuxRelease)?;
+
             let mut system_info: utsname;
 
             unsafe {
