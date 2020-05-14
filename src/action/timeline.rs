@@ -25,6 +25,7 @@ pub struct Request {
 }
 
 /// A newtype wrapper for SHA-256 chunk digest.
+#[derive(Debug, PartialEq, Clone)]
 struct ChunkDigest([u8; 32]);
 
 /// A response type for the timeline action (actual response).
@@ -55,7 +56,7 @@ where
         mode: Some(metadata.mode()),
         size: Some(metadata.size()),
         dev: Some(metadata.dev()),
-        ino: Some(metadata.dev()),
+        ino: Some(metadata.ino()),
         uid: Some(metadata.uid() as i64),
         gid: Some(metadata.gid() as i64),
         atime_ns: Some(metadata.atime_nsec() as u64),
@@ -191,52 +192,111 @@ impl super::Response for ChunkResponse {
 mod tests {
 
     use super::*;
+    use std::fs::{hard_link, create_dir, write};
+    use std::path::Path;
+    use std::os::unix::{ffi::OsStrExt, fs::symlink};
     use tempfile::tempdir;
     use crate::action::Request;
-    use std::os::unix::ffi::OsStrExt;
     use crate::gzchunked::GzChunkedDecoder;
+
+    fn handle_for_path<S>(session: &mut S, path: &Path) -> session::Result<()>
+    where
+        S: Session,
+    {
+        let path_bytes = Vec::from(path.as_os_str().as_bytes());
+        let args_proto = TimelineArgs { root: Some(path_bytes) };
+        let request = Request::from_proto(args_proto).unwrap();
+        handle(session, request)
+    }
+
+    fn entry_for_path(path: &Path) -> TimelineEntry {
+        let metadata = symlink_metadata(path).unwrap();
+        entry_from_metadata(&metadata, &PathBuf::from(path))
+    }
+
+    fn entries_from_session_response(session: &session::test::Fake) -> Vec<TimelineEntry> {
+        assert_eq!(session.reply_count(), 1);
+        let block_count = session.response_count(session::Sink::TRANSFER_STORE);
+
+        let mut expected_ids = session.reply::<Response>(0).ids.clone();
+        let mut ids = Vec::new();
+        assert_eq!(expected_ids.len(), block_count);
+        expected_ids.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut decoder = GzChunkedDecoder::new();
+        for block_number in 0..block_count {
+            let block = session.response::<ChunkResponse>(session::Sink::TRANSFER_STORE, block_number);
+            let response_digest = ChunkDigest(Sha256::digest(&block.data).into());
+            ids.push(response_digest);
+
+            decoder.write(block.data.as_slice()).unwrap();
+        }
+
+        expected_ids.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(ids, expected_ids);
+
+        let mut ret = Vec::new();
+        while let Some(entry_data) = decoder.try_next_data() {
+            let entry: TimelineEntry = prost::Message::decode(entry_data.as_slice()).unwrap();
+            ret.push(entry);
+        }
+        ret.sort_by(|a, b| a.path.cmp(&b.path));
+        ret
+    }
 
     #[test]
     fn test_nonexistent_path() {
         let dir = tempdir().unwrap();
-        let mut dir_path = PathBuf::from(dir.path());
-        dir_path.push("nonexistent_subdir");
-        let dir_path_bytes = dir_path.into_os_string().into_vec();
+        let dir_path = dir.path().join("nonexistent_subdir");
 
-        let args_proto = TimelineArgs { root: Some(dir_path_bytes) };
-        let request = Request::from_proto(args_proto).unwrap();
         let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, request).is_err());
+        assert!(handle_for_path(&mut session, dir_path.as_path()).is_err());
     }
 
     #[test]
     fn test_one_empty_dir() {
+        let mut expected_entries = Vec::new();
+
         let dir = tempdir().unwrap();
-        let dir_metadata = symlink_metadata(dir.path()).unwrap();
-        let dir_path_bytes = Vec::from(dir.path().as_os_str().as_bytes());
+        expected_entries.push(entry_for_path(dir.path()));
 
-        let expected_entry = entry_from_metadata(&dir_metadata, &PathBuf::from(dir.path()));
+        expected_entries.sort_by(|a, b| a.path.cmp(&b.path));
 
-        let args_proto = TimelineArgs { root: Some(dir_path_bytes) };
-        let request = Request::from_proto(args_proto).unwrap();
         let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, request).is_ok());
+        assert!(handle_for_path(&mut session, dir.path()).is_ok());
 
-        assert_eq!(session.reply_count(), 1);
-        assert_eq!(session.response_count(session::Sink::TRANSFER_STORE), 1);
+        let entries = entries_from_session_response(&session);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries, expected_entries);
+    }
 
-        let reply = session.reply::<Response>(0);
-        assert_eq!(reply.ids.len(), 1);
-        let response = session.response::<ChunkResponse>(session::Sink::TRANSFER_STORE, 0);
-        let response_digest = ChunkDigest(Sha256::digest(&response.data).into());
-        assert_eq!(response_digest.0, reply.ids[0].0);
+    #[test]
+    fn test_file_hardlink() {
+        let mut expected_entries = Vec::new();
 
-        let mut decoder = GzChunkedDecoder::new();
-        decoder.write(response.data.as_slice()).unwrap();
-        let entry_data = decoder.try_next_data().unwrap();
-        assert_eq!(decoder.try_next_data(), None);
+        let dir = tempdir().unwrap();
 
-        let entry: TimelineEntry = prost::Message::decode(entry_data.as_slice()).unwrap();
-        assert_eq!(entry, expected_entry);
+        let test1_path = dir.path().join("test1.txt");
+        write(&test1_path, "foo");
+
+        let test2_path = dir.path().join("test2.txt");
+        hard_link(&test1_path, &test2_path).unwrap();
+
+        let test1_entry = entry_for_path(&test1_path);
+        let test2_entry = entry_for_path(&test2_path);
+        assert_eq!(test1_entry.ino, test2_entry.ino);
+
+        expected_entries.push(entry_for_path(dir.path()));
+        expected_entries.push(test1_entry);
+        expected_entries.push(test2_entry);
+
+        expected_entries.sort_by(|a, b| a.path.cmp(&b.path));
+
+        let mut session = session::test::Fake::new();
+        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+
+        let entries = entries_from_session_response(&session);
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries, expected_entries);
     }
 }
