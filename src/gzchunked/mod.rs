@@ -117,6 +117,66 @@ mod tests {
     use rand::{Rng, SeedableRng, rngs::StdRng};
 
     #[test]
+    fn test_encode_and_decode_empty() {
+        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
+        let mut decoder = GzChunkedDecoder::new();
+
+        let encoded_block = encoder.next_chunk().unwrap();
+        // should contain gzip header
+        assert_ne!(encoded_block.len(), 0);
+        decoder.write(encoded_block.as_slice()).unwrap();
+        decoder.write(encoded_block.as_slice()).unwrap();
+
+        assert!(decoder.try_next_data().is_none());
+    }
+
+    #[test]
+    fn test_encode_and_decode_all_in_one_block() {
+        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
+        let mut decoder = GzChunkedDecoder::new();
+        let blocks = vec![
+            vec![1, 2, 3, 4],
+            vec![],
+            vec![1, 2, 3, 4, 5, 6, 7, 8],
+            vec![1],
+        ];
+
+        for block in &blocks {
+            encoder.write(block.as_slice()).unwrap();
+        }
+
+        let encoded_block = encoder.next_chunk().unwrap();
+        decoder.write(encoded_block.as_slice()).unwrap();
+
+        for block in blocks {
+            assert_eq!(block, decoder.try_next_data().unwrap());
+        }
+        assert!(decoder.try_next_data().is_none());
+    }
+
+    #[test]
+    fn test_encode_and_decode_one_per_block() {
+        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
+        let mut decoder = GzChunkedDecoder::new();
+        let blocks = vec![
+            vec![1, 2, 3, 4],
+            vec![],
+            vec![1, 2, 3, 4, 5, 6, 7, 8],
+            vec![1],
+        ];
+
+        for block in blocks {
+            encoder.write(block.as_slice()).unwrap();
+            let encoded_block = encoder.next_chunk().unwrap();
+
+            decoder.write(encoded_block.as_slice()).unwrap();
+
+            assert_eq!(block, decoder.try_next_data().unwrap());
+            assert!(decoder.try_next_data().is_none());
+        }
+    }
+
+    #[test]
     fn test_encode_and_decode_random() {
         let mut rng = StdRng::seed_from_u64(20200509);
         let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
