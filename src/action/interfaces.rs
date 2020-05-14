@@ -8,6 +8,8 @@
 //! The interfaces action lists all network interfaces available on the client,
 //! collecting their names, MAC and IP addresses.
 
+use log::error;
+
 use ipnetwork::IpNetwork;
 use pnet::{
     datalink::{self, NetworkInterface},
@@ -81,7 +83,16 @@ impl super::Response for Response {
 
     fn into_proto(self) -> Interface {
         Interface {
-            mac_address: Some(mac_to_vec(self.interface.mac_address())),
+            mac_address: match self.interface.mac {
+                Some(mac) => Some(mac_to_vec(mac)),
+                None => {
+                    error!(
+                        "unable to get MAC address for {} interface",
+                        self.interface.name,
+                    );
+                    None
+                }
+            },
             ifname: Some(self.interface.name),
             addresses: ips_to_protos(self.interface.ips),
             ..Default::default()
