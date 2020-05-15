@@ -192,9 +192,10 @@ impl super::Response for ChunkResponse {
 mod tests {
 
     use super::*;
-    use std::fs::{hard_link, create_dir, write};
+    use std::fs::{hard_link, create_dir, write, set_permissions, Permissions};
+    use std::ffi::OsStr;
     use std::path::Path;
-    use std::os::unix::{ffi::OsStrExt, fs::symlink};
+    use std::os::unix::{ffi::OsStrExt, fs::{symlink, PermissionsExt}};
     use tempfile::tempdir;
     use crate::action::Request;
     use crate::gzchunked::GzChunkedDecoder;
@@ -304,6 +305,155 @@ mod tests {
         expected_entries.push(entry_for_path(dir.path()));
         expected_entries.push(test1_entry);
         expected_entries.push(test2_entry);
+
+        let mut session = session::test::Fake::new();
+        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+
+        let mut entries = entries_from_session_response(&session);
+        diff_entries(&mut entries, &mut expected_entries);
+    }
+    
+    #[test]
+    fn test_file_symlink() {
+        let mut expected_entries = Vec::new();
+
+        let dir = tempdir().unwrap();
+
+        let test1_path = dir.path().join("test1.txt");
+        write(&test1_path, "foo").unwrap();
+
+        let test2_path = dir.path().join("test2.txt");
+        symlink(&test1_path, &test2_path).unwrap();
+
+        let test1_entry = entry_for_path(&test1_path);
+        let test2_entry = entry_for_path(&test2_path);
+        assert_ne!(test1_entry.ino, test2_entry.ino);
+
+        expected_entries.push(entry_for_path(dir.path()));
+        expected_entries.push(test1_entry);
+        expected_entries.push(test2_entry);
+
+        let mut session = session::test::Fake::new();
+        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+
+        let mut entries = entries_from_session_response(&session);
+        diff_entries(&mut entries, &mut expected_entries);
+    }
+    
+    #[test]
+    fn test_symlink_loops() {
+        let mut expected_entries = Vec::new();
+
+        let dir = tempdir().unwrap();
+
+        let test1_path = dir.path().join("test1");
+        let test2_path = dir.path().join("test2");
+        let test3_path = dir.path().join("test3");
+        let test4_path = test3_path.join("test4");
+        symlink(&test2_path, &test1_path).unwrap();
+        symlink(&test1_path, &test2_path).unwrap();
+        create_dir(&test3_path).unwrap();
+        symlink("../test3", &test4_path).unwrap();
+
+        let test1_entry = entry_for_path(&test1_path);
+        let test2_entry = entry_for_path(&test2_path);
+        let test3_entry = entry_for_path(&test3_path);
+        let test4_entry = entry_for_path(&test4_path);
+
+        expected_entries.push(entry_for_path(dir.path()));
+        expected_entries.push(test1_entry);
+        expected_entries.push(test2_entry);
+        expected_entries.push(test3_entry);
+        expected_entries.push(test4_entry);
+
+        let mut session = session::test::Fake::new();
+        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+
+        let mut entries = entries_from_session_response(&session);
+        diff_entries(&mut entries, &mut expected_entries);
+    }
+    
+    #[test]
+    fn test_weird_unicode_names() {
+        let mut expected_entries = Vec::new();
+
+        let dir = tempdir().unwrap();
+
+        let filenames = vec!["with spaces", "with_'\"quotes\"'", "кириллица"];
+        for filename in filenames {
+            let path = dir.path().join(filename);
+            write(&path, "foo").unwrap();
+            let entry = entry_for_path(&path);
+            let entry_path = Path::new(OsStr::from_bytes(entry.path.as_ref().unwrap().as_slice()));
+            assert_eq!(entry_path.file_name().unwrap().to_str().unwrap(), filename);
+            expected_entries.push(entry);
+        }
+        expected_entries.push(entry_for_path(dir.path()));
+
+        let mut session = session::test::Fake::new();
+        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+
+        let mut entries = entries_from_session_response(&session);
+        diff_entries(&mut entries, &mut expected_entries);
+    }
+    
+    #[test]
+    fn test_deep_dirs() {
+        const DIR_COUNT: u32 = 256;
+        let mut expected_entries = Vec::new();
+
+        let dir = tempdir().unwrap();
+
+        let mut path = PathBuf::from(dir.path());
+        for _ in 0..DIR_COUNT {
+            path.push("dir");
+            create_dir(&path).unwrap();
+        }
+        
+        path = PathBuf::from(dir.path());
+        expected_entries.push(entry_for_path(dir.path()));
+        for _ in 0..DIR_COUNT {
+            path.push("dir");
+            let entry = entry_for_path(&path);
+            expected_entries.push(entry);
+        }
+
+        let mut session = session::test::Fake::new();
+        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+
+        let mut entries = entries_from_session_response(&session);
+        diff_entries(&mut entries, &mut expected_entries);
+    }
+    
+    #[test]
+    fn test_mode_and_permissions() {
+        let mut expected_entries = Vec::new();
+
+        let dir = tempdir().unwrap();
+
+        let unavailable_dir_path = dir.path().join("unavailable");
+        let unavailable_file_path = unavailable_dir_path.join("file");
+        let readonly_path = dir.path().join("readonly.txt");
+        let symlink_path = dir.path().join("writeonly.txt");
+        create_dir(&unavailable_dir_path).unwrap();
+        write(&unavailable_file_path, "foo").unwrap();
+        write(&readonly_path, "foo").unwrap();
+        symlink(&readonly_path, &symlink_path).unwrap();
+        
+        set_permissions(&unavailable_dir_path, Permissions::from_mode(0o000)).unwrap();
+        set_permissions(&readonly_path, Permissions::from_mode(0o444)).unwrap();
+
+        let unavailable_dir_entry = entry_for_path(&unavailable_dir_path);
+        let readonly_entry = entry_for_path(&readonly_path);
+        let symlink_entry = entry_for_path(&symlink_path);
+        assert_eq!(unavailable_dir_entry.mode.unwrap(), 0o040000);
+        assert_eq!(readonly_entry.mode.unwrap(), 0o100444);
+        assert_eq!(symlink_entry.mode.unwrap(), 0o120777);
+
+        expected_entries.push(entry_for_path(dir.path()));
+        expected_entries.push(unavailable_dir_entry);
+        expected_entries.push(readonly_entry);
+        expected_entries.push(symlink_entry);
 
         let mut session = session::test::Fake::new();
         assert!(handle_for_path(&mut session, dir.path()).is_ok());
