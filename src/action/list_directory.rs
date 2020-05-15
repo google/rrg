@@ -105,13 +105,16 @@ struct PathSpec {
 pub fn handle<S: Session>(session: &mut S, request: Request)
                           -> session::Result<()> {
     let dir_path = &request.pathspec.path;
-    let dir_iterator = match dir_path.read_dir() {
+    // In case if Result<DirEntry> matches the error branch, we won't give
+    // any info about that file, but other info isn't effected:
+    let (dir_entries, _): (Vec<_>, Vec<_>) = match dir_path.read_dir() {
         Ok(dir_iter) => dir_iter,
         Err(error) =>
             return Err(session::Error::from(Error::ReadPathError(error))),
-    };
-    let mut paths: Vec<_> = dir_iterator.map(|entry| entry
-        .unwrap().path()).collect();
+    }.partition(Result::is_ok);
+    // Code won't panic because of unwrap(). We made the partition above
+    let mut paths: Vec<PathBuf> = dir_entries.into_iter().map(Result::unwrap)
+        .map(|entry| entry.path()).collect();
     paths.sort();
     for file_path in &paths {
         let umetadata = match fs::symlink_metadata(file_path) {
