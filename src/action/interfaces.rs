@@ -91,7 +91,7 @@ impl super::Response for Response {
                         self.interface.name,
                     );
                     None
-                }
+                },
             },
             ifname: Some(self.interface.name),
             addresses: ips_to_protos(self.interface.ips),
