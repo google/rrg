@@ -24,3 +24,4 @@ sysinfo = { version = "0.14.1" }
 [dev-dependencies]
 rand = { version = "0.7.3" }
 tempfile = { version = "3.1.0" }
+diff = { version = "0.1.12" }

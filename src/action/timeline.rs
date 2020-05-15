@@ -240,8 +240,24 @@ mod tests {
             let entry: TimelineEntry = prost::Message::decode(entry_data.as_slice()).unwrap();
             ret.push(entry);
         }
-        ret.sort_by(|a, b| a.path.cmp(&b.path));
         ret
+    }
+
+    fn diff_entries(left: &mut Vec<TimelineEntry>, right: &mut Vec<TimelineEntry>) {
+        left.sort_by(|a, b| a.path.cmp(&b.path));
+        right.sort_by(|a, b| a.path.cmp(&b.path));
+
+        let diffs = diff::slice(left.as_slice(), right.as_slice())
+            .into_iter()
+            .filter(|diff_result|
+                    if let diff::Result::Both(_, _) = diff_result {
+                        false
+                    } else {
+                        true
+                    })
+            .collect::<Vec<diff::Result<&TimelineEntry>>>();
+
+        assert_eq!(diffs, Vec::new());
     }
 
     #[test]
@@ -265,9 +281,8 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle_for_path(&mut session, dir.path()).is_ok());
 
-        let entries = entries_from_session_response(&session);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries, expected_entries);
+        let mut entries = entries_from_session_response(&session);
+        diff_entries(&mut entries, &mut expected_entries);
     }
 
     #[test]
@@ -277,7 +292,7 @@ mod tests {
         let dir = tempdir().unwrap();
 
         let test1_path = dir.path().join("test1.txt");
-        write(&test1_path, "foo");
+        write(&test1_path, "foo").unwrap();
 
         let test2_path = dir.path().join("test2.txt");
         hard_link(&test1_path, &test2_path).unwrap();
@@ -290,13 +305,10 @@ mod tests {
         expected_entries.push(test1_entry);
         expected_entries.push(test2_entry);
 
-        expected_entries.sort_by(|a, b| a.path.cmp(&b.path));
-
         let mut session = session::test::Fake::new();
         assert!(handle_for_path(&mut session, dir.path()).is_ok());
 
-        let entries = entries_from_session_response(&session);
-        assert_eq!(entries.len(), 3);
-        assert_eq!(entries, expected_entries);
+        let mut entries = entries_from_session_response(&session);
+        diff_entries(&mut entries, &mut expected_entries);
     }
 }
