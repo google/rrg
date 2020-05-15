@@ -107,19 +107,33 @@ impl RecurseState {
     where
         S: Session,
     {
-        let metadata = match symlink_metadata(&root) {
-            Ok(metadata) => metadata,
-            Err(_) => return Ok(()),
-        };
-        let entry = entry_from_metadata(&metadata, root);
-        self.process_entry(entry, session)?;
-        if metadata.is_dir() && metadata.dev() == self.device {
-            let entry_iter = match read_dir(root) {
-                Ok(iter) => iter,
-                Err(_) => return Ok(()),
+        let mut path = root.clone();
+        let mut dir_iter_stack = Vec::new();
+        loop {
+            let metadata = match symlink_metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(_) => continue,
             };
-            for entry in entry_iter {
-                self.recurse(&entry.map_err(Error::action)?.path(), session)?;
+            let entry = entry_from_metadata(&metadata, &path);
+            self.process_entry(entry, session)?;
+            if metadata.is_dir() && metadata.dev() == self.device {
+                if let Ok(dir_iter) = read_dir(&path) {
+                    dir_iter_stack.push(dir_iter);
+                }
+            }
+            let mut new_path = None;
+            while let Some(dir_iter) = dir_iter_stack.last_mut() {
+                if let Some(dir_entry) = dir_iter.next() {
+                    new_path = Some(dir_entry.map_err(Error::action)?.path());
+                    break;
+                } else {
+                    dir_iter_stack.pop();
+                }
+            }
+            if let Some(new_path) = new_path {
+                path = new_path;
+            } else {
+                break;
             }
         }
         Ok(())
@@ -399,7 +413,7 @@ mod tests {
     
     #[test]
     fn test_deep_dirs() {
-        const DIR_COUNT: u32 = 256;
+        const DIR_COUNT: u32 = 512;
         let mut expected_entries = Vec::new();
 
         let dir = tempdir().unwrap();
