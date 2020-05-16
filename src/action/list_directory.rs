@@ -81,7 +81,6 @@ pub struct Request {
 }
 
 enum PathType {
-    Unset,
     OS,
     TSK,
     Registry,
@@ -173,7 +172,6 @@ fn get_enum_path_options(option: &Option<i32>) -> Option<PathOption> {
 fn get_enum_path_type(option: &Option<i32>) -> Option<PathType> {
     match option {
         Some(ptype) => match ptype {
-            -1 => Some(PathType::Unset),
             0 => Some(PathType::OS),
             1 => Some(PathType::TSK),
             2 => Some(PathType::Registry),
@@ -229,7 +227,6 @@ fn get_int_path_options(pathspec: &PathSpec) -> Option<i32> {
 /// Converts enum type back to integer to pass to the proto
 fn get_int_path_type(pathspec: &PathSpec) -> Option<i32> {
     match pathspec.pathtype {
-        PathType::Unset => Some(-1),
         PathType::OS => Some(0),
         PathType::TSK => Some(1),
         PathType::Registry => Some(2),
