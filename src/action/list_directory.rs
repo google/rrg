@@ -311,3 +311,220 @@ impl super::Response for Response {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::action::Request;
+    use tempfile::tempdir;
+    use rand::thread_rng;
+    use rand::seq::SliceRandom;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn fill_proto_request(path_options: Option<i32>,
+                          pathtype: Option<i32>,
+                          path: Option<String>) -> ListDirRequest {
+        ListDirRequest {
+            pathspec: Some(rrg_proto::PathSpec {
+                path_options: path_options,
+                pathtype: pathtype,
+                path: path,
+                mount_point: None,
+                stream_name: None,
+                file_size_override: None,
+                inode: None,
+                is_virtualroot: None,
+                nested_path: None,
+                ntfs_id: None,
+                ntfs_type: None,
+                offset: None,
+                recursion_depth: None,
+            }),
+            iterator: None,
+        }
+    }
+
+    #[test]
+    fn test_empty_pathspec_field() {
+        let request: Result<super::Request, _> =
+            Request::from_proto(ListDirRequest {
+                pathspec: None,
+                iterator: None,
+            });
+        assert!(request.is_err());
+    }
+
+    #[test]
+    fn test_empty_path_options() {
+        let request: Result<super::Request, _> = Request::from_proto
+            (fill_proto_request(None, Some(0), Some(String::from("/"))));
+        assert!(request.is_ok());
+    }
+
+    #[test]
+    fn test_unset_pathtype() {
+        let request: Result<super::Request, _> = Request::from_proto
+            (fill_proto_request(None, Some(-1), Some(String::from("/"))));
+        assert!(request.is_err());
+    }
+
+
+    #[test]
+    fn test_empty_pathtype() {
+        let request: Result<super::Request, _> = Request::from_proto
+            (fill_proto_request(None, None, Some(String::from("/"))));
+        assert!(request.is_err());
+    }
+
+    #[test]
+    fn test_empty_path() {
+        let request: Result<super::Request, _> = Request::from_proto
+            (fill_proto_request(None, Some(0), None));
+        assert!(&request.is_ok());
+        assert_eq!(request.unwrap().pathspec.path, PathBuf::from("/"));
+    }
+
+    #[test]
+    fn test_empty_dir() {
+        let dir = tempdir().unwrap();
+        let request = super::Request {
+            pathspec: PathSpec {
+                path_options: None,
+                pathtype: PathType::OS,
+                path: PathBuf::from(dir.path()),
+            }
+        };
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[test]
+    fn test_nonexistent_path() {
+        let dir = tempdir().unwrap();
+        let request = super::Request {
+            pathspec: PathSpec {
+                path_options: None,
+                pathtype: PathType::OS,
+                path: PathBuf::from(dir.path().join("nonexistent_subdir")),
+            }
+        };
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_err());
+    }
+
+    #[test]
+    fn test_lexicographical_order() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+        let file_names = vec!["1numfile", "5numfile",
+                              "Afile", "aafile", "afile",
+                              "bfile", "zfile", "*file", "(file)", "=^-^="];
+        let mut file_paths = vec![];
+        for file_name in &file_names {
+            file_paths.push(dir_path.join(file_name));
+        }
+        file_paths.shuffle(&mut thread_rng());
+        for file_path in &file_paths {
+            std::fs::File::create(file_path).unwrap();
+        }
+        file_paths.sort();
+        let request = super::Request {
+            pathspec: PathSpec {
+                path_options: None,
+                pathtype: PathType::OS,
+                path: PathBuf::from(&dir_path),
+            }
+        };
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+        for i in 0..file_paths.len() {
+            assert_eq!(&session.reply::<Response>(i)
+                .pathspec.path, &file_paths[i]);
+        }
+    }
+
+    #[test]
+    fn test_dir_response() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+        let inner_dir_path = &dir_path.join("dir");
+        std::fs::create_dir(&inner_dir_path).unwrap();
+        let request = super::Request {
+            pathspec: PathSpec {
+                path_options: None,
+                pathtype: PathType::OS,
+                path: PathBuf::from(&dir_path),
+            }
+        };
+        let mut session = session::test::Fake::new();
+        handle(&mut session, request).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let inner_dir = &session.reply::<Response>(0);
+        assert_eq!(&inner_dir.pathspec.path, inner_dir_path);
+        assert!(inner_dir.symlink.is_none());
+        assert_eq!(inner_dir.st_uid, users::get_current_uid());
+        assert_eq!(inner_dir.st_gid, users::get_current_uid());
+        assert_eq!(inner_dir.st_dev,
+                   dir_path.metadata().unwrap().dev() as u32);
+        assert_eq!(inner_dir.st_mode, 0o40775);
+        assert_eq!(inner_dir.st_nlink, 2);
+    }
+
+    #[test]
+    fn test_symlink_response() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+        let file_path = dir_path.join("file");
+        std::fs::File::create(&file_path).unwrap();
+        let sl_path = dir_path.join("symlink");
+        std::os::unix::fs::symlink(&file_path, &sl_path).unwrap();
+        let request = super::Request {
+            pathspec: PathSpec {
+                path_options: None,
+                pathtype: PathType::OS,
+                path: PathBuf::from(&dir_path),
+            }
+        };
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+        assert_eq!(session.reply_count(), 2);
+        let symlink = &session.reply::<Response>(1);
+        assert_eq!(&symlink.pathspec.path, &sl_path);
+        assert!(&symlink.symlink.is_some());
+        assert_eq!(&symlink.symlink.as_ref().unwrap().as_str(),
+                   &file_path.to_str().unwrap());
+        assert_eq!(symlink.st_mode, 0o120777);
+        assert_eq!(symlink.st_nlink, 1);
+    }
+
+    #[test]
+    fn test_file_response() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+        let file_path = dir_path.join("file");
+        std::fs::File::create(&file_path).unwrap();
+        std::fs::set_permissions(&file_path,
+                                 PermissionsExt::from_mode(0o664)).unwrap();
+        let request = super::Request {
+            pathspec: PathSpec {
+                path_options: None,
+                pathtype: PathType::OS,
+                path: PathBuf::from(&dir_path),
+            }
+        };
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+        assert_eq!(session.reply_count(), 1);
+        let file = &session.reply::<Response>(0);
+        assert_eq!(file.pathspec.path, file_path);
+        assert_eq!(file.st_size, 0);
+        assert_eq!(file.st_mode, 0o100664);
+        assert_eq!(file.st_uid, users::get_current_uid());
+        assert_eq!(file.st_gid, users::get_current_uid());
+        assert_eq!(file.st_dev,
+                   dir_path.metadata().unwrap().dev() as u32);
+        assert_eq!(file.st_nlink, 1);
+        assert!(file.symlink.is_none());
+    }
+}
