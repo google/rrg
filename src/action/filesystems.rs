@@ -18,7 +18,7 @@ use std::fmt::{Display, Formatter};
 /// Enum of possible errors, which can occur during collecting filesystems data.
 #[derive(Debug)]
 enum Error {
-    /// Missed mtab-like file error.
+    /// Missing mtab-like file error.
     MissingFile(std::io::Error),
     /// Parsing mtab-like file error.
     MountInfoParse(std::io::Error),
@@ -67,7 +67,7 @@ pub struct Response {
 
 /// Handles requests for the filesystems action.
 ///
-/// Initially searches in `/proc/mounts`. If it's missed, falls back to
+/// Initially searches in `/proc/mounts`. If it's missing, falls back to
 /// `/etc/mtab`.
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     use proc_mounts::MountIter;
