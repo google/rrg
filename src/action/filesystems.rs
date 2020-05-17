@@ -163,7 +163,7 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn test_if_any_filesystem_exist() {
+    fn test_if_any_filesystem_exists() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
         assert_ne!(session.reply_count(), 0);
