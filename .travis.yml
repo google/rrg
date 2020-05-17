@@ -1,6 +1,12 @@
-dist: xenial
 language: rust
 cache: cargo
+
+os:
+  - linux
+  - osx
+  - windows
+
+dist: xenial
 
 rust:
   - stable
