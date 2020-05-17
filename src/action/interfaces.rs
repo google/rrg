@@ -82,17 +82,19 @@ impl super::Response for Response {
     type Proto = Interface;
 
     fn into_proto(self) -> Interface {
-        Interface {
-            mac_address: match self.interface.mac {
-                Some(mac) => Some(mac_to_vec(mac)),
-                None => {
-                    error!(
-                        "unable to get MAC address for {} interface",
-                        self.interface.name,
-                    );
-                    None
-                },
+        let mac = match self.interface.mac {
+            Some(mac) => Some(mac_to_vec(mac)),
+            None => {
+                error!(
+                    "unable to get MAC address for {} interface",
+                    self.interface.name,
+                );
+                None
             },
+        };
+
+        Interface {
+            mac_address: mac,
             ifname: Some(self.interface.name),
             addresses: ips_to_protos(self.interface.ips),
             ..Default::default()
