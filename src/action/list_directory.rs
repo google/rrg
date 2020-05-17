@@ -4,6 +4,8 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 //! A handler and associated types for the list directory action.
+//!
+//! A list directory action stats all files in the provided directory.
 
 use crate::session::{self, Session};
 use rrg_proto::{ListDirRequest, StatEntry};
@@ -321,6 +323,7 @@ mod tests {
     use rand::seq::SliceRandom;
     use std::os::unix::fs::PermissionsExt;
 
+    /// Fills ListDirRequest with provided fields
     fn fill_proto_request(path_options: Option<i32>,
                           pathtype: Option<i32>,
                           path: Option<String>) -> ListDirRequest {
