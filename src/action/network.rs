@@ -212,7 +212,7 @@ impl ProcessInfo {
     /// The process name will be retrieved from the system using the `system`
     /// parameter.
     fn from_system<S: SystemExt>(system: &S, pid: u32) -> ProcessInfo {
-        match system.get_process(pid as i32) {
+        match system.get_process(pid as sysinfo::Pid) {
             Some(process) => ProcessInfo::from(process),
             None => ProcessInfo::from_pid(pid),
         }
