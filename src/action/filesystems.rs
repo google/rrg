@@ -96,6 +96,7 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 fn option_to_key_value(option: String) -> KeyValue {
     match &option.split('=').collect::<Vec<&str>>()[..] {
         &[key] => {
+            // TODO: Simplify work with `DataBlob`.
             KeyValue {
                 k: Some(DataBlob {
                     string: Some(String::from(key)),
