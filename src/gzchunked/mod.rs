@@ -30,6 +30,7 @@ pub struct GzChunkedDecoder {
     queue: VecDeque<Vec<u8>>,
 }
 
+/// A type for defining gzip compression level for gzchunked.
 impl GzChunkedCompression {
     pub fn new(level: u32) -> GzChunkedCompression {
         GzChunkedCompression(Compression::new(level))
@@ -122,8 +123,8 @@ mod tests {
         let mut decoder = GzChunkedDecoder::new();
 
         let encoded_block = encoder.next_chunk().unwrap();
-        // should contain gzip header
-        assert_ne!(encoded_block.len(), 0);
+        // This is because the block should at least contain gzip header.
+        assert!(!encoded_block.is_empty());
         decoder.write(encoded_block.as_slice()).unwrap();
         decoder.write(encoded_block.as_slice()).unwrap();
 
