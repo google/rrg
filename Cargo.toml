@@ -14,6 +14,5 @@ prost-types = { version = "0.6.1" }
 rrg-proto = { path = "proto/" }
 simplelog = { version = "0.7.6" }
 structopt = { version = "0.3.12" }
-sys-info = { version = "0.5.1" }
 netstat2 = { version = "0.8.1" }
 sysinfo = { version = "0.14.1" }
