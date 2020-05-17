@@ -30,6 +30,7 @@ pub struct GzChunkedDecoder {
     queue: VecDeque<Vec<u8>>,
 }
 
+/// A type for defining gzip compression level for gzchunked.
 impl GzChunkedCompression {
     pub fn new(level: u32) -> GzChunkedCompression {
         GzChunkedCompression(Compression::new(level))
@@ -122,8 +123,8 @@ mod tests {
         let mut decoder = GzChunkedDecoder::new();
 
         let encoded_block = encoder.next_chunk().unwrap();
-        // should contain gzip header
-        assert_ne!(encoded_block.len(), 0);
+        // This is because the block should at least contain gzip header.
+        assert!(!encoded_block.is_empty());
         decoder.write(encoded_block.as_slice()).unwrap();
         decoder.write(encoded_block.as_slice()).unwrap();
 
@@ -134,23 +135,19 @@ mod tests {
     fn test_encode_and_decode_all_in_one_block() {
         let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
         let mut decoder = GzChunkedDecoder::new();
-        let blocks = vec![
-            vec![1, 2, 3, 4],
-            vec![],
-            vec![1, 2, 3, 4, 5, 6, 7, 8],
-            vec![1],
-        ];
 
-        for block in &blocks {
-            encoder.write(block.as_slice()).unwrap();
-        }
+        encoder.write(&[1, 2, 3, 4]).unwrap();
+        encoder.write(&[]).unwrap();
+        encoder.write(&[1, 2, 3, 4, 5, 6, 7, 8]).unwrap();
+        encoder.write(&[1]).unwrap();
 
         let encoded_block = encoder.next_chunk().unwrap();
         decoder.write(encoded_block.as_slice()).unwrap();
 
-        for block in blocks {
-            assert_eq!(block, decoder.try_next_data().unwrap());
-        }
+        assert_eq!([1, 2, 3, 4], decoder.try_next_data().unwrap().as_slice());
+        assert_eq!([] as [u8; 0], decoder.try_next_data().unwrap().as_slice());
+        assert_eq!([1, 2, 3, 4, 5, 6, 7, 8], decoder.try_next_data().unwrap().as_slice());
+        assert_eq!([1], decoder.try_next_data().unwrap().as_slice());
         assert!(decoder.try_next_data().is_none());
     }
 
@@ -158,22 +155,30 @@ mod tests {
     fn test_encode_and_decode_one_per_block() {
         let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
         let mut decoder = GzChunkedDecoder::new();
-        let blocks = vec![
-            vec![1, 2, 3, 4],
-            vec![],
-            vec![1, 2, 3, 4, 5, 6, 7, 8],
-            vec![1],
-        ];
 
-        for block in blocks {
-            encoder.write(block.as_slice()).unwrap();
-            let encoded_block = encoder.next_chunk().unwrap();
+        encoder.write(&[1, 2, 3, 4]).unwrap();
+        let encoded_block = encoder.next_chunk().unwrap();
+        decoder.write(encoded_block.as_slice()).unwrap();
+        assert_eq!([1, 2, 3, 4], decoder.try_next_data().unwrap().as_slice());
+        assert!(decoder.try_next_data().is_none());
 
-            decoder.write(encoded_block.as_slice()).unwrap();
+        encoder.write(&[]).unwrap();
+        let encoded_block = encoder.next_chunk().unwrap();
+        decoder.write(encoded_block.as_slice()).unwrap();
+        assert_eq!([] as [u8; 0], decoder.try_next_data().unwrap().as_slice());
+        assert!(decoder.try_next_data().is_none());
 
-            assert_eq!(block, decoder.try_next_data().unwrap());
-            assert!(decoder.try_next_data().is_none());
-        }
+        encoder.write(&[1, 2, 3, 4, 5, 6, 7, 8]).unwrap();
+        let encoded_block = encoder.next_chunk().unwrap();
+        decoder.write(encoded_block.as_slice()).unwrap();
+        assert_eq!([1, 2, 3, 4, 5, 6, 7, 8], decoder.try_next_data().unwrap().as_slice());
+        assert!(decoder.try_next_data().is_none());
+
+        encoder.write(&[1]).unwrap();
+        let encoded_block = encoder.next_chunk().unwrap();
+        decoder.write(encoded_block.as_slice()).unwrap();
+        assert_eq!([1], decoder.try_next_data().unwrap().as_slice());
+        assert!(decoder.try_next_data().is_none());
     }
 
     #[test]
