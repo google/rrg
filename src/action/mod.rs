@@ -18,6 +18,7 @@
 pub mod filesystems;
 pub mod metadata;
 pub mod startup;
+pub mod network;
 
 use crate::session::{self, Session, Task};
 
@@ -95,6 +96,7 @@ where
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
         "EnumerateFilesystems" => task.execute(self::filesystems::handle),
+        "ListNetworkConnections" => task.execute(self::network::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
