@@ -188,14 +188,11 @@ mod tests {
     }
 
     /// Unit-like struct, representing a filesystem for testing with `fuse`.
-    #[cfg(target_os = "linux")]
     struct FuseFilesystem;
 
-    #[cfg(target_os = "linux")]
     impl fuse::Filesystem for FuseFilesystem {}
 
     #[test]
-    #[cfg(target_os = "linux")]
     fn test_fuse_filesystem() {
         use users::{get_current_uid, get_current_gid};
 
