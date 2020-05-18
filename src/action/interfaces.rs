@@ -10,9 +10,9 @@
 
 use log::error;
 
-use ipnetwork::IpNetwork;
 use pnet::{
     datalink::{self, NetworkInterface},
+    ipnetwork::IpNetwork,
     util::MacAddr,
 };
 use rrg_proto::{Interface, NetworkAddress};

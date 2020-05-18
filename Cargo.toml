@@ -8,7 +8,6 @@ edition = "2018"
 [dependencies]
 fleetspeak = { version = "0.1.2" }
 humantime = { version = "2.0.0" }
-ipnetwork = { version = "0.16.0" }
 log = { version = "0.4.8" }
 pnet = { version = "0.26.0" }
 prost = { version = "0.6.1" }
