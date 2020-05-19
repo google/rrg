@@ -444,14 +444,14 @@ mod tests {
 
         let mut path = PathBuf::from(dir.path());
         for _ in 0..DIR_COUNT {
-            path.push("dir");
+            path.push("d");
             create_dir(&path).unwrap();
         }
         
         path = PathBuf::from(dir.path());
         expected_entries.push(entry_for_path(dir.path()));
         for _ in 0..DIR_COUNT {
-            path.push("dir");
+            path.push("d");
             let entry = entry_for_path(&path);
             expected_entries.push(entry);
         }
@@ -487,7 +487,8 @@ mod tests {
         let symlink_entry = entry_for_path(&symlink_path);
         assert_eq!(unavailable_dir_entry.mode.unwrap(), 0o040000);
         assert_eq!(readonly_entry.mode.unwrap(), 0o100444);
-        assert_eq!(symlink_entry.mode.unwrap(), 0o120777);
+        // Drop mode bits because symlinks have actual modes on some unix systems.
+        assert_eq!(symlink_entry.mode.unwrap() & 0o120000, 0o120000);
 
         expected_entries.push(entry_for_path(dir.path()));
         expected_entries.push(unavailable_dir_entry);
