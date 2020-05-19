@@ -9,8 +9,11 @@ use std::vec::Vec;
 use std::ffi::OsString;
 use std::result::Result;
 use std::path::PathBuf;
-use std::fs::{symlink_metadata, read_dir};
+use std::fs::{symlink_metadata, read_dir, Metadata};
+#[cfg(target_family = "unix")]
 use std::os::unix::{fs::MetadataExt, ffi::OsStringExt};
+#[cfg(target_family = "windows")]
+use std::os::windows::{fs::MetadataExt, ffi::OsStringExt};
 
 use sha2::{Digest, Sha256};
 use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
@@ -47,9 +50,8 @@ struct RecurseState {
 }
 
 /// Encodes filesystem metadata into timeline entry proto.
-fn entry_from_metadata<M>(metadata: &M, path: &PathBuf) -> TimelineEntry 
-where
-    M: MetadataExt,
+#[cfg(target_family = "unix")]
+fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> TimelineEntry 
 {
     TimelineEntry {
         path: Some(path.clone().into_os_string().into_vec()),
@@ -62,6 +64,22 @@ where
         atime_ns: Some(metadata.atime_nsec() as u64),
         ctime_ns: Some(metadata.ctime_nsec() as u64),
         mtime_ns: Some(metadata.mtime_nsec() as u64),
+    }
+}
+#[cfg(target_family = "windows")]
+fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> TimelineEntry 
+{
+    TimelineEntry {
+        path: Some(path.clone().into_os_string().into_vec()),
+        mode: None,
+        size: Some(metadata.len()),
+        dev: None,
+        ino: None,
+        uid: None,
+        gid: None,
+        atime_ns: Some(metadata.last_access_time()),
+        ctime_ns: Some(metadata.creation_time()),
+        mtime_ns: Some(metadata.last_write_time()),
     }
 }
 
@@ -209,10 +227,13 @@ mod tests {
     use std::fs::{hard_link, create_dir, write, set_permissions, Permissions};
     use std::ffi::OsStr;
     use std::path::Path;
-    use std::os::unix::{ffi::OsStrExt, fs::{symlink, PermissionsExt}};
     use tempfile::tempdir;
     use crate::action::Request;
     use crate::gzchunked::GzChunkedDecoder;
+    #[cfg(target_family = "unix")]
+    use std::os::unix::{ffi::OsStrExt, fs::{symlink, PermissionsExt}};
+    #[cfg(target_family = "windows")]
+    use std::os::windows::ffi::OsStrExt;
 
     fn handle_for_path<S>(session: &mut S, path: &Path) -> session::Result<()>
     where
@@ -299,7 +320,8 @@ mod tests {
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
     }
-
+    
+    #[cfg(target_family = "unix")]
     #[test]
     fn test_file_hardlink() {
         let mut expected_entries = Vec::new();
@@ -327,6 +349,7 @@ mod tests {
         diff_entries(&mut entries, &mut expected_entries);
     }
     
+    #[cfg(target_family = "unix")]
     #[test]
     fn test_file_symlink() {
         let mut expected_entries = Vec::new();
@@ -354,6 +377,7 @@ mod tests {
         diff_entries(&mut entries, &mut expected_entries);
     }
     
+    #[cfg(target_family = "unix")]
     #[test]
     fn test_symlink_loops() {
         let mut expected_entries = Vec::new();
@@ -439,6 +463,7 @@ mod tests {
         diff_entries(&mut entries, &mut expected_entries);
     }
     
+    #[cfg(target_family = "unix")]
     #[test]
     fn test_mode_and_permissions() {
         let mut expected_entries = Vec::new();
