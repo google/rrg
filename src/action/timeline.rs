@@ -437,20 +437,26 @@ mod tests {
     
     #[test]
     fn test_deep_dirs() {
-        const DIR_COUNT: u32 = 512;
+        const MAX_DIR_COUNT: u32 = 512;
+        let mut dir_count = 0;
         let mut expected_entries = Vec::new();
 
         let dir = tempdir().unwrap();
 
         let mut path = PathBuf::from(dir.path());
-        for _ in 0..DIR_COUNT {
+        while dir_count < MAX_DIR_COUNT {
             path.push("d");
-            create_dir(&path).unwrap();
+            if let Err(_) = create_dir(&path) {
+                break;
+            }
+            dir_count += 1;
         }
+        // Let's suppose we can create at least this much.
+        assert!(dir_count >= 64);
         
         path = PathBuf::from(dir.path());
         expected_entries.push(entry_for_path(dir.path()));
-        for _ in 0..DIR_COUNT {
+        for _ in 0..dir_count {
             path.push("d");
             let entry = entry_for_path(&path);
             expected_entries.push(entry);
