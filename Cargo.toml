@@ -6,6 +6,7 @@ authors = ["Łukasz Hanuszczak <hanuszczak@google.com>"]
 edition = "2018"
 
 [dependencies]
+ioctls = {version = "0.5.1"}
 fleetspeak = { version = "0.1.2" }
 humantime = { version = "2.0.0" }
 log = { version = "0.4.8" }
@@ -16,3 +17,4 @@ simplelog = { version = "0.7.6" }
 structopt = { version = "0.3.12" }
 netstat2 = { version = "0.8.1" }
 sysinfo = { version = "0.14.1" }
+xattr = { version = "0.2.2" }

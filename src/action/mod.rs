@@ -18,6 +18,7 @@
 pub mod metadata;
 pub mod startup;
 pub mod network;
+pub mod file_stat;
 
 use crate::session::{self, Session, Task};
 
@@ -95,6 +96,7 @@ where
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
+        "GetFileStat" => task.execute(self::file_stat::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
