@@ -13,7 +13,9 @@ use std::fs::{symlink_metadata, read_dir, Metadata};
 #[cfg(target_family = "unix")]
 use std::os::unix::{fs::MetadataExt, ffi::OsStringExt};
 #[cfg(target_family = "windows")]
-use std::os::windows::{fs::MetadataExt, ffi::OsStringExt};
+use std::os::windows::{fs::MetadataExt, ffi::{OsStrExt, OsStringExt}};
+#[cfg(target_family = "windows")]
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use sha2::{Digest, Sha256};
 use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
@@ -49,6 +51,16 @@ struct RecurseState {
     encoder: GzChunkedEncoder,
 }
 
+/// Retrieves device ID from metadata.
+#[cfg(target_family = "unix")]
+fn dev_from_metadata(metadata: &Metadata) -> u64 {
+    metadata.dev()
+}
+#[cfg(target_family = "windows")]
+fn dev_from_metadata(metadata: &Metadata) -> u64 {
+    0
+}
+
 /// Encodes filesystem metadata into timeline entry proto.
 #[cfg(target_family = "unix")]
 fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> TimelineEntry 
@@ -70,7 +82,9 @@ fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> TimelineEntry
 fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> TimelineEntry 
 {
     TimelineEntry {
-        path: Some(path.clone().into_os_string().into_vec()),
+        path: path.as_os_str().encode_wide().try_fold(Vec::new(), |stream, ch| {
+            stream.write_u16::<LittleEndian>().map(|_| stream)
+        }).ok(),
         mode: None,
         size: Some(metadata.len()),
         dev: None,
@@ -134,7 +148,7 @@ impl RecurseState {
             };
             let entry = entry_from_metadata(&metadata, &path);
             self.process_entry(entry, session)?;
-            if metadata.is_dir() && metadata.dev() == self.device {
+            if metadata.is_dir() && dev_from_metadata(&metadata) == self.device {
                 if let Ok(dir_iter) = read_dir(&path) {
                     dir_iter_stack.push(dir_iter);
                 }
@@ -167,7 +181,8 @@ impl RecurseState {
 
 /// Handles requests for the timeline action.
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let target_device = symlink_metadata(&request.root).map_err(Error::action)?.dev();
+    let root_metadata = symlink_metadata(&request.root).map_err(Error::action)?;
+    let target_device = dev_from_metadata(&root_metadata);
     let mut state = RecurseState::new(target_device);
 
     state.recurse(&request.root, session)?;
@@ -183,11 +198,27 @@ impl super::Request for Request {
 
     type Proto = TimelineArgs;
 
+    #[cfg(target_family = "unix")]
     fn from_proto(proto: TimelineArgs) -> Result<Request, ParseError> {
         match proto.root {
             Some(root) => Ok(Request {
                 root: PathBuf::from(OsString::from_vec(root)),
             }),
+            None => Err(ParseError::malformed(MissingFieldError::new("root"))),
+        }
+    }
+    #[cfg(target_family = "windows")]
+    fn from_proto(proto: TimelineArgs) -> Result<Request, ParseError> {
+        match proto.root {
+            Some(root) => {
+                let mut wchars = Vec::new();
+                while Ok(wchar) = root.read_u16::<LittleEndian>() {
+                    wchars.push(wchar);
+                }
+                Request {
+                    root: PathBuf::from(OsString::from_wide(wchars.as_slice())),
+                }
+            },
             None => Err(ParseError::malformed(MissingFieldError::new("root"))),
         }
     }
