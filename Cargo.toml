@@ -17,7 +17,6 @@ simplelog = { version = "0.7.6" }
 structopt = { version = "0.3.12" }
 flate2 = { version = "1.0.14" }
 byteorder = { version = "1.3.4" }
-netstat2 = { version = "0.8.1" }
 sysinfo = { version = "0.14.1" }
 
 [dev-dependencies]
