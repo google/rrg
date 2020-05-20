@@ -113,28 +113,28 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
         .map(|entry| entry.path()).collect();
     paths.sort();
     for file_path in &paths {
-        let umetadata = match fs::symlink_metadata(file_path) {
+        let metadata = match fs::symlink_metadata(file_path) {
             Ok(metadata) => metadata,
             Err(error) =>
                 return Err(session::Error::from(Error::ReadPath(error))),
         };
         session.reply(Response {
-            st_mode: umetadata.mode().into(),
-            st_ino: umetadata.ino() as u32,
-            st_dev: umetadata.dev() as u32,
-            st_nlink: umetadata.nlink() as u32,
-            st_uid: umetadata.uid() as u32,
-            st_gid: umetadata.gid() as u32,
-            st_size: umetadata.size(),
-            st_atime: umetadata.atime() as u64,
-            st_mtime: umetadata.mtime() as u64,
-            st_ctime: umetadata.ctime() as u64,
-            st_blocks: umetadata.blocks() as u32,
-            st_blksize: umetadata.blksize() as u32,
-            st_rdev: umetadata.rdev() as u32,
+            st_mode: metadata.mode().into(),
+            st_ino: metadata.ino() as u32,
+            st_dev: metadata.dev() as u32,
+            st_nlink: metadata.nlink() as u32,
+            st_uid: metadata.uid() as u32,
+            st_gid: metadata.gid() as u32,
+            st_size: metadata.size(),
+            st_atime: metadata.atime() as u64,
+            st_mtime: metadata.mtime() as u64,
+            st_ctime: metadata.ctime() as u64,
+            st_blocks: metadata.blocks() as u32,
+            st_blksize: metadata.blksize() as u32,
+            st_rdev: metadata.rdev() as u32,
             st_flags_linux:
             get_linux_flags(file_path).unwrap_or_default() as u32,
-            symlink: match umetadata.file_type().is_symlink() {
+            symlink: match metadata.file_type().is_symlink() {
                 true => match fs::read_link(file_path) {
                     Ok(file) => Some(file.to_string_lossy().to_string()),
                     _ => None,
