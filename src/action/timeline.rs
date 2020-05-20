@@ -6,12 +6,12 @@
 //! A handler and associated types for the timeline action.
 
 use std::vec::Vec;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::result::Result;
 use std::path::PathBuf;
 use std::fs::{symlink_metadata, read_dir, Metadata};
 #[cfg(target_family = "unix")]
-use std::os::unix::{fs::MetadataExt, ffi::OsStringExt};
+use std::os::unix::{fs::MetadataExt, ffi::{OsStrExt, OsStringExt}};
 #[cfg(target_family = "windows")]
 use std::os::windows::{fs::MetadataExt, ffi::{OsStrExt, OsStringExt}};
 #[cfg(target_family = "windows")]
@@ -57,16 +57,41 @@ fn dev_from_metadata(metadata: &Metadata) -> u64 {
     metadata.dev()
 }
 #[cfg(target_family = "windows")]
-fn dev_from_metadata(metadata: &Metadata) -> u64 {
+fn dev_from_metadata(_: &Metadata) -> u64 {
     0
+}
+
+#[cfg(target_family = "unix")]
+fn bytes_from_os_str(s: &OsStr) -> std::io::Result<Vec<u8>> {
+    Ok(Vec::from(s.as_bytes()))
+}
+#[cfg(target_family = "windows")]
+fn bytes_from_os_str(s: &OsStr) -> std::io::Result<Vec<u8>> {
+    s.encode_wide().try_fold(Vec::new(), |mut stream, ch| {
+        stream.write_u16::<LittleEndian>(ch).map(|_| stream)
+    })
+}
+
+#[cfg(target_family = "unix")]
+fn os_string_from_bytes(bytes: &[u8]) -> OsString {
+    OsString::from_vec(Vec::from(bytes))
+}
+#[cfg(target_family = "windows")]
+fn os_string_from_bytes(bytes: &[u8]) -> OsString {
+    let mut wchars = Vec::new();
+    let mut bytes_slice = bytes;
+    while let Ok(wchar) = bytes_slice.read_u16::<LittleEndian>() {
+        wchars.push(wchar);
+    }
+    OsString::from_wide(wchars.as_slice())
 }
 
 /// Encodes filesystem metadata into timeline entry proto.
 #[cfg(target_family = "unix")]
-fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> TimelineEntry 
+fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> std::io::Result<TimelineEntry>
 {
-    TimelineEntry {
-        path: Some(path.clone().into_os_string().into_vec()),
+    Ok(TimelineEntry {
+        path: Some(bytes_from_os_str(path.as_os_str())?),
         mode: Some(metadata.mode()),
         size: Some(metadata.size()),
         dev: Some(metadata.dev()),
@@ -76,15 +101,13 @@ fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> TimelineEntry
         atime_ns: Some(metadata.atime_nsec() as u64),
         ctime_ns: Some(metadata.ctime_nsec() as u64),
         mtime_ns: Some(metadata.mtime_nsec() as u64),
-    }
+    })
 }
 #[cfg(target_family = "windows")]
-fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> TimelineEntry 
+fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> std::io::Result<TimelineEntry>
 {
-    TimelineEntry {
-        path: path.as_os_str().encode_wide().try_fold(Vec::new(), |stream, ch| {
-            stream.write_u16::<LittleEndian>().map(|_| stream)
-        }).ok(),
+    Ok(TimelineEntry {
+        path: Some(bytes_from_os_str(path.as_os_str())?),
         mode: None,
         size: Some(metadata.len()),
         dev: None,
@@ -94,7 +117,7 @@ fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> TimelineEntry
         atime_ns: Some(metadata.last_access_time()),
         ctime_ns: Some(metadata.creation_time()),
         mtime_ns: Some(metadata.last_write_time()),
-    }
+    })
 }
 
 impl RecurseState {
@@ -146,7 +169,7 @@ impl RecurseState {
                 Ok(metadata) => metadata,
                 Err(_) => continue,
             };
-            let entry = entry_from_metadata(&metadata, &path);
+            let entry = entry_from_metadata(&metadata, &path).map_err(Error::action)?;
             self.process_entry(entry, session)?;
             if metadata.is_dir() && dev_from_metadata(&metadata) == self.device {
                 if let Ok(dir_iter) = read_dir(&path) {
@@ -198,27 +221,11 @@ impl super::Request for Request {
 
     type Proto = TimelineArgs;
 
-    #[cfg(target_family = "unix")]
     fn from_proto(proto: TimelineArgs) -> Result<Request, ParseError> {
         match proto.root {
             Some(root) => Ok(Request {
-                root: PathBuf::from(OsString::from_vec(root)),
+                root: PathBuf::from(os_string_from_bytes(root.as_slice())),
             }),
-            None => Err(ParseError::malformed(MissingFieldError::new("root"))),
-        }
-    }
-    #[cfg(target_family = "windows")]
-    fn from_proto(proto: TimelineArgs) -> Result<Request, ParseError> {
-        match proto.root {
-            Some(root) => {
-                let mut wchars = Vec::new();
-                while Ok(wchar) = root.read_u16::<LittleEndian>() {
-                    wchars.push(wchar);
-                }
-                Request {
-                    root: PathBuf::from(OsString::from_wide(wchars.as_slice())),
-                }
-            },
             None => Err(ParseError::malformed(MissingFieldError::new("root"))),
         }
     }
@@ -255,22 +262,21 @@ impl super::Response for ChunkResponse {
 mod tests {
 
     use super::*;
-    use std::fs::{hard_link, create_dir, write, set_permissions, Permissions};
-    use std::ffi::OsStr;
+    use std::fs::{hard_link, create_dir, write};
     use std::path::Path;
     use tempfile::tempdir;
     use crate::action::Request;
     use crate::gzchunked::GzChunkedDecoder;
     #[cfg(target_family = "unix")]
-    use std::os::unix::{ffi::OsStrExt, fs::{symlink, PermissionsExt}};
-    #[cfg(target_family = "windows")]
-    use std::os::windows::ffi::OsStrExt;
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    #[cfg(target_family = "unix")]
+    use std::fs::{set_permissions, Permissions};
 
     fn handle_for_path<S>(session: &mut S, path: &Path) -> session::Result<()>
     where
         S: Session,
     {
-        let path_bytes = Vec::from(path.as_os_str().as_bytes());
+        let path_bytes = bytes_from_os_str(path.as_os_str()).unwrap();
         let args_proto = TimelineArgs { root: Some(path_bytes) };
         let request = Request::from_proto(args_proto).unwrap();
         handle(session, request)
@@ -278,7 +284,7 @@ mod tests {
 
     fn entry_for_path(path: &Path) -> TimelineEntry {
         let metadata = symlink_metadata(path).unwrap();
-        entry_from_metadata(&metadata, &PathBuf::from(path))
+        entry_from_metadata(&metadata, &PathBuf::from(path)).unwrap()
     }
 
     fn entries_from_session_response(session: &session::test::Fake) -> Vec<TimelineEntry> {
@@ -352,7 +358,7 @@ mod tests {
         diff_entries(&mut entries, &mut expected_entries);
     }
     
-    #[cfg(target_family = "unix")]
+    #[cfg_attr(target_family = "windows", ignore)]
     #[test]
     fn test_file_hardlink() {
         let mut expected_entries = Vec::new();
@@ -448,15 +454,27 @@ mod tests {
 
         let dir = tempdir().unwrap();
 
-        let filenames = vec!["with spaces", "with_'\"quotes\"'", "кириллица"];
-        for filename in filenames {
-            let path = dir.path().join(filename);
-            write(&path, "foo").unwrap();
-            let entry = entry_for_path(&path);
-            let entry_path = Path::new(OsStr::from_bytes(entry.path.as_ref().unwrap().as_slice()));
-            assert_eq!(entry_path.file_name().unwrap().to_str().unwrap(), filename);
-            expected_entries.push(entry);
-        }
+        let path = dir.path().join("with spaces");
+        write(&path, "foo").unwrap();
+        let entry = entry_for_path(&path);
+        let entry_path = PathBuf::from(os_string_from_bytes(entry.path.as_ref().unwrap().as_slice()));
+        assert_eq!(entry_path.file_name().unwrap().to_str().unwrap(), "with spaces");
+        expected_entries.push(entry);
+        
+        let path = dir.path().join("'quotes'");
+        write(&path, "foo").unwrap();
+        let entry = entry_for_path(&path);
+        let entry_path = PathBuf::from(os_string_from_bytes(entry.path.as_ref().unwrap().as_slice()));
+        assert_eq!(entry_path.file_name().unwrap().to_str().unwrap(), "'quotes'");
+        expected_entries.push(entry);
+        
+        let path = dir.path().join("кириллица");
+        write(&path, "foo").unwrap();
+        let entry = entry_for_path(&path);
+        let entry_path = PathBuf::from(os_string_from_bytes(entry.path.as_ref().unwrap().as_slice()));
+        assert_eq!(entry_path.file_name().unwrap().to_str().unwrap(), "кириллица");
+        expected_entries.push(entry);
+
         expected_entries.push(entry_for_path(dir.path()));
 
         let mut session = session::test::Fake::new();
