@@ -24,6 +24,7 @@ enum Error {
 }
 
 impl std::error::Error for Error {
+
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use Error::*;
 
