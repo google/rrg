@@ -15,6 +15,9 @@
 //! instance of the corresponding request type and send some (zero or more)
 //! instances of the corresponding response type.
 
+#[cfg(target_os = "linux")]
+pub mod filesystems;
+
 pub mod metadata;
 pub mod startup;
 pub mod timeline;
@@ -97,6 +100,10 @@ where
         "GetClientInfo" => task.execute(self::metadata::handle),
         "Timeline" => task.execute(self::timeline::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
+
+        #[cfg(target_os = "linux")]
+        "EnumerateFilesystems" => task.execute(self::filesystems::handle),
+
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
