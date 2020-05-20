@@ -203,9 +203,8 @@ fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
         match ioctls::fs_ioc_getflags(file.as_raw_fd(), linux_flags_ptr) {
             0 => Some(linux_flags),
             _ => None,
-        };
+        }
     }
-    Some(linux_flags)
 }
 
 /// Converts enum type back to integer to pass to the proto
