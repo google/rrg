@@ -184,12 +184,8 @@ fn get_enum_path_type(option: &Option<i32>) -> Option<PathType> {
 
 fn get_path(path: &Option<String>) -> PathBuf {
     match path {
-        Some(string_path) => {
-            if string_path.is_empty() {
-                PathBuf::from("/")
-            } else {
-                PathBuf::from(string_path)
-            }
+        Some(string_path) if !string_path.is_empty() => {
+            PathBuf::from(string_path)
         }
         _ => PathBuf::from("/"),
     }
