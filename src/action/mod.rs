@@ -18,7 +18,6 @@
 pub mod metadata;
 pub mod startup;
 pub mod list_directory;
-// pub mod file_stat;
 
 use crate::session::{self, Session, Task};
 
@@ -96,7 +95,6 @@ where
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
         "ListDirectory" => task.execute(self::list_directory::handle),
-        // "StatFile" => task.execute(self::file_stat::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
