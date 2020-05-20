@@ -20,8 +20,7 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
 enum Error {
-    MissingFieldError(String),
-    ReadPathError(std::io::Error),
+    ReadPath(std::io::Error),
 }
 
 impl std::error::Error for Error {
@@ -29,8 +28,7 @@ impl std::error::Error for Error {
         use Error::*;
 
         match *self {
-            MissingFieldError(ref _field) => None,
-            ReadPathError(ref error) => Some(error),
+            ReadPath(ref error) => Some(error),
         }
     }
 }
@@ -40,11 +38,8 @@ impl Display for Error {
         use Error::*;
 
         match *self {
-            MissingFieldError(ref field) => {
-                write!(fmt, "{} field should be filled", field)
-            }
-            ReadPathError(ref error) => {
-                write!(fmt, "Unable to read path: {}", error)
+            ReadPath(ref error) => {
+                write!(fmt, "unable to read path: {}", error)
             }
         }
     }
@@ -111,7 +106,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
     let (dir_entries, _): (Vec<_>, Vec<_>) = match dir_path.read_dir() {
         Ok(dir_iter) => dir_iter,
         Err(error) =>
-            return Err(session::Error::from(Error::ReadPathError(error))),
+            return Err(session::Error::from(Error::ReadPath(error))),
     }.partition(Result::is_ok);
     // Code won't panic because of unwrap(). We made the partition above
     let mut paths: Vec<PathBuf> = dir_entries.into_iter().map(Result::unwrap)
@@ -121,7 +116,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
         let umetadata = match fs::symlink_metadata(file_path) {
             Ok(metadata) => metadata,
             Err(error) =>
-                return Err(session::Error::from(Error::ReadPathError(error))),
+                return Err(session::Error::from(Error::ReadPath(error))),
         };
         session.reply(Response {
             st_mode: umetadata.mode().into(),
@@ -251,14 +246,12 @@ impl super::Request for Request {
                         Some(path_type) => path_type,
                         None => return
                             Err(session::ParseError::malformed
-                                (Error::MissingFieldError
-                                    (String::from("path type"))))
+                                (session::MissingFieldError::new("path type")))
                     },
                     path: get_path(&pathspec.path),
                 },
                 None => return Err(session::ParseError::malformed
-                    (Error::MissingFieldError
-                        (String::from("pathspec")))),
+                    (session::MissingFieldError::new("pathspec"))),
             }
         })
     }
