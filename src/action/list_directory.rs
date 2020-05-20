@@ -113,11 +113,8 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
         .map(|entry| entry.path()).collect();
     paths.sort();
     for file_path in &paths {
-        let metadata = match fs::symlink_metadata(file_path) {
-            Ok(metadata) => metadata,
-            Err(error) =>
-                return Err(session::Error::from(Error::ReadPath(error))),
-        };
+        let metadata = fs::symlink_metadata(file_path)
+            .map_err(Error::ReadPath)?;
         session.reply(Response {
             st_mode: metadata.mode().into(),
             st_ino: metadata.ino() as u32,
