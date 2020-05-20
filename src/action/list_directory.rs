@@ -409,18 +409,12 @@ mod tests {
     fn test_lexicographical_order() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
-        let file_names = vec!["1numfile", "5numfile",
-                              "Afile", "aafile", "afile",
-                              "bfile", "zfile", "*file", "(file)", "=^-^="];
-        let mut file_paths = vec![];
-        for file_name in &file_names {
-            file_paths.push(dir_path.join(file_name));
-        }
-        file_paths.shuffle(&mut thread_rng());
-        for file_path in &file_paths {
-            std::fs::File::create(file_path).unwrap();
-        }
-        file_paths.sort();
+        std::fs::File::create(dir_path.join("Datei")).unwrap();
+        std::fs::File::create(dir_path.join("file")).unwrap();
+        std::fs::File::create(dir_path.join("αρχείο")).unwrap();
+        std::fs::File::create(dir_path.join("файл")).unwrap();
+        std::fs::File::create(dir_path.join("फ़ाइल")).unwrap();
+        std::fs::File::create(dir_path.join("❤ℝℝG❤")).unwrap();
         let request = super::Request {
             pathspec: PathSpec {
                 path_options: None,
@@ -430,10 +424,18 @@ mod tests {
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
-        for i in 0..file_paths.len() {
-            assert_eq!(&session.reply::<Response>(i)
-                .pathspec.path, &file_paths[i]);
-        }
+        assert_eq!(&session.reply::<Response>(0).pathspec.path,
+                   &dir_path.join("Datei"));
+        assert_eq!(&session.reply::<Response>(1).pathspec.path,
+                   &dir_path.join("file"));
+        assert_eq!(&session.reply::<Response>(2).pathspec.path,
+                   &dir_path.join("αρχείο"));
+        assert_eq!(&session.reply::<Response>(3).pathspec.path,
+                   &dir_path.join("файл"));
+        assert_eq!(&session.reply::<Response>(4).pathspec.path,
+                   &dir_path.join("फ़ाइल"));
+        assert_eq!(&session.reply::<Response>(5).pathspec.path,
+                   &dir_path.join("❤ℝℝG❤"));
     }
 
     #[test]
