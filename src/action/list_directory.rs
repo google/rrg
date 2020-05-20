@@ -35,6 +35,7 @@ impl std::error::Error for Error {
 }
 
 impl Display for Error {
+
     fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
         use Error::*;
 
@@ -47,6 +48,7 @@ impl Display for Error {
 }
 
 impl From<Error> for session::Error {
+
     fn from(error: Error) -> session::Error {
         session::Error::action(error)
     }
@@ -228,6 +230,7 @@ fn get_int_path_type(pathspec: &PathSpec) -> Option<i32> {
 }
 
 impl super::Request for Request {
+
     type Proto = ListDirRequest;
 
     fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
@@ -253,6 +256,7 @@ impl super::Request for Request {
 }
 
 impl super::Response for Response {
+
     const RDF_NAME: Option<&'static str> = Some("StatEntry");
 
     type Proto = StatEntry;
