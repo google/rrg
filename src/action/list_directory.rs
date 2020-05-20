@@ -520,4 +520,33 @@ mod tests {
         assert_eq!(file.st_nlink, 1);
         assert!(file.symlink.is_none());
     }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_st_flags_linux() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+        let file_path = dir_path.join("file");
+        std::fs::File::create(&file_path).unwrap();
+        let request = super::Request {
+            pathspec: PathSpec {
+                path_options: None,
+                pathtype: PathType::OS,
+                path: PathBuf::from(&dir_path),
+            }
+        };
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+        assert_eq!(session.reply_count(), 1);
+        let file = &session.reply::<Response>(0);
+        assert_eq!(file.pathspec.path, file_path);
+        assert_ne!(file.st_flags_linux, 0);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_linux_flags_non_existing_path() {
+        let path_buf =  PathBuf::from("some non existing path");
+        assert!(get_linux_flags(&path_buf).is_none());
+    }
 }
