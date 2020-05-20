@@ -265,22 +265,11 @@ mod tests {
     use std::fs::{hard_link, create_dir, write};
     use std::path::Path;
     use tempfile::tempdir;
-    use crate::action::Request;
     use crate::gzchunked::GzChunkedDecoder;
     #[cfg(target_family = "unix")]
     use std::os::unix::fs::{symlink, PermissionsExt};
     #[cfg(target_family = "unix")]
     use std::fs::{set_permissions, Permissions};
-
-    fn handle_for_path<S>(session: &mut S, path: &Path) -> session::Result<()>
-    where
-        S: Session,
-    {
-        let path_bytes = bytes_from_os_str(path.as_os_str()).unwrap();
-        let args_proto = TimelineArgs { root: Some(path_bytes) };
-        let request = Request::from_proto(args_proto).unwrap();
-        handle(session, request)
-    }
 
     fn entry_for_path(path: &Path) -> TimelineEntry {
         let metadata = symlink_metadata(path).unwrap();
@@ -339,7 +328,7 @@ mod tests {
         let dir_path = dir.path().join("nonexistent_subdir");
 
         let mut session = session::test::Fake::new();
-        assert!(handle_for_path(&mut session, dir_path.as_path()).is_err());
+        assert!(handle(&mut session, Request { root: dir_path }).is_err());
     }
 
     #[test]
@@ -352,7 +341,7 @@ mod tests {
         expected_entries.sort_by(|a, b| a.path.cmp(&b.path));
 
         let mut session = session::test::Fake::new();
-        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
@@ -380,7 +369,7 @@ mod tests {
         expected_entries.push(test2_entry);
 
         let mut session = session::test::Fake::new();
-        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
@@ -408,7 +397,7 @@ mod tests {
         expected_entries.push(test2_entry);
 
         let mut session = session::test::Fake::new();
-        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
@@ -442,7 +431,7 @@ mod tests {
         expected_entries.push(test4_entry);
 
         let mut session = session::test::Fake::new();
-        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
@@ -478,7 +467,7 @@ mod tests {
         expected_entries.push(entry_for_path(dir.path()));
 
         let mut session = session::test::Fake::new();
-        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
@@ -514,7 +503,7 @@ mod tests {
         }
 
         let mut session = session::test::Fake::new();
-        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
@@ -553,7 +542,7 @@ mod tests {
         expected_entries.push(symlink_entry);
 
         let mut session = session::test::Fake::new();
-        assert!(handle_for_path(&mut session, dir.path()).is_ok());
+        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
