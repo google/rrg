@@ -134,14 +134,16 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
             st_rdev: metadata.rdev() as u32,
             st_flags_linux:
             get_linux_flags(file_path).unwrap_or_default() as u32,
-            symlink: match metadata.file_type().is_symlink() {
-                true => match fs::read_link(file_path) {
+            symlink: if metadata.file_type().is_symlink() {
+                match fs::read_link(file_path) {
                     Ok(file) => Some(file.to_string_lossy().to_string()),
                     _ => None,
                 }
-                false => None
+            } else {
+                None
             },
-            pathspec: PathSpec {
+            pathspec: PathSpec
+            {
                 path_options: Some(PathOption::CaseLiteral),
                 pathtype: PathType::OS,
                 path: file_path.clone(),
