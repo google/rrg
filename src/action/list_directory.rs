@@ -104,11 +104,8 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
     let dir_path = &request.pathspec.path;
     // In case if Result<DirEntry> matches the error branch, we won't give
     // any info about that file, but other info isn't effected:
-    let (dir_entries, _): (Vec<_>, Vec<_>) = match dir_path.read_dir() {
-        Ok(dir_iter) => dir_iter,
-        Err(error) =>
-            return Err(session::Error::from(Error::ReadPath(error))),
-    }.partition(Result::is_ok);
+    let (dir_entries, _): (Vec<_>, Vec<_>) = dir_path.read_dir()
+        .map_err(Error::ReadPath)?.partition(Result::is_ok);
     // Code won't panic because of unwrap(). We made the partition above
     let mut paths: Vec<PathBuf> = dir_entries.into_iter().map(Result::unwrap)
         .map(|entry| entry.path()).collect();
@@ -547,7 +544,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_linux_flags_non_existing_path() {
-        let path_buf =  PathBuf::from("some non existing path");
+        let path_buf = PathBuf::from("some non existing path");
         assert!(get_linux_flags(&path_buf).is_none());
     }
 }
