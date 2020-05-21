@@ -54,6 +54,43 @@ impl From<Error> for session::Error {
     }
 }
 
+#[derive(Debug)]
+enum ParseError {
+    UnsupportedValue(String, String),
+}
+
+impl std::error::Error for ParseError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use ParseError::*;
+
+        match *self {
+            UnsupportedValue(ref _field, ref _value) => None,
+        }
+    }
+}
+
+impl Display for ParseError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        use ParseError::*;
+
+        match *self {
+            UnsupportedValue(ref field, ref value) => {
+                write!(fmt, "value {} in {} field is not supported",
+                       value, field)
+            }
+        }
+    }
+}
+
+impl From<ParseError> for session::Error {
+
+    fn from(error: ParseError) -> session::Error {
+        session::Error::action(error)
+    }
+}
+
 
 /// A response type for the list directory action.
 pub struct Response {
