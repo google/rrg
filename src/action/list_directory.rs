@@ -117,14 +117,6 @@ pub struct Request {
     pathspec: PathSpec,
 }
 
-enum PathType {
-    OS,
-    TSK,
-    Registry,
-    TMPFile,
-    NTFS,
-}
-
 enum PathOption {
     CaseInsensitive,
     CaseLiteral,
@@ -134,7 +126,6 @@ enum PathOption {
 
 struct PathSpec {
     path_options: Option<PathOption>,
-    pathtype: PathType,
     path: PathBuf,
 }
 
@@ -176,10 +167,8 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
             } else {
                 None
             },
-            pathspec: PathSpec
-            {
+            pathspec: PathSpec {
                 path_options: Some(PathOption::CaseLiteral),
-                pathtype: PathType::OS,
                 path: file_path.clone(),
             },
         })?;
@@ -196,21 +185,6 @@ fn get_enum_path_options(option: &Option<i32>) -> Option<PathOption> {
             2 => Some(PathOption::Recursive),
             3 => Some(PathOption::Regex),
             _ => None
-        },
-        _ => None,
-    }
-}
-
-/// Converts integer from proto to human-readable enum type
-fn get_enum_path_type(option: &Option<i32>) -> Option<PathType> {
-    match option {
-        Some(ptype) => match ptype {
-            0 => Some(PathType::OS),
-            1 => Some(PathType::TSK),
-            2 => Some(PathType::Registry),
-            3 => Some(PathType::TMPFile),
-            4 => Some(PathType::NTFS),
-            _ => None,
         },
         _ => None,
     }
@@ -252,38 +226,24 @@ fn get_int_path_options(pathspec: &PathSpec) -> Option<i32> {
     }
 }
 
-/// Converts enum type back to integer to pass to the proto
-fn get_int_path_type(pathspec: &PathSpec) -> Option<i32> {
-    match pathspec.pathtype {
-        PathType::OS => Some(0),
-        PathType::TSK => Some(1),
-        PathType::Registry => Some(2),
-        PathType::TMPFile => Some(3),
-        PathType::NTFS => Some(4),
-    }
-}
-
 impl super::Request for Request {
 
     type Proto = ListDirRequest;
 
     fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
+        let missing = session::MissingFieldError::new;
+        let pathspec = proto.pathspec.ok_or(missing("path spec"))?;
+        let path_type = pathspec.pathtype
+            .ok_or(missing("path type"))?;
+        if path_type != 0 {
+            return Err(session::ParseError::malformed
+                (ParseError::UnsupportedValue
+                    (String::from("path type"), path_type.to_string())));
+        }
         Ok(Request {
-            pathspec: match proto.pathspec {
-                Some(pathspec) => PathSpec {
-                    path_options:
-                    get_enum_path_options(&pathspec.path_options),
-                    pathtype: match
-                    get_enum_path_type(&pathspec.pathtype) {
-                        Some(path_type) => path_type,
-                        None => return
-                            Err(session::ParseError::malformed
-                                (session::MissingFieldError::new("path type")))
-                    },
-                    path: get_path(&pathspec.path),
-                },
-                None => return Err(session::ParseError::malformed
-                    (session::MissingFieldError::new("pathspec"))),
+            pathspec: PathSpec {
+                path_options: get_enum_path_options(&pathspec.path_options),
+                path: get_path(&pathspec.path),
             }
         })
     }
@@ -320,7 +280,8 @@ impl super::Response for Response {
             resident: None,
             pathspec: Some(rrg_proto::PathSpec {
                 path_options: get_int_path_options(&self.pathspec),
-                pathtype: get_int_path_type(&self.pathspec),
+                // represents OS path type (other types are not supported)
+                pathtype: Some(0),
                 path: Some(self.pathspec.path.to_string_lossy().to_string()),
                 mount_point: None,
                 stream_name: None,
@@ -417,7 +378,6 @@ mod tests {
         let request = super::Request {
             pathspec: PathSpec {
                 path_options: None,
-                pathtype: PathType::OS,
                 path: PathBuf::from(dir.path()),
             }
         };
@@ -432,7 +392,6 @@ mod tests {
         let request = super::Request {
             pathspec: PathSpec {
                 path_options: None,
-                pathtype: PathType::OS,
                 path: PathBuf::from(dir.path().join("nonexistent_subdir")),
             }
         };
@@ -453,7 +412,6 @@ mod tests {
         let request = super::Request {
             pathspec: PathSpec {
                 path_options: None,
-                pathtype: PathType::OS,
                 path: PathBuf::from(&dir_path),
             }
         };
@@ -482,7 +440,6 @@ mod tests {
         let request = super::Request {
             pathspec: PathSpec {
                 path_options: None,
-                pathtype: PathType::OS,
                 path: PathBuf::from(&dir_path),
             }
         };
@@ -511,7 +468,6 @@ mod tests {
         let request = super::Request {
             pathspec: PathSpec {
                 path_options: None,
-                pathtype: PathType::OS,
                 path: PathBuf::from(&dir_path),
             }
         };
@@ -538,7 +494,6 @@ mod tests {
         let request = super::Request {
             pathspec: PathSpec {
                 path_options: None,
-                pathtype: PathType::OS,
                 path: PathBuf::from(&dir_path),
             }
         };
@@ -567,7 +522,6 @@ mod tests {
         let request = super::Request {
             pathspec: PathSpec {
                 path_options: None,
-                pathtype: PathType::OS,
                 path: PathBuf::from(&dir_path),
             }
         };
