@@ -409,12 +409,12 @@ mod tests {
     fn test_lexicographical_order() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
-        std::fs::File::create(dir_path.join("Datei")).unwrap();
-        std::fs::File::create(dir_path.join("file")).unwrap();
-        std::fs::File::create(dir_path.join("αρχείο")).unwrap();
-        std::fs::File::create(dir_path.join("файл")).unwrap();
-        std::fs::File::create(dir_path.join("फ़ाइल")).unwrap();
         std::fs::File::create(dir_path.join("❤ℝℝG❤")).unwrap();
+        std::fs::File::create(dir_path.join("файл")).unwrap();
+        std::fs::File::create(dir_path.join("file")).unwrap();
+        std::fs::File::create(dir_path.join("Datei")).unwrap();
+        std::fs::File::create(dir_path.join("αρχείο")).unwrap();
+        std::fs::File::create(dir_path.join("फ़ाइल")).unwrap();
         let request = super::Request {
             pathspec: PathSpec {
                 path_options: None,
