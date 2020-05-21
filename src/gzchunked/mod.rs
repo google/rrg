@@ -207,4 +207,35 @@ mod tests {
         }
         assert_eq!(decoded_data, expected_data);
     }
+
+    #[test]
+    fn test_encode_and_decode_max_compression() {
+        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::new(9));
+        let mut decoder = GzChunkedDecoder::new();
+
+        encoder.write(&[1, 2, 3, 4]).unwrap();
+        let encoded_block = encoder.next_chunk().unwrap();
+        decoder.write(encoded_block.as_slice()).unwrap();
+        assert_eq!(decoder.try_next_data(), Some(vec![1, 2, 3, 4]));
+        assert_eq!(decoder.try_next_data(), None);
+    }
+
+    #[test]
+    fn test_encode_and_decode_min_compression() {
+        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::new(0));
+        let mut decoder = GzChunkedDecoder::new();
+
+        encoder.write(&[1, 2, 3, 4]).unwrap();
+        let encoded_block = encoder.next_chunk().unwrap();
+        decoder.write(encoded_block.as_slice()).unwrap();
+        assert_eq!(decoder.try_next_data(), Some(vec![1, 2, 3, 4]));
+        assert_eq!(decoder.try_next_data(), None);
+    }
+
+    // Should panic because the underlying gzip only supports levels from 0 to 9.
+    #[test]
+    #[should_panic]
+    fn test_huge_compression() {
+        GzChunkedEncoder::new(GzChunkedCompression::new(100500));
+    }
 }
