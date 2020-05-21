@@ -352,6 +352,13 @@ mod tests {
         assert!(request.is_err());
     }
 
+    #[test]
+    fn test_unsupported_pathtype() {
+        let request: Result<super::Request, _> = Request::from_proto
+            (fill_proto_request(None, Some(1), Some(String::from("/"))));
+        assert!(request.is_err());
+    }
+
 
     #[test]
     fn test_empty_pathtype() {
