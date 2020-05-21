@@ -128,7 +128,7 @@ mod tests {
         decoder.write(encoded_block.as_slice()).unwrap();
         decoder.write(encoded_block.as_slice()).unwrap();
 
-        assert!(decoder.try_next_data().is_none());
+        assert_eq!(decoder.try_next_data(), None);
     }
 
     #[test]
@@ -144,11 +144,11 @@ mod tests {
         let encoded_block = encoder.next_chunk().unwrap();
         decoder.write(encoded_block.as_slice()).unwrap();
 
-        assert_eq!([1, 2, 3, 4], decoder.try_next_data().unwrap().as_slice());
-        assert_eq!([] as [u8; 0], decoder.try_next_data().unwrap().as_slice());
-        assert_eq!([1, 2, 3, 4, 5, 6, 7, 8], decoder.try_next_data().unwrap().as_slice());
-        assert_eq!([1], decoder.try_next_data().unwrap().as_slice());
-        assert!(decoder.try_next_data().is_none());
+        assert_eq!(decoder.try_next_data(), Some(vec![1, 2, 3, 4]));
+        assert_eq!(decoder.try_next_data(), Some(Vec::new()));
+        assert_eq!(decoder.try_next_data(), Some(vec![1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_eq!(decoder.try_next_data(), Some(vec![1]));
+        assert_eq!(decoder.try_next_data(), None);
     }
 
     #[test]
@@ -159,26 +159,26 @@ mod tests {
         encoder.write(&[1, 2, 3, 4]).unwrap();
         let encoded_block = encoder.next_chunk().unwrap();
         decoder.write(encoded_block.as_slice()).unwrap();
-        assert_eq!([1, 2, 3, 4], decoder.try_next_data().unwrap().as_slice());
-        assert!(decoder.try_next_data().is_none());
+        assert_eq!(decoder.try_next_data(), Some(vec![1, 2, 3, 4]));
+        assert_eq!(decoder.try_next_data(), None);
 
         encoder.write(&[]).unwrap();
         let encoded_block = encoder.next_chunk().unwrap();
         decoder.write(encoded_block.as_slice()).unwrap();
-        assert_eq!([] as [u8; 0], decoder.try_next_data().unwrap().as_slice());
-        assert!(decoder.try_next_data().is_none());
+        assert_eq!(decoder.try_next_data(), Some(Vec::new()));
+        assert_eq!(decoder.try_next_data(), None);
 
         encoder.write(&[1, 2, 3, 4, 5, 6, 7, 8]).unwrap();
         let encoded_block = encoder.next_chunk().unwrap();
         decoder.write(encoded_block.as_slice()).unwrap();
-        assert_eq!([1, 2, 3, 4, 5, 6, 7, 8], decoder.try_next_data().unwrap().as_slice());
-        assert!(decoder.try_next_data().is_none());
+        assert_eq!(decoder.try_next_data(), Some(vec![1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_eq!(decoder.try_next_data(), None);
 
         encoder.write(&[1]).unwrap();
         let encoded_block = encoder.next_chunk().unwrap();
         decoder.write(encoded_block.as_slice()).unwrap();
-        assert_eq!([1], decoder.try_next_data().unwrap().as_slice());
-        assert!(decoder.try_next_data().is_none());
+        assert_eq!(decoder.try_next_data(), Some(vec![1]));
+        assert_eq!(decoder.try_next_data(), None);
     }
 
     #[test]
@@ -205,6 +205,6 @@ mod tests {
         while let Some(data) = decoder.try_next_data() {
             decoded_data.push(data);
         }
-        assert_eq!(expected_data, decoded_data);
+        assert_eq!(decoded_data, expected_data);
     }
 }
