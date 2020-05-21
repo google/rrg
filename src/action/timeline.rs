@@ -5,23 +5,30 @@
 
 //! A handler and associated types for the timeline action.
 
-use std::vec::Vec;
 use std::ffi::{OsStr, OsString};
-use std::result::Result;
-use std::path::PathBuf;
 use std::fs::{symlink_metadata, read_dir, Metadata};
-#[cfg(target_family = "unix")]
-use std::os::unix::{fs::MetadataExt, ffi::{OsStrExt, OsStringExt}};
-#[cfg(target_family = "windows")]
-use std::os::windows::{fs::MetadataExt, ffi::{OsStrExt, OsStringExt}};
-#[cfg(target_family = "windows")]
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use std::path::PathBuf;
+use std::result::Result;
+use std::vec::Vec;
 
+use cfg_if::cfg_if;
 use sha2::{Digest, Sha256};
 use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
 
-use crate::session::{self, Session, Error, ParseError, MissingFieldError};
 use crate::gzchunked::{GzChunkedEncoder, GzChunkedCompression};
+use crate::session::{self, Session, Error, ParseError, MissingFieldError};
+
+cfg_if! {
+    if #[cfg(target_family = "unix")] {
+        use std::os::unix::{fs::MetadataExt, ffi::{OsStrExt, OsStringExt}};
+    }
+}
+cfg_if! {
+    if #[cfg(target_family = "windows")] {
+        use std::os::windows::{fs::MetadataExt, ffi::{OsStrExt, OsStringExt}};
+        use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+    }
+}
 
 
 /// A request type for the timeline action.
@@ -52,72 +59,85 @@ struct RecurseState {
 }
 
 /// Retrieves device ID from metadata.
-#[cfg(target_family = "unix")]
 fn dev_from_metadata(metadata: &Metadata) -> u64 {
-    metadata.dev()
-}
-#[cfg(target_family = "windows")]
-fn dev_from_metadata(_: &Metadata) -> u64 {
-    0
-}
-
-#[cfg(target_family = "unix")]
-fn bytes_from_os_str(s: &OsStr) -> std::io::Result<Vec<u8>> {
-    Ok(Vec::from(s.as_bytes()))
-}
-#[cfg(target_family = "windows")]
-fn bytes_from_os_str(s: &OsStr) -> std::io::Result<Vec<u8>> {
-    s.encode_wide().try_fold(Vec::new(), |mut stream, ch| {
-        stream.write_u16::<LittleEndian>(ch).map(|_| stream)
-    })
-}
-
-#[cfg(target_family = "unix")]
-fn os_string_from_bytes(bytes: &[u8]) -> OsString {
-    OsString::from_vec(Vec::from(bytes))
-}
-#[cfg(target_family = "windows")]
-fn os_string_from_bytes(bytes: &[u8]) -> OsString {
-    let mut wchars = Vec::new();
-    let mut bytes_slice = bytes;
-    while let Ok(wchar) = bytes_slice.read_u16::<LittleEndian>() {
-        wchars.push(wchar);
+    cfg_if! {
+        if #[cfg(target_family = "unix")] {
+            metadata.dev()
+        } else if #[cfg(target_family = "windows")] {
+            0
+        } else {
+            compile_error!("unsupported OS family");
+        }
     }
-    OsString::from_wide(wchars.as_slice())
+}
+
+/// Tries to convert OS-dependent string to raw bytes.
+fn bytes_from_os_str(s: &OsStr) -> std::io::Result<Vec<u8>> {
+    cfg_if! {
+        if #[cfg(target_family = "unix")] {
+            Ok(Vec::from(s.as_bytes()))
+        } else if #[cfg(target_family = "windows")] {
+            s.encode_wide().try_fold(Vec::new(), |mut stream, ch| {
+                stream.write_u16::<LittleEndian>(ch).map(|_| stream)
+            })
+        } else {
+            compile_error!("unsupported OS family");
+        }
+    }
+}
+
+/// Converts raw bytes to OS-dependent string.
+fn os_string_from_bytes(bytes: &[u8]) -> OsString {
+    cfg_if! {
+        if #[cfg(target_family = "unix")] {
+            OsString::from_vec(Vec::from(bytes))
+        } else if #[cfg(target_family = "windows")] {
+            let mut wchars = Vec::new();
+            let mut bytes_slice = bytes;
+            while let Ok(wchar) = bytes_slice.read_u16::<LittleEndian>() {
+                wchars.push(wchar);
+            }
+            OsString::from_wide(wchars.as_slice())
+        } else {
+            compile_error!("unsupported OS family");
+        }
+    }
 }
 
 /// Encodes filesystem metadata into timeline entry proto.
-#[cfg(target_family = "unix")]
 fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> std::io::Result<TimelineEntry>
 {
-    Ok(TimelineEntry {
-        path: Some(bytes_from_os_str(path.as_os_str())?),
-        mode: Some(metadata.mode()),
-        size: Some(metadata.size()),
-        dev: Some(metadata.dev()),
-        ino: Some(metadata.ino()),
-        uid: Some(metadata.uid() as i64),
-        gid: Some(metadata.gid() as i64),
-        atime_ns: Some(metadata.atime_nsec() as u64),
-        ctime_ns: Some(metadata.ctime_nsec() as u64),
-        mtime_ns: Some(metadata.mtime_nsec() as u64),
-    })
-}
-#[cfg(target_family = "windows")]
-fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> std::io::Result<TimelineEntry>
-{
-    Ok(TimelineEntry {
-        path: Some(bytes_from_os_str(path.as_os_str())?),
-        mode: None,
-        size: Some(metadata.len()),
-        dev: None,
-        ino: None,
-        uid: None,
-        gid: None,
-        atime_ns: Some(metadata.last_access_time()),
-        ctime_ns: Some(metadata.creation_time()),
-        mtime_ns: Some(metadata.last_write_time()),
-    })
+    cfg_if! {
+        if #[cfg(target_family = "unix")] {
+            Ok(TimelineEntry {
+                path: Some(bytes_from_os_str(path.as_os_str())?),
+                mode: Some(metadata.mode()),
+                size: Some(metadata.size()),
+                dev: Some(metadata.dev()),
+                ino: Some(metadata.ino()),
+                uid: Some(metadata.uid() as i64),
+                gid: Some(metadata.gid() as i64),
+                atime_ns: Some(metadata.atime_nsec() as u64),
+                ctime_ns: Some(metadata.ctime_nsec() as u64),
+                mtime_ns: Some(metadata.mtime_nsec() as u64),
+            })
+        } else if #[cfg(target_family = "windows")] {
+            Ok(TimelineEntry {
+                path: Some(bytes_from_os_str(path.as_os_str())?),
+                mode: None,
+                size: Some(metadata.len()),
+                dev: None,
+                ino: None,
+                uid: None,
+                gid: None,
+                atime_ns: Some(metadata.last_access_time()),
+                ctime_ns: Some(metadata.creation_time()),
+                mtime_ns: Some(metadata.last_write_time()),
+            })
+        } else {
+            compile_error!("unsupported OS family");
+        }
+    }
 }
 
 impl RecurseState {
@@ -266,10 +286,12 @@ mod tests {
     use std::path::Path;
     use tempfile::tempdir;
     use crate::gzchunked::GzChunkedDecoder;
-    #[cfg(target_family = "unix")]
-    use std::os::unix::fs::{symlink, PermissionsExt};
-    #[cfg(target_family = "unix")]
-    use std::fs::{set_permissions, Permissions};
+    cfg_if! {
+        if #[cfg(target_family = "unix")] {
+            use std::os::unix::fs::{symlink, PermissionsExt};
+            use std::fs::{set_permissions, Permissions};
+        }
+    }
 
     fn entry_for_path(path: &Path) -> TimelineEntry {
         let metadata = symlink_metadata(path).unwrap();
@@ -282,7 +304,7 @@ mod tests {
 
         let mut expected_ids = session.reply::<Response>(0).ids.clone();
         let mut ids = Vec::new();
-        assert_eq!(expected_ids.len(), block_count);
+        assert_eq!(block_count, expected_ids.len());
         expected_ids.sort_by(|a, b| a.0.cmp(&b.0));
 
         let mut decoder = GzChunkedDecoder::new();
@@ -346,7 +368,7 @@ mod tests {
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
     }
-    
+
     #[cfg_attr(target_family = "windows", ignore)]
     #[test]
     fn test_file_hardlink() {
@@ -374,7 +396,7 @@ mod tests {
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
     }
-    
+
     #[cfg(target_family = "unix")]
     #[test]
     fn test_file_symlink() {
@@ -402,7 +424,7 @@ mod tests {
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
     }
-    
+
     #[cfg(target_family = "unix")]
     #[test]
     fn test_symlink_loops() {
@@ -436,7 +458,7 @@ mod tests {
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
     }
-    
+
     #[test]
     fn test_weird_unicode_names() {
         let mut expected_entries = Vec::new();
@@ -449,14 +471,14 @@ mod tests {
         let entry_path = PathBuf::from(os_string_from_bytes(entry.path.as_ref().unwrap().as_slice()));
         assert_eq!(entry_path.file_name().unwrap().to_str().unwrap(), "with spaces");
         expected_entries.push(entry);
-        
+
         let path = dir.path().join("'quotes'");
         write(&path, "foo").unwrap();
         let entry = entry_for_path(&path);
         let entry_path = PathBuf::from(os_string_from_bytes(entry.path.as_ref().unwrap().as_slice()));
         assert_eq!(entry_path.file_name().unwrap().to_str().unwrap(), "'quotes'");
         expected_entries.push(entry);
-        
+
         let path = dir.path().join("кириллица");
         write(&path, "foo").unwrap();
         let entry = entry_for_path(&path);
@@ -472,7 +494,7 @@ mod tests {
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
     }
-    
+
     // TODO: Debug this test on MacOS.
     #[cfg_attr(target_os = "macos", ignore)]
     #[test]
@@ -493,7 +515,7 @@ mod tests {
         }
         // Let's suppose we can create at least this much.
         assert!(dir_count >= 64);
-        
+
         path = PathBuf::from(dir.path());
         expected_entries.push(entry_for_path(dir.path()));
         for _ in 0..dir_count {
@@ -508,7 +530,7 @@ mod tests {
         let mut entries = entries_from_session_response(&session);
         diff_entries(&mut entries, &mut expected_entries);
     }
-    
+
     #[cfg(target_family = "unix")]
     #[test]
     fn test_mode_and_permissions() {
@@ -524,7 +546,7 @@ mod tests {
         write(&unavailable_file_path, "foo").unwrap();
         write(&readonly_path, "foo").unwrap();
         symlink(&readonly_path, &symlink_path).unwrap();
-        
+
         set_permissions(&unavailable_dir_path, Permissions::from_mode(0o000)).unwrap();
         set_permissions(&readonly_path, Permissions::from_mode(0o444)).unwrap();
 
