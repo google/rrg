@@ -308,8 +308,6 @@ mod tests {
     use super::*;
     use crate::action::Request;
     use tempfile::tempdir;
-    use rand::thread_rng;
-    use rand::seq::SliceRandom;
     use std::os::unix::fs::PermissionsExt;
 
     /// Fills ListDirRequest with provided fields
