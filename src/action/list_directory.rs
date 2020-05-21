@@ -11,7 +11,7 @@ use crate::session::{self, Session};
 use rrg_proto::{ListDirRequest, StatEntry};
 
 use ioctls;
-use std::fs::{self, File};
+use std::fs::{self, File, Metadata};
 use std::path::PathBuf;
 use std::os::raw::c_long;
 use std::os::unix::fs::MetadataExt;
@@ -129,6 +129,38 @@ struct PathSpec {
     path: PathBuf,
 }
 
+fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
+    Response {
+        st_mode: metadata.mode().into(),
+        st_ino: metadata.ino() as u32,
+        st_dev: metadata.dev() as u32,
+        st_nlink: metadata.nlink() as u32,
+        st_uid: metadata.uid() as u32,
+        st_gid: metadata.gid() as u32,
+        st_size: metadata.size(),
+        st_atime: metadata.atime() as u64,
+        st_mtime: metadata.mtime() as u64,
+        st_ctime: metadata.ctime() as u64,
+        st_blocks: metadata.blocks() as u32,
+        st_blksize: metadata.blksize() as u32,
+        st_rdev: metadata.rdev() as u32,
+        st_flags_linux:
+        get_linux_flags(file_path).unwrap_or_default() as u32,
+        symlink: if metadata.file_type().is_symlink() {
+            match fs::read_link(file_path) {
+                Ok(file) => Some(file.to_string_lossy().to_string()),
+                _ => None,
+            }
+        } else {
+            None
+        },
+        pathspec: PathSpec {
+            path_options: Some(PathOption::CaseLiteral),
+            path: file_path.clone(),
+        },
+    }
+}
+
 pub fn handle<S: Session>(session: &mut S, request: Request)
                           -> session::Result<()> {
     let dir_path = &request.pathspec.path;
@@ -136,39 +168,13 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
         .map_err(Error::ReadPath)?.filter_map(|entry| entry.ok())
         .map(|entry| entry.path()).collect();
     paths.sort();
+
     for file_path in &paths {
         let metadata = fs::symlink_metadata(file_path)
             .map_err(Error::ReadPath)?;
-        session.reply(Response {
-            st_mode: metadata.mode().into(),
-            st_ino: metadata.ino() as u32,
-            st_dev: metadata.dev() as u32,
-            st_nlink: metadata.nlink() as u32,
-            st_uid: metadata.uid() as u32,
-            st_gid: metadata.gid() as u32,
-            st_size: metadata.size(),
-            st_atime: metadata.atime() as u64,
-            st_mtime: metadata.mtime() as u64,
-            st_ctime: metadata.ctime() as u64,
-            st_blocks: metadata.blocks() as u32,
-            st_blksize: metadata.blksize() as u32,
-            st_rdev: metadata.rdev() as u32,
-            st_flags_linux:
-            get_linux_flags(file_path).unwrap_or_default() as u32,
-            symlink: if metadata.file_type().is_symlink() {
-                match fs::read_link(file_path) {
-                    Ok(file) => Some(file.to_string_lossy().to_string()),
-                    _ => None,
-                }
-            } else {
-                None
-            },
-            pathspec: PathSpec {
-                path_options: Some(PathOption::CaseLiteral),
-                path: file_path.clone(),
-            },
-        })?;
+        session.reply(fill_response(&metadata, file_path))?;
     }
+
     Ok(())
 }
 
