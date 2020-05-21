@@ -23,6 +23,9 @@ sysinfo = { version = "0.14.1" }
 rand = { version = "0.7.3" }
 tempfile = { version = "3.1.0" }
 
+[target.'cfg(target_family = "unix")'.dependencies]
+pnet = { version = "0.26.0" }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 proc-mounts = { version = "0.2.4" }
 
