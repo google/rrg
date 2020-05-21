@@ -310,9 +310,9 @@ mod tests {
                           path: Option<String>) -> ListDirRequest {
         ListDirRequest {
             pathspec: Some(rrg_proto::PathSpec {
-                path_options: path_options,
-                pathtype: pathtype,
-                path: path,
+                path_options,
+                pathtype,
+                path,
                 mount_point: None,
                 stream_name: None,
                 file_size_override: None,
