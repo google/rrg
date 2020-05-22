@@ -65,7 +65,7 @@ struct PathSpec {
 }
 
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let mut path = collapse_pathspec(request.pathspec.unwrap());
+    let original_path = collapse_pathspec(request.pathspec.unwrap());
 
     let follow_symlink = match request.follow_symlink {
         Some(s) => s,
@@ -77,16 +77,15 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
         None => false,
     };
 
-    if follow_symlink {
-        path = match fs::read_link(&path) {
-            Ok(result) => result,
-            Err(_) => path
-        }
-    }
+    let destination = if follow_symlink {
+        fs::canonicalize(&original_path)?
+    } else {
+        original_path.clone()
+    };
 
-    let mut response = form_response(&path)?;
+    let mut response = form_response(&original_path, &destination)?;
     if collect_ext_attrs {
-        response.ext_attrs = get_ext_attrs(&path);
+        response.ext_attrs = get_ext_attrs(&destination);
     }
 
     session.reply(response)?;
@@ -106,8 +105,10 @@ fn get_ext_attrs(path: &PathBuf) -> Vec<rrg_proto::stat_entry::ExtAttr> {
     result
 }
 
-fn form_response(path: &PathBuf) -> Result<Response, std::io::Error> {
-    let metadata = fs::metadata(path)?;
+fn form_response(original_path: &PathBuf, destination: &PathBuf)
+                 -> Result<Response, std::io::Error> {
+    let metadata = fs::symlink_metadata(destination)?;
+    let original_metadata = fs::symlink_metadata(original_path)?;
 
     Ok(Response {
         st_mode: metadata.mode().into(),
@@ -123,10 +124,10 @@ fn form_response(path: &PathBuf) -> Result<Response, std::io::Error> {
         st_blocks: metadata.blocks() as u32,
         st_blksize: metadata.blksize() as u32,
         st_rdev: metadata.rdev() as u32,
-        st_flags_linux: get_linux_flags(path).unwrap_or_default() as u32,
+        st_flags_linux: get_linux_flags(destination).unwrap_or_default() as u32,
 
-        symlink: match metadata.file_type().is_symlink() {
-            true => Some(fs::read_link(path).
+        symlink: match original_metadata.file_type().is_symlink() {
+            true => Some(fs::read_link(original_path).
                 unwrap().to_str().unwrap().to_string()),
             false => None
         },
@@ -135,7 +136,7 @@ fn form_response(path: &PathBuf) -> Result<Response, std::io::Error> {
             nested_path: None,
             path_options: Some(PathOption::CaseLiteral),
             pathtype: Some(PathType::OS),
-            path: Some(path.clone()),
+            path: Some(original_path.clone()),
         },
 
         ext_attrs: vec![],
@@ -175,7 +176,7 @@ fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
         match pathspec.path {
             Some(path) => {
                 match pathspec.nested_path {
-                    Some(nested_path_box) => path.join(collapse_pathspec(*nested_path_box)),
+                    Some(nested_path_box) => path.join(recursive_collapse(*nested_path_box)),
                     None => path,
                 }
             },
