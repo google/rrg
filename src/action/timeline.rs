@@ -18,19 +18,6 @@ use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
 use crate::gzchunked::{GzChunkedEncoder, GzChunkedCompression};
 use crate::session::{self, Session, Error, ParseError, MissingFieldError};
 
-cfg_if! {
-    if #[cfg(target_family = "unix")] {
-        use std::os::unix::{fs::MetadataExt, ffi::{OsStrExt, OsStringExt}};
-    }
-}
-cfg_if! {
-    if #[cfg(target_family = "windows")] {
-        use std::os::windows::{fs::MetadataExt, ffi::{OsStrExt, OsStringExt}};
-        use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-    }
-}
-
-
 /// A request type for the timeline action.
 pub struct Request {
     root: PathBuf,
@@ -59,9 +46,11 @@ struct RecurseState {
 }
 
 /// Retrieves device ID from metadata.
+#[allow(unused_variables)]
 fn dev_from_metadata(metadata: &Metadata) -> u64 {
     cfg_if! {
         if #[cfg(target_family = "unix")] {
+            use std::os::unix::fs::MetadataExt;
             metadata.dev()
         } else if #[cfg(target_family = "windows")] {
             0
@@ -75,8 +64,11 @@ fn dev_from_metadata(metadata: &Metadata) -> u64 {
 fn bytes_from_os_str(s: &OsStr) -> std::io::Result<Vec<u8>> {
     cfg_if! {
         if #[cfg(target_family = "unix")] {
+            use std::os::unix::ffi::OsStrExt;
             Ok(Vec::from(s.as_bytes()))
         } else if #[cfg(target_family = "windows")] {
+            use std::os::windows::ffi::OsStrExt;
+            use byteorder::{LittleEndian, WriteBytesExt};
             s.encode_wide().try_fold(Vec::new(), |mut stream, ch| {
                 stream.write_u16::<LittleEndian>(ch).map(|_| stream)
             })
@@ -90,8 +82,11 @@ fn bytes_from_os_str(s: &OsStr) -> std::io::Result<Vec<u8>> {
 fn os_string_from_bytes(bytes: &[u8]) -> OsString {
     cfg_if! {
         if #[cfg(target_family = "unix")] {
+            use std::os::unix::ffi::OsStringExt;
             OsString::from_vec(Vec::from(bytes))
         } else if #[cfg(target_family = "windows")] {
+            use std::os::windows::ffi::OsStringExt;
+            use byteorder::{LittleEndian, ReadBytesExt};
             let mut wchars = Vec::new();
             let mut bytes_slice = bytes;
             while let Ok(wchar) = bytes_slice.read_u16::<LittleEndian>() {
@@ -109,6 +104,7 @@ fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> std::io::Result<T
 {
     cfg_if! {
         if #[cfg(target_family = "unix")] {
+            use std::os::unix::fs::MetadataExt;
             Ok(TimelineEntry {
                 path: Some(bytes_from_os_str(path.as_os_str())?),
                 mode: Some(metadata.mode()),
@@ -122,6 +118,7 @@ fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> std::io::Result<T
                 mtime_ns: Some(metadata.mtime_nsec() as u64),
             })
         } else if #[cfg(target_family = "windows")] {
+            use std::os::windows::fs::MetadataExt;
             Ok(TimelineEntry {
                 path: Some(bytes_from_os_str(path.as_os_str())?),
                 mode: None,
@@ -286,12 +283,6 @@ mod tests {
     use std::path::Path;
     use tempfile::tempdir;
     use crate::gzchunked::GzChunkedDecoder;
-    cfg_if! {
-        if #[cfg(target_family = "unix")] {
-            use std::os::unix::fs::{symlink, PermissionsExt};
-            use std::fs::{set_permissions, Permissions};
-        }
-    }
 
     fn entry_for_path(path: &Path) -> TimelineEntry {
         let metadata = symlink_metadata(path).unwrap();
@@ -400,6 +391,7 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn test_file_symlink() {
+        use std::os::unix::fs::symlink;
         let mut expected_entries = Vec::new();
 
         let dir = tempdir().unwrap();
@@ -428,6 +420,7 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn test_symlink_loops() {
+        use std::os::unix::fs::symlink;
         let mut expected_entries = Vec::new();
 
         let dir = tempdir().unwrap();
@@ -534,6 +527,8 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn test_mode_and_permissions() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::fs::{set_permissions, Permissions};
         let mut expected_entries = Vec::new();
 
         let dir = tempdir().unwrap();
