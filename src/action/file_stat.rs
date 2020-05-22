@@ -58,18 +58,30 @@ enum PathOption {
 }
 
 struct PathSpec {
+    nested_path: Option<Box<PathSpec>>,
     path_options: Option<PathOption>,
     pathtype: Option<PathType>,
     path: Option<PathBuf>,
 }
 
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let mut path = request.pathspec.unwrap().path.unwrap();
-    let follow_symlink = request.follow_symlink.unwrap();
-    let collect_ext_attrs = request.collect_ext_attrs.unwrap();
+    let mut path = collapse_pathspec(request.pathspec.unwrap());
+
+    let follow_symlink = match request.follow_symlink {
+        Some(s) => s,
+        None => false,
+    };
+
+    let collect_ext_attrs = match request.collect_ext_attrs {
+        Some(s) => s,
+        None => false,
+    };
 
     if follow_symlink {
-        path = fs::read_link(&path)?;
+        path = match fs::read_link(&path) {
+            Ok(result) => result,
+            Err(_) => path
+        }
     }
 
     let mut response = form_response(&path)?;
@@ -96,6 +108,7 @@ fn get_ext_attrs(path: &PathBuf) -> Vec<rrg_proto::stat_entry::ExtAttr> {
 
 fn form_response(path: &PathBuf) -> Result<Response, std::io::Error> {
     let metadata = fs::metadata(path)?;
+
     Ok(Response {
         st_mode: metadata.mode().into(),
         st_ino: metadata.ino() as u32,
@@ -119,6 +132,7 @@ fn form_response(path: &PathBuf) -> Result<Response, std::io::Error> {
         },
 
         pathspec: PathSpec {
+            nested_path: None,
             path_options: Some(PathOption::CaseLiteral),
             pathtype: Some(PathType::OS),
             path: Some(path.clone()),
@@ -154,6 +168,26 @@ fn get_enum_path_type(option: &Option<i32>) -> Option<PathType> {
         },
         _ => None,
     }
+}
+
+fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
+    fn recursive_collapse(pathspec: PathSpec) -> PathBuf {
+        match pathspec.path {
+            Some(path) => {
+                match pathspec.nested_path {
+                    Some(nested_path_box) => path.join(collapse_pathspec(*nested_path_box)),
+                    None => path,
+                }
+            },
+            None => PathBuf::default()
+        }
+    }
+
+    let mut result = recursive_collapse(pathspec);
+    if !result.has_root() {
+        result = PathBuf::from("/").join(result);
+    }
+    result
 }
 
 fn get_path(path: &Option<String>) -> Option<PathBuf> {
@@ -200,19 +234,26 @@ fn get_int_path_type(pathspec: &PathSpec) -> Option<i32> {
     }
 }
 
+fn pathspec_from_proto(proto: rrg_proto::PathSpec) -> PathSpec {
+    PathSpec {
+        nested_path: match proto.nested_path {
+            Some(pathspec) => Some(Box::new(pathspec_from_proto(*pathspec))),
+            None => None,
+        },
+
+        path_options: get_enum_path_options(&proto.path_options),
+        pathtype: get_enum_path_type(&proto.pathtype),
+        path: get_path(&proto.path),
+    }
+}
+
 impl super::Request for Request {
     type Proto = GetFileStatRequest;
 
     fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError> {
         Ok(Request {
             pathspec: match proto.pathspec {
-                Some(pathspec) =>
-                    Some(PathSpec {
-                        path_options:
-                        get_enum_path_options(&pathspec.path_options),
-                        pathtype: get_enum_path_type(&pathspec.pathtype),
-                        path: get_path(&pathspec.path),
-                    }),
+                Some(pathspec) => Some(pathspec_from_proto(pathspec)),
                 None => None,
             },
 
@@ -244,28 +285,18 @@ impl super::Response for Response {
             st_rdev: Some(self.st_rdev),
             st_flags_osx: None,
             st_flags_linux: Some(self.st_flags_linux),
-            symlink: match self.symlink {
-                Some(s) => Some(s),
-                None => None
-            },
+            symlink: self.symlink,
             registry_type: None,
             resident: None,
+
             pathspec: Some(rrg_proto::PathSpec {
                 path_options: get_int_path_options(&self.pathspec),
                 pathtype: get_int_path_type(&self.pathspec),
                 path: Some(self.pathspec.path.unwrap()
                     .to_str().unwrap().to_string()),
-                mount_point: None,
-                stream_name: None,
-                file_size_override: None,
-                inode: None,
-                is_virtualroot: None,
-                nested_path: None,
-                ntfs_id: None,
-                ntfs_type: None,
-                offset: None,
-                recursion_depth: None,
+                ..Default::default()
             }),
+
             registry_data: None,
             st_crtime: None,
             ext_attrs: self.ext_attrs,
