@@ -244,16 +244,18 @@ fn get_int_path_type(pathspec: &PathSpec) -> Option<i32> {
     }
 }
 
-fn pathspec_from_proto(proto: rrg_proto::PathSpec) -> PathSpec {
-    PathSpec {
-        nested_path: match proto.nested_path {
-            Some(pathspec) => Some(Box::new(pathspec_from_proto(*pathspec))),
-            None => None,
-        },
+impl From<rrg_proto::PathSpec> for PathSpec {
+    fn from(proto: rrg_proto::PathSpec) -> PathSpec {
+        PathSpec {
+            nested_path: match proto.nested_path {
+                Some(pathspec) => Some(Box::new(Self::from(*pathspec))),
+                None => None,
+            },
 
-        path_options: get_enum_path_options(&proto.path_options),
-        pathtype: get_enum_path_type(&proto.pathtype),
-        path: get_path(&proto.path),
+            path_options: get_enum_path_options(&proto.path_options),
+            pathtype: get_enum_path_type(&proto.pathtype),
+            path: get_path(&proto.path),
+        }
     }
 }
 
@@ -263,7 +265,7 @@ impl super::Request for Request {
     fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError> {
         Ok(Request {
             pathspec: match proto.pathspec {
-                Some(pathspec) => Some(pathspec_from_proto(pathspec)),
+                Some(proto_pathspec) => Some(PathSpec::from(proto_pathspec)),
                 None => None,
             },
 
