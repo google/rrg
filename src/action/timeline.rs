@@ -307,7 +307,7 @@ mod tests {
             decoder.write(block.data.as_slice()).unwrap();
         }
 
-        expected_ids.sort_by(|a, b| a.0.cmp(&b.0));
+        ids.sort_by(|a, b| a.0.cmp(&b.0));
         assert_eq!(ids, expected_ids);
 
         let mut ret = Vec::new();
@@ -318,11 +318,11 @@ mod tests {
         ret
     }
 
-    fn diff_entries(left: &mut Vec<TimelineEntry>, right: &mut Vec<TimelineEntry>) {
+    fn diff_entries<'a>(left: &'a mut Vec<TimelineEntry>, right: &'a mut Vec<TimelineEntry>) -> Vec<diff::Result<&'a TimelineEntry>> {
         left.sort_by(|a, b| a.path.cmp(&b.path));
         right.sort_by(|a, b| a.path.cmp(&b.path));
 
-        let diffs = diff::slice(left.as_slice(), right.as_slice())
+        diff::slice(left.as_slice(), right.as_slice())
             .into_iter()
             .filter(|diff_result|
                     if let diff::Result::Both(_, _) = diff_result {
@@ -330,9 +330,7 @@ mod tests {
                     } else {
                         true
                     })
-            .collect::<Vec<diff::Result<&TimelineEntry>>>();
-
-        assert_eq!(diffs, Vec::new());
+            .collect()
     }
 
     #[test]
@@ -357,7 +355,7 @@ mod tests {
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        diff_entries(&mut entries, &mut expected_entries);
+        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
     }
 
     #[cfg_attr(target_family = "windows", ignore)]
@@ -385,7 +383,7 @@ mod tests {
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        diff_entries(&mut entries, &mut expected_entries);
+        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
     }
 
     #[cfg(target_family = "unix")]
@@ -414,7 +412,7 @@ mod tests {
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        diff_entries(&mut entries, &mut expected_entries);
+        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
     }
 
     #[cfg(target_family = "unix")]
@@ -449,7 +447,7 @@ mod tests {
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        diff_entries(&mut entries, &mut expected_entries);
+        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
     }
 
     #[test]
@@ -485,7 +483,7 @@ mod tests {
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        diff_entries(&mut entries, &mut expected_entries);
+        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
     }
 
     // TODO: Debug this test on MacOS.
@@ -521,7 +519,7 @@ mod tests {
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        diff_entries(&mut entries, &mut expected_entries);
+        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
     }
 
     #[cfg(target_family = "unix")]
@@ -562,6 +560,6 @@ mod tests {
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        diff_entries(&mut entries, &mut expected_entries);
+        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
     }
 }
