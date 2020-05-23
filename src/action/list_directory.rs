@@ -17,6 +17,7 @@ use std::os::raw::c_long;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::AsRawFd;
 use std::fmt::{Display, Formatter};
+use log::warn;
 
 #[derive(Debug)]
 enum Error {
@@ -149,7 +150,10 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
         symlink: if metadata.file_type().is_symlink() {
             match fs::read_link(file_path) {
                 Ok(file) => Some(file.to_string_lossy().to_string()),
-                _ => None,
+                Err(error) => {
+                    warn!("unable to read symlink: {}", error);
+                    None
+                },
             }
         } else {
             None
