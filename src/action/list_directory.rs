@@ -95,20 +95,20 @@ impl From<ParseError> for session::Error {
 
 /// A response type for the list directory action.
 pub struct Response {
-    st_mode: u64,
-    st_ino: u32,
-    st_dev: u32,
-    st_nlink: u32,
-    st_uid: u32,
-    st_gid: u32,
-    st_size: u64,
-    st_atime: u64,
-    st_mtime: u64,
-    st_ctime: u64,
-    st_blocks: u32,
-    st_blksize: u32,
-    st_rdev: u32,
-    st_flags_linux: u32,
+    mode: u64,
+    ino: u32,
+    dev: u32,
+    nlink: u32,
+    uid: u32,
+    gid: u32,
+    size: u64,
+    atime: u64,
+    mtime: u64,
+    ctime: u64,
+    blocks: u32,
+    blksize: u32,
+    rdev: u32,
+    flags_linux: u32,
     symlink: Option<String>,
     pathspec: PathSpec,
 }
@@ -132,20 +132,20 @@ struct PathSpec {
 
 fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
     Response {
-        st_mode: metadata.mode().into(),
-        st_ino: metadata.ino() as u32,
-        st_dev: metadata.dev() as u32,
-        st_nlink: metadata.nlink() as u32,
-        st_uid: metadata.uid() as u32,
-        st_gid: metadata.gid() as u32,
-        st_size: metadata.size(),
-        st_atime: metadata.atime() as u64,
-        st_mtime: metadata.mtime() as u64,
-        st_ctime: metadata.ctime() as u64,
-        st_blocks: metadata.blocks() as u32,
-        st_blksize: metadata.blksize() as u32,
-        st_rdev: metadata.rdev() as u32,
-        st_flags_linux:
+        mode: metadata.mode().into(),
+        ino: metadata.ino() as u32,
+        dev: metadata.dev() as u32,
+        nlink: metadata.nlink() as u32,
+        uid: metadata.uid() as u32,
+        gid: metadata.gid() as u32,
+        size: metadata.size(),
+        atime: metadata.atime() as u64,
+        mtime: metadata.mtime() as u64,
+        ctime: metadata.ctime() as u64,
+        blocks: metadata.blocks() as u32,
+        blksize: metadata.blksize() as u32,
+        rdev: metadata.rdev() as u32,
+        flags_linux:
         get_linux_flags(file_path).unwrap_or_default() as u32,
         symlink: if metadata.file_type().is_symlink() {
             match fs::read_link(file_path) {
@@ -263,21 +263,21 @@ impl super::Response for Response {
 
     fn into_proto(self) -> Self::Proto {
         StatEntry {
-            st_mode: Some(self.st_mode),
-            st_ino: Some(self.st_ino),
-            st_dev: Some(self.st_dev),
-            st_nlink: Some(self.st_nlink),
-            st_uid: Some(self.st_uid),
-            st_gid: Some(self.st_gid),
-            st_size: Some(self.st_size),
-            st_atime: Some(self.st_atime),
-            st_mtime: Some(self.st_mtime),
-            st_ctime: Some(self.st_ctime),
-            st_blocks: Some(self.st_blocks),
-            st_blksize: Some(self.st_blksize),
-            st_rdev: Some(self.st_rdev),
+            st_mode: Some(self.mode),
+            st_ino: Some(self.ino),
+            st_dev: Some(self.dev),
+            st_nlink: Some(self.nlink),
+            st_uid: Some(self.uid),
+            st_gid: Some(self.gid),
+            st_size: Some(self.size),
+            st_atime: Some(self.atime),
+            st_mtime: Some(self.mtime),
+            st_ctime: Some(self.ctime),
+            st_blocks: Some(self.blocks),
+            st_blksize: Some(self.blksize),
+            st_rdev: Some(self.rdev),
             st_flags_osx: None,
-            st_flags_linux: Some(self.st_flags_linux),
+            st_flags_linux: Some(self.flags_linux),
             symlink: match self.symlink {
                 Some(s) => Some(s),
                 None => None
@@ -462,12 +462,12 @@ mod tests {
         let inner_dir = &session.reply::<Response>(0);
         assert_eq!(&inner_dir.pathspec.path, inner_dir_path);
         assert!(inner_dir.symlink.is_none());
-        assert_eq!(inner_dir.st_uid, users::get_current_uid());
-        assert_eq!(inner_dir.st_gid, users::get_current_uid());
-        assert_eq!(inner_dir.st_dev,
+        assert_eq!(inner_dir.uid, users::get_current_uid());
+        assert_eq!(inner_dir.gid, users::get_current_uid());
+        assert_eq!(inner_dir.dev,
                    dir_path.metadata().unwrap().dev() as u32);
-        assert_eq!(inner_dir.st_mode, 0o40775);
-        assert_eq!(inner_dir.st_nlink, 2);
+        assert_eq!(inner_dir.mode, 0o40775);
+        assert_eq!(inner_dir.nlink, 2);
     }
 
     #[test]
@@ -492,8 +492,8 @@ mod tests {
         assert!(&symlink.symlink.is_some());
         assert_eq!(&symlink.symlink.as_ref().unwrap().as_str(),
                    &file_path.to_str().unwrap());
-        assert_eq!(symlink.st_mode, 0o120777);
-        assert_eq!(symlink.st_nlink, 1);
+        assert_eq!(symlink.mode, 0o120777);
+        assert_eq!(symlink.nlink, 1);
     }
 
     #[test]
@@ -515,13 +515,13 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
         assert_eq!(file.pathspec.path, file_path);
-        assert_eq!(file.st_size, 0);
-        assert_eq!(file.st_mode, 0o100664);
-        assert_eq!(file.st_uid, users::get_current_uid());
-        assert_eq!(file.st_gid, users::get_current_uid());
-        assert_eq!(file.st_dev,
+        assert_eq!(file.size, 0);
+        assert_eq!(file.mode, 0o100664);
+        assert_eq!(file.uid, users::get_current_uid());
+        assert_eq!(file.gid, users::get_current_uid());
+        assert_eq!(file.dev,
                    dir_path.metadata().unwrap().dev() as u32);
-        assert_eq!(file.st_nlink, 1);
+        assert_eq!(file.nlink, 1);
         assert!(file.symlink.is_none());
     }
 
@@ -543,7 +543,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
         assert_eq!(file.pathspec.path, file_path);
-        assert_ne!(file.st_flags_linux, 0);
+        assert_ne!(file.flags_linux, 0);
     }
 
     #[test]
