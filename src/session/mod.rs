@@ -340,12 +340,17 @@ pub mod test {
         where
             R: action::Response + 'static,
         {
-            let responses = match self.responses.get(&sink) {
-                Some(responses) => responses,
-                None => panic!("no responses for sink '{:?}'", sink),
-            };
+            // Since the empty iterator (as defined in the standard library) is
+            // a specific type, it cannot be returned in one branch but not in
+            // another branch.
+            //
+            // Instead, we use the fact that `Option` is an iterator and then we
+            // squash it with `Iterator::flat_map`.
+            let responses = self.responses.get(&sink)
+                .into_iter()
+                .flat_map(std::convert::identity);
 
-            responses.iter().map(move |response| match response.downcast_ref() {
+            responses.map(move |response| match response.downcast_ref() {
                 Some(response) => response,
                 None => panic!("unexpected response type in sink '{:?}'", sink),
             })
@@ -469,19 +474,6 @@ mod tests {
         let response_bar = session.response::<StringResponse>(Sink::STARTUP, 1);
         assert_eq!(response_foo.0, "foo");
         assert_eq!(response_bar.0, "bar");
-    }
-
-    #[test]
-    #[should_panic(expected = "no responses")]
-    fn test_fake_response_empty_sink() {
-
-        fn handle<S: Session>(_: &mut S, _: ()) {
-        }
-
-        let mut session = test::Fake::new();
-        handle(&mut session, ());
-
-        session.response::<()>(Sink::STARTUP, 0);
     }
 
     #[test]
