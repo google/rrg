@@ -296,12 +296,19 @@ pub mod test {
         where
             R: action::Response + 'static,
         {
-            let reply = match self.replies.get(id) {
+            match self.replies::<R>().nth(id) {
                 Some(reply) => reply,
                 None => panic!("no reply #{}", id),
-            };
+            }
+        }
 
-            reply.downcast_ref().expect("unexpected reply type")
+        pub fn replies<R>(&self) -> impl Iterator<Item = &R>
+        where
+            R: action::Response + 'static
+        {
+            self.replies.iter().map(|reply| {
+                reply.downcast_ref().expect("unexpected reply type")
+            })
         }
 
         /// Yields the number of responses sent so far to the specified sink.
