@@ -296,7 +296,7 @@ pub mod test {
         where
             R: action::Response + 'static,
         {
-            match self.replies::<R>().nth(id) {
+            match self.replies().nth(id) {
                 Some(reply) => reply,
                 None => panic!("no reply #{}", id),
             }
@@ -330,7 +330,7 @@ pub mod test {
         where
             R: action::Response + 'static,
         {
-            match self.responses::<R>(sink).nth(id) {
+            match self.responses(sink).nth(id) {
                 Some(response) => response,
                 None => panic!("no response #{} for sink '{:?}'", id, sink),
             }
