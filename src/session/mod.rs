@@ -330,20 +330,25 @@ pub mod test {
         where
             R: action::Response + 'static,
         {
+            match self.responses::<R>(sink).nth(id) {
+                Some(response) => response,
+                None => panic!("no response #{} for sink '{:?}'", id, sink),
+            }
+        }
+
+        pub fn responses<R>(&self, sink: Sink) -> impl Iterator<Item = &R>
+        where
+            R: action::Response + 'static,
+        {
             let responses = match self.responses.get(&sink) {
                 Some(responses) => responses,
                 None => panic!("no responses for sink '{:?}'", sink),
             };
 
-            let response = match responses.get(id) {
-                Some(response) => response,
-                None => panic!("no response #{} for sink '{:?}'", id, sink),
-            };
-
-            match response.downcast_ref() {
+            responses.iter().map(move |response| match response.downcast_ref() {
                 Some(response) => response,
                 None => panic!("unexpected response type in sink '{:?}'", sink),
-            }
+            })
         }
     }
 
