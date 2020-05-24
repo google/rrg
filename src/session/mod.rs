@@ -302,6 +302,10 @@ pub mod test {
             }
         }
 
+        /// Constructs an iterator over session replies.
+        ///
+        /// The iterator will panic (but not immediately) if some reply has an
+        /// incorrect type.
         pub fn replies<R>(&self) -> impl Iterator<Item = &R>
         where
             R: action::Response + 'static
@@ -336,6 +340,10 @@ pub mod test {
             }
         }
 
+        /// Constructs an iterator over session responses for the given sink.
+        ///
+        /// The iterator will panic (but not immediately) if some response has
+        /// an incorrect type.
         pub fn responses<R>(&self, sink: Sink) -> impl Iterator<Item = &R>
         where
             R: action::Response + 'static,
