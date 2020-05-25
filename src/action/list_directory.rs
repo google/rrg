@@ -13,11 +13,18 @@ use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType};
 use ioctls;
 use std::fs::{self, File, Metadata};
 use std::path::PathBuf;
-use std::os::raw::c_long;
-use std::os::unix::fs::MetadataExt;
-use std::os::unix::io::AsRawFd;
 use std::fmt::{Display, Formatter};
 use log::warn;
+
+
+#[cfg(target_family = "unix")]
+use std::os::raw::c_long;
+
+#[cfg(target_family = "unix")]
+use std::os::unix::fs::MetadataExt;
+
+#[cfg(target_family = "unix")]
+use std::os::unix::io::AsRawFd;
 
 #[derive(Debug)]
 enum Error {
@@ -130,6 +137,7 @@ struct PathSpec {
     path: PathBuf,
 }
 
+#[cfg(target_family = "unix")]
 fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
     Response {
         mode: metadata.mode().into(),
@@ -153,7 +161,7 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
                 Err(error) => {
                     warn!("unable to read symlink: {}", error);
                     None
-                },
+                }
             }
         } else {
             None
@@ -162,6 +170,13 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
             path_options: Some(PathOption::CaseLiteral),
             path: file_path.clone(),
         },
+    }
+}
+
+#[cfg(not(target_family = "unix"))]
+fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
+    Response {
+        ..Default::default()
     }
 }
 
