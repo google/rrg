@@ -105,22 +105,51 @@ impl From<ParseError> for session::Error {
 
 /// A response type for the list directory action.
 pub struct Response {
-    mode: u64,
-    ino: u32,
-    dev: u32,
-    nlink: u32,
-    uid: u32,
-    gid: u32,
-    size: u64,
-    atime: u64,
-    mtime: u64,
-    ctime: u64,
-    blocks: u32,
-    blksize: u32,
-    rdev: u32,
-    flags_linux: u32,
+    mode: Option<u64>,
+    ino: Option<u32>,
+    dev: Option<u32>,
+    nlink: Option<u32>,
+    uid: Option<u32>,
+    gid: Option<u32>,
+    size: Option<u64>,
+    atime: Option<SystemTime>,
+    mtime: Option<SystemTime>,
+    ctime: Option<SystemTime>,
+    blocks: Option<u32>,
+    blksize: Option<u32>,
+    rdev: Option<u32>,
+    flags_linux: Option<u32>,
     symlink: Option<String>,
     pathspec: PathSpec,
+    crtime: Option<SystemTime>,
+}
+
+impl Default for Response {
+
+    fn default() -> Response {
+        Response {
+            mode: None,
+            ino: None,
+            dev: None,
+            nlink: None,
+            uid: None,
+            gid: None,
+            size: None,
+            atime: None,
+            mtime: None,
+            ctime: None,
+            blocks: None,
+            blksize: None,
+            rdev: None,
+            flags_linux: None,
+            symlink: None,
+            pathspec: PathSpec {
+                path_options: None,
+                path: Default::default()
+            },
+            crtime: None
+        }
+    }
 }
 
 /// A request type for the list directory action.
@@ -179,6 +208,32 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
 #[cfg(not(target_family = "unix"))]
 fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
     Response {
+        size: Some(metadata.len()),
+        atime: match metadata.accessed() {
+            Ok(atime) => Some(atime),
+            Err(_) => {
+                warn!("unable to get last access time");
+                None
+            }
+        },
+        mtime: match metadata.modified() {
+            Ok(atime) => Some(atime),
+            Err(_) => {
+                warn!("unable to get last modification time");
+                None
+            }
+        },
+        pathspec: PathSpec {
+            path_options: Some(PathOption::CaseLiteral),
+            path: file_path.clone(),
+        },
+        crtime: match metadata.created() {
+            Ok(atime) => Some(atime),
+            Err(_) => {
+                warn!("unable to get creation time");
+                None
+            }
+        },
         ..Default::default()
     }
 }
@@ -224,6 +279,7 @@ fn get_path(path: &Option<String>) -> PathBuf {
 }
 
 /// Fills st_linux_flags field
+#[cfg(target_family = "unix")]
 fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
     let file = match File::open(path) {
         Ok(file) => file,
@@ -273,6 +329,11 @@ impl super::Request for Request {
     }
 }
 
+fn get_time_since_unix_epoch(sys_time: &Option<SystemTime>) -> Option<u64> {
+    return sys_time.map_or(None, |time| time.duration_since(UNIX_EPOCH)
+        .map_or(None, |dur| Some(dur.as_secs())));
+}
+
 impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("StatEntry");
@@ -281,25 +342,22 @@ impl super::Response for Response {
 
     fn into_proto(self) -> Self::Proto {
         StatEntry {
-            st_mode: Some(self.mode),
-            st_ino: Some(self.ino),
-            st_dev: Some(self.dev),
-            st_nlink: Some(self.nlink),
-            st_uid: Some(self.uid),
-            st_gid: Some(self.gid),
-            st_size: Some(self.size),
-            st_atime: Some(self.atime),
-            st_mtime: Some(self.mtime),
-            st_ctime: Some(self.ctime),
-            st_blocks: Some(self.blocks),
-            st_blksize: Some(self.blksize),
-            st_rdev: Some(self.rdev),
+            st_mode: self.mode,
+            st_ino: self.ino,
+            st_dev: self.dev,
+            st_nlink: self.nlink,
+            st_uid: self.uid,
+            st_gid: self.gid,
+            st_size: self.size,
+            st_atime: get_time_since_unix_epoch(&self.atime),
+            st_mtime: get_time_since_unix_epoch(&self.mtime),
+            st_ctime: get_time_since_unix_epoch(&self.ctime),
+            st_blocks: self.blocks,
+            st_blksize: self.blksize,
+            st_rdev: self.rdev,
             st_flags_osx: None,
-            st_flags_linux: Some(self.flags_linux),
-            symlink: match self.symlink {
-                Some(s) => Some(s),
-                None => None
-            },
+            st_flags_linux: self.flags_linux,
+            symlink: self.symlink,
             registry_type: None,
             resident: None,
             pathspec: Some(rrg_proto::PathSpec {
@@ -310,7 +368,7 @@ impl super::Response for Response {
                 ..Default::default()
             }),
             registry_data: None,
-            st_crtime: None,
+            st_crtime: get_time_since_unix_epoch(&self.crtime),
             ext_attrs: vec![],
         }
     }
@@ -321,6 +379,8 @@ mod tests {
     use super::*;
     use crate::action::Request;
     use tempfile::tempdir;
+
+    #[cfg(target_family = "unix")]
     use std::os::unix::fs::PermissionsExt;
 
     /// Fills ListDirRequest with provided fields
@@ -445,6 +505,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_family = "unix")]
     fn test_dir_response() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
@@ -471,6 +532,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_family = "unix")]
     fn test_symlink_response() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
@@ -497,6 +559,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_family = "unix")]
     fn test_file_response() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
@@ -523,6 +586,27 @@ mod tests {
                    dir_path.metadata().unwrap().dev() as u32);
         assert_eq!(file.nlink, 1);
         assert!(file.symlink.is_none());
+    }
+
+    #[test]
+    #[cfg(not(target_family = "unix"))]
+    fn test_file_response() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+        let file_path = dir_path.join("file");
+        std::fs::File::create(&file_path).unwrap();
+        let request = super::Request {
+            pathspec: PathSpec {
+                path_options: None,
+                path: PathBuf::from(&dir_path),
+            }
+        };
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+        assert_eq!(session.reply_count(), 1);
+        let file = &session.reply::<Response>(0);
+        assert_eq!(file.pathspec.path, file_path);
+        assert_eq!(file.size.unwrap(), 0);
     }
 
     #[test]
