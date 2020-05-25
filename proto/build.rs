@@ -8,8 +8,16 @@ use std::io::{Read, Write, Result};
 
 const PROTOS: &'static [&'static str] = &[
     "grr/grr/proto/grr_response_proto/semantic.proto",
+    "grr/grr/proto/grr_response_proto/sysinfo.proto",
     "grr/grr/proto/grr_response_proto/knowledge_base.proto",
     "grr/grr/proto/grr_response_proto/jobs.proto",
+    "grr/grr/proto/grr_response_proto/anomaly.proto",
+    "grr/grr/proto/grr_response_proto/export.proto",
+    "grr/grr/proto/grr_response_proto/objects.proto",
+    "grr/grr/proto/grr_response_proto/output_plugin.proto",
+    "grr/grr/proto/grr_response_proto/flows.proto",
+    "grr/grr/proto/grr_response_proto/sysinfo.proto",
+    "grr/grr/proto/grr_response_proto/user.proto",
 ];
 
 const INCLUDES: &'static [&'static str] = &[
