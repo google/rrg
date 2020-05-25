@@ -14,7 +14,7 @@ use std::fs::{self, File, Metadata};
 use std::path::PathBuf;
 use std::fmt::{Display, Formatter};
 use log::warn;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
 
 #[cfg(target_family = "unix")]
@@ -145,9 +145,9 @@ impl Default for Response {
             symlink: None,
             pathspec: PathSpec {
                 path_options: None,
-                path: Default::default()
+                path: Default::default(),
             },
-            crtime: None
+            crtime: None,
         }
     }
 }
@@ -169,24 +169,60 @@ struct PathSpec {
     path: PathBuf,
 }
 
+fn get_accesses_time(metadata: &Metadata) -> Option<SystemTime> {
+    match metadata.accessed() {
+        Ok(atime) => Some(atime),
+        Err(err) => {
+            warn!("unable to get last access time: {}", err);
+            None
+        }
+    }
+}
+
+fn get_modification_time(metadata: &Metadata) -> Option<SystemTime> {
+    match metadata.modified() {
+        Ok(atime) => Some(atime),
+        Err(err) => {
+            warn!("unable to get last modification time: {}", err);
+            None
+        }
+    }
+}
+
+fn get_creation_time(metadata: &Metadata) -> Option<SystemTime> {
+    match metadata.created() {
+        Ok(atime) => Some(atime),
+        Err(err) => {
+            warn!("unable to get creation time: {}", err);
+            None
+        }
+    }
+}
+
+
+fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
+    UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
+}
+
+
 #[cfg(target_family = "unix")]
 fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
     Response {
-        mode: metadata.mode().into(),
-        ino: metadata.ino() as u32,
-        dev: metadata.dev() as u32,
-        nlink: metadata.nlink() as u32,
-        uid: metadata.uid() as u32,
-        gid: metadata.gid() as u32,
-        size: metadata.size(),
-        atime: metadata.atime() as u64,
-        mtime: metadata.mtime() as u64,
-        ctime: metadata.ctime() as u64,
-        blocks: metadata.blocks() as u32,
-        blksize: metadata.blksize() as u32,
-        rdev: metadata.rdev() as u32,
+        mode: Some(metadata.mode().into()),
+        ino: Some(metadata.ino() as u32),
+        dev: Some(metadata.dev() as u32),
+        nlink: Some(metadata.nlink() as u32),
+        uid: Some(metadata.uid() as u32),
+        gid: Some(metadata.gid() as u32),
+        size: Some(metadata.size()),
+        atime: get_accesses_time(&metadata),
+        mtime: get_modification_time(&metadata),
+        ctime: get_status_change_time(&metadata),
+        blocks: Some(metadata.blocks() as u32),
+        blksize: Some(metadata.blksize() as u32),
+        rdev: Some(metadata.rdev() as u32),
         flags_linux:
-        get_linux_flags(file_path).unwrap_or_default() as u32,
+        Some(get_linux_flags(file_path).unwrap_or_default() as u32),
         symlink: if metadata.file_type().is_symlink() {
             match fs::read_link(file_path) {
                 Ok(file) => Some(file.to_string_lossy().to_string()),
@@ -202,6 +238,7 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
             path_options: Some(PathOption::CaseLiteral),
             path: file_path.clone(),
         },
+        crtime: get_creation_time(&metadata),
     }
 }
 
@@ -523,12 +560,12 @@ mod tests {
         let inner_dir = &session.reply::<Response>(0);
         assert_eq!(&inner_dir.pathspec.path, inner_dir_path);
         assert!(inner_dir.symlink.is_none());
-        assert_eq!(inner_dir.uid, users::get_current_uid());
-        assert_eq!(inner_dir.gid, users::get_current_uid());
-        assert_eq!(inner_dir.dev,
+        assert_eq!(inner_dir.uid.unwrap(), users::get_current_uid());
+        assert_eq!(inner_dir.gid.unwrap(), users::get_current_uid());
+        assert_eq!(inner_dir.dev.unwrap(),
                    dir_path.metadata().unwrap().dev() as u32);
-        assert_eq!(inner_dir.mode, 0o40775);
-        assert_eq!(inner_dir.nlink, 2);
+        assert_eq!(inner_dir.mode.unwrap(), 0o40775);
+        assert_eq!(inner_dir.nlink.unwrap(), 2);
     }
 
     #[test]
@@ -554,8 +591,8 @@ mod tests {
         assert!(&symlink.symlink.is_some());
         assert_eq!(&symlink.symlink.as_ref().unwrap().as_str(),
                    &file_path.to_str().unwrap());
-        assert_eq!(symlink.mode, 0o120777);
-        assert_eq!(symlink.nlink, 1);
+        assert_eq!(symlink.mode.unwrap(), 0o120777);
+        assert_eq!(symlink.nlink.unwrap(), 1);
     }
 
     #[test]
@@ -578,13 +615,13 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
         assert_eq!(file.pathspec.path, file_path);
-        assert_eq!(file.size, 0);
-        assert_eq!(file.mode, 0o100664);
-        assert_eq!(file.uid, users::get_current_uid());
-        assert_eq!(file.gid, users::get_current_uid());
-        assert_eq!(file.dev,
+        assert_eq!(file.size.unwrap(), 0);
+        assert_eq!(file.mode.unwrap(), 0o100664);
+        assert_eq!(file.uid.unwrap(), users::get_current_uid());
+        assert_eq!(file.gid.unwrap(), users::get_current_uid());
+        assert_eq!(file.dev.unwrap(),
                    dir_path.metadata().unwrap().dev() as u32);
-        assert_eq!(file.nlink, 1);
+        assert_eq!(file.nlink.unwrap(), 1);
         assert!(file.symlink.is_none());
     }
 
@@ -627,7 +664,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
         assert_eq!(file.pathspec.path, file_path);
-        assert_ne!(file.flags_linux, 0);
+        assert_ne!(file.flags_linux.unwrap(), 0);
     }
 
     #[test]
