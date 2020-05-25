@@ -10,12 +10,15 @@
 use crate::session::{self, Session};
 use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType};
 
-use ioctls;
 use std::fs::{self, File, Metadata};
 use std::path::PathBuf;
 use std::fmt::{Display, Formatter};
 use log::warn;
+use std::time::{SystemTime, UNIX_EPOCH};
 
+
+#[cfg(target_family = "unix")]
+use ioctls;
 
 #[cfg(target_family = "unix")]
 use std::os::raw::c_long;
