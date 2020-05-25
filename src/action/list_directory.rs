@@ -8,7 +8,7 @@
 //! A list directory action stats all files in the provided directory.
 
 use crate::session::{self, Session};
-use rrg_proto::{ListDirRequest, StatEntry};
+use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType};
 
 use ioctls;
 use std::fs::{self, File, Metadata};
@@ -287,7 +287,7 @@ impl super::Response for Response {
             pathspec: Some(rrg_proto::PathSpec {
                 path_options: get_int_path_options(&self.pathspec),
                 // represents OS path type (other types are not supported)
-                pathtype: Some(0),
+                pathtype: Some(PathType::Os as i32),
                 path: Some(self.pathspec.path.to_string_lossy().to_string()),
                 ..Default::default()
             }),
@@ -333,21 +333,21 @@ mod tests {
     #[test]
     fn test_empty_path_options() {
         let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(0), Some(String::from("/"))));
+            (fill_proto_request(None, Some(PathType::Os as i32), Some(String::from("/"))));
         assert!(request.is_ok());
     }
 
     #[test]
     fn test_unset_pathtype() {
         let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(-1), Some(String::from("/"))));
+            (fill_proto_request(None, Some(PathType::Unset as i32), Some(String::from("/"))));
         assert!(request.is_err());
     }
 
     #[test]
     fn test_unsupported_pathtype() {
         let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(1), Some(String::from("/"))));
+            (fill_proto_request(None, Some(PathType::Tsk as i32), Some(String::from("/"))));
         assert!(request.is_err());
     }
 
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn test_empty_path() {
         let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(0), None));
+            (fill_proto_request(None, Some(PathType::Os as i32), None));
         assert!(&request.is_ok());
         assert_eq!(request.unwrap().pathspec.path, PathBuf::from("/"));
     }
