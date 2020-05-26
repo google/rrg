@@ -17,16 +17,16 @@ use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
 
-#[cfg(target_family = "unix")]
+#[cfg(target_os = "linux")]
 use ioctls;
 
-#[cfg(target_family = "unix")]
+#[cfg(target_os = "linux")]
 use std::os::raw::c_long;
 
-#[cfg(target_family = "unix")]
+#[cfg(target_os = "linux")]
 use std::os::unix::fs::MetadataExt;
 
-#[cfg(target_family = "unix")]
+#[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
 
 #[derive(Debug)]
@@ -200,12 +200,13 @@ fn get_creation_time(metadata: &Metadata) -> Option<SystemTime> {
 }
 
 
+#[cfg(target_os = "linux")]
 fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
     UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
 }
 
 
-#[cfg(target_family = "unix")]
+#[cfg(target_os = "linux")]
 fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
     Response {
         mode: Some(metadata.mode().into()),
@@ -242,7 +243,7 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
     }
 }
 
-#[cfg(not(target_family = "unix"))]
+#[cfg(not(target_os = "linux"))]
 fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
     Response {
         size: Some(metadata.len()),
@@ -316,7 +317,7 @@ fn get_path(path: &Option<String>) -> PathBuf {
 }
 
 /// Fills st_linux_flags field
-#[cfg(target_family = "unix")]
+#[cfg(target_os = "linux")]
 fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
     let file = match File::open(path) {
         Ok(file) => file,
@@ -417,7 +418,7 @@ mod tests {
     use crate::action::Request;
     use tempfile::tempdir;
 
-    #[cfg(target_family = "unix")]
+    #[cfg(target_os = "linux")]
     use std::os::unix::fs::PermissionsExt;
 
     /// Fills ListDirRequest with provided fields
@@ -542,7 +543,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_family = "unix")]
+    #[cfg(target_os = "linux")]
     fn test_dir_response() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
@@ -573,7 +574,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_family = "unix")]
+    #[cfg(target_os = "linux")]
     fn test_symlink_response() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
@@ -604,8 +605,8 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_family = "unix")]
-    fn test_file_response() {
+    #[cfg(target_os = "linux")]
+    fn test_file_response_linux() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
         let file_path = dir_path.join("file");
@@ -638,7 +639,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_family = "unix"))]
     fn test_file_response() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
