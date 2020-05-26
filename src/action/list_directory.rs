@@ -16,6 +16,8 @@ use std::fmt::{Display, Formatter};
 use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
+#[cfg(target_os = "linux")]
+use std::fs::File;
 
 #[cfg(target_os = "linux")]
 use ioctls;
