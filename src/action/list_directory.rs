@@ -566,6 +566,10 @@ mod tests {
                    dir_path.metadata().unwrap().dev() as u32);
         assert_eq!(inner_dir.mode.unwrap(), 0o40775);
         assert_eq!(inner_dir.nlink.unwrap(), 2);
+        assert!(inner_dir.atime.unwrap() <= SystemTime::now());
+        assert!(inner_dir.ctime.unwrap() <= SystemTime::now());
+        assert!(inner_dir.mtime.unwrap() <= SystemTime::now());
+        assert!(inner_dir.crtime.unwrap() <= SystemTime::now());
     }
 
     #[test]
@@ -593,6 +597,10 @@ mod tests {
                    &file_path.to_str().unwrap());
         assert_eq!(symlink.mode.unwrap(), 0o120777);
         assert_eq!(symlink.nlink.unwrap(), 1);
+        assert!(symlink.atime.unwrap() <= SystemTime::now());
+        assert!(symlink.ctime.unwrap() <= SystemTime::now());
+        assert!(symlink.mtime.unwrap() <= SystemTime::now());
+        assert!(symlink.crtime.unwrap() <= SystemTime::now());
     }
 
     #[test]
@@ -623,6 +631,10 @@ mod tests {
                    dir_path.metadata().unwrap().dev() as u32);
         assert_eq!(file.nlink.unwrap(), 1);
         assert!(file.symlink.is_none());
+        assert!(file.atime.unwrap() <= SystemTime::now());
+        assert!(file.ctime.unwrap() <= SystemTime::now());
+        assert!(file.mtime.unwrap() <= SystemTime::now());
+        assert!(file.crtime.unwrap() <= SystemTime::now());
     }
 
     #[test]
