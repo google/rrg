@@ -656,6 +656,9 @@ mod tests {
         let file = &session.reply::<Response>(0);
         assert_eq!(file.pathspec.path, file_path);
         assert_eq!(file.size.unwrap(), 0);
+        assert!(file.atime.unwrap() <= SystemTime::now());
+        assert!(file.mtime.unwrap() <= SystemTime::now());
+        assert!(file.crtime.unwrap() <= SystemTime::now());
     }
 
     #[test]
