@@ -679,4 +679,49 @@ mod tests {
         let path_buf = PathBuf::from("some non existing path");
         assert!(get_linux_flags(&path_buf).is_none());
     }
+
+    #[test]
+    fn test_unicode_paths() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+        std::fs::File::create(dir_path.join("❤ℝℝG❤")).unwrap();
+        std::fs::File::create(dir_path.join("файл")).unwrap();
+        std::fs::File::create(dir_path.join("ファイル")).unwrap();
+        std::fs::File::create(dir_path.join("αρχείο")).unwrap();
+        std::fs::File::create(dir_path.join("फ़ाइल")).unwrap();
+        let request = super::Request {
+            pathspec: PathSpec {
+                path_options: None,
+                path: PathBuf::from(&dir_path),
+            }
+        };
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+        assert_eq!(session.reply_count(), 5);
+        let file = &session.reply::<Response>(0);
+        assert_eq!(file.size.unwrap(), 0);
+        assert!(file.atime.unwrap() <= SystemTime::now());
+        assert!(file.mtime.unwrap() <= SystemTime::now());
+        assert!(file.crtime.unwrap() <= SystemTime::now());
+        let file = &session.reply::<Response>(1);
+        assert_eq!(file.size.unwrap(), 0);
+        assert!(file.atime.unwrap() <= SystemTime::now());
+        assert!(file.mtime.unwrap() <= SystemTime::now());
+        assert!(file.crtime.unwrap() <= SystemTime::now());
+        let file = &session.reply::<Response>(2);
+        assert_eq!(file.size.unwrap(), 0);
+        assert!(file.atime.unwrap() <= SystemTime::now());
+        assert!(file.mtime.unwrap() <= SystemTime::now());
+        assert!(file.crtime.unwrap() <= SystemTime::now());
+        let file = &session.reply::<Response>(3);
+        assert_eq!(file.size.unwrap(), 0);
+        assert!(file.atime.unwrap() <= SystemTime::now());
+        assert!(file.mtime.unwrap() <= SystemTime::now());
+        assert!(file.crtime.unwrap() <= SystemTime::now());
+        let file = &session.reply::<Response>(4);
+        assert_eq!(file.size.unwrap(), 0);
+        assert!(file.atime.unwrap() <= SystemTime::now());
+        assert!(file.mtime.unwrap() <= SystemTime::now());
+        assert!(file.crtime.unwrap() <= SystemTime::now());
+    }
 }
