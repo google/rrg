@@ -14,7 +14,10 @@ use std::fs::{self, Metadata};
 use std::path::PathBuf;
 use std::fmt::{Display, Formatter};
 use log::warn;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[cfg(target_os = "linux")]
+use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 use std::fs::File;
