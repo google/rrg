@@ -501,12 +501,13 @@ mod tests {
     fn test_lexicographical_order() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
-        std::fs::File::create(dir_path.join("❤ℝℝG❤")).unwrap();
-        std::fs::File::create(dir_path.join("файл")).unwrap();
+        std::fs::File::create(dir_path.join("юникод")).unwrap();
+        std::fs::File::create(dir_path.join("unicode")).unwrap();
         std::fs::File::create(dir_path.join("file")).unwrap();
+        std::fs::File::create(dir_path.join("afile")).unwrap();
         std::fs::File::create(dir_path.join("Datei")).unwrap();
-        std::fs::File::create(dir_path.join("ファイル")).unwrap();
-        std::fs::File::create(dir_path.join("फ़ाइल")).unwrap();
+        std::fs::File::create(dir_path.join("snake_case")).unwrap();
+        std::fs::File::create(dir_path.join("CamelCase")).unwrap();
         let request = super::Request {
             pathspec: PathSpec {
                 path_options: None,
@@ -515,18 +516,21 @@ mod tests {
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
+        assert_eq!(session.reply_count(), 7);
         assert_eq!(&session.reply::<Response>(0).pathspec.path,
-                   &dir_path.join("Datei"));
+                   &dir_path.join("CamelCase"));
         assert_eq!(&session.reply::<Response>(1).pathspec.path,
-                   &dir_path.join("file"));
+                   &dir_path.join("Datei"));
         assert_eq!(&session.reply::<Response>(2).pathspec.path,
-                   &dir_path.join("файл"));
+                   &dir_path.join("afile"));
         assert_eq!(&session.reply::<Response>(3).pathspec.path,
-                   &dir_path.join("फ़ाइल"));
+                   &dir_path.join("file"));
         assert_eq!(&session.reply::<Response>(4).pathspec.path,
-                   &dir_path.join("❤ℝℝG❤"));
+                   &dir_path.join("snake_case"));
         assert_eq!(&session.reply::<Response>(5).pathspec.path,
-                   &dir_path.join("ファイル"));
+                   &dir_path.join("unicode"));
+        assert_eq!(&session.reply::<Response>(6).pathspec.path,
+                   &dir_path.join("юникод"));
     }
 
     #[test]
