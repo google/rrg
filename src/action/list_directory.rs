@@ -247,31 +247,13 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
 fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
     Response {
         size: Some(metadata.len()),
-        atime: match metadata.accessed() {
-            Ok(atime) => Some(atime),
-            Err(_) => {
-                warn!("unable to get last access time");
-                None
-            }
-        },
-        mtime: match metadata.modified() {
-            Ok(atime) => Some(atime),
-            Err(_) => {
-                warn!("unable to get last modification time");
-                None
-            }
-        },
+        atime: get_accesses_time(&metadata),
+        mtime: get_modification_time(&metadata),
         pathspec: PathSpec {
             path_options: Some(PathOption::CaseLiteral),
             path: file_path.clone(),
         },
-        crtime: match metadata.created() {
-            Ok(atime) => Some(atime),
-            Err(_) => {
-                warn!("unable to get creation time");
-                None
-            }
-        },
+        crtime: get_creation_time(&metadata),
         ..Default::default()
     }
 }
