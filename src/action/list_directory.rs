@@ -10,7 +10,7 @@
 use crate::session::{self, Session};
 use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType};
 
-use std::fs::{self, File, Metadata};
+use std::fs::{self, Metadata};
 use std::path::PathBuf;
 use std::fmt::{Display, Formatter};
 use log::warn;
