@@ -500,7 +500,7 @@ mod tests {
         std::fs::File::create(dir_path.join("файл")).unwrap();
         std::fs::File::create(dir_path.join("file")).unwrap();
         std::fs::File::create(dir_path.join("Datei")).unwrap();
-        std::fs::File::create(dir_path.join("αρχείο")).unwrap();
+        std::fs::File::create(dir_path.join("ファイル")).unwrap();
         std::fs::File::create(dir_path.join("फ़ाइल")).unwrap();
         let request = super::Request {
             pathspec: PathSpec {
@@ -515,13 +515,13 @@ mod tests {
         assert_eq!(&session.reply::<Response>(1).pathspec.path,
                    &dir_path.join("file"));
         assert_eq!(&session.reply::<Response>(2).pathspec.path,
-                   &dir_path.join("αρχείο"));
-        assert_eq!(&session.reply::<Response>(3).pathspec.path,
                    &dir_path.join("файл"));
-        assert_eq!(&session.reply::<Response>(4).pathspec.path,
+        assert_eq!(&session.reply::<Response>(3).pathspec.path,
                    &dir_path.join("फ़ाइल"));
-        assert_eq!(&session.reply::<Response>(5).pathspec.path,
+        assert_eq!(&session.reply::<Response>(4).pathspec.path,
                    &dir_path.join("❤ℝℝG❤"));
+        assert_eq!(&session.reply::<Response>(5).pathspec.path,
+                   &dir_path.join("ファイル"));
     }
 
     #[test]
