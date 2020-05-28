@@ -17,6 +17,8 @@ use std::os::raw::c_long;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::AsRawFd;
 use xattr;
+use log::warn;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Error {
@@ -25,20 +27,20 @@ impl From<std::io::Error> for Error {
 }
 
 pub struct Response {
-    mode: u64,
-    inode: u32,
-    device: u32,
-    hard_links: u32,
-    uid: u32,
-    gid: u32,
-    size: u64,
-    access_time: u64,
-    modification_time: u64,
-    status_change_time: u64,
-    blocks_number: u32,
-    block_size: u32,
-    represented_device: u32,
-    flags_linux: u32,
+    mode: Option<u64>,
+    inode: Option<u32>,
+    device: Option<u32>,
+    hard_links: Option<u32>,
+    uid: Option<u32>,
+    gid: Option<u32>,
+    size: Option<u64>,
+    access_time: Option<SystemTime>,
+    modification_time: Option<SystemTime>,
+    status_change_time: Option<SystemTime>,
+    blocks_number: Option<u32>,
+    block_size: Option<u32>,
+    represented_device: Option<u32>,
+    flags_linux: Option<u32>,
     symlink: Option<String>,
     pathspec: PathSpec,
     extended_attributes: Vec<rrg_proto::stat_entry::ExtAttr>,
@@ -114,26 +116,41 @@ fn get_ext_attrs(path: &PathBuf) -> Vec<rrg_proto::stat_entry::ExtAttr> {
     result
 }
 
+fn get_time_option<E: std::fmt::Display>(time: Result<SystemTime, E>) -> Option<SystemTime> {
+    match time {
+        Ok(time_value) => Some(time_value),
+        Err(err) => {
+            warn!("Unable to get time value: {}", err);
+            None
+        }
+    }
+}
+
+fn get_time_since_unix_epoch(sys_time: &Option<SystemTime>) -> Option<u64> {
+    return sys_time.map_or(None, |time| time.duration_since(UNIX_EPOCH)
+        .map_or(None, |dur| Some(dur.as_secs())));
+}
+
 fn form_response(original_path: &PathBuf, destination: &PathBuf)
                  -> Result<Response, std::io::Error> {
     let metadata = fs::symlink_metadata(destination)?;
     let original_metadata = fs::symlink_metadata(original_path)?;
 
     Ok(Response {
-        mode: metadata.mode().into(),
-        inode: metadata.ino() as u32,
-        device: metadata.dev() as u32,
-        hard_links: metadata.nlink() as u32,
-        uid: metadata.uid() as u32,
-        gid: metadata.gid() as u32,
-        size: metadata.size(),
-        access_time: metadata.atime() as u64,
-        modification_time: metadata.mtime() as u64,
-        status_change_time: metadata.ctime() as u64,
-        blocks_number: metadata.blocks() as u32,
-        block_size: metadata.blksize() as u32,
-        represented_device: metadata.rdev() as u32,
-        flags_linux: get_linux_flags(destination).unwrap_or_default() as u32,
+        mode: Some(metadata.mode() as u64),
+        inode: Some(metadata.ino() as u32),
+        device: Some(metadata.dev() as u32),
+        hard_links: Some(metadata.nlink() as u32),
+        uid: Some(metadata.uid() as u32),
+        gid: Some(metadata.gid() as u32),
+        size: Some(metadata.size() as u64),
+        access_time: get_time_option(metadata.accessed()),
+        modification_time: get_time_option(metadata.modified()),
+        status_change_time: get_time_option(metadata.created()),
+        blocks_number: Some(metadata.blocks() as u32),
+        block_size: Some(metadata.blksize() as u32),
+        represented_device: Some(metadata.rdev() as u32),
+        flags_linux: get_linux_flags(destination),
 
         symlink: match original_metadata.file_type().is_symlink() {
             true => Some(fs::read_link(original_path).
@@ -188,7 +205,7 @@ fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
                     Some(nested_path_box) => path.join(recursive_collapse(*nested_path_box)),
                     None => path,
                 }
-            },
+            }
             None => PathBuf::default()
         }
     }
@@ -207,7 +224,7 @@ fn get_path(path: &Option<String>) -> Option<PathBuf> {
     }
 }
 
-fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
+fn get_linux_flags(path: &PathBuf) -> Option<u32> {
     let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => return None,
@@ -216,11 +233,10 @@ fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
     let linux_flags_ptr: *mut c_long = &mut linux_flags;
     unsafe {
         match ioctls::fs_ioc_getflags(file.as_raw_fd(), linux_flags_ptr) {
-            0 => Some(linux_flags),
+            0 => Some(linux_flags as u32),
             _ => None,
-        };
+        }
     }
-    Some(linux_flags)
 }
 
 fn get_int_path_options(pathspec: &PathSpec) -> Option<i32> {
@@ -282,21 +298,21 @@ impl super::Response for Response {
 
     fn into_proto(self) -> Self::Proto {
         StatEntry {
-            st_mode: Some(self.mode),
-            st_ino: Some(self.inode),
-            st_dev: Some(self.device),
-            st_nlink: Some(self.hard_links),
-            st_uid: Some(self.uid),
-            st_gid: Some(self.gid),
-            st_size: Some(self.size),
-            st_atime: Some(self.access_time),
-            st_mtime: Some(self.modification_time),
-            st_ctime: Some(self.status_change_time),
-            st_blocks: Some(self.blocks_number),
-            st_blksize: Some(self.block_size),
-            st_rdev: Some(self.represented_device),
+            st_mode: self.mode,
+            st_ino: self.inode,
+            st_dev: self.device,
+            st_nlink: self.hard_links,
+            st_uid: self.uid,
+            st_gid: self.gid,
+            st_size: self.size,
+            st_atime: get_time_since_unix_epoch(&self.access_time),
+            st_mtime: get_time_since_unix_epoch(&self.modification_time),
+            st_ctime: get_time_since_unix_epoch(&self.status_change_time),
+            st_blocks: self.blocks_number,
+            st_blksize: self.block_size,
+            st_rdev: self.represented_device,
             st_flags_osx: None,
-            st_flags_linux: Some(self.flags_linux),
+            st_flags_linux: self.flags_linux,
             symlink: self.symlink,
             registry_type: None,
             resident: None,
