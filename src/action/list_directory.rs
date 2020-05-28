@@ -236,12 +236,12 @@ fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
+fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
     Response {
         size: Some(metadata.len()),
         atime: get_accesses_time(&metadata),
         mtime: get_modification_time(&metadata),
-        path: file_path.clone(),
+        path: file_path.clone().to_path_buf(),
         crtime: get_creation_time(&metadata),
         ..Default::default()
     }
