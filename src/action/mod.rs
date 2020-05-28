@@ -109,7 +109,7 @@ where
 
         #[cfg(target_os = "linux")]
         "EnumerateFilesystems" => task.execute(self::filesystems::handle),
-        
+
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
