@@ -25,23 +25,23 @@ impl From<std::io::Error> for Error {
 }
 
 pub struct Response {
-    st_mode: u64,
-    st_ino: u32,
-    st_dev: u32,
-    st_nlink: u32,
-    st_uid: u32,
-    st_gid: u32,
-    st_size: u64,
-    st_atime: u64,
-    st_mtime: u64,
-    st_ctime: u64,
-    st_blocks: u32,
-    st_blksize: u32,
-    st_rdev: u32,
-    st_flags_linux: u32,
+    mode: u64,
+    inode: u32,
+    device: u32,
+    hard_links: u32,
+    uid: u32,
+    gid: u32,
+    size: u64,
+    access_time: u64,
+    modification_time: u64,
+    status_change_time: u64,
+    blocks_number: u32,
+    block_size: u32,
+    represented_device: u32,
+    flags_linux: u32,
     symlink: Option<String>,
     pathspec: PathSpec,
-    ext_attrs: Vec<rrg_proto::stat_entry::ExtAttr>,
+    extended_attributes: Vec<rrg_proto::stat_entry::ExtAttr>,
 }
 
 pub struct Request {
@@ -94,7 +94,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
 
     let mut response = form_response(&original_path, &destination)?;
     if collect_ext_attrs {
-        response.ext_attrs = get_ext_attrs(&destination);
+        response.extended_attributes = get_ext_attrs(&destination);
     }
 
     session.reply(response)?;
@@ -120,20 +120,20 @@ fn form_response(original_path: &PathBuf, destination: &PathBuf)
     let original_metadata = fs::symlink_metadata(original_path)?;
 
     Ok(Response {
-        st_mode: metadata.mode().into(),
-        st_ino: metadata.ino() as u32,
-        st_dev: metadata.dev() as u32,
-        st_nlink: metadata.nlink() as u32,
-        st_uid: metadata.uid() as u32,
-        st_gid: metadata.gid() as u32,
-        st_size: metadata.size(),
-        st_atime: metadata.atime() as u64,
-        st_mtime: metadata.mtime() as u64,
-        st_ctime: metadata.ctime() as u64,
-        st_blocks: metadata.blocks() as u32,
-        st_blksize: metadata.blksize() as u32,
-        st_rdev: metadata.rdev() as u32,
-        st_flags_linux: get_linux_flags(destination).unwrap_or_default() as u32,
+        mode: metadata.mode().into(),
+        inode: metadata.ino() as u32,
+        device: metadata.dev() as u32,
+        hard_links: metadata.nlink() as u32,
+        uid: metadata.uid() as u32,
+        gid: metadata.gid() as u32,
+        size: metadata.size(),
+        access_time: metadata.atime() as u64,
+        modification_time: metadata.mtime() as u64,
+        status_change_time: metadata.ctime() as u64,
+        blocks_number: metadata.blocks() as u32,
+        block_size: metadata.blksize() as u32,
+        represented_device: metadata.rdev() as u32,
+        flags_linux: get_linux_flags(destination).unwrap_or_default() as u32,
 
         symlink: match original_metadata.file_type().is_symlink() {
             true => Some(fs::read_link(original_path).
@@ -148,7 +148,7 @@ fn form_response(original_path: &PathBuf, destination: &PathBuf)
             path: Some(original_path.clone()),
         },
 
-        ext_attrs: vec![],
+        extended_attributes: vec![],
     })
 }
 
@@ -282,21 +282,21 @@ impl super::Response for Response {
 
     fn into_proto(self) -> Self::Proto {
         StatEntry {
-            st_mode: Some(self.st_mode),
-            st_ino: Some(self.st_ino),
-            st_dev: Some(self.st_dev),
-            st_nlink: Some(self.st_nlink),
-            st_uid: Some(self.st_uid),
-            st_gid: Some(self.st_gid),
-            st_size: Some(self.st_size),
-            st_atime: Some(self.st_atime),
-            st_mtime: Some(self.st_mtime),
-            st_ctime: Some(self.st_ctime),
-            st_blocks: Some(self.st_blocks),
-            st_blksize: Some(self.st_blksize),
-            st_rdev: Some(self.st_rdev),
+            st_mode: Some(self.mode),
+            st_ino: Some(self.inode),
+            st_dev: Some(self.device),
+            st_nlink: Some(self.hard_links),
+            st_uid: Some(self.uid),
+            st_gid: Some(self.gid),
+            st_size: Some(self.size),
+            st_atime: Some(self.access_time),
+            st_mtime: Some(self.modification_time),
+            st_ctime: Some(self.status_change_time),
+            st_blocks: Some(self.blocks_number),
+            st_blksize: Some(self.block_size),
+            st_rdev: Some(self.represented_device),
             st_flags_osx: None,
-            st_flags_linux: Some(self.st_flags_linux),
+            st_flags_linux: Some(self.flags_linux),
             symlink: self.symlink,
             registry_type: None,
             resident: None,
@@ -311,8 +311,7 @@ impl super::Response for Response {
 
             registry_data: None,
             st_crtime: None,
-            ext_attrs: self.ext_attrs,
+            ext_attrs: self.extended_attributes,
         }
     }
 }
-
