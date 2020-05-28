@@ -241,10 +241,7 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
         size: Some(metadata.len()),
         atime: get_accesses_time(&metadata),
         mtime: get_modification_time(&metadata),
-        pathspec: PathSpec {
-            path_options: Some(PathOption::CaseLiteral),
-            path: file_path.clone(),
-        },
+        path: file_path.clone(),
         crtime: get_creation_time(&metadata),
         ..Default::default()
     }
