@@ -11,10 +11,9 @@ use crate::session::{self, Session, Error};
 use rrg_proto::{GetFileStatRequest, StatEntry};
 
 use ioctls;
-use std::fs::{self, File};
+use std::fs::{self, File, Metadata};
 use std::path::PathBuf;
 use std::os::raw::c_long;
-use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::AsRawFd;
 use xattr;
 use log::warn;
@@ -75,6 +74,18 @@ struct PathSpec {
     path: Option<PathBuf>,
 }
 
+
+impl Default for PathSpec {
+    fn default() -> PathSpec {
+        PathSpec {
+            nested_path: None,
+            path_options: None,
+            pathtype: None,
+            path: None,
+        }
+    }
+}
+
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
     let original_path = collapse_pathspec(request.pathspec.unwrap());
 
@@ -131,8 +142,19 @@ fn get_time_since_unix_epoch(sys_time: &Option<SystemTime>) -> Option<u64> {
         .map_or(None, |dur| Some(dur.as_secs())));
 }
 
+#[cfg(target_os = "linux")]
+fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
+    use std::time::Duration;
+    use std::os::unix::fs::MetadataExt;
+
+    UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
+}
+
+#[cfg(target_os = "linux")]
 fn form_response(original_path: &PathBuf, destination: &PathBuf)
                  -> Result<Response, std::io::Error> {
+    use std::os::unix::fs::MetadataExt;
+
     let metadata = fs::symlink_metadata(destination)?;
     let original_metadata = fs::symlink_metadata(original_path)?;
 
@@ -146,7 +168,7 @@ fn form_response(original_path: &PathBuf, destination: &PathBuf)
         size: Some(metadata.size() as u64),
         access_time: get_time_option(metadata.accessed()),
         modification_time: get_time_option(metadata.modified()),
-        status_change_time: get_time_option(metadata.created()),
+        status_change_time: get_status_change_time(&metadata),
         blocks_number: Some(metadata.blocks() as u32),
         block_size: Some(metadata.blksize() as u32),
         represented_device: Some(metadata.rdev() as u32),
@@ -224,6 +246,7 @@ fn get_path(path: &Option<String>) -> Option<PathBuf> {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn get_linux_flags(path: &PathBuf) -> Option<u32> {
     let file = match File::open(path) {
         Ok(file) => file,
@@ -329,5 +352,32 @@ impl super::Response for Response {
             st_crtime: None,
             ext_attrs: self.extended_attributes,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_path_collapse() {
+        let pathspec = PathSpec {
+            nested_path: Some(Box::new(
+                PathSpec {
+                    nested_path: Some(Box::new(
+                        PathSpec {
+                            nested_path: None,
+                            path: Some(PathBuf::from("file")),
+                            ..Default::default()
+                        }
+                    )),
+                    path: Some(PathBuf::from("to")),
+                    ..Default::default()
+                })),
+            path: Some(PathBuf::from("path")),
+            ..Default::default()
+        };
+
+        assert_eq!(collapse_pathspec(pathspec), PathBuf::from("/path/to/file"));
     }
 }
