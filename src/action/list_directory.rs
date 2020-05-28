@@ -8,7 +8,8 @@
 //! A list directory action stats all files in the provided directory.
 
 use crate::session::{self, Session};
-use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType};
+use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType,
+                path_spec::Options};
 
 use std::fs::{self, Metadata};
 use std::path::PathBuf;
@@ -125,7 +126,7 @@ pub struct Response {
     rdev: Option<u32>,
     flags_linux: Option<u32>,
     symlink: Option<String>,
-    pathspec: PathSpec,
+    path: PathBuf,
     crtime: Option<SystemTime>,
 }
 
@@ -148,10 +149,7 @@ impl Default for Response {
             rdev: None,
             flags_linux: None,
             symlink: None,
-            pathspec: PathSpec {
-                path_options: None,
-                path: Default::default(),
-            },
+            path: Default::default(),
             crtime: None,
         }
     }
@@ -159,18 +157,6 @@ impl Default for Response {
 
 /// A request type for the list directory action.
 pub struct Request {
-    pathspec: PathSpec,
-}
-
-enum PathOption {
-    CaseInsensitive,
-    CaseLiteral,
-    Regex,
-    Recursive,
-}
-
-struct PathSpec {
-    path_options: Option<PathOption>,
     path: PathBuf,
 }
 
@@ -209,7 +195,6 @@ fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
     use std::time::Duration;
     use std::os::unix::fs::MetadataExt;
 
-
     UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
 }
 
@@ -245,10 +230,7 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
         } else {
             None
         },
-        pathspec: PathSpec {
-            path_options: Some(PathOption::CaseLiteral),
-            path: file_path.clone(),
-        },
+        path: file_path.clone(),
         crtime: get_creation_time(&metadata),
     }
 }
@@ -270,7 +252,7 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
 
 pub fn handle<S: Session>(session: &mut S, request: Request)
                           -> session::Result<()> {
-    let dir_path = &request.pathspec.path;
+    let dir_path = &request.path;
     let mut paths: Vec<PathBuf> = dir_path.read_dir()
         .map_err(Error::ReadPath)?.filter_map(|entry| entry.ok())
         .map(|entry| entry.path()).collect();
@@ -283,20 +265,6 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
     }
 
     Ok(())
-}
-
-/// Converts integer from proto to human-readable enum type
-fn get_enum_path_options(option: &Option<i32>) -> Option<PathOption> {
-    match option {
-        Some(poption) => match poption {
-            0 => Some(PathOption::CaseInsensitive),
-            1 => Some(PathOption::CaseLiteral),
-            2 => Some(PathOption::Recursive),
-            3 => Some(PathOption::Regex),
-            _ => None
-        },
-        _ => None,
-    }
 }
 
 fn get_path(path: &Option<String>) -> PathBuf {
@@ -314,7 +282,6 @@ fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
     use std::fs::File;
     use std::os::unix::io::AsRawFd;
 
-
     let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => return None,
@@ -329,17 +296,6 @@ fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
     }
 }
 
-/// Converts enum type back to integer to pass to the proto
-fn get_int_path_options(pathspec: &PathSpec) -> Option<i32> {
-    match pathspec.path_options {
-        Some(PathOption::CaseInsensitive) => Some(0),
-        Some(PathOption::CaseLiteral) => Some(1),
-        Some(PathOption::Recursive) => Some(2),
-        Some(PathOption::Regex) => Some(3),
-        _ => None
-    }
-}
-
 impl super::Request for Request {
 
     type Proto = ListDirRequest;
@@ -349,19 +305,26 @@ impl super::Request for Request {
         let pathspec = proto.pathspec.ok_or(missing("path spec"))?;
         let path_type = pathspec.pathtype
             .ok_or(missing("path type"))?;
-        if path_type != 0 {
+        if path_type != PathType::Os as i32 {
             return Err(session::ParseError::malformed
-                           (ParseError::UnsupportedValue
-                               (UnsupportedValueMessage {
-                                   field: String::from("path type"),
-                                   value: path_type.to_string(),
-                               })));
+                (ParseError::UnsupportedValue
+                    (UnsupportedValueMessage {
+                        field: String::from("path type"),
+                        value: path_type.to_string(),
+                    })));
         }
+        let path_option = pathspec.path_options
+            .unwrap_or(Options::CaseLiteral as i32);
+        if path_option != Options::CaseLiteral as i32 {
+            return Err(session::ParseError::malformed
+                (ParseError::UnsupportedValue
+                    (UnsupportedValueMessage {
+                        field: String::from("path option"),
+                        value: path_option.to_string(),
+                    })));
+        };
         Ok(Request {
-            pathspec: PathSpec {
-                path_options: get_enum_path_options(&pathspec.path_options),
-                path: get_path(&pathspec.path),
-            }
+            path: get_path(&pathspec.path),
         })
     }
 }
@@ -398,10 +361,12 @@ impl super::Response for Response {
             registry_type: None,
             resident: None,
             pathspec: Some(rrg_proto::PathSpec {
-                path_options: get_int_path_options(&self.pathspec),
+                // represents CaseLiteral path option (other options are not
+                // supported)
+                path_options: Some(Options::CaseLiteral as i32),
                 // represents OS path type (other types are not supported)
                 pathtype: Some(PathType::Os as i32),
-                path: Some(self.pathspec.path.to_string_lossy().to_string()),
+                path: Some(self.path.to_string_lossy().to_string()),
                 ..Default::default()
             }),
             registry_data: None,
@@ -448,21 +413,42 @@ mod tests {
     #[test]
     fn test_empty_path_options() {
         let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(PathType::Os as i32), Some(String::from("/"))));
+            (fill_proto_request(None, Some(PathType::Os as i32),
+                                Some(String::from("/"))));
+        assert!(request.is_ok());
+    }
+
+    #[test]
+    fn test_unsupported_path_options() {
+        let request: Result<super::Request, _> = Request::from_proto
+            (fill_proto_request(Some(Options::Regex as i32),
+                                Some(PathType::Os as i32),
+                                Some(String::from("/"))));
+        assert!(request.is_err());
+    }
+
+    #[test]
+    fn test_ok_path_options() {
+        let request: Result<super::Request, _> = Request::from_proto
+            (fill_proto_request(Some(Options::CaseLiteral as i32),
+                                Some(PathType::Os as i32),
+                                Some(String::from("/"))));
         assert!(request.is_ok());
     }
 
     #[test]
     fn test_unset_pathtype() {
         let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(PathType::Unset as i32), Some(String::from("/"))));
+            (fill_proto_request(None, Some(PathType::Unset as i32),
+                                Some(String::from("/"))));
         assert!(request.is_err());
     }
 
     #[test]
     fn test_unsupported_pathtype() {
         let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(PathType::Tsk as i32), Some(String::from("/"))));
+            (fill_proto_request(None, Some(PathType::Tsk as i32),
+                                Some(String::from("/"))));
         assert!(request.is_err());
     }
 
@@ -479,17 +465,14 @@ mod tests {
         let request: Result<super::Request, _> = Request::from_proto
             (fill_proto_request(None, Some(PathType::Os as i32), None));
         assert!(&request.is_ok());
-        assert_eq!(request.unwrap().pathspec.path, PathBuf::from("/"));
+        assert_eq!(request.unwrap().path, PathBuf::from("/"));
     }
 
     #[test]
     fn test_empty_dir() {
         let dir = tempdir().unwrap();
         let request = super::Request {
-            pathspec: PathSpec {
-                path_options: None,
-                path: PathBuf::from(dir.path()),
-            }
+            path: PathBuf::from(dir.path()),
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
@@ -500,10 +483,7 @@ mod tests {
     fn test_nonexistent_path() {
         let dir = tempdir().unwrap();
         let request = super::Request {
-            pathspec: PathSpec {
-                path_options: None,
-                path: PathBuf::from(dir.path().join("nonexistent_subdir")),
-            }
+            path: PathBuf::from(dir.path().join("nonexistent_subdir")),
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_err());
@@ -521,27 +501,24 @@ mod tests {
         std::fs::File::create(dir_path.join("snake_case")).unwrap();
         std::fs::File::create(dir_path.join("CamelCase")).unwrap();
         let request = super::Request {
-            pathspec: PathSpec {
-                path_options: None,
-                path: PathBuf::from(&dir_path),
-            }
+            path: PathBuf::from(&dir_path),
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
         assert_eq!(session.reply_count(), 7);
-        assert_eq!(&session.reply::<Response>(0).pathspec.path,
+        assert_eq!(&session.reply::<Response>(0).path,
                    &dir_path.join("CamelCase"));
-        assert_eq!(&session.reply::<Response>(1).pathspec.path,
+        assert_eq!(&session.reply::<Response>(1).path,
                    &dir_path.join("Datei"));
-        assert_eq!(&session.reply::<Response>(2).pathspec.path,
+        assert_eq!(&session.reply::<Response>(2).path,
                    &dir_path.join("afile"));
-        assert_eq!(&session.reply::<Response>(3).pathspec.path,
+        assert_eq!(&session.reply::<Response>(3).path,
                    &dir_path.join("file"));
-        assert_eq!(&session.reply::<Response>(4).pathspec.path,
+        assert_eq!(&session.reply::<Response>(4).path,
                    &dir_path.join("snake_case"));
-        assert_eq!(&session.reply::<Response>(5).pathspec.path,
+        assert_eq!(&session.reply::<Response>(5).path,
                    &dir_path.join("unicode"));
-        assert_eq!(&session.reply::<Response>(6).pathspec.path,
+        assert_eq!(&session.reply::<Response>(6).path,
                    &dir_path.join("юникод"));
     }
 
@@ -553,16 +530,13 @@ mod tests {
         let inner_dir_path = &dir_path.join("dir");
         std::fs::create_dir(&inner_dir_path).unwrap();
         let request = super::Request {
-            pathspec: PathSpec {
-                path_options: None,
-                path: PathBuf::from(&dir_path),
-            }
+            path: PathBuf::from(&dir_path),
         };
         let mut session = session::test::Fake::new();
         handle(&mut session, request).unwrap();
         assert_eq!(session.reply_count(), 1);
         let inner_dir = &session.reply::<Response>(0);
-        assert_eq!(&inner_dir.pathspec.path, inner_dir_path);
+        assert_eq!(&inner_dir.path, inner_dir_path);
         assert!(inner_dir.symlink.is_none());
         assert_eq!(inner_dir.uid.unwrap(), users::get_current_uid());
         assert_eq!(inner_dir.gid.unwrap(), users::get_current_uid());
@@ -586,16 +560,13 @@ mod tests {
         let sl_path = dir_path.join("symlink");
         std::os::unix::fs::symlink(&file_path, &sl_path).unwrap();
         let request = super::Request {
-            pathspec: PathSpec {
-                path_options: None,
-                path: PathBuf::from(&dir_path),
-            }
+            path: PathBuf::from(&dir_path),
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
         assert_eq!(session.reply_count(), 2);
         let symlink = &session.reply::<Response>(1);
-        assert_eq!(&symlink.pathspec.path, &sl_path);
+        assert_eq!(&symlink.path, &sl_path);
         assert!(&symlink.symlink.is_some());
         assert_eq!(&symlink.symlink.as_ref().unwrap().as_str(),
                    &file_path.to_str().unwrap());
@@ -619,16 +590,13 @@ mod tests {
         std::fs::set_permissions(&file_path,
                                  PermissionsExt::from_mode(0o664)).unwrap();
         let request = super::Request {
-            pathspec: PathSpec {
-                path_options: None,
-                path: PathBuf::from(&dir_path),
-            }
+            path: PathBuf::from(&dir_path),
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
-        assert_eq!(file.pathspec.path, file_path);
+        assert_eq!(file.path, file_path);
         assert_eq!(file.size.unwrap(), 0);
         assert_eq!(file.mode.unwrap(), 0o100664);
         assert_eq!(file.uid.unwrap(), users::get_current_uid());
@@ -650,16 +618,13 @@ mod tests {
         let file_path = dir_path.join("file");
         std::fs::File::create(&file_path).unwrap();
         let request = super::Request {
-            pathspec: PathSpec {
-                path_options: None,
-                path: PathBuf::from(&dir_path),
-            }
+            path: PathBuf::from(&dir_path),
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
-        assert_eq!(file.pathspec.path, file_path);
+        assert_eq!(file.path, file_path);
         assert_eq!(file.size.unwrap(), 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
@@ -674,16 +639,13 @@ mod tests {
         let file_path = dir_path.join("file");
         std::fs::File::create(&file_path).unwrap();
         let request = super::Request {
-            pathspec: PathSpec {
-                path_options: None,
-                path: PathBuf::from(&dir_path),
-            }
+            path: PathBuf::from(&dir_path),
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
-        assert_eq!(file.pathspec.path, file_path);
+        assert_eq!(file.path, file_path);
         assert_ne!(file.flags_linux.unwrap(), 0);
     }
 
@@ -704,10 +666,7 @@ mod tests {
         std::fs::File::create(dir_path.join("αρχείο")).unwrap();
         std::fs::File::create(dir_path.join("फ़ाइल")).unwrap();
         let request = super::Request {
-            pathspec: PathSpec {
-                path_options: None,
-                path: PathBuf::from(&dir_path),
-            }
+            path: PathBuf::from(&dir_path),
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
