@@ -302,15 +302,16 @@ impl super::Request for Request {
     type Proto = GetFileStatRequest;
 
     fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError> {
-        Ok(Request {
-            pathspec: match proto.pathspec {
-                Some(proto_pathspec) => Some(PathSpec::from(proto_pathspec)),
-                None => None,
-            },
+        match proto.pathspec {
+            Some(proto_pathspec) => Ok(Request {
+                pathspec: Some(PathSpec::from(proto_pathspec)),
+                collect_ext_attrs: proto.collect_ext_attrs,
+                follow_symlink: proto.follow_symlink,
+            }),
 
-            collect_ext_attrs: proto.collect_ext_attrs,
-            follow_symlink: proto.follow_symlink,
-        })
+            None => Err(session::ParseError::from(
+                session::MissingFieldError::new("path spec"))),
+        }
     }
 }
 
@@ -358,6 +359,7 @@ impl super::Response for Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::action::Request;
 
     #[test]
     fn test_path_collapse() {
@@ -379,5 +381,17 @@ mod tests {
         };
 
         assert_eq!(collapse_pathspec(pathspec), PathBuf::from("/path/to/file"));
+    }
+
+    #[test]
+    fn test_empty_pathspec_field() {
+        let request: Result<super::Request, _> =
+            Request::from_proto(GetFileStatRequest {
+                pathspec: None,
+                collect_ext_attrs: None,
+                follow_symlink: None,
+            });
+
+        assert!(request.is_err());
     }
 }
