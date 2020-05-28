@@ -125,7 +125,7 @@ pub struct Response {
     blksize: Option<u32>,
     rdev: Option<u32>,
     flags_linux: Option<u32>,
-    symlink: Option<String>,
+    symlink: Option<PathBuf>,
     path: PathBuf,
     crtime: Option<SystemTime>,
 }
@@ -221,7 +221,7 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
         Some(get_linux_flags(file_path).unwrap_or_default() as u32),
         symlink: if metadata.file_type().is_symlink() {
             match fs::read_link(file_path) {
-                Ok(file) => Some(file.to_string_lossy().to_string()),
+                Ok(file) => Some(file),
                 Err(error) => {
                     warn!("unable to read symlink: {}", error);
                     None
@@ -354,7 +354,10 @@ impl super::Response for Response {
             st_rdev: self.rdev,
             st_flags_osx: None,
             st_flags_linux: self.flags_linux,
-            symlink: self.symlink,
+            symlink:
+            self.symlink
+                .map_or(None,
+                        |symlink| Some(symlink.to_string_lossy().to_string())),
             registry_type: None,
             resident: None,
             pathspec: Some(rrg_proto::PathSpec {
@@ -565,8 +568,7 @@ mod tests {
         let symlink = &session.reply::<Response>(1);
         assert_eq!(&symlink.path, &sl_path);
         assert!(&symlink.symlink.is_some());
-        assert_eq!(&symlink.symlink.as_ref().unwrap().as_str(),
-                   &file_path.to_str().unwrap());
+        assert_eq!(&symlink.symlink, &Some(file_path));
         assert_eq!(symlink.mode.unwrap(), 0o120777);
         assert_eq!(symlink.nlink.unwrap(), 1);
         assert!(symlink.atime.unwrap() <= SystemTime::now());
