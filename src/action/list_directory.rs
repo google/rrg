@@ -12,7 +12,7 @@ use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType};
 
 use std::fs::{self, Metadata};
 use std::path::PathBuf;
-use std::fmt::{Display, Formatter};
+use std::fmt::{self, Display, Formatter};
 use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -70,9 +70,24 @@ impl From<Error> for session::Error {
     }
 }
 
+struct UnsupportedValueMessage {
+    field: String,
+    value: String,
+}
+
+impl std::fmt::Debug for UnsupportedValueMessage {
+
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UnsupportedValueMessage")
+            .field("field", &self.field)
+            .field("value", &self.value)
+            .finish()
+    }
+}
+
 #[derive(Debug)]
 enum ParseError {
-    UnsupportedValue(String, String),
+    UnsupportedValue(UnsupportedValueMessage),
 }
 
 impl std::error::Error for ParseError {
@@ -81,7 +96,7 @@ impl std::error::Error for ParseError {
         use ParseError::*;
 
         match *self {
-            UnsupportedValue(ref _field, ref _value) => None,
+            UnsupportedValue(_) => None,
         }
     }
 }
@@ -92,9 +107,9 @@ impl Display for ParseError {
         use ParseError::*;
 
         match *self {
-            UnsupportedValue(ref field, ref value) => {
+            UnsupportedValue(ref message) => {
                 write!(fmt, "value {} in {} field is not supported",
-                       value, field)
+                       message.value, message.field)
             }
         }
     }
@@ -342,8 +357,11 @@ impl super::Request for Request {
             .ok_or(missing("path type"))?;
         if path_type != 0 {
             return Err(session::ParseError::malformed
-                (ParseError::UnsupportedValue
-                    (String::from("path type"), path_type.to_string())));
+                           (ParseError::UnsupportedValue
+                               (UnsupportedValueMessage {
+                                   field: String::from("path type"),
+                                   value: path_type.to_string(),
+                               })));
         }
         Ok(Request {
             pathspec: PathSpec {
