@@ -12,7 +12,7 @@ use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType,
                 path_spec::Options};
 
 use std::fs::{self, Metadata};
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::fmt::{self, Display, Formatter};
 use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -200,7 +200,7 @@ fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
 
 
 #[cfg(target_os = "linux")]
-fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
+fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
     use std::os::unix::fs::MetadataExt;
 
     Response {
@@ -230,7 +230,7 @@ fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
         } else {
             None
         },
-        path: file_path.clone(),
+        path: file_path.clone().to_path_buf(),
         crtime: get_creation_time(&metadata),
     }
 }
@@ -275,7 +275,7 @@ fn get_path(path: &Option<String>) -> PathBuf {
 
 /// Fills st_linux_flags field
 #[cfg(target_os = "linux")]
-fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
+fn get_linux_flags(path: &Path) -> Option<c_long> {
     use std::fs::File;
     use std::os::unix::io::AsRawFd;
 
