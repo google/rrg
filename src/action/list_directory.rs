@@ -17,22 +17,7 @@ use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(target_os = "linux")]
-use std::time::Duration;
-
-#[cfg(target_os = "linux")]
-use std::fs::File;
-
-#[cfg(target_os = "linux")]
-use ioctls;
-
-#[cfg(target_os = "linux")]
 use std::os::raw::c_long;
-
-#[cfg(target_os = "linux")]
-use std::os::unix::fs::MetadataExt;
-
-#[cfg(target_os = "linux")]
-use std::os::unix::io::AsRawFd;
 
 #[derive(Debug)]
 enum Error {
@@ -219,15 +204,20 @@ fn get_creation_time(metadata: &Metadata) -> Option<SystemTime> {
     }
 }
 
-
 #[cfg(target_os = "linux")]
 fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
+    use std::time::Duration;
+    use std::os::unix::fs::MetadataExt;
+
+
     UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
 }
 
 
 #[cfg(target_os = "linux")]
 fn fill_response(metadata: &Metadata, file_path: &PathBuf) -> Response {
+    use std::os::unix::fs::MetadataExt;
+
     Response {
         mode: Some(metadata.mode().into()),
         ino: Some(metadata.ino() as u32),
@@ -321,6 +311,10 @@ fn get_path(path: &Option<String>) -> PathBuf {
 /// Fills st_linux_flags field
 #[cfg(target_os = "linux")]
 fn get_linux_flags(path: &PathBuf) -> Option<c_long> {
+    use std::fs::File;
+    use std::os::unix::io::AsRawFd;
+
+
     let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => return None,
@@ -424,7 +418,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[cfg(target_os = "linux")]
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::MetadataExt;
 
     /// Fills ListDirRequest with provided fields
     fn fill_proto_request(path_options: Option<i32>,
@@ -616,6 +610,8 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_file_response_linux() {
+        use std::os::unix::fs::PermissionsExt;
+
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
         let file_path = dir_path.join("file");
