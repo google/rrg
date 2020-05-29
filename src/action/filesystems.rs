@@ -99,6 +99,7 @@ fn option_to_key_value(option: String) -> KeyValue {
         &[key, value] => KeyValue::pair(String::from(key), String::from(value)),
         _ => {
             error!("invalid mount option syntax: {}", option);
+            // TODO: It's better not to send any key-value in this case.
             KeyValue::empty()
         },
     }
