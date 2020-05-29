@@ -13,7 +13,7 @@ use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType,
 
 use std::fs::{self, Metadata};
 use std::path::{PathBuf, Path};
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{Display, Formatter};
 use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH};
 
