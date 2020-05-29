@@ -8,7 +8,8 @@
 //! A file stat action responses with stat of a given file
 
 use crate::session::{self, Session, Error};
-use rrg_proto::{GetFileStatRequest, StatEntry, path_spec::PathType, path_spec::Options};
+use rrg_proto::{GetFileStatRequest, StatEntry, path_spec::PathType,
+                path_spec::Options, stat_entry::ExtAttr};
 use ioctls;
 use std::fs::{self, File, Metadata};
 use std::path::{PathBuf, Path};
@@ -22,6 +23,7 @@ impl From<std::io::Error> for Error {
     }
 }
 
+#[derive(Debug)]
 pub struct Response {
     mode: Option<u64>,
     inode: Option<u32>,
@@ -39,15 +41,17 @@ pub struct Response {
     flags_linux: Option<u32>,
     symlink: Option<PathBuf>,
     pathspec: PathSpec,
-    extended_attributes: Vec<rrg_proto::stat_entry::ExtAttr>,
+    extended_attributes: Vec<ExtAttr>,
 }
 
+#[derive(Debug)]
 pub struct Request {
     pathspec: Option<PathSpec>,
     collect_ext_attrs: Option<bool>,
     follow_symlink: Option<bool>,
 }
 
+#[derive(Debug)]
 struct PathSpec {
     nested_path: Option<Box<PathSpec>>,
     path: Option<PathBuf>,
@@ -58,6 +62,30 @@ impl Default for PathSpec {
         PathSpec {
             nested_path: None,
             path: None,
+        }
+    }
+}
+
+impl Default for Response {
+    fn default() -> Response {
+        Response {
+            mode: None,
+            inode: None,
+            device: None,
+            hard_links: None,
+            uid: None,
+            gid: None,
+            size: None,
+            access_time: None,
+            modification_time: None,
+            status_change_time: None,
+            blocks_number: None,
+            block_size: None,
+            represented_device: None,
+            flags_linux: None,
+            symlink: None,
+            pathspec: PathSpec::default(),
+            extended_attributes: vec![],
         }
     }
 }
@@ -90,17 +118,23 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
     Ok(())
 }
 
-fn get_ext_attrs(path: &Path) -> Vec<rrg_proto::stat_entry::ExtAttr> {
+#[cfg(target_family = "unix")]
+fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
     let xattrs = xattr::list(path).unwrap();
 
     let mut result = vec![];
     for attr in xattrs {
-        result.push(rrg_proto::stat_entry::ExtAttr {
+        result.push(ExtAttr {
             name: Some(attr.to_str().unwrap().as_bytes().to_vec()),
             value: xattr::get(path, attr).unwrap(),
         });
     }
     result
+}
+
+#[cfg(not(target_family = "unix"))]
+fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
+    vec![]
 }
 
 fn get_time_option<E: std::fmt::Display>(time: Result<SystemTime, E>) -> Option<SystemTime> {
@@ -162,6 +196,12 @@ fn form_response(original_path: &PathBuf, destination: &PathBuf)
 
         extended_attributes: vec![],
     })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn form_response(original_path: &PathBuf, destination: &PathBuf)
+                 -> Result<Response, std::io::Error> {
+    Ok(Response::default())
 }
 
 fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
