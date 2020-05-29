@@ -5,6 +5,56 @@
 
 include!(concat!(env!("OUT_DIR"), "/grr.rs"));
 
+impl Into<DataBlob> for bool {
+
+    fn into(self) -> DataBlob {
+        DataBlob {
+            boolean: Some(self),
+            ..Default::default()
+        }
+    }
+}
+
+impl Into<DataBlob> for i64 {
+
+    fn into(self) -> DataBlob {
+        DataBlob {
+            integer: Some(self),
+            ..Default::default()
+        }
+    }
+}
+
+impl Into<DataBlob> for f32 {
+
+    fn into(self) -> DataBlob {
+        DataBlob {
+            float: Some(self),
+            ..Default::default()
+        }
+    }
+}
+
+impl Into<DataBlob> for Vec<u8> {
+
+    fn into(self) -> DataBlob {
+        DataBlob {
+            data: Some(self),
+            ..Default::default()
+        }
+    }
+}
+
+impl Into<DataBlob> for String {
+
+    fn into(self) -> DataBlob {
+        DataBlob {
+            string: Some(self),
+            ..Default::default()
+        }
+    }
+}
+
 /// An error type for failures of converting timestamps to microseconds.
 #[derive(Clone, Debug)]
 pub enum MicrosError {
