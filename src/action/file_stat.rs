@@ -120,7 +120,6 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
 
 #[cfg(target_family = "unix")]
 fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
-    use xattr;
     let xattrs = xattr::list(path).unwrap();
 
     let mut result = vec![];
