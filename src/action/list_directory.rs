@@ -352,10 +352,10 @@ impl super::Response for Response {
             registry_type: None,
             resident: None,
             pathspec: Some(rrg_proto::PathSpec {
-                // represents CaseLiteral path option (other options are not
-                // supported)
+                // Represents `CaseLiteral` path option (other options are not
+                // supported).
                 path_options: Some(Options::CaseLiteral as i32),
-                // represents OS path type (other types are not supported)
+                // Represents `OS` path type (other types are not supported).
                 pathtype: Some(PathType::Os as i32),
                 path: Some(self.path.to_string_lossy().to_string()),
                 ..Default::default()
