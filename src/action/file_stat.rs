@@ -211,7 +211,6 @@ fn get_linux_flags(path: &Path) -> Option<u32> {
     }
 }
 
-
 impl From<rrg_proto::PathSpec> for PathSpec {
     fn from(proto: rrg_proto::PathSpec) -> PathSpec {
         PathSpec {
@@ -437,5 +436,55 @@ mod tests {
         check_attribute(&extended_attributes[0], "user.simple_name", vec![0, 28, 42]);
         check_attribute(&extended_attributes[1], "user.ⓤⓝⓘⓒⓞⓓⓔ ⓝⓐⓜⓔ", vec![0, 1]);
         check_attribute(&extended_attributes[2], "user.без значения", vec![]);
+    }
+
+    #[test]
+    #[cfg(target_family = "unix")]
+    fn test_chain_of_symlinks() {
+        use std::os::unix;
+
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("temp_file.txt");
+        fs::File::create(file_path.to_path_buf()).unwrap();
+
+        let chain_length = 5;
+        unix::fs::symlink(&file_path, dir.path().join("symlink 0")).unwrap();
+
+        for i in 1..chain_length {
+            unix::fs::symlink(dir.path().join(format!("symlink {}", i - 1)),
+                              dir.path().join(format!("symlink {}", i))).unwrap();
+        }
+
+        let last_symlink = dir.path().join(format!("symlink {}", chain_length - 1));
+        let previous_symlink = dir.path().join(format!("symlink {}", chain_length - 2));
+
+        let response = form_response(&last_symlink,
+                                     &fs::canonicalize(&last_symlink).unwrap());
+        let original_response = form_response(&file_path, &file_path);
+
+        assert!(response.is_ok());
+        let response = response.unwrap();
+
+        assert!(original_response.is_ok());
+        let original_response = original_response.unwrap();
+
+        assert!(response.symlink.is_some());
+        assert!(original_response.symlink.is_none());
+        assert_eq!(response.symlink.unwrap(), previous_symlink);
+
+        assert_eq!(response.mode, original_response.mode);
+        assert_eq!(response.inode, original_response.inode);
+        assert_eq!(response.device, original_response.device);
+        assert_eq!(response.hard_links, original_response.hard_links);
+        assert_eq!(response.uid, original_response.uid);
+        assert_eq!(response.gid, original_response.gid);
+        assert_eq!(response.size, original_response.size);
+        assert_eq!(response.access_time, original_response.access_time);
+        assert_eq!(response.modification_time, original_response.modification_time);
+        assert_eq!(response.status_change_time, original_response.status_change_time);
+        assert_eq!(response.blocks_number, original_response.blocks_number);
+        assert_eq!(response.block_size, original_response.block_size);
+        assert_eq!(response.represented_device, original_response.represented_device);
+        assert_eq!(response.flags_linux, original_response.flags_linux);
     }
 }
