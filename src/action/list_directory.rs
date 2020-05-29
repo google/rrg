@@ -56,24 +56,23 @@ impl From<Error> for session::Error {
     }
 }
 
-struct UnsupportedValueMessage {
+#[derive(Debug)]
+struct UnsupportedValueError {
     field: String,
     value: String,
 }
 
-impl std::fmt::Debug for UnsupportedValueMessage {
-
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("UnsupportedValueMessage")
-            .field("field", &self.field)
-            .field("value", &self.value)
-            .finish()
-    }
+fn unsupported_value(field: String, value: String) -> session::ParseError {
+    session::ParseError::malformed(ParseError::UnsupportedValue(
+        UnsupportedValueError {
+            field,
+            value,
+        }))
 }
 
 #[derive(Debug)]
 enum ParseError {
-    UnsupportedValue(UnsupportedValueMessage),
+    UnsupportedValue(UnsupportedValueError),
 }
 
 impl std::error::Error for ParseError {
@@ -303,22 +302,14 @@ impl super::Request for Request {
         let path_type = pathspec.pathtype
             .ok_or(missing("path type"))?;
         if path_type != PathType::Os as i32 {
-            return Err(session::ParseError::malformed
-                (ParseError::UnsupportedValue
-                    (UnsupportedValueMessage {
-                        field: String::from("path type"),
-                        value: path_type.to_string(),
-                    })));
+            return Err(unsupported_value(String::from("path type"),
+                                         path_type.to_string()));
         }
         let path_option = pathspec.path_options
             .unwrap_or(Options::CaseLiteral as i32);
         if path_option != Options::CaseLiteral as i32 {
-            return Err(session::ParseError::malformed
-                (ParseError::UnsupportedValue
-                    (UnsupportedValueMessage {
-                        field: String::from("path option"),
-                        value: path_option.to_string(),
-                    })));
+            return Err(unsupported_value(String::from("path option"),
+                                         path_option.to_string()));
         };
         Ok(Request {
             path: get_path(&pathspec.path),
