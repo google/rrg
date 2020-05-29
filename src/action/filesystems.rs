@@ -104,14 +104,6 @@ fn option_to_key_value(option: String) -> KeyValue {
     }
 }
 
-/// Converts a `Vec` of filesystem mount options in `String` representation to
-/// GRR's `AttributedDict` protobuf struct representation.
-fn options_to_dict(options: Vec<String>) -> AttributedDict {
-    AttributedDict {
-        dat: options.into_iter().map(option_to_key_value).collect(),
-    }
-}
-
 impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("Filesystem");
@@ -119,6 +111,10 @@ impl super::Response for Response {
     type Proto = rrg_proto::Filesystem;
 
     fn into_proto(self) -> Filesystem {
+        let options = self.mount_info.options.into_iter()
+            .map(option_to_key_value)
+            .collect();
+
         // TODO: Remove lossy conversion of `PathBuf` to `String`
         // when `mount_point` and `device` fields of `Filesystem` message
         // will have `bytes` type instead of `string`.
@@ -129,7 +125,7 @@ impl super::Response for Response {
                 .into_owned()),
             r#type: Some(self.mount_info.fstype),
             label: None,
-            options: Some(options_to_dict(self.mount_info.options)),
+            options: Some(options),
         }
     }
 }
