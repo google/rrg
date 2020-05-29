@@ -360,6 +360,7 @@ impl super::Response for Response {
 mod tests {
     use super::*;
     use crate::action::Request;
+    use tempfile::tempdir;
 
     #[test]
     fn test_path_collapse() {
@@ -368,7 +369,6 @@ mod tests {
                 PathSpec {
                     nested_path: Some(Box::new(
                         PathSpec {
-                            nested_path: None,
                             path: Some(PathBuf::from("file")),
                             ..Default::default()
                         }
@@ -381,17 +381,129 @@ mod tests {
         };
 
         assert_eq!(collapse_pathspec(pathspec), PathBuf::from("/path/to/file"));
+
+        let pathspec = PathSpec {
+            nested_path: Some(Box::new(
+                PathSpec {
+                    nested_path: Some(Box::new(
+                        PathSpec {
+                            path: Some(PathBuf::from("on/device")),
+                            ..Default::default()
+                        }
+                    )),
+                    path: Some(PathBuf::from("some/file")),
+                    ..Default::default()
+                })),
+            path: Some(PathBuf::from("path/to")),
+            ..Default::default()
+        };
+
+        assert_eq!(collapse_pathspec(pathspec), PathBuf::from("/path/to/some/file/on/device"));
     }
 
     #[test]
-    fn test_empty_pathspec_field() {
+    fn test_empty_request() {
         let request: Result<super::Request, _> =
-            Request::from_proto(GetFileStatRequest {
-                pathspec: None,
-                collect_ext_attrs: None,
-                follow_symlink: None,
-            });
-
+            Request::from_proto(GetFileStatRequest::default());
         assert!(request.is_err());
+    }
+
+    #[test]
+    fn test_no_error_with_existing_file() {
+        let dir = tempdir().unwrap();
+
+        let file_path = dir.path().join("temp_file.txt");
+        fs::File::create(file_path.to_path_buf()).unwrap();
+        let response = form_response(&file_path, &file_path);
+        assert!(response.is_ok());
+    }
+
+    #[test]
+    fn test_file_does_not_exist() {
+        let dir = tempdir().unwrap();
+
+        let file_path = dir.path().join("temp_file.txt");
+        let response = form_response(&file_path, &file_path);
+        assert!(response.is_err());
+    }
+
+    #[test]
+    fn test_mode_and_size() {
+        let new_size = 42;
+        let new_mode = 0o100444;
+
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("temp_file.txt");
+        let file = fs::File::create(file_path.to_path_buf()).unwrap();
+
+        file.set_len(new_size).unwrap();
+        let mut permissions = fs::metadata(&file_path).unwrap().permissions();
+        permissions.set_readonly(true);
+        file.set_permissions(permissions).unwrap();
+
+        let response = form_response(&file_path, &file_path);
+
+        assert!(response.is_ok());
+
+        let response = response.unwrap();
+        assert!(response.size.is_some());
+        assert_eq!(response.size.unwrap(), new_size);
+
+        assert!(response.mode.is_some());
+        assert_eq!(response.mode.unwrap(), new_mode);
+    }
+
+    #[test]
+    fn test_hard_link() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("temp_file.txt");
+        let hard_link_path = dir.path().join("hard_link.txt");
+        fs::File::create(file_path.to_path_buf()).unwrap();
+        fs::hard_link(&file_path, &hard_link_path).unwrap();
+
+        let file_response = form_response(&file_path, &file_path);
+        let link_response = form_response(&hard_link_path, &hard_link_path);
+
+        assert!(file_response.is_ok());
+        assert!(link_response.is_ok());
+
+        let file_response = file_response.unwrap();
+        let link_response = link_response.unwrap();
+
+        assert!(file_response.hard_links.is_some());
+        assert_eq!(file_response.hard_links.unwrap(), 2);
+
+        assert!(link_response.hard_links.is_some());
+        assert_eq!(link_response.hard_links.unwrap(), 2);
+
+        assert!(file_response.inode.is_some());
+        assert!(link_response.inode.is_some());
+        assert_eq!(file_response.inode.unwrap(), link_response.inode.unwrap());
+    }
+
+    #[test]
+    fn test_extended_attributes() {
+        fn check_attribute(attribute: &rrg_proto::stat_entry::ExtAttr,
+                           name: &str, value: Vec<u8>) {
+            assert!(attribute.name.is_some());
+            assert_eq!(attribute.name.clone().unwrap(), name.as_bytes().to_vec());
+            assert!(attribute.value.is_some());
+            assert_eq!(attribute.value.clone().unwrap(), value);
+        }
+
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("temp_file");
+        fs::File::create(file_path.to_path_buf()).unwrap();
+        xattr::set(&file_path, "user.simple_name", &[0, 28, 42]).unwrap();
+        xattr::set(&file_path, "user.ⓤⓝⓘⓒⓞⓓⓔ ⓝⓐⓜⓔ", &[0, 1]).unwrap();
+        xattr::set(&file_path, "user.без значения", &[]).unwrap();
+
+        let extended_attributes = get_ext_attrs(&file_path);
+
+        assert_eq!(extended_attributes.len(), 3);
+
+        check_attribute(&extended_attributes[0], "user.simple_name", vec![0, 28, 42]);
+        check_attribute(&extended_attributes[1], "user.ⓤⓝⓘⓒⓞⓓⓔ ⓝⓐⓜⓔ", vec![0, 1]);
+        check_attribute(&extended_attributes[2], "user.без значения", vec![]);
     }
 }
