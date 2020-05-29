@@ -353,10 +353,8 @@ pub mod test {
             // another branch.
             //
             // Instead, we use the fact that `Option` is an iterator and then we
-            // squash it with `Iterator::flat_map`.
-            let responses = self.responses.get(&sink)
-                .into_iter()
-                .flat_map(std::convert::identity);
+            // squash it with `Iterator::flatten`.
+            let responses = self.responses.get(&sink).into_iter().flatten();
 
             responses.map(move |response| match response.downcast_ref() {
                 Some(response) => response,
