@@ -57,6 +57,19 @@ impl From<String> for DataBlob {
 
 impl KeyValue {
 
+    /// Creates an empty key-value.
+    ///
+    /// Both the key and the value are going to be equal to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rrg_proto::KeyValue;
+    ///
+    /// let entry = KeyValue::empty();
+    /// assert_eq!(entry.k, None);
+    /// assert_eq!(entry.v, None);
+    /// ```
     pub fn empty() -> KeyValue {
         KeyValue {
             k: None,
@@ -64,6 +77,19 @@ impl KeyValue {
         }
     }
 
+    /// Creates a key-value pair.
+    ///
+    /// Both the key and the value are going to be equal to the given values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rrg_proto::KeyValue;
+    ///
+    /// let entry = KeyValue::pair(String::from("foo"), 42i64);
+    /// assert_eq!(entry.k.unwrap().string, Some(String::from("foo")));
+    /// assert_eq!(entry.v.unwrap().integer, Some(42));
+    /// ```
     pub fn pair<K, V>(key: K, value: V) -> KeyValue
     where
         K: Into<DataBlob>,
@@ -75,6 +101,20 @@ impl KeyValue {
         }
     }
 
+    /// Creates a key-only key-value.
+    ///
+    /// The key is going to be equal to the given value and the key will be
+    /// `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rrg_proto::KeyValue;
+    ///
+    /// let entry = KeyValue::key(String::from("quux"));
+    /// assert_eq!(entry.k.unwrap().string, Some(String::from("quux")));
+    /// assert_eq!(entry.v, None);
+    /// ```
     pub fn key<K>(key: K) -> KeyValue
     where
         K: Into<DataBlob>,
