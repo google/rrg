@@ -9,7 +9,7 @@
 //! collecting device name, mount point, filesystem type and its options.
 //! Current implementation works only in Linux systems.
 
-use rrg_proto::{Filesystem, KeyValue, AttributedDict, DataBlob};
+use rrg_proto::{Filesystem, KeyValue, AttributedDict};
 use crate::session::{self, Session};
 
 use log::error;
@@ -95,43 +95,13 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 /// GRR's `KeyValue` protobuf struct representation.
 fn option_to_key_value(option: String) -> KeyValue {
     match &option.split('=').collect::<Vec<&str>>()[..] {
-        &[key] => {
-            // TODO: Simplify work with `DataBlob`.
-            KeyValue {
-                k: Some(DataBlob {
-                    string: Some(String::from(key)),
-                    ..Default::default()
-                }),
-                v: None,
-            }
-        },
-        &[key, value] => {
-            KeyValue {
-                k: Some(DataBlob {
-                    string: Some(String::from(key)),
-                    ..Default::default()
-                }),
-                v: Some(DataBlob {
-                    string: Some(String::from(value)),
-                    ..Default::default()
-                }),
-            }
-        },
+        &[key] => KeyValue::key(String::from(key)),
+        &[key, value] => KeyValue::pair(String::from(key), String::from(value)),
         _ => {
             error!("invalid mount option syntax: {}", option);
-            KeyValue {
-                k: None,
-                v: None,
-            }
+            // TODO: It's better not to send any key-value in this case.
+            KeyValue::empty()
         },
-    }
-}
-
-/// Converts a `Vec` of filesystem mount options in `String` representation to
-/// GRR's `AttributedDict` protobuf struct representation.
-fn options_to_dict(options: Vec<String>) -> AttributedDict {
-    AttributedDict {
-        dat: options.into_iter().map(option_to_key_value).collect(),
     }
 }
 
@@ -142,6 +112,10 @@ impl super::Response for Response {
     type Proto = rrg_proto::Filesystem;
 
     fn into_proto(self) -> Filesystem {
+        let options = self.mount_info.options.into_iter()
+            .map(option_to_key_value)
+            .collect();
+
         // TODO: Remove lossy conversion of `PathBuf` to `String`
         // when `mount_point` and `device` fields of `Filesystem` message
         // will have `bytes` type instead of `string`.
@@ -152,7 +126,7 @@ impl super::Response for Response {
                 .into_owned()),
             r#type: Some(self.mount_info.fstype),
             label: None,
-            options: Some(options_to_dict(self.mount_info.options)),
+            options: Some(options),
         }
     }
 }
