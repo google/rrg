@@ -9,7 +9,7 @@
 //! collecting device name, mount point, filesystem type and its options.
 //! Current implementation works only in Linux systems.
 
-use rrg_proto::{Filesystem, KeyValue, AttributedDict, DataBlob};
+use rrg_proto::{Filesystem, KeyValue, AttributedDict};
 use crate::session::{self, Session};
 
 use log::error;
@@ -95,34 +95,11 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 /// GRR's `KeyValue` protobuf struct representation.
 fn option_to_key_value(option: String) -> KeyValue {
     match &option.split('=').collect::<Vec<&str>>()[..] {
-        &[key] => {
-            // TODO: Simplify work with `DataBlob`.
-            KeyValue {
-                k: Some(DataBlob {
-                    string: Some(String::from(key)),
-                    ..Default::default()
-                }),
-                v: None,
-            }
-        },
-        &[key, value] => {
-            KeyValue {
-                k: Some(DataBlob {
-                    string: Some(String::from(key)),
-                    ..Default::default()
-                }),
-                v: Some(DataBlob {
-                    string: Some(String::from(value)),
-                    ..Default::default()
-                }),
-            }
-        },
+        &[key] => KeyValue::key(String::from(key)),
+        &[key, value] => KeyValue::pair(String::from(key), String::from(value)),
         _ => {
             error!("invalid mount option syntax: {}", option);
-            KeyValue {
-                k: None,
-                v: None,
-            }
+            KeyValue::empty()
         },
     }
 }
