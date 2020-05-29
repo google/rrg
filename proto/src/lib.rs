@@ -5,51 +5,51 @@
 
 include!(concat!(env!("OUT_DIR"), "/grr.rs"));
 
-impl Into<DataBlob> for bool {
+impl From<bool> for DataBlob {
 
-    fn into(self) -> DataBlob {
+    fn from(value: bool) -> DataBlob {
         DataBlob {
-            boolean: Some(self),
+            boolean: Some(value),
             ..Default::default()
         }
     }
 }
 
-impl Into<DataBlob> for i64 {
+impl From<i64> for DataBlob {
 
-    fn into(self) -> DataBlob {
+    fn from(value: i64) -> DataBlob {
         DataBlob {
-            integer: Some(self),
+            integer: Some(value),
             ..Default::default()
         }
     }
 }
 
-impl Into<DataBlob> for f32 {
+impl From<f32> for DataBlob {
 
-    fn into(self) -> DataBlob {
+    fn from(value: f32) -> DataBlob {
         DataBlob {
-            float: Some(self),
+            float: Some(value),
             ..Default::default()
         }
     }
 }
 
-impl Into<DataBlob> for Vec<u8> {
+impl From<Vec<u8>> for DataBlob {
 
-    fn into(self) -> DataBlob {
+    fn from(value: Vec<u8>) -> DataBlob {
         DataBlob {
-            data: Some(self),
+            data: Some(value),
             ..Default::default()
         }
     }
 }
 
-impl Into<DataBlob> for String {
+impl From<String> for DataBlob {
 
-    fn into(self) -> DataBlob {
+    fn from(value: String) -> DataBlob  {
         DataBlob {
-            string: Some(self),
+            string: Some(value),
             ..Default::default()
         }
     }
