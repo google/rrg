@@ -511,6 +511,71 @@ mod tests {
         session.response::<()>(Sink::STARTUP, 0);
     }
 
+    #[test]
+    fn test_fake_replies_no_responses() {
+
+        fn handle<S: Session>(_: &mut S, _: ()) {
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        let mut replies = session.replies::<()>();
+        assert_eq!(replies.next(), None);
+    }
+
+    #[test]
+    fn test_fake_replies_multiple_responses() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.reply(StringResponse::from("foo")).unwrap();
+            session.reply(StringResponse::from("bar")).unwrap();
+            session.reply(StringResponse::from("baz")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        let mut replies = session.replies::<StringResponse>();
+        assert_eq!(replies.next().unwrap().0, "foo");
+        assert_eq!(replies.next().unwrap().0, "bar");
+        assert_eq!(replies.next().unwrap().0, "baz");
+        assert_eq!(replies.next(), None);
+    }
+
+    #[test]
+    fn test_fake_responses_no_responses() {
+
+        fn handle<S: Session>(_: &mut S, _: ()) {
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        let mut responses = session.responses::<()>(Sink::STARTUP);
+        assert_eq!(responses.next(), None);
+    }
+
+    #[test]
+    fn test_fake_responses_multiple_responses() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.send(Sink::STARTUP, StringResponse::from("foo")).unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("bar")).unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("baz")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        let mut responses = session.responses::<StringResponse>(Sink::STARTUP);
+        assert_eq!(responses.next().unwrap().0, "foo");
+        assert_eq!(responses.next().unwrap().0, "bar");
+        assert_eq!(responses.next().unwrap().0, "baz");
+        assert_eq!(responses.next(), None);
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
     struct StringResponse(String);
 
     impl<S: Into<String>> From<S> for StringResponse {
