@@ -126,6 +126,23 @@ impl KeyValue {
     }
 }
 
+impl<K, V> std::iter::FromIterator<(K, V)> for AttributedDict
+where
+    K: Into<DataBlob>,
+    V: Into<DataBlob>,
+{
+    fn from_iter<I>(iter: I) -> AttributedDict
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        let pair = |(key, value)| KeyValue::pair(key, value);
+
+        AttributedDict {
+            dat: iter.into_iter().map(pair).collect(),
+        }
+    }
+}
+
 /// An error type for failures of converting timestamps to microseconds.
 #[derive(Clone, Debug)]
 pub enum MicrosError {
