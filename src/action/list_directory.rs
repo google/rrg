@@ -347,8 +347,7 @@ impl super::Response for Response {
             st_flags_linux: self.flags_linux,
             symlink:
             self.symlink
-                .map_or(None,
-                        |symlink| Some(symlink.to_string_lossy().to_string())),
+                .map(|symlink| symlink.to_string_lossy().to_string()),
             registry_type: None,
             resident: None,
             pathspec: Some(rrg_proto::PathSpec {
