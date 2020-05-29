@@ -55,14 +55,34 @@ impl From<String> for DataBlob {
     }
 }
 
-pub fn key_value<K, V>(key: K, value: V) -> KeyValue
-where
-    K: Into<DataBlob>,
-    V: Into<DataBlob>,
-{
-    KeyValue {
-        k: Some(key.into()),
-        v: Some(value.into()),
+impl KeyValue {
+
+    pub fn empty() -> KeyValue {
+        KeyValue {
+            k: None,
+            v: None,
+        }
+    }
+
+    pub fn pair<K, V>(key: K, value: V) -> KeyValue
+    where
+        K: Into<DataBlob>,
+        V: Into<DataBlob>,
+    {
+        KeyValue {
+            k: Some(key.into()),
+            v: Some(value.into()),
+        }
+    }
+
+    pub fn key<K>(key: K) -> KeyValue
+    where
+        K: Into<DataBlob>,
+    {
+        KeyValue {
+            k: Some(key.into()),
+            v: None,
+        }
     }
 }
 
