@@ -8,8 +8,7 @@
 //! A file stat action responses with stat of a given file
 
 use crate::session::{self, Session, Error};
-use rrg_proto::{GetFileStatRequest, StatEntry};
-
+use rrg_proto::{GetFileStatRequest, StatEntry, path_spec::PathType, path_spec::Options};
 use ioctls;
 use std::fs::{self, File, Metadata};
 use std::path::{PathBuf, Path};
@@ -38,7 +37,7 @@ pub struct Response {
     block_size: Option<u32>,
     represented_device: Option<u32>,
     flags_linux: Option<u32>,
-    symlink: Option<String>,
+    symlink: Option<PathBuf>,
     pathspec: PathSpec,
     extended_attributes: Vec<rrg_proto::stat_entry::ExtAttr>,
 }
@@ -49,26 +48,8 @@ pub struct Request {
     follow_symlink: Option<bool>,
 }
 
-enum PathType {
-    Unset,
-    OS,
-    TSK,
-    Registry,
-    TMPFile,
-    NTFS,
-}
-
-enum PathOption {
-    CaseInsensitive,
-    CaseLiteral,
-    Regex,
-    Recursive,
-}
-
 struct PathSpec {
     nested_path: Option<Box<PathSpec>>,
-    path_options: Option<PathOption>,
-    pathtype: Option<PathType>,
     path: Option<PathBuf>,
 }
 
@@ -76,8 +57,6 @@ impl Default for PathSpec {
     fn default() -> PathSpec {
         PathSpec {
             nested_path: None,
-            path_options: None,
-            pathtype: None,
             path: None,
         }
     }
@@ -172,48 +151,17 @@ fn form_response(original_path: &PathBuf, destination: &PathBuf)
         flags_linux: get_linux_flags(destination),
 
         symlink: match original_metadata.file_type().is_symlink() {
-            true => Some(fs::read_link(original_path).
-                unwrap().to_str().unwrap().to_string()),
+            true => Some(fs::read_link(original_path).unwrap()),
             false => None
         },
 
         pathspec: PathSpec {
             nested_path: None,
-            path_options: Some(PathOption::CaseLiteral),
-            pathtype: Some(PathType::OS),
             path: Some(original_path.clone()),
         },
 
         extended_attributes: vec![],
     })
-}
-
-fn get_enum_path_options(option: &Option<i32>) -> Option<PathOption> {
-    match option {
-        Some(poption) => match poption {
-            0 => Some(PathOption::CaseInsensitive),
-            1 => Some(PathOption::CaseLiteral),
-            2 => Some(PathOption::Recursive),
-            3 => Some(PathOption::Regex),
-            _ => None
-        },
-        _ => None,
-    }
-}
-
-fn get_enum_path_type(option: &Option<i32>) -> Option<PathType> {
-    match option {
-        Some(ptype) => match ptype {
-            -1 => Some(PathType::Unset),
-            0 => Some(PathType::OS),
-            1 => Some(PathType::TSK),
-            2 => Some(PathType::Registry),
-            3 => Some(PathType::TMPFile),
-            4 => Some(PathType::NTFS),
-            _ => None,
-        },
-        _ => None,
-    }
 }
 
 fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
@@ -263,26 +211,6 @@ fn get_linux_flags(path: &Path) -> Option<u32> {
     }
 }
 
-fn get_int_path_options(pathspec: &PathSpec) -> Option<i32> {
-    match pathspec.path_options {
-        Some(PathOption::CaseInsensitive) => Some(0),
-        Some(PathOption::CaseLiteral) => Some(1),
-        Some(PathOption::Recursive) => Some(2),
-        Some(PathOption::Regex) => Some(3),
-        _ => None
-    }
-}
-
-fn get_int_path_type(pathspec: &PathSpec) -> Option<i32> {
-    match pathspec.pathtype {
-        Some(PathType::OS) => Some(0),
-        Some(PathType::TSK) => Some(1),
-        Some(PathType::Registry) => Some(2),
-        Some(PathType::TMPFile) => Some(3),
-        Some(PathType::NTFS) => Some(4),
-        _ => Some(-1),
-    }
-}
 
 impl From<rrg_proto::PathSpec> for PathSpec {
     fn from(proto: rrg_proto::PathSpec) -> PathSpec {
@@ -292,8 +220,6 @@ impl From<rrg_proto::PathSpec> for PathSpec {
                 None => None,
             },
 
-            path_options: get_enum_path_options(&proto.path_options),
-            pathtype: get_enum_path_type(&proto.pathtype),
             path: get_path(&proto.path),
         }
     }
@@ -338,13 +264,18 @@ impl super::Response for Response {
             st_rdev: self.represented_device,
             st_flags_osx: None,
             st_flags_linux: self.flags_linux,
-            symlink: self.symlink,
+
+            symlink: match self.symlink {
+                Some(path) => Some(path.to_str().unwrap().to_string()),
+                None => None
+            },
+
             registry_type: None,
             resident: None,
 
             pathspec: Some(rrg_proto::PathSpec {
-                path_options: get_int_path_options(&self.pathspec),
-                pathtype: get_int_path_type(&self.pathspec),
+                path_options: Some(Options::CaseLiteral as i32),
+                pathtype: Some(PathType::Os as i32),
                 path: Some(self.pathspec.path.unwrap()
                     .to_str().unwrap().to_string()),
                 ..Default::default()
