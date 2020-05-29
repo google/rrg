@@ -403,58 +403,58 @@ mod tests {
 
     #[test]
     fn test_empty_path_options() {
-        let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(PathType::Os as i32),
-                                Some(String::from("/"))));
+        let request: Result<super::Request, _> = Request::from_proto(
+            fill_proto_request(None, Some(PathType::Os as i32),
+                               Some(String::from("/"))));
         assert!(request.is_ok());
     }
 
     #[test]
     fn test_unsupported_path_options() {
-        let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(Some(Options::Regex as i32),
-                                Some(PathType::Os as i32),
-                                Some(String::from("/"))));
+        let request: Result<super::Request, _> = Request::from_proto(
+            fill_proto_request(Some(Options::Regex as i32),
+                               Some(PathType::Os as i32),
+                               Some(String::from("/"))));
         assert!(request.is_err());
     }
 
     #[test]
     fn test_ok_path_options() {
-        let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(Some(Options::CaseLiteral as i32),
-                                Some(PathType::Os as i32),
-                                Some(String::from("/"))));
+        let request: Result<super::Request, _> = Request::from_proto(
+            fill_proto_request(Some(Options::CaseLiteral as i32),
+                               Some(PathType::Os as i32),
+                               Some(String::from("/"))));
         assert!(request.is_ok());
     }
 
     #[test]
     fn test_unset_pathtype() {
-        let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(PathType::Unset as i32),
-                                Some(String::from("/"))));
+        let request: Result<super::Request, _> = Request::from_proto(
+            fill_proto_request(None, Some(PathType::Unset as i32),
+                               Some(String::from("/"))));
         assert!(request.is_err());
     }
 
     #[test]
     fn test_unsupported_pathtype() {
-        let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(PathType::Tsk as i32),
-                                Some(String::from("/"))));
+        let request: Result<super::Request, _> = Request::from_proto(
+            fill_proto_request(None, Some(PathType::Tsk as i32),
+                               Some(String::from("/"))));
         assert!(request.is_err());
     }
 
 
     #[test]
     fn test_empty_pathtype() {
-        let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, None, Some(String::from("/"))));
+        let request: Result<super::Request, _> = Request::from_proto(
+            fill_proto_request(None, None, Some(String::from("/"))));
         assert!(request.is_err());
     }
 
     #[test]
     fn test_empty_path() {
-        let request: Result<super::Request, _> = Request::from_proto
-            (fill_proto_request(None, Some(PathType::Os as i32), None));
+        let request: Result<super::Request, _> = Request::from_proto(
+            fill_proto_request(None, Some(PathType::Os as i32), None));
         assert!(&request.is_ok());
         assert_eq!(request.unwrap().path, PathBuf::from("/"));
     }
