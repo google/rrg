@@ -12,9 +12,7 @@ use rrg_proto::{GetFileStatRequest, StatEntry};
 
 use ioctls;
 use std::fs::{self, File, Metadata};
-use std::path::PathBuf;
-use std::os::raw::c_long;
-use std::os::unix::io::AsRawFd;
+use std::path::{PathBuf, Path};
 use xattr;
 use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -74,7 +72,6 @@ struct PathSpec {
     path: Option<PathBuf>,
 }
 
-
 impl Default for PathSpec {
     fn default() -> PathSpec {
         PathSpec {
@@ -114,7 +111,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
     Ok(())
 }
 
-fn get_ext_attrs(path: &PathBuf) -> Vec<rrg_proto::stat_entry::ExtAttr> {
+fn get_ext_attrs(path: &Path) -> Vec<rrg_proto::stat_entry::ExtAttr> {
     let xattrs = xattr::list(path).unwrap();
 
     let mut result = vec![];
@@ -247,11 +244,15 @@ fn get_path(path: &Option<String>) -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "linux")]
-fn get_linux_flags(path: &PathBuf) -> Option<u32> {
+fn get_linux_flags(path: &Path) -> Option<u32> {
+    use std::os::raw::c_long;
+    use std::os::unix::io::AsRawFd;
+
     let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => return None,
     };
+
     let mut linux_flags: c_long = 0;
     let linux_flags_ptr: *mut c_long = &mut linux_flags;
     unsafe {
