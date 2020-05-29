@@ -55,6 +55,17 @@ impl Into<DataBlob> for String {
     }
 }
 
+pub fn key_value<K, V>(key: K, value: V) -> KeyValue
+where
+    K: Into<DataBlob>,
+    V: Into<DataBlob>,
+{
+    KeyValue {
+        k: Some(key.into()),
+        v: Some(value.into()),
+    }
+}
+
 /// An error type for failures of converting timestamps to microseconds.
 #[derive(Clone, Debug)]
 pub enum MicrosError {
