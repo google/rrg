@@ -126,6 +126,18 @@ impl KeyValue {
     }
 }
 
+impl std::iter::FromIterator<KeyValue> for AttributedDict {
+
+    fn from_iter<I>(iter: I) -> AttributedDict
+    where
+        I: IntoIterator<Item = KeyValue>,
+    {
+        AttributedDict {
+            dat: iter.into_iter().collect(),
+        }
+    }
+}
+
 impl<K, V> std::iter::FromIterator<(K, V)> for AttributedDict
 where
     K: Into<DataBlob>,
@@ -136,10 +148,7 @@ where
         I: IntoIterator<Item = (K, V)>,
     {
         let pair = |(key, value)| KeyValue::pair(key, value);
-
-        AttributedDict {
-            dat: iter.into_iter().map(pair).collect(),
-        }
+        iter.into_iter().map(pair).collect()
     }
 }
 
