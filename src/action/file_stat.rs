@@ -7,15 +7,15 @@
 //!
 //! A file stat action responses with stat of a given file
 
-use crate::session::{self, Session, Error};
-use rrg_proto::{GetFileStatRequest, StatEntry, path_spec::PathType,
-                path_spec::Options, stat_entry::ExtAttr};
-use ioctls;
 use std::fs::{self, File, Metadata};
-use std::path::{PathBuf, Path};
-use xattr;
-use log::warn;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use log::warn;
+use rrg_proto::{GetFileStatRequest, path_spec::Options, path_spec::PathType,
+                stat_entry::ExtAttr, StatEntry};
+
+use crate::session::{self, Error, Session};
 
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Error {
@@ -120,6 +120,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
 
 #[cfg(target_family = "unix")]
 fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
+    use xattr;
     let xattrs = xattr::list(path).unwrap();
 
     let mut result = vec![];
@@ -329,9 +330,11 @@ impl super::Response for Response {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::action::Request;
     use tempfile::tempdir;
+
+    use crate::action::Request;
+
+    use super::*;
 
     #[test]
     fn test_path_collapse() {
