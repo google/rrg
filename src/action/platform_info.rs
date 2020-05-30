@@ -68,7 +68,6 @@ pub struct Response {
 }
 
 /// Funcion that converts raw C-strings into `String` type
-#[inline]
 fn convert_raw_string(c_string: &[c_char]) -> String {
     unsafe { 
         String::from(CStr::from_ptr(c_string.as_ptr()).to_string_lossy().into_owned())
