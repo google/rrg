@@ -16,7 +16,7 @@ pub struct Response {
 
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     let mut system = sysinfo::System::new();
-    system.refresh_all();
+    system.refresh_system();
     session.reply(Response {
         memory_size: system.get_total_memory() * 1024
     })?;
