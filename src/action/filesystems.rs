@@ -9,7 +9,7 @@
 //! collecting device name, mount point, filesystem type and its options.
 //! Current implementation works only in Linux systems.
 
-use rrg_proto::{Filesystem, KeyValue, AttributedDict};
+use rrg_proto::{Filesystem, KeyValue};
 use crate::session::{self, Session};
 
 use log::error;
