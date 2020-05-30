@@ -3,9 +3,9 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-//! A handler and associated types for the `GetMemorySize` action.
+//! A handler and associated types for the memory size action.
 //!
-//! The `GetMemorySize` action returns the RAM size in bytes.
+//! The `memory size` action returns the RAM size in bytes.
 
 use sysinfo::SystemExt;
 use crate::session::{self, Session};
@@ -23,7 +23,7 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     Ok(())
 }
 
-/// A response type for the `GetMemorySize` action.
+/// A response type for the memory size action.
 impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("ByteSize");

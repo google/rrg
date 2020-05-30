@@ -24,7 +24,7 @@ pub mod interfaces;
 pub mod metadata;
 pub mod startup;
 pub mod network;
-pub mod memory_size;
+pub mod memsize;
 
 use crate::session::{self, Session, Task};
 
@@ -110,7 +110,7 @@ where
         "EnumerateFilesystems" => task.execute(self::filesystems::handle),
 
 
-        "GetMemorySize" => task.execute(self::memory_size::handle),
+        "GetMemorySize" => task.execute(self::memsize::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
