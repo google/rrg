@@ -34,3 +34,19 @@ impl super::Response for Response {
         self.memory_size.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test() {
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let memory_size = session.reply::<Response>(0).memory_size;
+        assert!(memory_size > 0);
+    }
+}
