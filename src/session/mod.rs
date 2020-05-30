@@ -296,12 +296,23 @@ pub mod test {
         where
             R: action::Response + 'static,
         {
-            let reply = match self.replies.get(id) {
+            match self.replies().nth(id) {
                 Some(reply) => reply,
                 None => panic!("no reply #{}", id),
-            };
+            }
+        }
 
-            reply.downcast_ref().expect("unexpected reply type")
+        /// Constructs an iterator over session replies.
+        ///
+        /// The iterator will panic (but not immediately) if some reply has an
+        /// incorrect type.
+        pub fn replies<R>(&self) -> impl Iterator<Item = &R>
+        where
+            R: action::Response + 'static
+        {
+            self.replies.iter().map(|reply| {
+                reply.downcast_ref().expect("unexpected reply type")
+            })
         }
 
         /// Yields the number of responses sent so far to the specified sink.
@@ -323,20 +334,32 @@ pub mod test {
         where
             R: action::Response + 'static,
         {
-            let responses = match self.responses.get(&sink) {
-                Some(responses) => responses,
-                None => panic!("no responses for sink '{:?}'", sink),
-            };
-
-            let response = match responses.get(id) {
+            match self.responses(sink).nth(id) {
                 Some(response) => response,
                 None => panic!("no response #{} for sink '{:?}'", id, sink),
-            };
+            }
+        }
 
-            match response.downcast_ref() {
+        /// Constructs an iterator over session responses for the given sink.
+        ///
+        /// The iterator will panic (but not immediately) if some response has
+        /// an incorrect type.
+        pub fn responses<R>(&self, sink: Sink) -> impl Iterator<Item = &R>
+        where
+            R: action::Response + 'static,
+        {
+            // Since the empty iterator (as defined in the standard library) is
+            // a specific type, it cannot be returned in one branch but not in
+            // another branch.
+            //
+            // Instead, we use the fact that `Option` is an iterator and then we
+            // squash it with `Iterator::flatten`.
+            let responses = self.responses.get(&sink).into_iter().flatten();
+
+            responses.map(move |response| match response.downcast_ref() {
                 Some(response) => response,
                 None => panic!("unexpected response type in sink '{:?}'", sink),
-            }
+            })
         }
     }
 
@@ -460,19 +483,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "no responses")]
-    fn test_fake_response_empty_sink() {
-
-        fn handle<S: Session>(_: &mut S, _: ()) {
-        }
-
-        let mut session = test::Fake::new();
-        handle(&mut session, ());
-
-        session.response::<()>(Sink::STARTUP, 0);
-    }
-
-    #[test]
     #[should_panic(expected = "no response #42")]
     fn test_fake_response_incorrect_response_id() {
 
@@ -501,6 +511,71 @@ mod tests {
         session.response::<()>(Sink::STARTUP, 0);
     }
 
+    #[test]
+    fn test_fake_replies_no_responses() {
+
+        fn handle<S: Session>(_: &mut S, _: ()) {
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        let mut replies = session.replies::<()>();
+        assert_eq!(replies.next(), None);
+    }
+
+    #[test]
+    fn test_fake_replies_multiple_responses() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.reply(StringResponse::from("foo")).unwrap();
+            session.reply(StringResponse::from("bar")).unwrap();
+            session.reply(StringResponse::from("baz")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        let mut replies = session.replies::<StringResponse>();
+        assert_eq!(replies.next().unwrap().0, "foo");
+        assert_eq!(replies.next().unwrap().0, "bar");
+        assert_eq!(replies.next().unwrap().0, "baz");
+        assert_eq!(replies.next(), None);
+    }
+
+    #[test]
+    fn test_fake_responses_no_responses() {
+
+        fn handle<S: Session>(_: &mut S, _: ()) {
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        let mut responses = session.responses::<()>(Sink::STARTUP);
+        assert_eq!(responses.next(), None);
+    }
+
+    #[test]
+    fn test_fake_responses_multiple_responses() {
+
+        fn handle<S: Session>(session: &mut S, _: ()) {
+            session.send(Sink::STARTUP, StringResponse::from("foo")).unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("bar")).unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("baz")).unwrap();
+        }
+
+        let mut session = test::Fake::new();
+        handle(&mut session, ());
+
+        let mut responses = session.responses::<StringResponse>(Sink::STARTUP);
+        assert_eq!(responses.next().unwrap().0, "foo");
+        assert_eq!(responses.next().unwrap().0, "bar");
+        assert_eq!(responses.next().unwrap().0, "baz");
+        assert_eq!(responses.next(), None);
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
     struct StringResponse(String);
 
     impl<S: Into<String>> From<S> for StringResponse {

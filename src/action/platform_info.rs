@@ -3,11 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-extern crate sys_info;
-
-/// Using for `uname` syscall.
-extern crate libc;
-
 use sys_info::{linux_os_release, os_type, hostname};
 use libc::{uname, utsname, c_char};
 use crate::session::{self, Session};
@@ -24,6 +19,7 @@ enum Error {
 }
 
 impl std::error::Error for Error {
+
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use Error::*;
 
@@ -35,6 +31,7 @@ impl std::error::Error for Error {
 }
 
 impl Display for Error {
+
     fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
         use Error::*;
 
@@ -51,6 +48,7 @@ impl Display for Error {
 }
 
 impl From<Error> for session::Error {
+
     fn from(error: Error) -> session::Error {
         session::Error::action(error)
     }
@@ -76,7 +74,7 @@ pub struct Response {
 }
 
 /// Funcion that converts raw C-strings into `String` type
-#[inline(always)]
+#[inline]
 fn convert_raw_string(c_string: &[c_char]) -> String {
     unsafe { 
         String::from(CStr::from_ptr(c_string.as_ptr()).to_string_lossy().into_owned())

@@ -15,9 +15,16 @@
 //! instance of the corresponding request type and send some (zero or more)
 //! instances of the corresponding response type.
 
+pub mod platform_info;
+#[cfg(target_os = "linux")]
+pub mod filesystems;
+
+#[cfg(target_family = "unix")]
+pub mod interfaces;
+
 pub mod metadata;
 pub mod startup;
-pub mod platform_info;
+pub mod network;
 
 use crate::session::{self, Session, Task};
 
@@ -95,6 +102,14 @@ where
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
         "GetPlatformInfo" => task.execute(self::platform_info::handle),
+        "ListNetworkConnections" => task.execute(self::network::handle),
+
+        #[cfg(target_family = "unix")]
+        "EnumerateInterfaces" => task.execute(self::interfaces::handle),
+
+        #[cfg(target_os = "linux")]
+        "EnumerateFilesystems" => task.execute(self::filesystems::handle),
+
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }

@@ -8,6 +8,7 @@ pub mod message;
 pub mod metadata;
 pub mod opts;
 pub mod session;
+pub mod gzchunked;
 
 use crate::opts::{Opts};
 
