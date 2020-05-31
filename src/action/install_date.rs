@@ -1,9 +1,13 @@
-use std::fs;
 use std::time::{SystemTime, Duration};
-use std::path::Path;
 
 use log::error;
 use crate::session::{self, Session};
+
+#[cfg(target_family = "unix")]
+use std::{fs, path::Path};
+
+#[cfg(target_os = "windows")]
+use winreg::RegKey;
 
 struct Response {
     time: Option<SystemTime>,
@@ -39,6 +43,7 @@ impl super::Response for Response {
     }
 }
 
+#[cfg(target_family = "unix")]
 fn get_modified_time<P, It>(iter: It) -> Option<SystemTime>
 where
     P: AsRef<Path>,
@@ -102,8 +107,16 @@ fn get_install_time() -> Option<SystemTime> {
     get_modified_time(CANDIDATES.iter())
 }
 
+#[cfg(target_os = "windows")]
+fn get_install_time() -> Option<SystemTime> {
+    let hklm = RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
+    let install_date = hklm
+        .open_subkey("Software\\Microsoft\\Windows NT\\CurrentVersion").ok()?
+        .get_value::<u32, _>("InstallDate").ok()?;
+    Some(SystemTime::UNIX_EPOCH + Duration::from_secs(install_date.into()))
+}
+
 // TODO : add other ways for GNU/Linux
-// TODO : add Windows
 
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     session.reply(Response {time: get_install_time()})?;
