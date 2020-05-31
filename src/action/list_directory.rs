@@ -9,7 +9,7 @@
 
 use crate::session::{self, Session};
 use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType,
-                path_spec::Options};
+                path_spec::Options, micros};
 
 use std::fs::{self, Metadata};
 use std::path::{PathBuf, Path};
@@ -325,8 +325,16 @@ impl super::Request for Request {
 }
 
 fn get_time_since_unix_epoch(sys_time: &Option<SystemTime>) -> Option<u64> {
-    return sys_time.map_or(None, |time| time.duration_since(UNIX_EPOCH)
-        .map_or(None, |dur| Some(dur.as_secs())));
+    match sys_time {
+        Some(time) => match micros(time.clone()) {
+            Ok(time) => Some(time),
+            Err(error) => {
+                warn!("failed to convert time: {}", error);
+                None
+            }
+        }
+        None => None,
+    }
 }
 
 impl super::Response for Response {
