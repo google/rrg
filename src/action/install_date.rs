@@ -90,7 +90,7 @@ fn get_install_time() -> Option<SystemTime> {
     None
 }
 
-#[cfg(target_os = "osx")]
+#[cfg(target_os = "macos")]
 fn get_install_time() -> Option<SystemTime> {
     // Here, we use the same way as Python version of GRR client does. We just
     // check the modification time for some of the paths
