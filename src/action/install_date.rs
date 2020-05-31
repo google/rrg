@@ -155,7 +155,7 @@ mod e2fs_utils {
                  Filesystem created:    "
             ) + &creation_time + "\n";
             let cursor = Cursor::new(input.as_bytes());
-            let parsed = parse_creation_date_from_dumpe2fs(cursor).unwrap();
+            let parsed = parse_creation_time_from_dumpe2fs(cursor).unwrap();
             let parsed = DateTime::<Utc>::from(parsed);
             assert_eq!(parsed, correct);
         }
