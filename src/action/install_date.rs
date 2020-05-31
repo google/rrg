@@ -1,5 +1,6 @@
 use std::fs;
 use std::time::{SystemTime, Duration};
+use std::path::Path;
 
 use log::error;
 use crate::session::{self, Session};
@@ -38,6 +39,21 @@ impl super::Response for Response {
     }
 }
 
+fn get_modified_time<P, It>(iter: It) -> Option<SystemTime>
+where
+    P: AsRef<Path>,
+    It: Iterator<Item = P>,
+{
+    for path in iter {
+        let time = fs::metadata(path).and_then(|metadata| metadata.modified());
+        if let Ok(time) = time {
+            return Some(time);
+        }
+    }
+
+    None
+}
+
 #[cfg(target_os = "linux")]
 fn get_install_time() -> Option<SystemTime> {
     // First, check the creation time of the root. This method works on
@@ -66,19 +82,28 @@ fn get_install_time() -> Option<SystemTime> {
         "/etc/hostname",
         "/lost+found",
     ];
-    for path in &CANDIDATES {
-        let time = fs::metadata(path).and_then(|metadata| metadata.modified());
-        if let Ok(time) = time {
-            return Some(time);
-        }
+    if let Some(time) = get_modified_time(CANDIDATES.iter()) {
+        return Some(time);
     }
 
     // We tried our best and all the methods have failed, so just give up.
     None
 }
 
+#[cfg(target_os = "osx")]
+fn get_install_time() -> Option<SystemTime> {
+    // Here, we use the same way as Python version of GRR client does. We just
+    // check the modification time for some of the paths
+    static CANDIDATES: [&str; 3] = [
+        "/var/log/CDIS.custom",
+        "/var",
+        "/private",
+    ];
+    get_modified_time(CANDIDATES.iter())
+}
+
 // TODO : add other ways for GNU/Linux
-// TODO : add OS X and Windows
+// TODO : add Windows
 
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     session.reply(Response {time: get_install_time()})?;
@@ -101,6 +126,9 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let response: &Response = session.reply(0);
         let time = response.time.unwrap();
+
+        // TODO: remove
+        eprintln!("Install time: {}", Timestamp::from(time));
 
         // We assume here that the tests won't be run for very old systems
         // installed before 01.01.2000.
