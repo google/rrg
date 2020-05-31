@@ -217,10 +217,12 @@ fn get_symlink(metadata: &Metadata, file_path: &Path) -> Option<PathBuf> {
 
 
 #[cfg(target_os = "linux")]
-fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
+fn fill_response(file_path: &Path) -> Result<Response, Error> {
     use std::os::unix::fs::MetadataExt;
+    let metadata = fs::symlink_metadata(file_path)
+        .map_err(Error::ReadPath)?;
 
-    Response {
+    Ok(Response {
         mode: Some(metadata.mode().into()),
         ino: Some(metadata.ino() as u32),
         dev: Some(metadata.dev() as u32),
@@ -238,7 +240,7 @@ fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
         symlink: get_symlink(&metadata, file_path),
         path: file_path.clone().to_path_buf(),
         crtime: get_creation_time(&metadata),
-    }
+    })
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -262,9 +264,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
     paths.sort();
 
     for file_path in &paths {
-        let metadata = fs::symlink_metadata(file_path)
-            .map_err(Error::ReadPath)?;
-        session.reply(fill_response(&metadata, file_path))?;
+        session.reply(fill_response(file_path)?)?;
     }
 
     Ok(())
