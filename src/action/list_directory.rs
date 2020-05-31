@@ -116,7 +116,7 @@ pub struct Response {
     nlink: Option<u32>,
     uid: Option<u32>,
     gid: Option<u32>,
-    size: Option<u64>,
+    size: u64,
     atime: Option<SystemTime>,
     mtime: Option<SystemTime>,
     ctime: Option<SystemTime>,
@@ -139,7 +139,7 @@ impl Default for Response {
             nlink: None,
             uid: None,
             gid: None,
-            size: None,
+            size: Default::default(),
             atime: None,
             mtime: None,
             ctime: None,
@@ -209,7 +209,7 @@ fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
         nlink: Some(metadata.nlink() as u32),
         uid: Some(metadata.uid() as u32),
         gid: Some(metadata.gid() as u32),
-        size: Some(metadata.size()),
+        size: metadata.size(),
         atime: get_accesses_time(&metadata),
         mtime: get_modification_time(&metadata),
         ctime: get_status_change_time(&metadata),
@@ -334,7 +334,7 @@ impl super::Response for Response {
             st_nlink: self.nlink,
             st_uid: self.uid,
             st_gid: self.gid,
-            st_size: self.size,
+            st_size: Some(self.size),
             st_atime: get_time_since_unix_epoch(&self.atime),
             st_mtime: get_time_since_unix_epoch(&self.mtime),
             st_ctime: get_time_since_unix_epoch(&self.ctime),
@@ -584,7 +584,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
         assert_eq!(file.path, file_path);
-        assert_eq!(file.size.unwrap(), 0);
+        assert_eq!(file.size, 0);
         assert_eq!(file.mode.unwrap(), 0o100664);
         assert_eq!(file.uid.unwrap(), users::get_current_uid());
         assert_eq!(file.gid.unwrap(), users::get_current_uid());
@@ -612,7 +612,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
         assert_eq!(file.path, file_path);
-        assert_eq!(file.size.unwrap(), 0);
+        assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
         assert!(file.crtime.unwrap() <= SystemTime::now());
@@ -659,27 +659,27 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
         assert_eq!(session.reply_count(), 5);
         let file = &session.reply::<Response>(0);
-        assert_eq!(file.size.unwrap(), 0);
+        assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
         assert!(file.crtime.unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(1);
-        assert_eq!(file.size.unwrap(), 0);
+        assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
         assert!(file.crtime.unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(2);
-        assert_eq!(file.size.unwrap(), 0);
+        assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
         assert!(file.crtime.unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(3);
-        assert_eq!(file.size.unwrap(), 0);
+        assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
         assert!(file.crtime.unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(4);
-        assert_eq!(file.size.unwrap(), 0);
+        assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
         assert!(file.crtime.unwrap() <= SystemTime::now());
