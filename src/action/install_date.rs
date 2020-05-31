@@ -60,6 +60,78 @@ where
 }
 
 #[cfg(target_os = "linux")]
+mod e2fs_utils {
+    use std::io::{Cursor, Read, BufRead, BufReader};
+    use std::path::PathBuf;
+    use std::process::{Command, Stdio};
+    use std::time::{self, SystemTime};
+
+    use chrono::prelude::*;
+    use proc_mounts::MountList;
+
+    fn get_root_device() -> Option<PathBuf> {
+        let mount_list = MountList::new().ok()?;
+        mount_list.get_mount_by_dest("/").map(|info| info.source.clone())
+    }
+
+    fn parse_creation_date_from_dumpe2fs<R>(output: R) -> Option<SystemTime>
+    where
+        R: Read,
+    {
+        let reader = BufReader::new(output);
+        for line in reader.lines() {
+            const FIELD_NAME: &'static str = "Filesystem created:";
+            let line = line.ok()?;
+            if !line.starts_with(FIELD_NAME) {
+                continue;
+            }
+            let line = line[FIELD_NAME.len() + 1 ..].trim();
+            let local_time = Local.datetime_from_str(line, "%c").ok()?;
+            let utc_time = local_time.with_timezone(&Utc);
+            let time_since_epoch =
+                (utc_time - Utc.timestamp(0, 0)).to_std().ok()?;
+            return Some(time::UNIX_EPOCH + time_since_epoch);
+        }
+        None
+    }
+
+    pub fn creation_date_from_dumpe2fs() -> Option<SystemTime> {
+        let output = Command::new("dumpe2fs")
+            .arg(get_root_device()?)
+            .stdout(Stdio::piped())
+            .spawn().ok()?
+            .wait_with_output().ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        parse_creation_date_from_dumpe2fs(Cursor::new(output.stdout))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::io::Cursor;
+
+        #[test]
+        fn test_parse_creation_date() {
+            let required = DateTime::parse_from_rfc3339("2020-05-31T19:02:03Z")
+                .unwrap().with_timezone(&Utc);
+            let creation_time = required.with_timezone(&Local)
+                .format("%c").to_string();
+            let input = String::from(
+                "Line 1\n\
+                 Line 2\n\
+                 Filesystem created:    "
+            ) + &creation_time + "\n";
+            let cursor = Cursor::new(input.as_bytes());
+            let parsed = parse_creation_date_from_dumpe2fs(cursor).unwrap();
+            let parsed = DateTime::<Utc>::from(parsed);
+            assert_eq!(parsed, required);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn get_install_time() -> Option<SystemTime> {
     // First, check the creation time of the root. This method works on
     // Linux >= 4.11.
@@ -68,7 +140,12 @@ fn get_install_time() -> Option<SystemTime> {
         return Some(time);
     }
 
-    // TODO : parse dumpe2fs
+    // Then, try to detect filesystem creation date using dumpe2fs. This
+    // works only on ext2/3/4 filesystems.
+    let time = e2fs_utils::creation_date_from_dumpe2fs();
+    if let Some(time) = time {
+        return Some(time);
+    }
 
     // Then, search for various files that were potentially modified only
     // on installation:
@@ -80,7 +157,7 @@ fn get_install_time() -> Option<SystemTime> {
     //   change after installation.
     // * /lost+found: This method was used by Python version on GRR client, so
     //   leaving it here.
-    static CANDIDATES: [&str; 5] = [
+    const CANDIDATES: [&str; 5] = [
         "/var/log/installer/syslog",
         "/var/log/installer/status",
         "/root/install.log",
@@ -99,7 +176,7 @@ fn get_install_time() -> Option<SystemTime> {
 fn get_install_time() -> Option<SystemTime> {
     // Here, we use the same way as Python version of GRR client does. We just
     // check the modification time for some of the paths
-    static CANDIDATES: [&str; 3] = [
+    const CANDIDATES: [&str; 3] = [
         "/var/log/CDIS.custom",
         "/var",
         "/private",
