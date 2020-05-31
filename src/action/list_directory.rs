@@ -17,8 +17,6 @@ use std::fmt::{Display, Formatter};
 use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(target_os = "linux")]
-use std::os::raw::c_long;
 
 #[derive(Debug)]
 enum Error {
@@ -221,8 +219,7 @@ fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
         blocks: Some(metadata.blocks() as u32),
         blksize: Some(metadata.blksize() as u32),
         rdev: Some(metadata.rdev() as u32),
-        flags_linux:
-        Some(get_linux_flags(file_path).unwrap_or_default() as u32),
+        flags_linux: get_linux_flags(file_path),
         symlink: if metadata.file_type().is_symlink() {
             match fs::read_link(file_path) {
                 Ok(file) => Some(file),
@@ -277,7 +274,8 @@ fn get_path(path: &Option<String>) -> PathBuf {
 
 /// Fills st_linux_flags field
 #[cfg(target_os = "linux")]
-fn get_linux_flags(path: &Path) -> Option<c_long> {
+fn get_linux_flags(path: &Path) -> Option<u32> {
+    use std::os::raw::c_long;
     use std::fs::File;
     use std::os::unix::io::AsRawFd;
 
@@ -289,7 +287,7 @@ fn get_linux_flags(path: &Path) -> Option<c_long> {
     let linux_flags_ptr: *mut c_long = &mut linux_flags;
     unsafe {
         match ioctls::fs_ioc_getflags(file.as_raw_fd(), linux_flags_ptr) {
-            0 => Some(linux_flags),
+            0 => Some(linux_flags as u32),
             _ => None,
         }
     }
