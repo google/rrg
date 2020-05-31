@@ -109,6 +109,7 @@ fn get_install_time() -> Option<SystemTime> {
 
 #[cfg(target_os = "windows")]
 fn get_install_time() -> Option<SystemTime> {
+    // Don't use winreg::enums::KEY_WOW64_64KEY since it breaks on Windows 2000
     let hklm = RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
     let install_date = hklm
         .open_subkey("Software\\Microsoft\\Windows NT\\CurrentVersion").ok()?
