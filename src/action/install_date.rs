@@ -116,15 +116,12 @@ fn get_install_time() -> Option<SystemTime> {
     Some(SystemTime::UNIX_EPOCH + Duration::from_secs(install_date.into()))
 }
 
-// TODO : add other ways for GNU/Linux
-
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     session.reply(Response {time: get_install_time()})?;
     Ok(())
 }
 
 // TODO: write docs
-// TODO: add tests
 
 #[cfg(test)]
 mod tests {
@@ -139,9 +136,6 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let response: &Response = session.reply(0);
         let time = response.time.unwrap();
-
-        // TODO: remove
-        eprintln!("Install time: {}", Timestamp::from(time));
 
         // We assume here that the tests won't be run for very old systems
         // installed before 01.01.2000.
