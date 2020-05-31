@@ -76,36 +76,31 @@ fn convert_raw_string(c_string: &[c_char]) -> String {
     } 
 }
 
-/// Function that returns `Response` for unix operating systems
-#[cfg(target_os = "linux")]
+/// Function that returns `Response` for Linux operating systems
 fn get_linux_response<S: Session>(session: &mut S, os_type: String) -> session::Result<()> {
-    let linux_release_info = linux_os_release()
+    #[cfg(target_os = "linux")]
+    {
+        let linux_release_info = linux_os_release()
                 .map_err(Error::CannotGetLinuxRelease)?;
 
-    let mut system_info: utsname;
+        let mut system_info: utsname;
 
-    unsafe {
-        system_info = std::mem::zeroed();
-        uname(&mut system_info);
+        unsafe {
+            system_info = std::mem::zeroed();
+            uname(&mut system_info);
+        }
+
+        session.reply(Response {
+            system: Some(os_type),
+            release_name: linux_release_info.name,
+            version_id: linux_release_info.version_id,
+            machine: Some(convert_raw_string(&system_info.machine)),
+            kernel_release: Some(convert_raw_string(&system_info.release)),
+            fqdn: hostname().ok(),
+            architecture: Some(convert_raw_string(&system_info.machine)),
+            node: Some(convert_raw_string(&system_info.nodename))
+        })?;
     }
-
-    session.reply(Response {
-        system: Some(os_type),
-        release_name: linux_release_info.name,
-        version_id: linux_release_info.version_id,
-        machine: Some(convert_raw_string(&system_info.machine)),
-        kernel_release: Some(convert_raw_string(&system_info.release)),
-        fqdn: hostname().ok(),
-        architecture: Some(convert_raw_string(&system_info.machine)),
-        node: Some(convert_raw_string(&system_info.nodename))
-    })?;
-
-    Ok(())
-}
-
-/// Fake realization for non-linux OS.
-#[cfg(not(target_os = "linux"))]
-fn get_linux_response<S: Session>(_: &mut S, _: String) -> session::Result<()> {
     Ok(())
 }
 
@@ -134,7 +129,7 @@ impl super::Response for Response {
 
     type Proto = rrg_proto::Uname;
 
-    /// Convert PlatformInformation struct to protobuf message Uname
+    /// Convert `Response` struct to protobuf message `Uname`
     fn into_proto(self) -> rrg_proto::Uname {
         Uname {
             system: self.system.clone(),
@@ -169,7 +164,8 @@ mod test {
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
 
-        assert_eq!(platform_info.system.as_ref().unwrap(), sys_info::os_type().as_ref().unwrap());
+        assert_eq!(platform_info.system.as_ref().unwrap(),
+                    sys_info::os_type().as_ref().unwrap());
     }
 
     #[test]
@@ -181,7 +177,8 @@ mod test {
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
 
-        assert_eq!(platform_info.release_name.as_ref().unwrap(), sys_info::linux_os_release().unwrap().name.as_ref().unwrap());
+        assert_eq!(platform_info.release_name.as_ref().unwrap(),
+                    sys_info::linux_os_release().unwrap().name.as_ref().unwrap());
     }
 
     #[test]
@@ -193,7 +190,8 @@ mod test {
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
 
-        assert_eq!(platform_info.version_id.as_ref().unwrap(), sys_info::linux_os_release().unwrap().version_id.as_ref().unwrap());
+        assert_eq!(platform_info.version_id.as_ref().unwrap(), 
+                    sys_info::linux_os_release().unwrap().version_id.as_ref().unwrap());
     }
 
     #[test]
@@ -211,7 +209,8 @@ mod test {
             system_info = std::mem::zeroed();
             uname(&mut system_info);
         }
-        assert_eq!(platform_info.machine.as_ref().unwrap(), &convert_raw_string(&system_info.machine));
+        assert_eq!(platform_info.machine.as_ref().unwrap(), 
+                    &convert_raw_string(&system_info.machine));
     }
 
     #[test]
@@ -228,7 +227,8 @@ mod test {
             system_info = std::mem::zeroed();
             uname(&mut system_info);
         }
-        assert_eq!(platform_info.kernel_release.as_ref().unwrap(), &convert_raw_string(&system_info.release));
+        assert_eq!(platform_info.kernel_release.as_ref().unwrap(),
+                    &convert_raw_string(&system_info.release));
     }
 
     #[test]
@@ -246,7 +246,8 @@ mod test {
             system_info = std::mem::zeroed();
             uname(&mut system_info);
         }
-        assert_eq!(platform_info.architecture.as_ref().unwrap(), &convert_raw_string(&system_info.machine));
+        assert_eq!(platform_info.architecture.as_ref().unwrap(),
+                    &convert_raw_string(&system_info.machine));
     }
 
     #[test]
@@ -264,6 +265,7 @@ mod test {
             system_info = std::mem::zeroed();
             uname(&mut system_info);
         }
-        assert_eq!(platform_info.node.as_ref().unwrap(), &convert_raw_string(&system_info.nodename));
+        assert_eq!(platform_info.node.as_ref().unwrap(),
+                    &convert_raw_string(&system_info.nodename));
     }
 }
