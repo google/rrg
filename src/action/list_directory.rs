@@ -15,8 +15,7 @@ use std::fs::{self, Metadata};
 use std::path::{PathBuf, Path};
 use std::fmt::{Display, Formatter};
 use log::warn;
-use std::time::{SystemTime, UNIX_EPOCH};
-
+use std::time::SystemTime;
 
 /// An error type used when some path can't be read. E.g. listed directory
 /// path or some inner file path.
@@ -203,7 +202,7 @@ fn get_creation_time(metadata: &Metadata) -> Option<SystemTime> {
 /// Returns the last status change time of provided `Metadata`.
 #[cfg(target_os = "linux")]
 fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
-    use std::time::Duration;
+    use std::time::{Duration, UNIX_EPOCH};
     use std::os::unix::fs::MetadataExt;
 
     UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
