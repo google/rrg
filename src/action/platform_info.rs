@@ -4,7 +4,9 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 use sys_info::{linux_os_release, os_type, hostname};
-use libc::{uname, utsname, c_char};
+#[cfg(target_os = "linux")]
+use libc::{uname, utsname};
+use libc::c_char;
 use crate::session::{self, Session};
 use std::ffi::CStr;
 use std::option::Option;
@@ -67,44 +69,56 @@ pub struct Response {
     node: Option<String>
 }
 
-/// Funcion that converts raw C-strings into `String` type
+/// Function that converts raw C-strings into `String` type
 fn convert_raw_string(c_string: &[c_char]) -> String {
     unsafe { 
         String::from(CStr::from_ptr(c_string.as_ptr()).to_string_lossy().into_owned())
     } 
 }
 
+/// Function that returns `Response` for unix operating systems
+#[cfg(target_os = "linux")]
+fn get_linux_response<S: Session>(session: &mut S, os_type: String) -> session::Result<()> {
+    let linux_release_info = linux_os_release()
+                .map_err(Error::CannotGetLinuxRelease)?;
+
+    let mut system_info: utsname;
+
+    unsafe {
+        system_info = std::mem::zeroed();
+        uname(&mut system_info);
+    }
+
+    session.reply(Response {
+        system: Some(os_type),
+        release_name: linux_release_info.name,
+        version_id: linux_release_info.version_id,
+        machine: Some(convert_raw_string(&system_info.machine)),
+        kernel_release: Some(convert_raw_string(&system_info.release)),
+        fqdn: hostname().ok(),
+        architecture: Some(convert_raw_string(&system_info.machine)),
+        node: Some(convert_raw_string(&system_info.nodename))
+    })?;
+
+    Ok(())
+}
+
+/// Fake realization for non-linux OS.
+#[cfg(not(target_os = "linux"))]
+fn get_linux_response<S: Session>(_: &mut S, _: String) -> session::Result<()> {
+    Ok(())
+}
+
 /// Handles requests for `GetPlatformInfo` action.
-/// 
-/// Currently works fine only for Linux OS.
 pub fn handle<S: Session>(session:&mut S, _: ()) -> session::Result<()> {
     let os_type = os_type().map_err(Error::CannotGetOSType)?;
     match os_type.as_str() {
         "Linux" => {
-            let linux_release_info = linux_os_release()
-                                        .map_err(Error::CannotGetLinuxRelease)?;
-
-            let mut system_info: utsname;
-
-            unsafe {
-                system_info = std::mem::zeroed();
-                uname(&mut system_info);
-            }
-
-            session.reply(Response {
-                    system: Some(os_type.to_string()),
-                    release_name: linux_release_info.name,
-                    version_id: linux_release_info.version_id,
-                    machine: Some(convert_raw_string(&system_info.machine)),
-                    kernel_release: Some(convert_raw_string(&system_info.release)),
-                    fqdn: hostname().ok(),
-                    architecture: Some(convert_raw_string(&system_info.machine)),
-                    node: Some(convert_raw_string(&system_info.nodename))
-                })?;
+            get_linux_response(session, os_type)?;
         },
         _ => {
             session.reply(Response {
-                    system: Some(os_type.to_string()),
+                    system: Some(os_type),
                     fqdn: hostname().ok(),
                     ..Default::default() // TODO: Add other systems
                 })?;
