@@ -18,6 +18,8 @@ use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 
+/// An error type used when some path can't be read. E.g. listed directory
+/// path or some inner file path.
 #[derive(Debug)]
 enum Error {
     ReadPath(std::io::Error),
@@ -54,6 +56,7 @@ impl From<Error> for session::Error {
     }
 }
 
+/// Contains information about an `UnsupportedValue` error.
 #[derive(Debug)]
 struct UnsupportedValueError {
     field: String,
@@ -62,7 +65,7 @@ struct UnsupportedValueError {
 
 impl ParseError {
 
-    /// This method constructs a `UnsupportedValue` from provided `field` and
+    /// Constructs an `UnsupportedValue` from provided `field` and
     /// `value`, then  converts it to `ParseError`.
     fn unsupported_value(field: String, value: String) -> session::ParseError {
         session::ParseError::malformed(ParseError::UnsupportedValue(
@@ -73,6 +76,8 @@ impl ParseError {
     }
 }
 
+/// An error type used when the value which comes from protocol buffer is
+/// unsupported by the current client.
 #[derive(Debug)]
 enum ParseError {
     UnsupportedValue(UnsupportedValueError),
@@ -162,6 +167,7 @@ pub struct Request {
     path: PathBuf,
 }
 
+/// Returns the last access time of provided `Metadata`.
 fn get_access_time(metadata: &Metadata) -> Option<SystemTime> {
     match metadata.accessed() {
         Ok(atime) => Some(atime),
@@ -172,6 +178,7 @@ fn get_access_time(metadata: &Metadata) -> Option<SystemTime> {
     }
 }
 
+/// Returns the last modification time of provided `Metadata`.
 fn get_modification_time(metadata: &Metadata) -> Option<SystemTime> {
     match metadata.modified() {
         Ok(mtime) => Some(mtime),
@@ -182,6 +189,7 @@ fn get_modification_time(metadata: &Metadata) -> Option<SystemTime> {
     }
 }
 
+/// Returns the creation time of provided `Metadata`.
 fn get_creation_time(metadata: &Metadata) -> Option<SystemTime> {
     match metadata.created() {
         Ok(creation_time) => Some(creation_time),
@@ -192,6 +200,7 @@ fn get_creation_time(metadata: &Metadata) -> Option<SystemTime> {
     }
 }
 
+/// Returns the last status change time of provided `Metadata`.
 #[cfg(target_os = "linux")]
 fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
     use std::time::Duration;
@@ -200,6 +209,7 @@ fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
     UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
 }
 
+/// Reads a symbolic link, returning the path to the file that the link points to.
 #[cfg(target_os = "linux")]
 fn get_symlink(metadata: &Metadata, file_path: &Path) -> Option<PathBuf> {
     if metadata.file_type().is_symlink() {
@@ -215,7 +225,7 @@ fn get_symlink(metadata: &Metadata, file_path: &Path) -> Option<PathBuf> {
     }
 }
 
-
+/// Fills all fields of `Response` using path to the file.
 #[cfg(target_os = "linux")]
 fn fill_response(file_path: &Path) -> Result<Response, Error> {
     use std::os::unix::fs::MetadataExt;
@@ -270,6 +280,8 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
     Ok(())
 }
 
+/// Constructs `PathBuf` from `String`. If provided string is empty constructs
+/// `PathBuf` from "/".
 fn get_path(path: &Option<String>) -> PathBuf {
     match path {
         Some(path) if !path.is_empty() => PathBuf::from(path),
@@ -277,7 +289,7 @@ fn get_path(path: &Option<String>) -> PathBuf {
     }
 }
 
-/// Fills st_linux_flags field
+/// Fills st_linux_flags field.
 #[cfg(target_os = "linux")]
 fn get_linux_flags(path: &Path) -> Option<u32> {
     use std::os::raw::c_long;
@@ -324,6 +336,7 @@ impl super::Request for Request {
     }
 }
 
+/// Converts idiomatic `SystemTime` to `u64` for the protocol buffer.
 fn get_time_since_unix_epoch(sys_time: &Option<SystemTime>) -> Option<u64> {
     match sys_time {
         Some(time) => match micros(time.clone()) {
@@ -369,7 +382,7 @@ impl super::Response for Response {
                 // Represents `CaseLiteral` path option (other options are not
                 // supported).
                 path_options: Some(Options::CaseLiteral as i32),
-                // Represents `OS` path type (other types are not supported).
+                // Represents OS path type (other types are not supported).
                 pathtype: Some(PathType::Os as i32),
                 path: Some(self.path.to_string_lossy().to_string()),
                 ..Default::default()
@@ -390,7 +403,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     use std::os::unix::fs::MetadataExt;
 
-    /// Fills ListDirRequest with provided fields
+    /// Fills `ListDirRequest` with provided fields.
     fn fill_proto_request(path_options: Option<i32>,
                           pathtype: Option<i32>,
                           path: Option<String>) -> ListDirRequest {
