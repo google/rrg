@@ -16,9 +16,6 @@ use crate::session::{self, Session};
 #[cfg(target_family = "unix")]
 use std::{fs, path::Path};
 
-#[cfg(target_os = "windows")]
-use winreg::RegKey;
-
 /// A response type for the install date action.
 struct Response {
     /// Install date of the operating system, or `None` if the attemps to
@@ -226,6 +223,8 @@ fn get_install_time() -> Option<SystemTime> {
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "windows")]
 fn get_install_time() -> Option<SystemTime> {
+    use winreg::RegKey;
+
     // Don't use winreg::enums::KEY_WOW64_64KEY since it breaks on Windows 2000
     let hklm = RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
     let install_time = hklm
