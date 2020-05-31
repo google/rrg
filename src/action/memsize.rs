@@ -29,7 +29,7 @@ impl super::Response for Response {
     const RDF_NAME: Option<&'static str> = Some("ByteSize");
 
     type Proto = String;
-    //TODO: Fix serialization issues.
+    // TODO: Fix serialization issues.
 
     fn into_proto(self) -> Self::Proto {
         self.memory_size.to_string()
