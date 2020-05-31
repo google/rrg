@@ -265,9 +265,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request)
 
 fn get_path(path: &Option<String>) -> PathBuf {
     match path {
-        Some(string_path) if !string_path.is_empty() => {
-            PathBuf::from(string_path)
-        }
+        Some(path) if !path.is_empty() => PathBuf::from(path),
         _ => PathBuf::from("/"),
     }
 }
