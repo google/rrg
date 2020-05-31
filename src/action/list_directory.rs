@@ -164,7 +164,7 @@ pub struct Request {
     path: PathBuf,
 }
 
-fn get_accesses_time(metadata: &Metadata) -> Option<SystemTime> {
+fn get_access_time(metadata: &Metadata) -> Option<SystemTime> {
     match metadata.accessed() {
         Ok(atime) => Some(atime),
         Err(err) => {
@@ -176,7 +176,7 @@ fn get_accesses_time(metadata: &Metadata) -> Option<SystemTime> {
 
 fn get_modification_time(metadata: &Metadata) -> Option<SystemTime> {
     match metadata.modified() {
-        Ok(atime) => Some(atime),
+        Ok(mtime) => Some(mtime),
         Err(err) => {
             warn!("unable to get last modification time: {}", err);
             None
@@ -186,7 +186,7 @@ fn get_modification_time(metadata: &Metadata) -> Option<SystemTime> {
 
 fn get_creation_time(metadata: &Metadata) -> Option<SystemTime> {
     match metadata.created() {
-        Ok(atime) => Some(atime),
+        Ok(creation_time) => Some(creation_time),
         Err(err) => {
             warn!("unable to get creation time: {}", err);
             None
@@ -215,7 +215,7 @@ fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
         uid: Some(metadata.uid() as u32),
         gid: Some(metadata.gid() as u32),
         size: metadata.size(),
-        atime: get_accesses_time(&metadata),
+        atime: get_access_time(&metadata),
         mtime: get_modification_time(&metadata),
         ctime: get_status_change_time(&metadata),
         blocks: Some(metadata.blocks() as u32),
