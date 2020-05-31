@@ -253,16 +253,20 @@ fn fill_response(file_path: &Path) -> Result<Response, Error> {
     })
 }
 
+/// Fills all fields of `Response` using path to the file.
 #[cfg(not(target_os = "linux"))]
-fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
-    Response {
-        size: Some(metadata.len()),
-        atime: get_accesses_time(&metadata),
+fn fill_response(file_path: &Path) -> Result<Response, Error> {
+    let metadata = fs::symlink_metadata(file_path)
+        .map_err(Error::ReadPath)?;
+
+    Ok(Response {
+        size: metadata.len(),
+        atime: get_access_time(&metadata),
         mtime: get_modification_time(&metadata),
         path: file_path.clone().to_path_buf(),
         crtime: get_creation_time(&metadata),
         ..Default::default()
-    }
+    })
 }
 
 pub fn handle<S: Session>(session: &mut S, request: Request)
