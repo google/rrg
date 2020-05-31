@@ -3,10 +3,10 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-//! A handler and associated types for the install time action.
+//! A handler and associated types for the install date action.
 //!
-//! The install time action uses various heuristics to detect the operating
-//! system install time.
+//! The install date action uses various heuristics to detect the operating
+//! system install date.
 
 use std::time::{SystemTime, Duration};
 
@@ -19,10 +19,10 @@ use std::{fs, path::Path};
 #[cfg(target_os = "windows")]
 use winreg::RegKey;
 
-/// A response type for the install time action.
+/// A response type for the install date action.
 struct Response {
-    /// Install time of the operating system, or `None` if the attemps to
-    /// obtain install time failed.
+    /// Install date of the operating system, or `None` if the attemps to
+    /// obtain install date failed.
     time: Option<SystemTime>,
 }
 
@@ -38,7 +38,7 @@ impl super::Response for Response {
         let time = match self.time {
             Some(time) => time,
             None => {
-                error!("cannot get install time, all methods failed");
+                error!("cannot get install date, all methods failed");
                 std::time::UNIX_EPOCH
             },
         };
@@ -46,7 +46,7 @@ impl super::Response for Response {
             Ok(duration) => duration,
             Err(err) => {
                 error!(
-                    "install time is {} seconds earlier than Unix epoch",
+                    "install date is {} seconds earlier than Unix epoch",
                     err.duration().as_secs()
                 );
                 Duration::from_secs(0)
@@ -162,7 +162,7 @@ mod e2fs_utils {
     }
 }
 
-/// Obtains system installation time using various heuristics.
+/// Obtains system install date using various heuristics.
 ///
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "linux")]
@@ -206,7 +206,7 @@ fn get_install_time() -> Option<SystemTime> {
     None
 }
 
-/// Obtains system installation time using various heuristics.
+/// Obtains system install date using various heuristics.
 ///
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "macos")]
@@ -221,7 +221,7 @@ fn get_install_time() -> Option<SystemTime> {
     get_modified_time(CANDIDATES.iter())
 }
 
-/// Obtains system installation time using various heuristics.
+/// Obtains system install date using various heuristics.
 ///
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "windows")]
@@ -234,7 +234,7 @@ fn get_install_time() -> Option<SystemTime> {
     Some(SystemTime::UNIX_EPOCH + Duration::from_secs(install_time.into()))
 }
 
-/// Handles requests for the install time action.
+/// Handles requests for the install date action.
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     session.reply(Response {time: get_install_time()})?;
     Ok(())
@@ -247,7 +247,7 @@ mod tests {
     use humantime::Timestamp;
 
     #[test]
-    fn test_install_time() {
+    fn test_install_date() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
         assert_eq!(session.reply_count(), 1);
@@ -258,7 +258,7 @@ mod tests {
         // installed before 01.01.2000.
         let lower_limit: Timestamp = "2000-01-01T00:00:00Z".parse().unwrap();
         let lower_limit: SystemTime = lower_limit.into();
-        // The upper limit for the installation is the current time.
+        // The upper limit for the install date is the current date.
         let upper_limit = SystemTime::now();
 
         assert!(time >= lower_limit);
