@@ -5,7 +5,7 @@
 
 //! A handler and associated types for the memory size action.
 //!
-//! The `memory size` action returns the RAM size in bytes.
+//! The memory size action returns the RAM size in bytes.
 
 use sysinfo::SystemExt;
 use crate::session::{self, Session};
@@ -29,6 +29,7 @@ impl super::Response for Response {
     const RDF_NAME: Option<&'static str> = Some("ByteSize");
 
     type Proto = String;
+    //TODO: Fix serialization issues.
 
     fn into_proto(self) -> Self::Proto {
         self.memory_size.to_string()
