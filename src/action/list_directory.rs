@@ -200,6 +200,21 @@ fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
     UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
 }
 
+#[cfg(target_os = "linux")]
+fn get_symlink(metadata: &Metadata, file_path: &Path) -> Option<PathBuf> {
+    if metadata.file_type().is_symlink() {
+        match fs::read_link(file_path) {
+            Ok(file) => Some(file),
+            Err(error) => {
+                warn!("unable to read symlink: {}", error);
+                None
+            }
+        }
+    } else {
+        None
+    }
+}
+
 
 #[cfg(target_os = "linux")]
 fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
@@ -220,17 +235,7 @@ fn fill_response(metadata: &Metadata, file_path: &Path) -> Response {
         blksize: Some(metadata.blksize() as u32),
         rdev: Some(metadata.rdev() as u32),
         flags_linux: get_linux_flags(file_path),
-        symlink: if metadata.file_type().is_symlink() {
-            match fs::read_link(file_path) {
-                Ok(file) => Some(file),
-                Err(error) => {
-                    warn!("unable to read symlink: {}", error);
-                    None
-                }
-            }
-        } else {
-            None
-        },
+        symlink: get_symlink(&metadata, file_path),
         path: file_path.clone().to_path_buf(),
         crtime: get_creation_time(&metadata),
     }
