@@ -701,4 +701,14 @@ mod tests {
         assert!(file.mtime.unwrap() <= SystemTime::now());
         assert!(file.crtime.unwrap() <= SystemTime::now());
     }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_fill_response_nonexistent_path() {
+        let dir = tempdir().unwrap();
+        let nonexistent_path = PathBuf::from(dir.path()
+            .join("nonexistent_subdir"));
+        assert!(!nonexistent_path.exists());
+        assert!(fill_response(&nonexistent_path).is_err());
+    }
 }
