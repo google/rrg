@@ -59,14 +59,14 @@ fn get_install_time() -> Option<SystemTime> {
     //   change after installation.
     // * /lost+found: This method was used by Python version on GRR client, so
     //   leaving it here.
-    let candidates = vec![
+    static CANDIDATES: [&str; 5] = [
         "/var/log/installer/syslog",
         "/var/log/installer/status",
         "/root/install.log",
         "/etc/hostname",
         "/lost+found",
     ];
-    for path in candidates {
+    for path in &CANDIDATES {
         let time = fs::metadata(path).and_then(|metadata| metadata.modified());
         if let Ok(time) = time {
             return Some(time);
