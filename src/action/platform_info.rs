@@ -4,8 +4,6 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 use sys_info::{linux_os_release, os_type, hostname};
-#[cfg(target_os = "linux")]
-use libc::{uname, utsname};
 use libc::c_char;
 use crate::session::{self, Session};
 use std::ffi::CStr;
@@ -76,6 +74,9 @@ fn convert_raw_string(c_string: &[c_char]) -> String {
     } 
 }
 
+#[cfg(target_os = "linux")]
+use libc::{uname, utsname};
+
 /// Function that returns `Response` for Linux operating systems
 fn get_linux_response<S: Session>(session: &mut S, os_type: String) -> session::Result<()> {
     #[cfg(target_os = "linux")]
@@ -142,9 +143,9 @@ impl super::Response for Response {
             node: self.node,
             pep425tag: Some(
                 format!("{}_{}_{}", 
-                    self.system.unwrap_or(String::from("")), 
-                    self.release_name.unwrap_or(String::from("")), 
-                    self.architecture.unwrap_or(String::from(""))
+                    self.system.unwrap_or(String::from("None")), 
+                    self.release_name.unwrap_or(String::from("None")), 
+                    self.architecture.unwrap_or(String::from("None"))
             )),
             ..Default::default()
         }
@@ -164,108 +165,66 @@ mod test {
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
 
-        assert_eq!(platform_info.system.as_ref().unwrap(),
-                    sys_info::os_type().as_ref().unwrap());
+        assert!(platform_info.system.is_some());
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_linux_release() {
+    fn test_release() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
-
-        assert_eq!(platform_info.release_name.as_ref().unwrap(),
-                    sys_info::linux_os_release().unwrap().name.as_ref().unwrap());
+        assert!(platform_info.release_name.is_some());
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_linux_version() {
+    fn test_version() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
-
-        assert_eq!(platform_info.version_id.as_ref().unwrap(), 
-                    sys_info::linux_os_release().unwrap().version_id.as_ref().unwrap());
+        assert!(platform_info.version_id.is_some());
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_linux_machine() {
+    fn test_machine() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
-
-        let mut system_info: utsname;
-
-        unsafe {
-            system_info = std::mem::zeroed();
-            uname(&mut system_info);
-        }
-        assert_eq!(platform_info.machine.as_ref().unwrap(), 
-                    &convert_raw_string(&system_info.machine));
+        assert!(platform_info.machine.is_some());
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_linux_kernel_release() {
+    fn test_kernel_release() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
-        let mut system_info: utsname;
-
-        unsafe {
-            system_info = std::mem::zeroed();
-            uname(&mut system_info);
-        }
-        assert_eq!(platform_info.kernel_release.as_ref().unwrap(),
-                    &convert_raw_string(&system_info.release));
+        assert!(platform_info.kernel_release.is_some());
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_linux_architecture() {
+    fn test_architecture() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
-
-        let mut system_info: utsname;
-
-        unsafe {
-            system_info = std::mem::zeroed();
-            uname(&mut system_info);
-        }
-        assert_eq!(platform_info.architecture.as_ref().unwrap(),
-                    &convert_raw_string(&system_info.machine));
+        assert!(platform_info.architecture.is_some());
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_linux_node() {
+    fn test_node() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
-
-        let mut system_info: utsname;
-
-        unsafe {
-            system_info = std::mem::zeroed();
-            uname(&mut system_info);
-        }
-        assert_eq!(platform_info.node.as_ref().unwrap(),
-                    &convert_raw_string(&system_info.nodename));
+        assert!(platform_info.node.is_some());
     }
 }
