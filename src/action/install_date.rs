@@ -192,8 +192,8 @@ fn get_install_time() -> Option<SystemTime> {
 
     // Then, search for various files that were potentially modified only
     // on installation:
-    // * /var/log/installer/: This works well on Debian-based systems, if the
-    //   installation logs were not purged.
+    // * /var/log/installer/: The location of installation logs for Debian-based
+    //   distributions.
     // * /root/install.log: The location of installation logs for RHEL-based
     //   distributions.
     // * /etc/hostname: In most cases, we may assume that the hostname didn't
