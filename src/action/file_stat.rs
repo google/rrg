@@ -25,19 +25,19 @@ impl From<std::io::Error> for Error {
 
 #[derive(Debug)]
 pub struct Response {
-    mode: Option<u64>,
-    inode: Option<u32>,
-    device: Option<u32>,
-    hard_links: Option<u32>,
-    uid: Option<u32>,
-    gid: Option<u32>,
-    size: Option<u64>,
+    mode: u64,
+    inode: u32,
+    device: u32,
+    hard_links: u32,
+    uid: u32,
+    gid: u32,
+    size: u64,
     access_time: Option<SystemTime>,
     modification_time: Option<SystemTime>,
     status_change_time: Option<SystemTime>,
-    blocks_number: Option<u32>,
-    block_size: Option<u32>,
-    represented_device: Option<u32>,
+    blocks_number: u32,
+    block_size: u32,
+    represented_device: u32,
     flags_linux: Option<u32>,
     symlink: Option<PathBuf>,
     pathspec: PathSpec,
@@ -62,30 +62,6 @@ impl Default for PathSpec {
         PathSpec {
             nested_path: None,
             path: None,
-        }
-    }
-}
-
-impl Default for Response {
-    fn default() -> Response {
-        Response {
-            mode: None,
-            inode: None,
-            device: None,
-            hard_links: None,
-            uid: None,
-            gid: None,
-            size: None,
-            access_time: None,
-            modification_time: None,
-            status_change_time: None,
-            blocks_number: None,
-            block_size: None,
-            represented_device: None,
-            flags_linux: None,
-            symlink: None,
-            pathspec: PathSpec::default(),
-            extended_attributes: vec![],
         }
     }
 }
@@ -159,19 +135,19 @@ fn form_response(original_path: &PathBuf, destination: &PathBuf)
     let original_metadata = fs::symlink_metadata(original_path)?;
 
     Ok(Response {
-        mode: Some(metadata.mode() as u64),
-        inode: Some(metadata.ino() as u32),
-        device: Some(metadata.dev() as u32),
-        hard_links: Some(metadata.nlink() as u32),
-        uid: Some(metadata.uid() as u32),
-        gid: Some(metadata.gid() as u32),
-        size: Some(metadata.size() as u64),
+        mode: metadata.mode() as u64,
+        inode: metadata.ino() as u32,
+        device: metadata.dev() as u32,
+        hard_links: metadata.nlink() as u32,
+        uid: metadata.uid() as u32,
+        gid: metadata.gid() as u32,
+        size: metadata.size() as u64,
         access_time: get_time_option(metadata.accessed()),
         modification_time: get_time_option(metadata.modified()),
         status_change_time: get_status_change_time(&metadata),
-        blocks_number: Some(metadata.blocks() as u32),
-        block_size: Some(metadata.blksize() as u32),
-        represented_device: Some(metadata.rdev() as u32),
+        blocks_number: metadata.blocks() as u32,
+        block_size: metadata.blksize() as u32,
+        represented_device: metadata.rdev() as u32,
         flags_linux: get_linux_flags(destination),
 
         symlink: match original_metadata.file_type().is_symlink() {
@@ -278,19 +254,19 @@ impl super::Response for Response {
 
     fn into_proto(self) -> Self::Proto {
         StatEntry {
-            st_mode: self.mode,
-            st_ino: self.inode,
-            st_dev: self.device,
-            st_nlink: self.hard_links,
-            st_uid: self.uid,
-            st_gid: self.gid,
-            st_size: self.size,
+            st_mode: Some(self.mode),
+            st_ino: Some(self.inode),
+            st_dev: Some(self.device),
+            st_nlink: Some(self.hard_links),
+            st_uid: Some(self.uid),
+            st_gid: Some(self.gid),
+            st_size: Some(self.size),
             st_atime: get_time_since_unix_epoch(&self.access_time),
             st_mtime: get_time_since_unix_epoch(&self.modification_time),
             st_ctime: get_time_since_unix_epoch(&self.status_change_time),
-            st_blocks: self.blocks_number,
-            st_blksize: self.block_size,
-            st_rdev: self.represented_device,
+            st_blocks: Some(self.blocks_number),
+            st_blksize: Some(self.block_size),
+            st_rdev: Some(self.represented_device),
             st_flags_osx: None,
             st_flags_linux: self.flags_linux,
 
