@@ -46,9 +46,9 @@ pub struct Response {
 
 #[derive(Debug)]
 pub struct Request {
-    pathspec: Option<PathSpec>,
-    collect_ext_attrs: Option<bool>,
-    follow_symlink: Option<bool>,
+    pathspec: PathSpec,
+    collect_ext_attrs: bool,
+    follow_symlink: bool,
 }
 
 #[derive(Debug)]
@@ -91,26 +91,16 @@ impl Default for Response {
 }
 
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let original_path = collapse_pathspec(request.pathspec.unwrap());
+    let original_path = collapse_pathspec(request.pathspec);
 
-    let follow_symlink = match request.follow_symlink {
-        Some(s) => s,
-        None => false,
-    };
-
-    let collect_ext_attrs = match request.collect_ext_attrs {
-        Some(s) => s,
-        None => false,
-    };
-
-    let destination = if follow_symlink {
+    let destination = if request.follow_symlink {
         fs::canonicalize(&original_path)?
     } else {
         original_path.clone()
     };
 
     let mut response = form_response(&original_path, &destination)?;
-    if collect_ext_attrs {
+    if request.collect_ext_attrs {
         response.extended_attributes = get_ext_attrs(&destination);
     }
 
@@ -270,9 +260,9 @@ impl super::Request for Request {
     fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError> {
         match proto.pathspec {
             Some(proto_pathspec) => Ok(Request {
-                pathspec: Some(PathSpec::from(proto_pathspec)),
-                collect_ext_attrs: proto.collect_ext_attrs,
-                follow_symlink: proto.follow_symlink,
+                pathspec: PathSpec::from(proto_pathspec),
+                collect_ext_attrs: proto.collect_ext_attrs.unwrap_or(false),
+                follow_symlink: proto.follow_symlink.unwrap_or(false),
             }),
 
             None => Err(session::ParseError::from(
