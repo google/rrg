@@ -18,5 +18,5 @@ before_install:
 
 script:
   - cargo build --verbose
-  - cargo test --verbose
+  - cargo test --verbose --package rrg-proto --package rrg
   - cargo run -- --version
