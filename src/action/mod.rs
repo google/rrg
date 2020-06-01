@@ -23,7 +23,7 @@ pub mod interfaces;
 
 pub mod metadata;
 pub mod startup;
-pub mod list_directory;
+pub mod listdir;
 pub mod network;
 
 use crate::session::{self, Session, Task};
@@ -101,7 +101,7 @@ where
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
-        "ListDirectory" => task.execute(self::list_directory::handle),
+        "ListDirectory" => task.execute(self::listdir::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
 
         #[cfg(target_family = "unix")]
