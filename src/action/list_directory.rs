@@ -191,7 +191,7 @@ fn get_modification_time(metadata: &Metadata) -> Option<SystemTime> {
 /// Returns the creation time of provided `Metadata`.
 fn get_creation_time(metadata: &Metadata) -> Option<SystemTime> {
     match metadata.created() {
-        Ok(creation_time) => Some(creation_time),
+        Ok(crtime) => Some(crtime),
         Err(err) => {
             warn!("unable to get creation time: {}", err);
             None
