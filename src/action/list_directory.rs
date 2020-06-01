@@ -211,16 +211,14 @@ fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
 /// Reads a symbolic link, returning the path to the file that the link points to.
 #[cfg(target_os = "linux")]
 fn get_symlink(metadata: &Metadata, file_path: &Path) -> Option<PathBuf> {
-    if metadata.file_type().is_symlink() {
-        match fs::read_link(file_path) {
-            Ok(file) => Some(file),
-            Err(error) => {
-                warn!("unable to read symlink: {}", error);
-                None
-            }
+    if !metadata.file_type().is_symlink() { return None; }
+
+    match fs::read_link(file_path) {
+        Ok(file) => Some(file),
+        Err(error) => {
+            warn!("unable to read symlink: {}", error);
+            None
         }
-    } else {
-        None
     }
 }
 
