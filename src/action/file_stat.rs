@@ -204,7 +204,10 @@ fn get_linux_flags(path: &Path) -> Option<u32> {
 
     let file = match File::open(path) {
         Ok(file) => file,
-        Err(_) => return None,
+        Err(err) => {
+            warn!("Unable to get linux flags: {}", err);
+            return None;
+        }
     };
 
     let mut linux_flags: c_long = 0;
