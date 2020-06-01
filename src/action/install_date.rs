@@ -166,7 +166,12 @@ mod e2fs_utils {
     }
 }
 
-/// Obtains system install date using various heuristics.
+/// Obtains system install date (Linux version).
+///
+/// To obtain install date, it first checks the creation time of the root
+/// filesystem. Then, it searches for the installation logs and gets their
+/// modification date. It also checks for other files that were probably
+/// unchanged from the installation.
 ///
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "linux")]
@@ -210,7 +215,10 @@ fn get_install_time() -> Option<SystemTime> {
     None
 }
 
-/// Obtains system install date using various heuristics.
+/// Obtains system install date (OS X version).
+///
+/// This function searches for some files that were probably unchanged since
+/// the installation.
 ///
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "macos")]
@@ -225,7 +233,10 @@ fn get_install_time() -> Option<SystemTime> {
     get_modified_time(CANDIDATES.iter())
 }
 
-/// Obtains system install date using various heuristics.
+/// Obtains system install date (Windows version).
+///
+/// To obtain install date, this function searches the corresponding value in
+/// Windows registry.
 ///
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "windows")]
