@@ -25,8 +25,8 @@ struct Response {
 
 impl super::Response for Response {
 
-    // TODO: change to RDFDatetime when the client will be capable to send
-    // "raw" strings without wrapping them into protobuf
+    // TODO: Change to RDFDatetime when the client will be capable to send
+    // "raw" strings without wrapping them into protobuf.
     const RDF_NAME: Option<&'static str> = Some("DataBlob");
 
     type Proto = u64;
@@ -53,25 +53,18 @@ impl super::Response for Response {
     }
 }
 
-/// Iterates over files given it `iter`, checking their modification times.
+/// Iterates over files given in `iter`, checking their modification times.
 ///
 /// If the function cannot get modification time from all the files (e. g.
 /// they all don't exist), the return value is `None`. Otherwise, the
 /// modification time of the first file is returned.
 #[cfg(target_family = "unix")]
-fn get_modified_time<P, It>(iter: It) -> Option<SystemTime>
+fn get_modified_time<P, I>(iter: I) -> Option<SystemTime>
 where
     P: AsRef<Path>,
-    It: Iterator<Item = P>,
+    I: Iterator<Item = P>,
 {
-    for path in iter {
-        let time = fs::metadata(path).and_then(|metadata| metadata.modified());
-        if let Ok(time) = time {
-            return Some(time);
-        }
-    }
-
-    None
+    iter.filter_map(|path| fs::metadata(path).ok()?.modified().ok()).next()
 }
 
 /// Contains utilities to work with ext2/3/4 filesystems. Currently, it is used
@@ -176,29 +169,30 @@ mod e2fs_utils {
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "linux")]
 fn get_install_time() -> Option<SystemTime> {
-    // First, check the creation time of the root. This method works on
-    // Linux >= 4.11.
-    let time = fs::metadata("/").and_then(|metadata| metadata.created());
-    if let Ok(time) = time {
-        return Some(time);
+    // First, check the creation time of the root. Rust implementation of
+    // `Metadata::created()` on Linux utilizes `statx` syscall, so this
+    // method will work only on kernels >= 4.11.
+    let time = fs::metadata("/").and_then(|metadata| metadata.created()).ok();
+    if time.is_some() {
+        return time;
     }
 
     // Then, try to detect filesystem creation time using dumpe2fs. This
     // works only on ext2/3/4 filesystems.
     let time = e2fs_utils::creation_time_from_dumpe2fs();
-    if let Some(time) = time {
-        return Some(time);
+    if time.is_some() {
+        return time;
     }
 
     // Then, search for various files that were potentially modified only
     // on installation:
-    // * /var/log/installer/: The location of installation logs for Debian-based
+    // * `/var/log/installer/`: The location of installation logs for
+    //   Debian-based distributions.
+    // * `/root/install.log`: The location of installation logs for RHEL-based
     //   distributions.
-    // * /root/install.log: The location of installation logs for RHEL-based
-    //   distributions.
-    // * /etc/hostname: In most cases, we may assume that the hostname didn't
+    // * `/etc/hostname`: In most cases, we may assume that the hostname didn't
     //   change after installation.
-    // * /lost+found: This method was used by Python version on GRR client, so
+    // * `/lost+found`: This method was used by Python version on GRR client, so
     //   leaving it here.
     const CANDIDATES: [&str; 5] = [
         "/var/log/installer/syslog",
@@ -207,8 +201,9 @@ fn get_install_time() -> Option<SystemTime> {
         "/etc/hostname",
         "/lost+found",
     ];
-    if let Some(time) = get_modified_time(CANDIDATES.iter()) {
-        return Some(time);
+    let time = get_modified_time(CANDIDATES.iter());
+    if time.is_some() {
+        return time;
     }
 
     // We tried our best and all the methods have failed, so just give up.
@@ -224,7 +219,7 @@ fn get_install_time() -> Option<SystemTime> {
 #[cfg(target_os = "macos")]
 fn get_install_time() -> Option<SystemTime> {
     // Here, we use the same way as Python version of GRR client does. We just
-    // check the modification time for some of the paths
+    // check the modification time for some of the paths.
     const CANDIDATES: [&str; 3] = [
         "/var/log/CDIS.custom",
         "/var",
@@ -243,7 +238,7 @@ fn get_install_time() -> Option<SystemTime> {
 fn get_install_time() -> Option<SystemTime> {
     use winreg::RegKey;
 
-    // Don't use winreg::enums::KEY_WOW64_64KEY since it breaks on Windows 2000
+    // Don't use winreg::enums::KEY_WOW64_64KEY since it breaks on Windows 2000.
     let hklm = RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
     let install_time = hklm
         .open_subkey("Software\\Microsoft\\Windows NT\\CurrentVersion").ok()?
