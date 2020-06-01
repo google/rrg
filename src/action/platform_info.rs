@@ -169,7 +169,8 @@ mod test {
     }
 
     #[test]
-    fn test_release() {
+    #[cfg(target_os = "linux")]
+    fn test_linux_release() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
@@ -179,7 +180,8 @@ mod test {
     }
 
     #[test]
-    fn test_version() {
+    #[cfg(target_os = "linux")]
+    fn test_linux_version() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
@@ -189,7 +191,8 @@ mod test {
     }
 
     #[test]
-    fn test_machine() {
+    #[cfg(target_os = "linux")]
+    fn test_linux_machine() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
@@ -199,7 +202,8 @@ mod test {
     }
 
     #[test]
-    fn test_kernel_release() {
+    #[cfg(target_os = "linux")]
+    fn test_linux_kernel_release() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
@@ -209,7 +213,8 @@ mod test {
     }
 
     #[test]
-    fn test_architecture() {
+    #[cfg(target_os = "linux")]
+    fn test_linux_architecture() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
@@ -219,7 +224,8 @@ mod test {
     }
 
     #[test]
-    fn test_node() {
+    #[cfg(target_os = "linux")]
+    fn test_linux_node() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
 
