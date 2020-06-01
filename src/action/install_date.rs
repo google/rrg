@@ -89,10 +89,17 @@ mod e2fs_utils {
     /// Returns the file name of the device that is mounted as root file
     /// system.
     ///
-    /// This function returns `None` in case of errors.
+    /// This function returns `None` in case of errors or when the root
+    /// filesystem doesn't have an associated device file (e.g. we created
+    /// a tmpfs filesystem and chrooted into it).
     fn get_root_device() -> Option<PathBuf> {
         let mount_list = MountList::new().ok()?;
-        mount_list.get_mount_by_dest("/").map(|info| info.source.clone())
+        let device = mount_list.get_mount_by_dest("/")?.source.clone();
+        if !device.starts_with("/") {
+            // Not a device file name.
+            return None;
+        }
+        Some(device)
     }
 
     /// Parses `dumpe2fs` output to get the filesystem creation time.
