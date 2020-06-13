@@ -67,6 +67,10 @@ fn bytes_from_os_str(s: &OsStr) -> std::io::Result<Vec<u8>> {
             use std::os::unix::ffi::OsStrExt;
             Ok(Vec::from(s.as_bytes()))
         } else if #[cfg(target_family = "windows")] {
+            // Using UTF16LE because Windows *seems* to be using only little-endian version.
+            // If RRG starts supporting Windows for real in future, it would be better to
+            // review this piece to ensure that it uses the same path encoding as GRR server.
+
             use std::os::windows::ffi::OsStrExt;
             use byteorder::{LittleEndian, WriteBytesExt};
             s.encode_wide().try_fold(Vec::new(), |mut stream, ch| {
@@ -85,6 +89,10 @@ fn os_string_from_bytes(bytes: &[u8]) -> OsString {
             use std::os::unix::ffi::OsStringExt;
             OsString::from_vec(Vec::from(bytes))
         } else if #[cfg(target_family = "windows")] {
+            // Using UTF16LE because Windows *seems* to be using only little-endian version.
+            // If RRG starts supporting Windows for real in future, it would be better to
+            // review this piece to ensure that it uses the same path encoding as GRR server.
+
             use std::os::windows::ffi::OsStringExt;
             use byteorder::{LittleEndian, ReadBytesExt};
             let mut wchars = Vec::new();
