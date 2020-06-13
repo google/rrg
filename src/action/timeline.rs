@@ -7,7 +7,7 @@
 
 use std::ffi::{OsStr, OsString};
 use std::fs::{symlink_metadata, read_dir, Metadata};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::result::Result;
 use std::vec::Vec;
 
@@ -100,7 +100,7 @@ fn os_string_from_bytes(bytes: &[u8]) -> OsString {
 }
 
 /// Encodes filesystem metadata into timeline entry proto.
-fn entry_from_metadata(metadata: &Metadata, path: &PathBuf) -> std::io::Result<TimelineEntry>
+fn entry_from_metadata(metadata: &Metadata, path: &Path) -> std::io::Result<TimelineEntry>
 {
     cfg_if! {
         if #[cfg(target_family = "unix")] {
@@ -175,11 +175,11 @@ impl RecurseState {
 
     /// Recursively traverses path specified as root, sends gzchunked stat data to session in
     /// process.
-    fn recurse<S>(&mut self, root: &PathBuf, session: &mut S) -> session::Result<()>
+    fn recurse<S>(&mut self, root: &Path, session: &mut S) -> session::Result<()>
     where
         S: Session,
     {
-        let mut path = root.clone();
+        let mut path = PathBuf::from(root);
         let mut dir_iter_stack = Vec::new();
         loop {
             let metadata = match symlink_metadata(&path) {
@@ -285,8 +285,7 @@ mod tests {
     use crate::gzchunked::GzChunkedDecoder;
 
     fn entry_for_path(path: &Path) -> TimelineEntry {
-        let metadata = symlink_metadata(path).unwrap();
-        entry_from_metadata(&metadata, &PathBuf::from(path)).unwrap()
+        entry_from_metadata(&symlink_metadata(path).unwrap(), path).unwrap()
     }
 
     fn entries_from_session_response(session: &session::test::Fake) -> Vec<TimelineEntry> {
