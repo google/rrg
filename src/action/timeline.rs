@@ -288,13 +288,8 @@ mod tests {
 
     use super::*;
     use std::fs::{hard_link, create_dir, write};
-    use std::path::Path;
     use tempfile::tempdir;
     use crate::gzchunked::GzChunkedDecoder;
-
-    fn entry_for_path(path: &Path) -> TimelineEntry {
-        entry_from_metadata(&symlink_metadata(path).unwrap(), path).unwrap()
-    }
 
     fn entries_from_session_response(session: &session::test::Fake) -> Vec<TimelineEntry> {
         assert_eq!(session.reply_count(), 1);
@@ -325,21 +320,6 @@ mod tests {
         ret
     }
 
-    fn diff_entries<'a>(left: &'a mut Vec<TimelineEntry>, right: &'a mut Vec<TimelineEntry>) -> Vec<diff::Result<&'a TimelineEntry>> {
-        left.sort_by(|a, b| a.path.cmp(&b.path));
-        right.sort_by(|a, b| a.path.cmp(&b.path));
-
-        diff::slice(left.as_slice(), right.as_slice())
-            .into_iter()
-            .filter(|diff_result|
-                    if let diff::Result::Both(_, _) = diff_result {
-                        false
-                    } else {
-                        true
-                    })
-            .collect()
-    }
-
     #[test]
     fn test_nonexistent_path() {
         let dir = tempdir().unwrap();
@@ -351,25 +331,20 @@ mod tests {
 
     #[test]
     fn test_one_empty_dir() {
-        let mut expected_entries = Vec::new();
-
         let dir = tempdir().unwrap();
-        expected_entries.push(entry_for_path(dir.path()));
-
-        expected_entries.sort_by(|a, b| a.path.cmp(&b.path));
 
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, Some(bytes_from_os_str(dir.path().as_os_str()).unwrap()));
     }
 
     #[cfg_attr(target_family = "windows", ignore)]
     #[test]
     fn test_file_hardlink() {
-        let mut expected_entries = Vec::new();
-
         let dir = tempdir().unwrap();
 
         let test1_path = dir.path().join("test1.txt");
@@ -378,26 +353,20 @@ mod tests {
         let test2_path = dir.path().join("test2.txt");
         hard_link(&test1_path, &test2_path).unwrap();
 
-        let test1_entry = entry_for_path(&test1_path);
-        let test2_entry = entry_for_path(&test2_path);
-        assert_eq!(test1_entry.ino, test2_entry.ino);
-
-        expected_entries.push(entry_for_path(dir.path()));
-        expected_entries.push(test1_entry);
-        expected_entries.push(test2_entry);
-
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        assert_eq!(entries.len(), 3);
+        assert_ne!(entries[0].ino, entries[1].ino);
+        assert_eq!(entries[1].ino, entries[2].ino);
     }
 
     #[cfg(target_family = "unix")]
     #[test]
     fn test_file_symlink() {
         use std::os::unix::fs::symlink;
-        let mut expected_entries = Vec::new();
 
         let dir = tempdir().unwrap();
 
@@ -407,26 +376,23 @@ mod tests {
         let test2_path = dir.path().join("test2.txt");
         symlink(&test1_path, &test2_path).unwrap();
 
-        let test1_entry = entry_for_path(&test1_path);
-        let test2_entry = entry_for_path(&test2_path);
-        assert_ne!(test1_entry.ino, test2_entry.ino);
-
-        expected_entries.push(entry_for_path(dir.path()));
-        expected_entries.push(test1_entry);
-        expected_entries.push(test2_entry);
-
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        assert_eq!(entries.len(), 3);
+        assert_ne!(entries[0].ino.unwrap(), entries[1].ino.unwrap());
+        assert_ne!(entries[1].ino.unwrap(), entries[2].ino.unwrap());
+        assert_eq!(entries[1].size, Some(3));
+        // Drop mode bits because symlinks have actual modes on some unix systems.
+        assert_eq!(entries[2].mode.unwrap() & 0o120000, 0o120000);
     }
 
     #[cfg(target_family = "unix")]
     #[test]
     fn test_symlink_loops() {
         use std::os::unix::fs::symlink;
-        let mut expected_entries = Vec::new();
 
         let dir = tempdir().unwrap();
 
@@ -439,67 +405,48 @@ mod tests {
         create_dir(&test3_path).unwrap();
         symlink("../test3", &test4_path).unwrap();
 
-        let test1_entry = entry_for_path(&test1_path);
-        let test2_entry = entry_for_path(&test2_path);
-        let test3_entry = entry_for_path(&test3_path);
-        let test4_entry = entry_for_path(&test4_path);
-
-        expected_entries.push(entry_for_path(dir.path()));
-        expected_entries.push(test1_entry);
-        expected_entries.push(test2_entry);
-        expected_entries.push(test3_entry);
-        expected_entries.push(test4_entry);
-
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        assert_eq!(entries.len(), 5);
+        assert_eq!(entries[1].path, Some(bytes_from_os_str(test1_path.as_os_str()).unwrap()));
+        assert_eq!(entries[2].path, Some(bytes_from_os_str(test2_path.as_os_str()).unwrap()));
+        assert_eq!(entries[3].path, Some(bytes_from_os_str(test3_path.as_os_str()).unwrap()));
+        assert_eq!(entries[4].path, Some(bytes_from_os_str(test4_path.as_os_str()).unwrap()));
     }
 
     #[test]
     fn test_weird_unicode_names() {
-        let mut expected_entries = Vec::new();
-
         let dir = tempdir().unwrap();
 
-        let path = dir.path().join("with spaces");
-        write(&path, "foo").unwrap();
-        let entry = entry_for_path(&path);
-        let entry_path = PathBuf::from(os_string_from_bytes(entry.path.as_ref().unwrap().as_slice()));
-        assert_eq!(entry_path.file_name().unwrap().to_str().unwrap(), "with spaces");
-        expected_entries.push(entry);
+        let path1 = dir.path().join("1with spaces");
+        write(&path1, "foo").unwrap();
 
-        let path = dir.path().join("'quotes'");
-        write(&path, "foo").unwrap();
-        let entry = entry_for_path(&path);
-        let entry_path = PathBuf::from(os_string_from_bytes(entry.path.as_ref().unwrap().as_slice()));
-        assert_eq!(entry_path.file_name().unwrap().to_str().unwrap(), "'quotes'");
-        expected_entries.push(entry);
+        let path2 = dir.path().join("2'quotes'");
+        write(&path2, "foo").unwrap();
 
-        let path = dir.path().join("кириллица");
-        write(&path, "foo").unwrap();
-        let entry = entry_for_path(&path);
-        let entry_path = PathBuf::from(os_string_from_bytes(entry.path.as_ref().unwrap().as_slice()));
-        assert_eq!(entry_path.file_name().unwrap().to_str().unwrap(), "кириллица");
-        expected_entries.push(entry);
-
-        expected_entries.push(entry_for_path(dir.path()));
+        let path3 = dir.path().join("3кириллица");
+        write(&path3, "foo").unwrap();
 
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        assert_eq!(entries.len(), 4);
+        assert_eq!(entries[1].path, Some(bytes_from_os_str(path1.as_os_str()).unwrap()));
+        assert_eq!(entries[2].path, Some(bytes_from_os_str(path2.as_os_str()).unwrap()));
+        assert_eq!(entries[3].path, Some(bytes_from_os_str(path3.as_os_str()).unwrap()));
     }
 
     // TODO: Debug this test on MacOS.
     #[cfg_attr(target_os = "macos", ignore)]
     #[test]
     fn test_deep_dirs() {
-        const MAX_DIR_COUNT: u32 = 512;
+        const MAX_DIR_COUNT: usize = 512;
         let mut dir_count = 0;
-        let mut expected_entries = Vec::new();
 
         let dir = tempdir().unwrap();
 
@@ -514,19 +461,11 @@ mod tests {
         // Let's suppose we can create at least this much.
         assert!(dir_count >= 64);
 
-        path = PathBuf::from(dir.path());
-        expected_entries.push(entry_for_path(dir.path()));
-        for _ in 0..dir_count {
-            path.push("d");
-            let entry = entry_for_path(&path);
-            expected_entries.push(entry);
-        }
-
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
-        let mut entries = entries_from_session_response(&session);
-        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
+        let entries = entries_from_session_response(&session);
+        assert_eq!(entries.len(), dir_count + 1);
     }
 
     #[cfg(target_family = "unix")]
@@ -534,7 +473,6 @@ mod tests {
     fn test_mode_and_permissions() {
         use std::os::unix::fs::{symlink, PermissionsExt};
         use std::fs::{set_permissions, Permissions};
-        let mut expected_entries = Vec::new();
 
         let dir = tempdir().unwrap();
 
@@ -550,23 +488,15 @@ mod tests {
         set_permissions(&unavailable_dir_path, Permissions::from_mode(0o000)).unwrap();
         set_permissions(&readonly_path, Permissions::from_mode(0o444)).unwrap();
 
-        let unavailable_dir_entry = entry_for_path(&unavailable_dir_path);
-        let readonly_entry = entry_for_path(&readonly_path);
-        let symlink_entry = entry_for_path(&symlink_path);
-        assert_eq!(unavailable_dir_entry.mode.unwrap(), 0o040000);
-        assert_eq!(readonly_entry.mode.unwrap(), 0o100444);
-        // Drop mode bits because symlinks have actual modes on some unix systems.
-        assert_eq!(symlink_entry.mode.unwrap() & 0o120000, 0o120000);
-
-        expected_entries.push(entry_for_path(dir.path()));
-        expected_entries.push(unavailable_dir_entry);
-        expected_entries.push(readonly_entry);
-        expected_entries.push(symlink_entry);
-
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
         let mut entries = entries_from_session_response(&session);
-        assert_eq!(diff_entries(&mut entries, &mut expected_entries), Vec::new());
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        assert_eq!(entries.len(), 4);
+        assert_eq!(entries[2].mode, Some(0o040000));
+        assert_eq!(entries[1].mode, Some(0o100444));
+        // Drop mode bits because symlinks have actual modes on some unix systems.
+        assert_eq!(entries[3].mode.unwrap() & 0o120000, 0o120000);
     }
 }
