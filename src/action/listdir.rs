@@ -66,7 +66,11 @@ impl ParseError {
 
     /// Constructs an `UnsupportedValue` from provided `field` and
     /// `value`, then  converts it to `ParseError`.
-    fn unsupported_value(field: String, value: String) -> ParseError {
+    fn unuspported_value<F, V>(field: F, value: V) -> ParseError
+        where
+            F: Into<String>,
+            V: Into<String>,
+    {
         ParseError::UnsupportedValue(UnsupportedValueError {
             field,
             value,
@@ -320,16 +324,14 @@ impl super::Request for Request {
         let path_type = pathspec.pathtype
             .ok_or(missing("path type"))?;
         if path_type != PathType::Os as i32 {
-            return Err(session::ParseError::from(
-                ParseError::unsupported_value(String::from("path type"),
-                                              path_type.to_string())));
+            return Err(ParseError::unsupported_value("path type",
+                                                     path_type).into());
         }
         let path_option = pathspec.path_options
             .unwrap_or(Options::CaseLiteral as i32);
         if path_option != Options::CaseLiteral as i32 {
-            return Err(session::ParseError::from(
-                ParseError::unsupported_value(String::from("path option"),
-                                              path_option.to_string())));
+            return Err(ParseError::unsupported_value("path option",
+                                                     path_option).into());
         };
         Ok(Request {
             path: get_path(&pathspec.path),
