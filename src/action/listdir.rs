@@ -71,11 +71,9 @@ impl ParseError {
             F: Into<String>,
             V: Into<String>,
     {
-        let field = field.into();
-        let value = value.into();
         ParseError::UnsupportedValue(UnsupportedValueError {
-            field,
-            value,
+            field: field.into(),
+            value: value.into(),
         })
     }
 }
