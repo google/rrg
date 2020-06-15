@@ -78,10 +78,12 @@ impl ParseError {
     }
 }
 
-/// An error type used when the value which comes from protocol buffer is
-/// unsupported by the current client.
+/// Enum of possible errors, which can occur during parsing data from protocol
+/// buffer.
 #[derive(Debug)]
 enum ParseError {
+    /// An error type used when the value which comes from protocol buffer is
+    /// unsupported by the current client.
     UnsupportedValue(UnsupportedValueError),
 }
 
