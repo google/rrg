@@ -266,14 +266,6 @@ mod tests {
         let response: &Response = session.reply(0);
         let time = response.time.unwrap();
 
-        // We assume here that the tests won't be run for very old systems
-        // installed before 01.01.2000.
-        let lower_limit: Timestamp = "2000-01-01T00:00:00Z".parse().unwrap();
-        let lower_limit: SystemTime = lower_limit.into();
-        // The upper limit for the install date is the current date.
-        let upper_limit = SystemTime::now();
-
-        assert!(time >= lower_limit);
-        assert!(time <= upper_limit);
+        assert!(time <= SystemTime::now());
     }
 }
