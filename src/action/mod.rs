@@ -24,7 +24,7 @@ pub mod interfaces;
 pub mod metadata;
 pub mod startup;
 pub mod network;
-pub mod install_date;
+pub mod insttime;
 pub mod memsize;
 
 use crate::session::{self, Session, Task};
@@ -103,7 +103,7 @@ where
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
-        "GetInstallDate" => task.execute(self::install_date::handle),
+        "GetInstallDate" => task.execute(self::insttime::handle),
 
         #[cfg(target_family = "unix")]
         "EnumerateInterfaces" => task.execute(self::interfaces::handle),
