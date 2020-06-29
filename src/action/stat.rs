@@ -24,6 +24,7 @@ impl From<std::io::Error> for Error {
 
 #[derive(Debug)]
 pub struct Response {
+
     mode: u64,
     inode: u32,
     device: u32,
@@ -45,6 +46,7 @@ pub struct Response {
 
 #[derive(Debug)]
 pub struct Request {
+
     pathspec: PathSpec,
     collect_ext_attrs: bool,
     follow_symlink: bool,
@@ -52,17 +54,20 @@ pub struct Request {
 
 #[derive(Debug)]
 pub struct ExtAttr {
+
     name: Vec<u8>,
     value: Vec<u8>,
 }
 
 #[derive(Debug)]
 struct PathSpec {
+
     nested_path: Option<Box<PathSpec>>,
     path: Option<PathBuf>,
 }
 
 impl Default for PathSpec {
+
     fn default() -> PathSpec {
         PathSpec {
             nested_path: None,
@@ -72,6 +77,7 @@ impl Default for PathSpec {
 }
 
 impl Into<rrg_proto::stat_entry::ExtAttr> for ExtAttr {
+
     fn into(self) -> rrg_proto::stat_entry::ExtAttr {
         rrg_proto::stat_entry::ExtAttr {
             name: Some(self.name),
@@ -248,6 +254,7 @@ fn get_linux_flags(path: &Path) -> Option<u32> {
 }
 
 impl From<rrg_proto::PathSpec> for PathSpec {
+
     fn from(proto: rrg_proto::PathSpec) -> PathSpec {
         PathSpec {
             nested_path: match proto.nested_path {
@@ -261,6 +268,7 @@ impl From<rrg_proto::PathSpec> for PathSpec {
 }
 
 impl super::Request for Request {
+
     type Proto = GetFileStatRequest;
 
     fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError> {
@@ -278,6 +286,7 @@ impl super::Request for Request {
 }
 
 impl super::Response for Response {
+
     const RDF_NAME: Option<&'static str> = Some("StatEntry");
 
     type Proto = StatEntry;
