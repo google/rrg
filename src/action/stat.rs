@@ -154,7 +154,7 @@ fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
 }
 
 #[cfg(target_os = "linux")]
-fn form_response(original_path: &PathBuf, destination: &PathBuf)
+fn form_response(original_path: &Path, destination: &Path)
                  -> Result<Response, std::io::Error> {
     use std::os::unix::fs::MetadataExt;
 
@@ -184,7 +184,7 @@ fn form_response(original_path: &PathBuf, destination: &PathBuf)
 
         pathspec: PathSpec {
             nested_path: None,
-            path: Some(original_path.clone()),
+            path: Some(original_path.clone().to_path_buf()),
         },
 
         extended_attributes: vec![],
