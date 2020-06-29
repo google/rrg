@@ -12,8 +12,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use log::warn;
-use rrg_proto::{GetFileStatRequest, path_spec::Options, path_spec::PathType,
-                stat_entry::ExtAttr, StatEntry};
+use rrg_proto::{GetFileStatRequest, path_spec::Options, path_spec::PathType, StatEntry};
 
 use crate::session::{self, Error, Session};
 
@@ -52,6 +51,12 @@ pub struct Request {
 }
 
 #[derive(Debug)]
+pub struct ExtAttr {
+    name: Vec<u8>,
+    value: Vec<u8>,
+}
+
+#[derive(Debug)]
 struct PathSpec {
     nested_path: Option<Box<PathSpec>>,
     path: Option<PathBuf>,
@@ -62,6 +67,15 @@ impl Default for PathSpec {
         PathSpec {
             nested_path: None,
             path: None,
+        }
+    }
+}
+
+impl Into<rrg_proto::stat_entry::ExtAttr> for ExtAttr {
+    fn into(self) -> rrg_proto::stat_entry::ExtAttr {
+        rrg_proto::stat_entry::ExtAttr {
+            name: Some(self.name),
+            value: Some(self.value),
         }
     }
 }
@@ -93,8 +107,8 @@ fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
     for attr in xattrs {
         match xattr::get(path, &attr) {
             Ok(attr_value) => result.push(ExtAttr {
-                name: Some(attr.into_vec()),
-                value: attr_value,
+                name: attr.into_vec(),
+                value: attr_value.unwrap_or_default(),
             }),
 
             Err(_) => ()
@@ -296,7 +310,8 @@ impl super::Response for Response {
 
             registry_data: None,
             st_crtime: None,
-            ext_attrs: self.extended_attributes,
+            ext_attrs: self.extended_attributes.into_iter()
+                .map(|attr| attr.into()).collect(),
         }
     }
 }
@@ -421,10 +436,10 @@ mod tests {
 
     #[test]
     fn test_extended_attributes() {
-        fn check_attribute(attribute: &rrg_proto::stat_entry::ExtAttr,
+        fn check_attribute(attribute: &ExtAttr,
                            name: &str, value: Vec<u8>) {
-            assert_eq!(attribute.name.clone().unwrap(), name.as_bytes().to_vec());
-            assert_eq!(attribute.value.clone().unwrap(), value);
+            assert_eq!(attribute.name.clone(), name.as_bytes().to_vec());
+            assert_eq!(attribute.value.clone(), value);
         }
 
         let dir = tempdir().unwrap();
