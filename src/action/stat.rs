@@ -133,8 +133,16 @@ fn get_time_option<E: std::fmt::Display>(time: Result<SystemTime, E>) -> Option<
 }
 
 fn get_time_since_unix_epoch(sys_time: &Option<SystemTime>) -> Option<u64> {
-    return sys_time.map_or(None, |time| time.duration_since(UNIX_EPOCH)
-        .map_or(None, |dur| Some(dur.as_secs())));
+    match sys_time {
+        Some(time_value) => match rrg_proto::micros(*time_value) {
+            Ok(micros_value) => Some(micros_value),
+            Err(error) => {
+                warn!("failed to convert time: {}", error);
+                None
+            }
+        }
+        None => None
+    }
 }
 
 #[cfg(target_os = "linux")]
