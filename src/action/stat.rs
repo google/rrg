@@ -86,12 +86,13 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
 
 #[cfg(target_family = "unix")]
 fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
+    use std::os::unix::ffi::OsStringExt;
     let xattrs = xattr::list(path).unwrap();
 
     let mut result = vec![];
     for attr in xattrs {
         result.push(ExtAttr {
-            name: Some(attr.to_str().unwrap().as_bytes().to_vec()),
+            name: Some(attr.clone().into_vec()),
             value: xattr::get(path, attr).unwrap(),
         });
     }
@@ -388,11 +389,8 @@ mod tests {
         assert!(response.is_ok());
 
         let response = response.unwrap();
-        assert!(response.size.is_some());
-        assert_eq!(response.size.unwrap(), new_size);
-
-        assert!(response.mode.is_some());
-        assert_eq!(response.mode.unwrap(), new_mode);
+        assert_eq!(response.size, new_size);
+        assert_eq!(response.mode, new_mode);
     }
 
     #[test]
@@ -412,24 +410,16 @@ mod tests {
         let file_response = file_response.unwrap();
         let link_response = link_response.unwrap();
 
-        assert!(file_response.hard_links.is_some());
-        assert_eq!(file_response.hard_links.unwrap(), 2);
-
-        assert!(link_response.hard_links.is_some());
-        assert_eq!(link_response.hard_links.unwrap(), 2);
-
-        assert!(file_response.inode.is_some());
-        assert!(link_response.inode.is_some());
-        assert_eq!(file_response.inode.unwrap(), link_response.inode.unwrap());
+        assert_eq!(file_response.hard_links, 2);
+        assert_eq!(link_response.hard_links, 2);
+        assert_eq!(file_response.inode, link_response.inode);
     }
 
     #[test]
     fn test_extended_attributes() {
         fn check_attribute(attribute: &rrg_proto::stat_entry::ExtAttr,
                            name: &str, value: Vec<u8>) {
-            assert!(attribute.name.is_some());
             assert_eq!(attribute.name.clone().unwrap(), name.as_bytes().to_vec());
-            assert!(attribute.value.is_some());
             assert_eq!(attribute.value.clone().unwrap(), value);
         }
 
