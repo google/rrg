@@ -91,10 +91,14 @@ fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
 
     let mut result = vec![];
     for attr in xattrs {
-        result.push(ExtAttr {
-            name: Some(attr.clone().into_vec()),
-            value: xattr::get(path, attr).unwrap(),
-        });
+        match xattr::get(path, &attr) {
+            Ok(attr_value) => result.push(ExtAttr {
+                name: Some(attr.into_vec()),
+                value: attr_value,
+            }),
+
+            Err(_) => ()
+        }
     }
     result
 }
