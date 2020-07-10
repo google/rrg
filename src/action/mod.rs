@@ -23,6 +23,7 @@ pub mod interfaces;
 
 pub mod metadata;
 pub mod startup;
+pub mod timeline;
 pub mod network;
 pub mod insttime;
 pub mod memsize;
@@ -102,6 +103,7 @@ where
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
+        "Timeline" => task.execute(self::timeline::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
         "GetInstallDate" => task.execute(self::insttime::handle),
 
