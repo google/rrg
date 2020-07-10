@@ -276,10 +276,7 @@ impl super::Response for ChunkResponse {
     type Proto = DataBlob;
 
     fn into_proto(self) -> DataBlob {
-        DataBlob {
-            data: Some(self.data),
-            ..Default::default()
-        }
+        self.data.into()
     }
 }
 
