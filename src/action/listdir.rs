@@ -67,9 +67,9 @@ impl ParseError {
     /// Constructs an `UnsupportedValue` from provided `field` and
     /// `value`, then  converts it to `ParseError`.
     fn unsupported_value<F, V>(field: F, value: V) -> ParseError
-        where
-            F: Into<String>,
-            V: Into<String>,
+    where
+        F: Into<String>,
+        V: Into<String>,
     {
         ParseError::UnsupportedValue(UnsupportedValueError {
             field: field.into(),
@@ -295,7 +295,7 @@ fn get_path(path: &Option<String>) -> PathBuf {
     }
 }
 
-/// Fills st_linux_flags field.
+/// Fills `st_linux_flags` field.
 #[cfg(target_os = "linux")]
 fn get_linux_flags(path: &Path) -> Option<u32> {
     use std::os::raw::c_long;
@@ -344,7 +344,7 @@ impl super::Request for Request {
 /// Converts idiomatic `SystemTime` to `u64` for the protocol buffer.
 fn get_time_since_unix_epoch(sys_time: &Option<SystemTime>) -> Option<u64> {
     match sys_time {
-        Some(time) => match micros(time.clone()) {
+        Some(time) => match micros(*time) {
             Ok(time) => Some(time),
             Err(error) => {
                 warn!("failed to convert time: {}", error);
