@@ -25,6 +25,7 @@ pub mod metadata;
 pub mod startup;
 pub mod timeline;
 pub mod network;
+pub mod insttime;
 pub mod memsize;
 
 use crate::session::{self, Session, Task};
@@ -104,6 +105,7 @@ where
         "GetClientInfo" => task.execute(self::metadata::handle),
         "Timeline" => task.execute(self::timeline::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
+        "GetInstallDate" => task.execute(self::insttime::handle),
 
         #[cfg(target_family = "unix")]
         "EnumerateInterfaces" => task.execute(self::interfaces::handle),
