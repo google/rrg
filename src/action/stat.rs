@@ -17,6 +17,7 @@ use rrg_proto::{GetFileStatRequest, path_spec::Options, path_spec::PathType, Pat
 use crate::session::{self, Error, Session};
 
 impl From<std::io::Error> for Error {
+
     fn from(e: std::io::Error) -> Error {
         Error::action(e)
     }
