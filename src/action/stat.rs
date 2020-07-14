@@ -85,7 +85,14 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
 #[cfg(target_family = "unix")]
 fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
     use std::os::unix::ffi::OsStringExt;
-    let xattrs = xattr::list(path).unwrap();
+
+    let xattrs = match xattr::list(path) {
+        Ok(xattr_list) => xattr_list,
+        Err(err) => {
+            warn!("Unable to get extended attributes: {}", err);
+            return vec![]
+        }
+    };
 
     let mut result = vec![];
     for attr in xattrs {
@@ -95,7 +102,7 @@ fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
                 value: attr_value.unwrap_or_default(),
             }),
 
-            Err(err) => warn!("Unable to get an extended attribute: {}", err)
+            Err(err) => warn!("Unable to get an extended attribute: {}", err),
         }
     }
     result
