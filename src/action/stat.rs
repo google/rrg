@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use log::warn;
-use rrg_proto::{GetFileStatRequest, path_spec::Options, path_spec::PathType, StatEntry};
+use rrg_proto::{GetFileStatRequest, path_spec::Options, path_spec::PathType, PathSpec, StatEntry};
 
 use crate::session::{self, Error, Session};
 
@@ -24,7 +24,6 @@ impl From<std::io::Error> for Error {
 
 #[derive(Debug)]
 pub struct Response {
-
     mode: u64,
     inode: u32,
     device: u32,
@@ -40,40 +39,21 @@ pub struct Response {
     represented_device: u32,
     flags_linux: Option<u32>,
     symlink: Option<PathBuf>,
-    pathspec: PathSpec,
+    path: PathBuf,
     extended_attributes: Vec<ExtAttr>,
 }
 
 #[derive(Debug)]
 pub struct Request {
-
-    pathspec: PathSpec,
+    path: PathBuf,
     collect_ext_attrs: bool,
     follow_symlink: bool,
 }
 
 #[derive(Debug)]
 pub struct ExtAttr {
-
     name: Vec<u8>,
     value: Vec<u8>,
-}
-
-#[derive(Debug)]
-struct PathSpec {
-
-    nested_path: Option<Box<PathSpec>>,
-    path: Option<PathBuf>,
-}
-
-impl Default for PathSpec {
-
-    fn default() -> PathSpec {
-        PathSpec {
-            nested_path: None,
-            path: None,
-        }
-    }
 }
 
 impl Into<rrg_proto::stat_entry::ExtAttr> for ExtAttr {
@@ -87,15 +67,13 @@ impl Into<rrg_proto::stat_entry::ExtAttr> for ExtAttr {
 }
 
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let original_path = collapse_pathspec(request.pathspec);
-
     let destination = if request.follow_symlink {
-        fs::canonicalize(&original_path)?
+        fs::canonicalize(&request.path)?
     } else {
-        original_path.clone()
+        request.path.clone()
     };
 
-    let mut response = form_response(&original_path, &destination)?;
+    let mut response = form_response(&request.path, &destination)?;
     if request.collect_ext_attrs {
         response.extended_attributes = get_ext_attrs(&destination);
     }
@@ -188,10 +166,7 @@ fn form_response(original_path: &Path, destination: &Path)
             false => None
         },
 
-        pathspec: PathSpec {
-            nested_path: None,
-            path: Some(original_path.clone().to_path_buf()),
-        },
+        path: original_path.to_owned(),
 
         extended_attributes: vec![],
     })
@@ -207,9 +182,10 @@ fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
     fn recursive_collapse(pathspec: PathSpec) -> PathBuf {
         match pathspec.path {
             Some(path) => {
+                let path_buf = PathBuf::from(path);
                 match pathspec.nested_path {
-                    Some(nested_path_box) => path.join(recursive_collapse(*nested_path_box)),
-                    None => path,
+                    Some(nested_path_box) => path_buf.join(recursive_collapse(*nested_path_box)),
+                    None => path_buf,
                 }
             }
             None => PathBuf::default()
@@ -221,13 +197,6 @@ fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
         result = PathBuf::from("/").join(result);
     }
     result
-}
-
-fn get_path(path: &Option<String>) -> Option<PathBuf> {
-    match path {
-        Some(string_path) => Some(PathBuf::from(string_path)),
-        _ => None,
-    }
 }
 
 #[cfg(target_os = "linux")]
@@ -253,28 +222,14 @@ fn get_linux_flags(path: &Path) -> Option<u32> {
     }
 }
 
-impl From<rrg_proto::PathSpec> for PathSpec {
-
-    fn from(proto: rrg_proto::PathSpec) -> PathSpec {
-        PathSpec {
-            nested_path: match proto.nested_path {
-                Some(pathspec) => Some(Box::new(Self::from(*pathspec))),
-                None => None,
-            },
-
-            path: get_path(&proto.path),
-        }
-    }
-}
-
 impl super::Request for Request {
 
     type Proto = GetFileStatRequest;
 
     fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError> {
         match proto.pathspec {
-            Some(proto_pathspec) => Ok(Request {
-                pathspec: PathSpec::from(proto_pathspec),
+            Some(pathspec) => Ok(Request {
+                path: collapse_pathspec(pathspec),
                 collect_ext_attrs: proto.collect_ext_attrs.unwrap_or(false),
                 follow_symlink: proto.follow_symlink.unwrap_or(false),
             }),
@@ -317,11 +272,10 @@ impl super::Response for Response {
             registry_type: None,
             resident: None,
 
-            pathspec: Some(rrg_proto::PathSpec {
+            pathspec: Some(PathSpec {
                 path_options: Some(Options::CaseLiteral as i32),
                 pathtype: Some(PathType::Os as i32),
-                path: Some(self.pathspec.path.unwrap()
-                    .to_str().unwrap().to_string()),
+                path: Some(self.path.to_str().unwrap().to_string()),
                 ..Default::default()
             }),
 
@@ -348,14 +302,14 @@ mod tests {
                 PathSpec {
                     nested_path: Some(Box::new(
                         PathSpec {
-                            path: Some(PathBuf::from("file")),
+                            path: Some(String::from("file")),
                             ..Default::default()
                         }
                     )),
-                    path: Some(PathBuf::from("to")),
+                    path: Some(String::from("to")),
                     ..Default::default()
                 })),
-            path: Some(PathBuf::from("path")),
+            path: Some(String::from("path")),
             ..Default::default()
         };
 
@@ -366,14 +320,14 @@ mod tests {
                 PathSpec {
                     nested_path: Some(Box::new(
                         PathSpec {
-                            path: Some(PathBuf::from("on/device")),
+                            path: Some(String::from("on/device")),
                             ..Default::default()
                         }
                     )),
-                    path: Some(PathBuf::from("some/file")),
+                    path: Some(String::from("some/file")),
                     ..Default::default()
                 })),
-            path: Some(PathBuf::from("path/to")),
+            path: Some(String::from("path/to")),
             ..Default::default()
         };
 
