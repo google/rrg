@@ -95,7 +95,7 @@ fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
                 value: attr_value.unwrap_or_default(),
             }),
 
-            Err(_) => ()
+            Err(err) => warn!("Unable to get an extended attribute: {}", err)
         }
     }
     result
