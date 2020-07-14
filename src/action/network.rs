@@ -308,30 +308,7 @@ mod tests {
 
     use super::*;
     use netstat2::TcpSocketInfo;
-    use std::net::{TcpStream, TcpListener, UdpSocket, SocketAddr};
-
-    /// Returns all the responses whose `local_addr` is equal to `addr`.
-    fn find_responses_by_addr(
-        session: &session::test::Fake,
-        addr: SocketAddr,
-    ) -> Vec<&Response> {
-        let mut responses = Vec::new();
-        for i in 0..session.reply_count() {
-            let resp: &Response = session.reply(i);
-            let ok = match &resp.socket_info {
-                ProtocolSocketInfo::Tcp(tcp) => {
-                    SocketAddr::new(tcp.local_addr, tcp.local_port) == addr
-                },
-                ProtocolSocketInfo::Udp(udp) => {
-                    SocketAddr::new(udp.local_addr, udp.local_port) == addr
-                },
-            };
-            if ok {
-                responses.push(resp);
-            }
-        }
-        responses
-    }
+    use std::net::{TcpStream, TcpListener, UdpSocket};
 
     /// Gets `TcpSocketInfo` from `response`.
     ///
@@ -343,13 +320,6 @@ mod tests {
                 panic!("expected TCP connection");
             },
         }
-    }
-
-    /// Returns the state of TCP connection from `response`.
-    ///
-    /// This function panics if `response` doesn't represent a TCP connection.
-    fn get_tcp_state(response: &Response) -> TcpState {
-        extract_tcp_info(&response).state
     }
 
     /// Checks if `response` represents a UDP connection.
@@ -379,22 +349,31 @@ mod tests {
 
         let our_pid = std::process::id();
 
-        // We must get two responses for the server here: one for the
-        // listening server socket and one for the temporary connection
-        // between the client and the server
-        let server_resp = find_responses_by_addr(&session, server_addr);
-        assert_eq!(server_resp.len(), 2);
+        let listen_resp = session.replies::<Response>().find(|reply| {
+            if socket_info_addr(&reply.socket_info) != server_addr {
+                return false;
+            }
 
-        let listen_resp;
-        let connection_resp;
-        if get_tcp_state(&server_resp[0]) == TcpState::Listen {
-            listen_resp = server_resp[0];
-            connection_resp = server_resp[1];
-        } else {
-            assert_eq!(get_tcp_state(&server_resp[1]), TcpState::Listen);
-            listen_resp = server_resp[1];
-            connection_resp = server_resp[0];
-        }
+            let info = match &reply.socket_info {
+                ProtocolSocketInfo::Tcp(info) => info,
+                ProtocolSocketInfo::Udp(_) => return false,
+            };
+
+            info.state == TcpState::Listen
+        }).expect("no reply with listening server-side TCP connection");
+
+        let connection_resp = session.replies::<Response>().find(|reply| {
+            if socket_info_addr(&reply.socket_info) != server_addr {
+                return false;
+            }
+
+            let info = match &reply.socket_info {
+                ProtocolSocketInfo::Tcp(info) => info,
+                ProtocolSocketInfo::Udp(_) => return false,
+            };
+
+            info.state == TcpState::Established
+        }).expect("no reply with established server-side TCP connection");
 
         // We don't check PID for `connection_resp`, because it is unset at
         // least on Linux and it's unclear whether PID is set on other systems.
@@ -405,11 +384,10 @@ mod tests {
         // the connections.
         assert_eq!(connection_socket.remote_addr, client_addr.ip());
         assert_eq!(connection_socket.remote_port, client_addr.port());
-        assert_eq!(connection_socket.state, TcpState::Established);
 
-        let client_resp = find_responses_by_addr(&session, client_addr);
-        assert_eq!(client_resp.len(), 1);
-        let client_resp = client_resp[0];
+        let client_resp = session.replies::<Response>().find(|reply| {
+            socket_info_addr(&reply.socket_info) == client_addr
+        }).expect("no reply with established client-side TCP connection");
 
         assert_eq!(client_resp.process_info.as_ref().unwrap().pid, our_pid);
 
@@ -435,15 +413,15 @@ mod tests {
 
         let our_pid = std::process::id();
 
-        let server_resp = find_responses_by_addr(&session, server_addr);
-        assert_eq!(server_resp.len(), 1);
-        let server_resp = server_resp[0];
+        let server_resp = session.replies::<Response>().find(|reply| {
+            socket_info_addr(&reply.socket_info) == server_addr
+        }).expect("no reply with a server-side connection");
         assert_eq!(server_resp.process_info.as_ref().unwrap().pid, our_pid);
         assert!(is_udp(&server_resp));
 
-        let client_resp = find_responses_by_addr(&session, client_addr);
-        assert_eq!(client_resp.len(), 1);
-        let client_resp = client_resp[0];
+        let client_resp = session.replies::<Response>().find(|reply| {
+            socket_info_addr(&reply.socket_info) == client_addr
+        }).expect("no reply with a client-side connection");
         assert_eq!(client_resp.process_info.as_ref().unwrap().pid, our_pid);
         assert!(is_udp(&client_resp));
     }
@@ -459,13 +437,24 @@ mod tests {
         let request = Request { listening_only: true };
         assert!(handle(&mut session, request).is_ok());
 
-        let server_resp = find_responses_by_addr(&session, server_addr);
-        assert_eq!(server_resp.len(), 1);
-        let server_resp = server_resp[0];
-        assert_eq!(get_tcp_state(&server_resp), TcpState::Listen);
+        let server_resp = session.replies::<Response>().find(|reply| {
+            if socket_info_addr(&reply.socket_info) != server_addr {
+                return false;
+            }
 
-        let client_resp = find_responses_by_addr(&session, client_addr);
-        assert_eq!(client_resp.len(), 0);
+            let info = match &reply.socket_info {
+                ProtocolSocketInfo::Tcp(info) => info,
+                ProtocolSocketInfo::Udp(_) => return false,
+            };
+
+            info.state == TcpState::Listen
+        });
+        assert!(server_resp.is_some());
+
+        let client_resp = session.replies::<Response>().find(|reply| {
+            socket_info_addr(&reply.socket_info) == client_addr
+        });
+        assert!(client_resp.is_none());
     }
 
     #[test]
@@ -477,7 +466,35 @@ mod tests {
         let request = Request { listening_only: true };
         assert!(handle(&mut session, request).is_ok());
 
-        let connection_resp = find_responses_by_addr(&session, connection_addr);
-        assert_eq!(connection_resp.len(), 0);
+        let connection_resp = session.replies::<Response>().find(|reply| {
+            socket_info_addr(&reply.socket_info) == connection_addr
+        });
+        assert!(connection_resp.is_none());
+    }
+
+    // TODO: Consider moving the following 3 helper methods to the `netstat2`
+    // crate.
+
+    /// Retrieves a local IP address of the given socket info object.
+    fn socket_info_local_ip(info: &ProtocolSocketInfo) -> std::net::IpAddr {
+        match info {
+            ProtocolSocketInfo::Tcp(info) => info.local_addr,
+            ProtocolSocketInfo::Udp(info) => info.local_addr,
+        }
+    }
+
+    /// Retrieves a local port of the given socket info object.
+    fn socket_info_local_port(info: &ProtocolSocketInfo) -> u16 {
+        match info {
+            ProtocolSocketInfo::Tcp(info) => info.local_port,
+            ProtocolSocketInfo::Udp(info) => info.local_port,
+        }
+    }
+
+    /// Retrieves a local socket address of the given socket info object.
+    fn socket_info_addr(info: &ProtocolSocketInfo) -> std::net::SocketAddr {
+        let local_addr = socket_info_local_ip(&info);
+        let local_port = socket_info_local_port(&info);
+        std::net::SocketAddr::new(local_addr, local_port)
     }
 }
