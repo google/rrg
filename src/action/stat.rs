@@ -34,7 +34,7 @@ pub struct Response {
     access_time: Option<SystemTime>,
     modification_time: Option<SystemTime>,
     status_change_time: Option<SystemTime>,
-    blocks_number: u32,
+    block_count: u32,
     block_size: u32,
     represented_device: u32,
     flags_linux: Option<u32>,
@@ -156,7 +156,7 @@ fn form_response(original_path: &Path, destination: &Path)
         access_time: get_time_option(metadata.accessed()),
         modification_time: get_time_option(metadata.modified()),
         status_change_time: get_status_change_time(&metadata),
-        blocks_number: metadata.blocks() as u32,
+        block_count: metadata.blocks() as u32,
         block_size: metadata.blksize() as u32,
         represented_device: metadata.rdev() as u32,
         flags_linux: get_linux_flags(destination),
@@ -258,7 +258,7 @@ impl super::Response for Response {
             st_atime: get_time_since_unix_epoch(&self.access_time),
             st_mtime: get_time_since_unix_epoch(&self.modification_time),
             st_ctime: get_time_since_unix_epoch(&self.status_change_time),
-            st_blocks: Some(self.blocks_number),
+            st_blocks: Some(self.block_count),
             st_blksize: Some(self.block_size),
             st_rdev: Some(self.represented_device),
             st_flags_osx: None,
@@ -473,7 +473,7 @@ mod tests {
         assert_eq!(response.access_time, original_response.access_time);
         assert_eq!(response.modification_time, original_response.modification_time);
         assert_eq!(response.status_change_time, original_response.status_change_time);
-        assert_eq!(response.blocks_number, original_response.blocks_number);
+        assert_eq!(response.block_count, original_response.block_count);
         assert_eq!(response.block_size, original_response.block_size);
         assert_eq!(response.represented_device, original_response.represented_device);
         assert_eq!(response.flags_linux, original_response.flags_linux);
