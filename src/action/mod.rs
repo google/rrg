@@ -15,12 +15,22 @@
 //! instance of the corresponding request type and send some (zero or more)
 //! instances of the corresponding response type.
 
-use crate::session::{self, Session, Task};
+#[cfg(target_os = "linux")]
+pub mod filesystems;
+
+#[cfg(target_family = "unix")]
+pub mod interfaces;
 
 pub mod metadata;
 pub mod startup;
+pub mod listdir;
+pub mod timeline;
 pub mod network;
 pub mod stat;
+pub mod insttime;
+pub mod memsize;
+
+use crate::session::{self, Session, Task};
 
 /// Abstraction for action-specific requests.
 ///
@@ -95,8 +105,20 @@ where
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
+        "ListDirectory" => task.execute(self::listdir::handle), 
+        "Timeline" => task.execute(self::timeline::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
         "GetFileStat" => task.execute(self::stat::handle),
+        "GetInstallDate" => task.execute(self::insttime::handle),
+
+        #[cfg(target_family = "unix")]
+        "EnumerateInterfaces" => task.execute(self::interfaces::handle),
+
+        #[cfg(target_os = "linux")]
+        "EnumerateFilesystems" => task.execute(self::filesystems::handle),
+
+
+        "GetMemorySize" => task.execute(self::memsize::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
