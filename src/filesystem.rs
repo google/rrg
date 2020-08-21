@@ -20,10 +20,11 @@ pub struct WalkEntry {
     metadata: Metadata,
 }
 
-impl Walk {
+impl WalkEntry {
 
-    fn step(&mut self, entry: std::fs::DirEntry) -> Option<WalkEntry> {
+    fn from_dir_entry(entry: std::fs::DirEntry) -> Option<WalkEntry> {
         let path = entry.path();
+
         let metadata = match entry.metadata() {
             Ok(metadata) => metadata,
             Err(error) => {
@@ -32,30 +33,36 @@ impl Walk {
             },
         };
 
-        self.push(&path);
-
         Some(WalkEntry {
             path: path,
             metadata: metadata,
         })
     }
+}
 
-    fn push(&mut self, path: &Path) {
-        match std::fs::read_dir(path) {
+impl Walk {
+
+    fn push(&mut self, entry: &WalkEntry) {
+        match std::fs::read_dir(&entry.path) {
             Ok(iter) => {
                 self.pending.push(iter);
             },
             Err(error) => {
-                warn!("failed to read '{}': {}", path.display(), error);
+                warn!("failed to read '{}': {}", entry.path.display(), error);
             },
         }
     }
 
-    fn pop(&mut self) -> Option<std::fs::DirEntry> {
+    fn pop(&mut self) -> Option<WalkEntry> {
         while let Some(iter) = self.pending.last_mut() {
             for entry in iter {
                 match entry {
-                    Ok(entry) => return Some(entry),
+                    Ok(entry) => {
+                        let entry = WalkEntry::from_dir_entry(entry);
+                        if entry.is_some() {
+                            return entry;
+                        }
+                    },
                     Err(error) => warn!("directory iteration error: {}", error),
                 }
             }
@@ -72,12 +79,8 @@ impl std::iter::Iterator for Walk {
     type Item = WalkEntry;
 
     fn next(&mut self) -> Option<WalkEntry> {
-        loop {
-            let entry = self.pop()?;
-            let entry = self.step(entry);
-            if entry.is_some() {
-                return entry;
-            }
-        }
+        let entry = self.pop()?;
+        self.push(&entry);
+        Some(entry)
     }
 }
