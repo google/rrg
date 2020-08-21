@@ -26,7 +26,7 @@ use log::{error, info};
 use crate::action;
 use crate::message;
 pub use self::demand::{Demand, Header, Payload};
-pub use self::error::{Error, ParseError, MissingFieldError};
+pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError};
 use self::response::{Response, Status};
 pub use self::sink::{Sink};
 
