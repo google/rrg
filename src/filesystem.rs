@@ -106,3 +106,89 @@ impl std::iter::Iterator for WalkDir {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use std::fs::File;
+
+    use super::*;
+
+    #[test]
+    fn test_walk_dir_empty() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let iter = std::fs::read_dir(&tempdir).unwrap();
+        let mut iter = WalkDir::from_read_dir(iter);
+
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_walk_dir_with_files() {
+        let tempdir = tempfile::tempdir().unwrap();
+        File::create(tempdir.path().join("abc")).unwrap();
+        File::create(tempdir.path().join("def")).unwrap();
+        File::create(tempdir.path().join("ghi")).unwrap();
+
+        let iter = std::fs::read_dir(&tempdir).unwrap();
+
+        let mut results = WalkDir::from_read_dir(iter).collect::<Vec<_>>();
+        results.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(results.len(), 3);
+
+        assert_eq!(results[0].path, tempdir.path().join("abc"));
+        assert!(results[0].metadata.is_file());
+
+        assert_eq!(results[1].path, tempdir.path().join("def"));
+        assert!(results[1].metadata.is_file());
+
+        assert_eq!(results[2].path, tempdir.path().join("ghi"));
+        assert!(results[2].metadata.is_file());
+    }
+
+    #[test]
+    fn test_walk_dir_with_dirs() {
+        let tempdir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tempdir.path().join("abc")).unwrap();
+        std::fs::create_dir(tempdir.path().join("def")).unwrap();
+
+        let iter = std::fs::read_dir(&tempdir).unwrap();
+
+        let mut results = WalkDir::from_read_dir(iter).collect::<Vec<_>>();
+        results.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(results.len(), 2);
+
+        assert_eq!(results[0].path, tempdir.path().join("abc"));
+        assert!(results[0].metadata.is_dir());
+
+        assert_eq!(results[1].path, tempdir.path().join("def"));
+        assert!(results[1].metadata.is_dir());
+    }
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_walk_dir_with_links() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let source = tempdir.path().join("abc");
+        let target = tempdir.path().join("def");
+
+        File::create(&source).unwrap();
+        std::os::unix::fs::symlink(&source, &target).unwrap();
+
+        let iter = std::fs::read_dir(&tempdir).unwrap();
+
+        let mut results = WalkDir::from_read_dir(iter).collect::<Vec<_>>();
+        results.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(results.len(), 2);
+
+        assert_eq!(results[0].path, source);
+        assert!(results[0].metadata.file_type().is_file());
+
+        assert_eq!(results[1].path, target);
+        assert!(results[1].metadata.file_type().is_symlink());
+    }
+}
