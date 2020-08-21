@@ -1,4 +1,4 @@
-use crate::session::{ParseError, UnknownEnumValueError};
+use crate::session::UnknownEnumValueError;
 
 pub trait ProtoEnum<Proto> {
     // Returns a default value for given Protobuf definition.
@@ -10,14 +10,14 @@ pub trait ProtoEnum<Proto> {
 }
 
 // Maps the raw integer value to enum value or returns ParseError when the value cannot be mapped.
-pub fn parse_enum<T: ProtoEnum<T>>(raw_enum_value: Option<i32>) -> Result<T, ParseError> {
+pub fn parse_enum<T: ProtoEnum<T>>(raw_enum_value: Option<i32>) -> Result<T, UnknownEnumValueError> {
     match raw_enum_value {
         Some(int_value) => match T::from_i32(int_value) {
             Some(parsed_value) => Ok(parsed_value),
-            None => Err(ParseError::from(UnknownEnumValueError::new(
+            None => Err(UnknownEnumValueError::new(
                 std::any::type_name::<T>(),
                 int_value,
-            ))),
+            )),
         },
         None => Ok(T::default()),
     }
@@ -55,14 +55,9 @@ mod tests {
 
     #[test]
     fn parse_incorrect_enum_value_test() {
-        let parsed : Result<TestEnum, ParseError> = parse_enum(Some(3));
-        assert!(parsed.is_err());
-        match parsed.unwrap_err() {
-            ParseError::UnknownEnumValue(error) => {
-                assert_eq!(error.enum_name, std::any::type_name::<TestEnum>());
-                assert_eq!(error.value, 3);
-            }
-            e @ _ => panic!("Unexpected error type: {:?}", e),
-        }
+        let parsed : Result<TestEnum, UnknownEnumValueError> = parse_enum(Some(3));
+        let error = parsed.unwrap_err();
+        assert_eq!(error.enum_name, std::any::type_name::<TestEnum>());
+        assert_eq!(error.value, 3);
     }
 }
