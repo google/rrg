@@ -18,6 +18,7 @@ mod demand;
 mod error;
 mod response;
 mod sink;
+mod parse_enum;
 
 use std::convert::TryInto;
 
