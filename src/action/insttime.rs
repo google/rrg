@@ -256,7 +256,6 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 mod tests {
 
     use super::*;
-    use humantime::Timestamp;
 
     #[test]
     fn test_install_date() {
