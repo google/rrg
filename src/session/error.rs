@@ -89,6 +89,8 @@ impl From<ParseError> for Error {
 pub enum ParseError {
     /// An error occurred because the decoded proto message was malformed.
     Malformed(Box<dyn std::error::Error + Send + Sync>),
+    /// A protobuf had a value which is now known.
+    UnknownEnumValue(UnknownEnumValueError),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
 }
@@ -116,6 +118,9 @@ impl Display for ParseError {
             Malformed(ref error) => {
                 write!(fmt, "invalid proto message: {}", error)
             }
+            UnknownEnumValue(ref error) => {
+                write!(fmt, "unknown enum value message: {}", error)
+            }
             Decode(ref error) => {
                 write!(fmt, "failed to decode proto message: {}", error)
             }
@@ -131,6 +136,7 @@ impl std::error::Error for ParseError {
         match *self {
             Malformed(ref error) => Some(error.as_ref()),
             Decode(ref error) => Some(error),
+            UnknownEnumValue(ref error) => Some(error),
         }
     }
 }
@@ -177,5 +183,44 @@ impl From<MissingFieldError> for ParseError {
 
     fn from(error: MissingFieldError) -> ParseError {
         ParseError::malformed(error)
+    }
+}
+
+/// An error type for situations where proto enum has a value for which the definition is not known.
+#[derive(Debug)]
+pub struct UnknownEnumValueError {
+    pub enum_name: &'static str,
+    pub value: i32
+}
+
+impl UnknownEnumValueError {
+
+    /// Creates a new error indicating that a proto enum has a value for which the definition
+    /// is not known.
+    pub fn new(enum_name: &'static str, value: i32) -> UnknownEnumValueError {
+        UnknownEnumValueError {
+            enum_name,
+            value
+        }
+    }
+}
+
+impl Display for UnknownEnumValueError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "protobuf enum '{}' has unrecognised value: '{}'", self.enum_name, self.value)
+    }
+}
+
+impl std::error::Error for UnknownEnumValueError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+impl From<UnknownEnumValueError> for ParseError {
+
+    fn from(error: UnknownEnumValueError) -> ParseError {
+        ParseError::UnknownEnumValue(error)
     }
 }

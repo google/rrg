@@ -19,6 +19,7 @@ mod error;
 mod response;
 mod sink;
 mod time;
+mod parse_enum;
 
 use std::convert::TryInto;
 
@@ -27,7 +28,7 @@ use log::{error, info};
 use crate::action;
 use crate::message;
 pub use self::demand::{Demand, Header, Payload};
-pub use self::error::{Error, ParseError, MissingFieldError};
+pub use self::error::{Error, ParseError, MissingFieldError, UnknownEnumValueError};
 use self::response::{Response, Status};
 pub use self::sink::{Sink};
 pub use self::time::time_from_micros;

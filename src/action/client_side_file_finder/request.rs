@@ -114,17 +114,6 @@ pub struct ContentsLiteralMatchConditionOptions {
     xor_out_key: u32,
 }
 
-fn time_from_micros(micros: u64) -> std::time::SystemTime {
-    return std::time::UNIX_EPOCH
-        .checked_add(std::time::Duration::from_micros(micros))
-        .unwrap_or_else(|| {
-            panic!(
-                "Cannot create std::time::SystemTime from micros: {}",
-                micros
-            ) // It should never happen as std::time::SystemTime supports all u64 values.
-        });
-}
-
 impl TryFrom<rrg_proto::FileFinderAction> for Action {
     type Error = ParseError;
 
