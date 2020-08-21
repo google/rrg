@@ -154,7 +154,7 @@ impl MissingFieldError {
     /// Creates a new error indicating that required field `name` is missing.
     pub fn new(name: &'static str) -> MissingFieldError {
         MissingFieldError {
-            name: name,
+            name
         }
     }
 }
