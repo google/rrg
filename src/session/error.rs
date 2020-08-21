@@ -93,6 +93,8 @@ pub enum ParseError {
     UnknownEnumValue(UnknownEnumValueError),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
+    /// An error occurred when parsing Vec<u8> to Regex.
+    RegexParse(RegexParseError)
 }
 
 impl ParseError {
@@ -124,6 +126,9 @@ impl Display for ParseError {
             Decode(ref error) => {
                 write!(fmt, "failed to decode proto message: {}", error)
             }
+            RegexParse(ref error) => {
+                write!(fmt, "regex parse error: {}", error)
+            }
         }
     }
 }
@@ -137,6 +142,7 @@ impl std::error::Error for ParseError {
             Malformed(ref error) => Some(error.as_ref()),
             Decode(ref error) => Some(error),
             UnknownEnumValue(ref error) => Some(error),
+            RegexParse(ref error) => Some(error)
         }
     }
 }
@@ -194,7 +200,6 @@ pub struct UnknownEnumValueError {
 }
 
 impl UnknownEnumValueError {
-
     /// Creates a new error indicating that a proto enum has a value for which the definition
     /// is not known.
     pub fn new(enum_name: &'static str, value: i32) -> UnknownEnumValueError {
@@ -218,9 +223,50 @@ impl std::error::Error for UnknownEnumValueError {
         None
     }
 }
+
 impl From<UnknownEnumValueError> for ParseError {
 
     fn from(error: UnknownEnumValueError) -> ParseError {
         ParseError::UnknownEnumValue(error)
+    }
+}
+
+#[derive(Debug)]
+pub struct RegexParseError {
+    pub raw_data: Vec<u8>,
+    pub error_message: String
+}
+
+impl RegexParseError {
+
+    /// Creates a new error indicating that a regex cannot be parsed.
+    pub fn new(raw_data: Vec<u8>, error_message: String) -> RegexParseError {
+        RegexParseError {
+            raw_data,
+            error_message
+        }
+    }
+}
+
+impl Display for RegexParseError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "Regex parse error happened on parsing '{:?}'. Error message: '{}'",
+               self.raw_data,
+               self.error_message)
+    }
+}
+
+impl std::error::Error for RegexParseError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl From<RegexParseError> for ParseError {
+
+    fn from(error: RegexParseError) -> ParseError {
+        ParseError::RegexParse(error)
     }
 }
