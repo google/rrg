@@ -6,7 +6,7 @@
 //! Defines an internal type for client side file finder action and provides a function converting
 //! proto format of the request (rrg_proto::FileFinderArgs) to the internal format.
 
-use crate::session::{ParseError, RegexParseError, parse_enum, ProtoEnum};
+use crate::session::{ParseError, RegexParseError, parse_enum, ProtoEnum, time_from_micros};
 use regex::Regex;
 use rrg_proto::{
     FileFinderAccessTimeCondition, FileFinderAction, FileFinderArgs, FileFinderCondition,
@@ -729,13 +729,6 @@ mod tests {
             ..Default::default()
         });
         assert!(request.conditions.is_empty())
-    }
-
-    #[test]
-    fn time_from_micros_doesnt_panic_on_edge_values_test() {
-        time_from_micros(u64::MIN);
-        time_from_micros(u64::MAX / 2);
-        time_from_micros(u64::MAX);
     }
 
     #[test]
