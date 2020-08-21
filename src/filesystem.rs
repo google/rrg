@@ -52,7 +52,11 @@ impl std::iter::Iterator for Walk {
 
     fn next(&mut self) -> Option<WalkEntry> {
         let entry = self.pop()?;
-        self.push(&entry);
+
+        if entry.metadata.is_dir() {
+            self.push(&entry);
+        }
+
         Some(entry)
     }
 }
