@@ -61,12 +61,20 @@ impl std::iter::Iterator for Walk {
     }
 }
 
+/// Iterator over the entries in a directory.
+///
+/// This iterator is very similar to the standard `ReadDir` iterator, except
+/// that it is forgetful and only yields entries that did not cause any errors.
+///
+/// Unlike the `ReadDir` iterator entries, `WalkDir` entries are guaranteed to
+/// have valid metadata objects attached.
 struct WalkDir {
     iter: std::fs::ReadDir,
 }
 
 impl WalkDir {
 
+    /// Converts a standard `ReadDir` iterator.
     fn from_read_dir(iter: std::fs::ReadDir) -> WalkDir {
         WalkDir {
             iter: iter,
