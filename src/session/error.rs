@@ -94,7 +94,9 @@ pub enum ParseError {
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
     /// An error occurred when parsing Vec<u8> to Regex.
-    RegexParse(RegexParseError)
+    RegexParse(RegexParseError),
+    /// An error occurred when converting time micros from proto to std::time::SystemTime.
+    TimeMicrosConversion(TimeMicrosConversionError),
 }
 
 impl ParseError {
@@ -129,6 +131,9 @@ impl Display for ParseError {
             RegexParse(ref error) => {
                 write!(fmt, "regex parse error: {}", error)
             }
+            TimeMicrosConversion(ref error) => {
+                write!(fmt, "time micros conversion error: {}", error)
+            }
         }
     }
 }
@@ -142,7 +147,8 @@ impl std::error::Error for ParseError {
             Malformed(ref error) => Some(error.as_ref()),
             Decode(ref error) => Some(error),
             UnknownEnumValue(ref error) => Some(error),
-            RegexParse(ref error) => Some(error)
+            RegexParse(ref error) => Some(error),
+            TimeMicrosConversion(ref error) => Some(error),
         }
     }
 }
@@ -258,7 +264,6 @@ impl Display for RegexParseError {
 }
 
 impl std::error::Error for RegexParseError {
-
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
@@ -268,5 +273,33 @@ impl From<RegexParseError> for ParseError {
 
     fn from(error: RegexParseError) -> ParseError {
         ParseError::RegexParse(error)
+    }
+}
+
+/// An error type for situations where time micros cannot be convert to std::time::SystemTime.
+#[derive(Debug)]
+pub struct TimeMicrosConversionError {
+/// Time micros value causing the conversion error.
+    pub micros: u64
+}
+
+impl Display for TimeMicrosConversionError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "cannot convert micros to std::time::SystemTime: {}", self.micros)
+    }
+}
+
+impl std::error::Error for TimeMicrosConversionError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl From<TimeMicrosConversionError> for ParseError {
+
+fn from(error: TimeMicrosConversionError) -> ParseError {
+        ParseError::TimeMicrosConversion(error)
     }
 }

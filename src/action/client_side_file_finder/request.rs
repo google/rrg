@@ -260,66 +260,60 @@ impl From<LiteralMatchMode> for MatchMode {
 
 fn get_modification_time_conditions(
     proto: Option<FileFinderModificationTimeCondition>,
-) -> Vec<Condition> {
-    match proto {
+) -> Result<Vec<Condition>, ParseError> {
+    Ok(match proto {
         Some(options) => {
             let mut conditions: Vec<Condition> = vec![];
             if options.min_last_modified_time.is_some() {
-                conditions.push(Condition::MinModificationTime(time_from_micros(
-                    options.min_last_modified_time.unwrap(),
-                )))
+                conditions.push(Condition::MinModificationTime(
+                    time_from_micros(options.min_last_modified_time.unwrap())?))
             }
             if options.max_last_modified_time.is_some() {
-                conditions.push(Condition::MaxModificationTime(time_from_micros(
-                    options.max_last_modified_time.unwrap(),
-                )));
+                conditions.push(Condition::MaxModificationTime(
+                    time_from_micros(options.max_last_modified_time.unwrap())?));
             }
             conditions
         }
         None => vec![],
-    }
+    })
 }
 
-fn get_access_time_conditions(proto: Option<FileFinderAccessTimeCondition>) -> Vec<Condition> {
-    match proto {
+fn get_access_time_conditions(proto: Option<FileFinderAccessTimeCondition>) -> Result<Vec<Condition>, ParseError> {
+    Ok(match proto {
         Some(options) => {
             let mut conditions: Vec<Condition> = vec![];
             if options.min_last_access_time.is_some() {
-                conditions.push(Condition::MinAccessTime(time_from_micros(
-                    options.min_last_access_time.unwrap(),
-                )))
+                conditions.push(Condition::MinAccessTime(
+                    time_from_micros(options.min_last_access_time.unwrap())?))
             }
             if options.max_last_access_time.is_some() {
-                conditions.push(Condition::MaxAccessTime(time_from_micros(
-                    options.max_last_access_time.unwrap(),
-                )));
+                conditions.push(Condition::MaxAccessTime(
+                    time_from_micros(options.max_last_access_time.unwrap())?));
             }
             conditions
         }
         None => vec![],
-    }
+    })
 }
 
 fn get_inode_change_time_conditions(
     proto: Option<FileFinderInodeChangeTimeCondition>,
-) -> Vec<Condition> {
-    match proto {
+) -> Result<Vec<Condition>, ParseError> {
+    Ok(match proto {
         Some(options) => {
             let mut conditions: Vec<Condition> = vec![];
             if options.min_last_inode_change_time.is_some() {
-                conditions.push(Condition::MinInodeChangeTime(time_from_micros(
-                    options.min_last_inode_change_time.unwrap(),
-                )))
+                conditions.push(Condition::MinInodeChangeTime(
+                    time_from_micros(options.min_last_inode_change_time.unwrap())?))
             }
             if options.max_last_inode_change_time.is_some() {
-                conditions.push(Condition::MaxInodeChangeTime(time_from_micros(
-                    options.max_last_inode_change_time.unwrap(),
-                )));
+                conditions.push(Condition::MaxInodeChangeTime(
+                    time_from_micros(options.max_last_inode_change_time.unwrap())?));
             }
             conditions
         }
         None => vec![],
-    }
+    })
 }
 
 fn get_size_conditions(proto: Option<FileFinderSizeCondition>) -> Vec<Condition> {
@@ -454,9 +448,9 @@ fn get_conditions(proto: FileFinderCondition) -> Result<Vec<Condition>, ParseErr
 
     Ok(match condition_type {
         ConditionType::ModificationTime =>
-            get_modification_time_conditions(proto.modification_time),
-        ConditionType::AccessTime => get_access_time_conditions(proto.access_time),
-        ConditionType::InodeChangeTime => get_inode_change_time_conditions(proto.inode_change_time),
+            get_modification_time_conditions(proto.modification_time)?,
+        ConditionType::AccessTime => get_access_time_conditions(proto.access_time)?,
+        ConditionType::InodeChangeTime => get_inode_change_time_conditions(proto.inode_change_time)?,
         ConditionType::Size => get_size_conditions(proto.size),
         ConditionType::ExtFlags => get_ext_flags_condition(proto.ext_flags),
         ConditionType::ContentsRegexMatch =>
@@ -766,7 +760,7 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MinModificationTime(time) => {
-                assert_eq!(&time_from_micros(123), time);
+                assert_eq!(&time_from_micros(123).unwrap(), time);
             },
             v @ _ => panic!("Unexpected condition type: {:?}", v)
         }
@@ -790,7 +784,7 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MaxModificationTime(time) => {
-                assert_eq!(&time_from_micros(234), time);
+                assert_eq!(&time_from_micros(234).unwrap(), time);
             },
             v @ _ => panic!("Unexpected condition type: {:?}", v)
         }
@@ -831,7 +825,7 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MinAccessTime(time) => {
-                assert_eq!(&time_from_micros(123), time);
+                assert_eq!(&time_from_micros(123).unwrap(), time);
             },
             v @ _ => panic!("Unexpected condition type: {:?}", v)
         }
@@ -855,7 +849,7 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MaxAccessTime(time) => {
-                assert_eq!(&time_from_micros(234), time);
+                assert_eq!(&time_from_micros(234).unwrap(), time);
             },
             v @ _ => panic!("Unexpected condition type: {:?}", v)
         }
@@ -896,7 +890,7 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MinInodeChangeTime(time) => {
-                assert_eq!(&time_from_micros(123), time);
+                assert_eq!(&time_from_micros(123).unwrap(), time);
             },
             v @ _ => panic!("Unexpected condition type: {:?}", v)
         }
@@ -920,7 +914,7 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MaxInodeChangeTime(time) => {
-                assert_eq!(&time_from_micros(234), time);
+                assert_eq!(&time_from_micros(234).unwrap(), time);
             },
             v @ _ => panic!("Unexpected condition type: {:?}", v)
         }
