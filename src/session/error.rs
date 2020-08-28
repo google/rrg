@@ -15,8 +15,6 @@ pub enum Error {
     Encode(prost::EncodeError),
     /// An error occurred when parsing a proto message.
     Parse(ParseError),
-    /// An error occurred when converting time micros from proto to std::time::SystemTime.
-    TimeMicrosConversion(TimeMicrosConversionError)
 }
 
 impl Error {
@@ -54,9 +52,6 @@ impl Display for Error {
             Parse(ref error) => {
                 write!(fmt, "malformed proto message: {}", error)
             }
-            TimeMicrosConversion(ref error) => {
-                write!(fmt, "time micros conversion error: {}", error)
-            }
         }
     }
 }
@@ -71,7 +66,6 @@ impl std::error::Error for Error {
             Dispatch(_) => None,
             Encode(ref error) => Some(error),
             Parse(ref error) => Some(error),
-            TimeMicrosConversion(ref error) => Some(error)
         }
     }
 }
@@ -97,6 +91,8 @@ pub enum ParseError {
     Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
+    /// An error occurred when converting time micros from proto to std::time::SystemTime.
+    TimeMicrosConversion(TimeMicrosConversionError)
 }
 
 impl ParseError {
@@ -125,6 +121,9 @@ impl Display for ParseError {
             Decode(ref error) => {
                 write!(fmt, "failed to decode proto message: {}", error)
             }
+            TimeMicrosConversion(ref error) => {
+                write!(fmt, "time micros conversion error: {}", error)
+            }
         }
     }
 }
@@ -137,6 +136,7 @@ impl std::error::Error for ParseError {
         match *self {
             Malformed(ref error) => Some(error.as_ref()),
             Decode(ref error) => Some(error),
+            TimeMicrosConversion(ref error) => Some(error),
         }
     }
 }
