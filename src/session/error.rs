@@ -15,6 +15,8 @@ pub enum Error {
     Encode(prost::EncodeError),
     /// An error occurred when parsing a proto message.
     Parse(ParseError),
+    /// An error occurred when converting time micros from proto to std::time::SystemTime.
+    TimeMicrosConversion(TimeMicrosConversionError)
 }
 
 impl Error {
@@ -52,6 +54,9 @@ impl Display for Error {
             Parse(ref error) => {
                 write!(fmt, "malformed proto message: {}", error)
             }
+            TimeMicrosConversion(ref error) => {
+                write!(fmt, "time micros conversion error: {}", error)
+            }
         }
     }
 }
@@ -66,6 +71,7 @@ impl std::error::Error for Error {
             Dispatch(_) => None,
             Encode(ref error) => Some(error),
             Parse(ref error) => Some(error),
+            TimeMicrosConversion(ref error) => Some(error)
         }
     }
 }
@@ -177,5 +183,33 @@ impl From<MissingFieldError> for ParseError {
 
     fn from(error: MissingFieldError) -> ParseError {
         ParseError::malformed(error)
+    }
+}
+
+/// An error type for situations where time micros cannot be convert to std::time::SystemTime.
+#[derive(Debug)]
+pub struct TimeMicrosConversionError {
+    /// Time micros value causing the conversion error.
+    pub micros: u64
+}
+
+impl Display for TimeMicrosConversionError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "cannot convert micros to std::time::SystemTime: {}", self.micros)
+    }
+}
+
+impl std::error::Error for TimeMicrosConversionError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl From<TimeMicrosConversionError> for ParseError {
+
+    fn from(error: TimeMicrosConversionError) -> ParseError {
+        ParseError::TimeMicrosConversion(error)
     }
 }
