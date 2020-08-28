@@ -15,7 +15,7 @@
 //! instance of the corresponding request type and send some (zero or more)
 //! instances of the corresponding response type.
 
-pub mod platform_info;
+pub mod platform;
 #[cfg(target_os = "linux")]
 pub mod filesystems;
 
@@ -101,7 +101,7 @@ where
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
-        "GetPlatformInfo" => task.execute(self::platform_info::handle),
+        "GetPlatformInfo" => task.execute(self::platform::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
 
         #[cfg(target_family = "unix")]

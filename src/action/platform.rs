@@ -53,10 +53,11 @@ impl From<Error> for session::Error {
     }
 }
 
-/// A Response type for `GetPlatformInfo` action
+/// A response type for `GetPlatformInfo` action.
+/// Gives client platform information.
 #[derive(Default)]
 pub struct Response {
-    /// Client platform information
+
     system: Option<String>,
     release_name: Option<String>,
     version_id: Option<String>,
@@ -108,17 +109,14 @@ fn get_linux_response<S: Session>(session: &mut S, os_type: String) -> session::
 /// Handles requests for `GetPlatformInfo` action.
 pub fn handle<S: Session>(session:&mut S, _: ()) -> session::Result<()> {
     let os_type = os_type().map_err(Error::CannotGetOSType)?;
-    match os_type.as_str() {
-        "Linux" => {
-            get_linux_response(session, os_type)?;
-        },
-        _ => {
-            session.reply(Response {
-                    system: Some(os_type),
-                    fqdn: hostname().ok(),
-                    ..Default::default() // TODO: Add other systems
-                })?;
-        }
+    if cfg!(target_os = "linux") {
+        get_linux_response(session, os_type)?;
+    } else {
+        session.reply(Response {
+                system: Some(os_type),
+                fqdn: hostname().ok(),
+                ..Default::default() // TODO: Add other systems
+            })?;
     }
 
     Ok(())
@@ -130,23 +128,27 @@ impl super::Response for Response {
 
     type Proto = rrg_proto::Uname;
 
-    /// Convert `Response` struct to protobuf message `Uname`
+    /// Convert `Response` struct to protobuf message `Uname`.
     fn into_proto(self) -> rrg_proto::Uname {
+        let system = self.system.unwrap_or(String::from("None"));
+        let release_name = self.release_name.unwrap_or(String::from("None"));
+        let architecture = self.architecture.unwrap_or(String::from("None"));
+        let pep425tag = Some(
+            format!("{}_{}_{}", 
+                system, 
+                release_name, 
+                architecture
+        ));
         Uname {
-            system: self.system.clone(),
-            release: self.release_name.clone(),
+            system: Some(system),
+            release: Some(release_name),
             version: self.version_id,
             machine: self.machine,
             kernel: self.kernel_release,
             fqdn: self.fqdn,
-            architecture: self.architecture.clone(),
+            architecture: Some(architecture),
             node: self.node,
-            pep425tag: Some(
-                format!("{}_{}_{}", 
-                    self.system.unwrap_or(String::from("None")), 
-                    self.release_name.unwrap_or(String::from("None")), 
-                    self.architecture.unwrap_or(String::from("None"))
-            )),
+            pep425tag: pep425tag,
             ..Default::default()
         }
     }
@@ -157,15 +159,39 @@ mod test {
 
     use super::*;
 
+    // #[test]
+    // fn test_system() {
+    //     let mut session = session::test::Fake::new();
+    //     assert!(handle(&mut session, ()).is_ok());
+
+    //     assert_eq!(session.reply_count(), 1);
+    //     let platform_info = &session.reply::<Response>(0);
+
+    //     assert!(platform_info.system.is_some());
+    // }
+
     #[test]
-    fn test_system() {
+    #[cfg(target_os = "linux")]
+    fn test_system_linux() {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, ()).is_ok());
-
+    
         assert_eq!(session.reply_count(), 1);
         let platform_info = &session.reply::<Response>(0);
 
-        assert!(platform_info.system.is_some());
+        assert_eq!(platform_info.system.as_ref().unwrap(), "Linux");
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_system_windows() {
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, ()).is_ok());
+    
+        assert_eq!(session.reply_count(), 1);
+        let platform_info = &session.reply::<Response>(0);
+    
+        assert_eq!(platform_info.system.as_ref().unwrap(), "Windows");
     }
 
     #[test]
