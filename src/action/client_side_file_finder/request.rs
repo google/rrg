@@ -30,19 +30,13 @@ type PathType = rrg_proto::path_spec::PathType;
 
 #[derive(Debug)]
 pub struct Request {
-    paths: Vec<String>,
-    path_type: PathType,
-    action: Option<Action>,
-    conditions: Vec<Condition>,
-    process_non_regular_files: bool,
-    follow_links: bool,
-    xdev_mode: XDevMode,
-}
-
-#[derive(Debug, PartialEq)]
-enum MatchMode {
-    AllHits,
-    FirstHit,
+    pub paths: Vec<String>,
+    pub path_type: PathType,
+    pub action: Option<Action>,
+    pub conditions: Vec<Condition>,
+    pub process_non_regular_files: bool,
+    pub follow_links: bool,
+    pub xdev_mode: XDevMode,
 }
 
 #[derive(Debug)]
@@ -54,24 +48,24 @@ pub enum Action {
 
 #[derive(Debug)]
 pub struct StatActionOptions {
-    resolve_links: bool,
-    collect_ext_attrs: bool,
+    pub resolve_links: bool,
+    pub collect_ext_attrs: bool,
 }
 
 #[derive(Debug)]
 pub struct HashActionOptions {
-    max_size: u64,
-    oversized_file_policy: HashActionOversizedFilePolicy,
-    collect_ext_attrs: bool,
+    pub max_size: u64,
+    pub oversized_file_policy: HashActionOversizedFilePolicy,
+    pub collect_ext_attrs: bool,
 }
 
 #[derive(Debug)]
 pub struct DownloadActionOptions {
-    max_size: u64,
-    oversized_file_policy: DownloadActionOversizedFilePolicy,
-    use_external_stores: bool,
-    collect_ext_attrs: bool,
-    chunk_size: u64,
+    pub max_size: u64,
+    pub oversized_file_policy: DownloadActionOversizedFilePolicy,
+    pub use_external_stores: bool,
+    pub collect_ext_attrs: bool,
+    pub chunk_size: u64,
 }
 
 #[derive(Debug)]
@@ -92,26 +86,32 @@ pub enum Condition {
     ContentsLiteralMatch(ContentsLiteralMatchConditionOptions),
 }
 
+#[derive(Debug, PartialEq)]
+pub enum MatchMode {
+    AllHits,
+    FirstHit,
+}
+
 #[derive(Debug)]
 pub struct ContentsRegexMatchConditionOptions {
-    regex: Regex,
-    mode: MatchMode,
-    bytes_before: u32,
-    bytes_after: u32,
-    start_offset: u64,
-    length: u64,
+    pub regex: Regex,
+    pub mode: MatchMode,
+    pub bytes_before: u32,
+    pub bytes_after: u32,
+    pub start_offset: u64,
+    pub length: u64,
 }
 
 #[derive(Debug)]
 pub struct ContentsLiteralMatchConditionOptions {
-    literal: Vec<u8>,
-    mode: MatchMode,
-    start_offset: u64,
-    length: u64,
-    bytes_before: u32,
-    bytes_after: u32,
-    xor_in_key: u32,
-    xor_out_key: u32,
+    pub literal: Vec<u8>,
+    pub mode: MatchMode,
+    pub start_offset: u64,
+    pub length: u64,
+    pub bytes_before: u32,
+    pub bytes_after: u32,
+    pub xor_in_key: u32,
+    pub xor_out_key: u32,
 }
 
 impl TryFrom<rrg_proto::FileFinderAction> for Action {
