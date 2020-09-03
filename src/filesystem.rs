@@ -35,6 +35,19 @@ pub struct Entry {
 /// The only exception are the problems encountering when collecting information
 /// about the root folder in which case an error is returned instead of the
 /// iterator.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::path::PathBuf;
+///
+/// let iter = rrg::filesystem::walk_dir("/").unwrap();
+///
+/// let items = iter.map(|entry| entry.path).collect::<Vec<_>>();
+/// assert!(items.contains(&PathBuf::from("/usr")));
+/// assert!(items.contains(&PathBuf::from("/usr/bin")));
+/// assert!(items.contains(&PathBuf::from("/usr/lib")));
+/// ```
 pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     let metadata = std::fs::symlink_metadata(&root)?;
     let pending = vec!(list_dir(&root)?);
@@ -59,7 +72,20 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
 /// While all entry-related errors are ignored, constructing the iterator itself
 /// can still fail. This can happen when e.g. when the specified path does not
 /// represent a directory or does not exist.
-fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::path::PathBuf;
+///
+/// let iter = rrg::filesystem::list_dir("/").unwrap();
+///
+/// let items = iter.map(|entry| entry.path).collect::<Vec<_>>();
+/// assert!(items.contains(&PathBuf::from("/home")));
+/// assert!(items.contains(&PathBuf::from("/bin")));
+/// assert!(items.contains(&PathBuf::from("/tmp")));
+/// ```
+pub fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
     let iter = std::fs::read_dir(path)?;
 
     Ok(ListDir {
@@ -143,7 +169,7 @@ impl std::iter::Iterator for WalkDir {
 /// The iterator can be constructed with the [`list_dir`] function.
 ///
 /// [`list_dir`]: fn.list_dir.html
-struct ListDir {
+pub struct ListDir {
     iter: std::fs::ReadDir,
 }
 
