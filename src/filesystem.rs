@@ -211,6 +211,20 @@ mod tests {
     }
 
     #[test]
+    fn test_walk_list_with_unicode_names() {
+        let tempdir = tempfile::tempdir().unwrap();
+        File::create(tempdir.path().join("zażółć gęślą jaźń")).unwrap();
+        File::create(tempdir.path().join("што й па мору")).unwrap();
+
+        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        results.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].path, tempdir.path().join("zażółć gęślą jaźń"));
+        assert_eq!(results[1].path, tempdir.path().join("што й па мору"));
+    }
+
+    #[test]
     fn test_walk_dir_non_existing() {
         let tempdir = tempfile::tempdir().unwrap();
 
