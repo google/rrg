@@ -4,14 +4,21 @@ use std::path::{Path, PathBuf};
 use log::warn;
 
 pub fn walk<P: AsRef<Path>>(root: P) -> std::io::Result<Walk> {
-    let iter = std::fs::read_dir(root)?;
+    let metadata = std::fs::symlink_metadata(&root)?;
+
+    let iter = std::fs::read_dir(&root)?;
     Ok(Walk {
+        root: Some(WalkEntry {
+            path: root.as_ref().to_path_buf(),
+            metadata: metadata,
+        }),
         pending: vec!(WalkDir::from_read_dir(iter)),
     })
 }
 
 pub struct Walk {
     // TODO: Add support for stopping at device boundaries.
+    root: Option<WalkEntry>,
     pending: Vec<WalkDir>,
 }
 
@@ -51,6 +58,10 @@ impl std::iter::Iterator for Walk {
     type Item = WalkEntry;
 
     fn next(&mut self) -> Option<WalkEntry> {
+        if self.root.is_some() {
+            return self.root.take();
+        }
+
         let entry = self.pop()?;
 
         if entry.metadata.is_dir() {
@@ -121,6 +132,8 @@ mod tests {
     use std::fs::File;
 
     use super::*;
+
+    // TODO: Add test case for non-existing directory.
 
     #[test]
     fn test_walk_dir_empty() {
@@ -200,14 +213,16 @@ mod tests {
         assert!(results[1].metadata.file_type().is_symlink());
     }
 
-    // TODO: The iterator should yield information about the root folder on its
-    // first tick.
-
     #[test]
     fn test_walk_empty() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let mut iter = walk(&tempdir).unwrap();
+
+        let entry = iter.next().unwrap();
+        assert_eq!(entry.path, tempdir.path());
+        assert!(entry.metadata.is_dir());
+
         assert!(iter.next().is_none());
     }
 
@@ -221,16 +236,19 @@ mod tests {
         let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 4);
 
-        assert_eq!(results[0].path, tempdir.path().join("abc"));
-        assert!(results[0].metadata.is_file());
+        assert_eq!(results[0].path, tempdir.path());
+        assert!(results[0].metadata.is_dir());
 
-        assert_eq!(results[1].path, tempdir.path().join("def"));
+        assert_eq!(results[1].path, tempdir.path().join("abc"));
         assert!(results[1].metadata.is_file());
 
-        assert_eq!(results[2].path, tempdir.path().join("ghi"));
+        assert_eq!(results[2].path, tempdir.path().join("def"));
         assert!(results[2].metadata.is_file());
+
+        assert_eq!(results[3].path, tempdir.path().join("ghi"));
+        assert!(results[3].metadata.is_file());
     }
 
     #[test]
@@ -242,13 +260,16 @@ mod tests {
         let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 2);
+        assert_eq!(results.len(), 3);
 
-        assert_eq!(results[0].path, tempdir.path().join("abc"));
+        assert_eq!(results[0].path, tempdir.path());
         assert!(results[0].metadata.is_dir());
 
-        assert_eq!(results[1].path, tempdir.path().join("def"));
+        assert_eq!(results[1].path, tempdir.path().join("abc"));
         assert!(results[1].metadata.is_dir());
+
+        assert_eq!(results[2].path, tempdir.path().join("def"));
+        assert!(results[2].metadata.is_dir());
     }
 
     #[test]
@@ -261,13 +282,16 @@ mod tests {
         let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 2);
+        assert_eq!(results.len(), 3);
 
-        assert_eq!(results[0].path, tempdir.path().join("abc"));
+        assert_eq!(results[0].path, tempdir.path());
         assert!(results[0].metadata.is_dir());
 
-        assert_eq!(results[1].path, tempdir.path().join("abc").join("def"));
+        assert_eq!(results[1].path, tempdir.path().join("abc"));
         assert!(results[1].metadata.is_dir());
+
+        assert_eq!(results[2].path, tempdir.path().join("abc").join("def"));
+        assert!(results[2].metadata.is_dir());
     }
 
     #[test]
@@ -283,9 +307,9 @@ mod tests {
         let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 512);
+        assert_eq!(results.len(), 513);
 
-        for entry in results {
+        for entry in &results[1..] {
             assert!(entry.path.starts_with(&tempdir));
             assert!(entry.path.ends_with("foo"));
             assert!(entry.metadata.is_dir());
@@ -302,16 +326,19 @@ mod tests {
         let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 4);
 
-        assert_eq!(results[0].path, tempdir.path().join("foo"));
+        assert_eq!(results[0].path, tempdir.path());
         assert!(results[0].metadata.is_dir());
 
-        assert_eq!(results[1].path, tempdir.path().join("foo").join("abc"));
-        assert!(results[1].metadata.is_file());
+        assert_eq!(results[1].path, tempdir.path().join("foo"));
+        assert!(results[1].metadata.is_dir());
 
-        assert_eq!(results[2].path, tempdir.path().join("foo").join("def"));
-        assert!(results[1].metadata.is_file());
+        assert_eq!(results[2].path, tempdir.path().join("foo").join("abc"));
+        assert!(results[2].metadata.is_file());
+
+        assert_eq!(results[3].path, tempdir.path().join("foo").join("def"));
+        assert!(results[3].metadata.is_file());
     }
 
     #[cfg(target_family = "unix")]
@@ -329,16 +356,19 @@ mod tests {
         let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 4);
 
-        assert_eq!(results[0].path, dir);
+        assert_eq!(results[0].path, tempdir.path());
         assert!(results[0].metadata.file_type().is_dir());
 
-        assert_eq!(results[1].path, file);
-        assert!(results[1].metadata.file_type().is_file());
+        assert_eq!(results[1].path, dir);
+        assert!(results[1].metadata.file_type().is_dir());
 
-        assert_eq!(results[2].path, symlink);
-        assert!(results[2].metadata.file_type().is_symlink());
+        assert_eq!(results[2].path, file);
+        assert!(results[2].metadata.file_type().is_file());
+
+        assert_eq!(results[3].path, symlink);
+        assert!(results[3].metadata.file_type().is_symlink());
     }
 
     #[cfg(target_family = "unix")]
@@ -354,13 +384,16 @@ mod tests {
         let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 2);
+        assert_eq!(results.len(), 3);
 
-        assert_eq!(results[0].path, dir);
+        assert_eq!(results[0].path, tempdir.path());
         assert!(results[0].metadata.file_type().is_dir());
 
-        assert_eq!(results[1].path, symlink);
-        assert!(results[1].metadata.file_type().is_symlink());
+        assert_eq!(results[1].path, dir);
+        assert!(results[1].metadata.file_type().is_dir());
+
+        assert_eq!(results[2].path, symlink);
+        assert!(results[2].metadata.file_type().is_symlink());
     }
 
     #[test]
@@ -371,8 +404,9 @@ mod tests {
         let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].path, tempdir.path().join("zażółć gęślą jaźń"));
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[1].path, tempdir.path().join("zażółć gęślą jaźń"));
     }
 
     #[test]
@@ -380,11 +414,10 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         std::fs::write(tempdir.path().join("foo"), b"123456789").unwrap();
 
-        let mut iter = walk(&tempdir).unwrap();
+        let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
+        results.sort_by_key(|entry| entry.path.clone());
 
-        let entry = iter.next().unwrap();
-        assert_eq!(entry.metadata.len(), 9);
-
-        assert!(iter.next().is_none());
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[1].metadata.len(), 9);
     }
 }
