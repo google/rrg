@@ -6,13 +6,20 @@ use log::warn;
 pub fn walk<P: AsRef<Path>>(root: P) -> std::io::Result<Walk> {
     let metadata = std::fs::symlink_metadata(&root)?;
 
-    let iter = std::fs::read_dir(&root)?;
     Ok(Walk {
         root: Some(WalkEntry {
             path: root.as_ref().to_path_buf(),
             metadata: metadata,
         }),
-        pending: vec!(ListDir::from_read_dir(iter)),
+        pending: vec!(list_dir(&root)?),
+    })
+}
+
+fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
+    let iter = std::fs::read_dir(path)?;
+
+    Ok(ListDir {
+        iter: iter,
     })
 }
 
@@ -30,9 +37,9 @@ pub struct WalkEntry {
 impl Walk {
 
     fn push(&mut self, entry: &WalkEntry) {
-        match std::fs::read_dir(&entry.path) {
+        match list_dir(&entry.path) {
             Ok(iter) => {
-                self.pending.push(ListDir::from_read_dir(iter));
+                self.pending.push(iter);
             },
             Err(error) => {
                 warn!("failed to read '{}': {}", entry.path.display(), error);
@@ -83,16 +90,6 @@ struct ListDir {
     iter: std::fs::ReadDir,
 }
 
-impl ListDir {
-
-    /// Converts a standard `ReadDir` iterator.
-    fn from_read_dir(iter: std::fs::ReadDir) -> ListDir {
-        ListDir {
-            iter: iter,
-        }
-    }
-}
-
 impl std::iter::Iterator for ListDir {
 
     type Item = WalkEntry;
@@ -139,8 +136,7 @@ mod tests {
     fn test_list_dir_empty() {
         let tempdir = tempfile::tempdir().unwrap();
 
-        let iter = std::fs::read_dir(&tempdir).unwrap();
-        let mut iter = ListDir::from_read_dir(iter);
+        let mut iter = list_dir(&tempdir).unwrap();
 
         assert!(iter.next().is_none());
     }
@@ -152,9 +148,7 @@ mod tests {
         File::create(tempdir.path().join("def")).unwrap();
         File::create(tempdir.path().join("ghi")).unwrap();
 
-        let iter = std::fs::read_dir(&tempdir).unwrap();
-
-        let mut results = ListDir::from_read_dir(iter).collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 3);
@@ -175,9 +169,7 @@ mod tests {
         std::fs::create_dir(tempdir.path().join("abc")).unwrap();
         std::fs::create_dir(tempdir.path().join("def")).unwrap();
 
-        let iter = std::fs::read_dir(&tempdir).unwrap();
-
-        let mut results = ListDir::from_read_dir(iter).collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
@@ -199,9 +191,7 @@ mod tests {
         File::create(&source).unwrap();
         std::os::unix::fs::symlink(&source, &target).unwrap();
 
-        let iter = std::fs::read_dir(&tempdir).unwrap();
-
-        let mut results = ListDir::from_read_dir(iter).collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
