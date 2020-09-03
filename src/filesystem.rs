@@ -5,13 +5,14 @@ use log::warn;
 
 pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     let metadata = std::fs::symlink_metadata(&root)?;
+    let pending = vec!(list_dir(&root)?);
 
     Ok(WalkDir {
         root: Some(WalkEntry {
             path: root.as_ref().to_path_buf(),
             metadata: metadata,
         }),
-        pending: vec!(list_dir(&root)?),
+        pending: pending,
     })
 }
 
