@@ -52,12 +52,16 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     let metadata = std::fs::symlink_metadata(&root)?;
     let pending = vec!(list_dir(&root)?);
 
+    #[cfg(target_family = "unix")]
+    let dev = std::os::unix::fs::MetadataExt::dev(&metadata);
+
     Ok(WalkDir {
         root: Some(Entry {
             path: root.as_ref().to_path_buf(),
             metadata: metadata,
         }),
         pending: pending,
+        #[cfg(target_family = "unix")] dev: dev,
     })
 }
 
@@ -107,9 +111,9 @@ pub fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
 ///
 /// [`walk_dir`]: fn.walk_dir.html
 pub struct WalkDir {
-    // TODO: Add support for stopping at device boundaries.
     root: Option<Entry>,
     pending: Vec<ListDir>,
+    #[cfg(target_family = "unix")] dev: u64,
 }
 
 impl WalkDir {
@@ -136,6 +140,16 @@ impl WalkDir {
 
         None
     }
+
+    #[cfg(target_family = "unix")]
+    fn same_dev(&self, entry: &Entry) -> bool {
+        self.dev == std::os::unix::fs::MetadataExt::dev(&entry.metadata)
+    }
+
+    #[cfg(target_family = "windows")]
+    fn same_dev(&self, entry: &Entry) -> bool {
+        true
+    }
 }
 
 impl std::iter::Iterator for WalkDir {
@@ -149,7 +163,7 @@ impl std::iter::Iterator for WalkDir {
 
         let entry = self.pop()?;
 
-        if entry.metadata.is_dir() {
+        if entry.metadata.is_dir() && self.same_dev(&entry) {
             self.push(&entry);
         }
 
