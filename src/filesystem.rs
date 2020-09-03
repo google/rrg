@@ -12,14 +12,14 @@ pub fn walk<P: AsRef<Path>>(root: P) -> std::io::Result<Walk> {
             path: root.as_ref().to_path_buf(),
             metadata: metadata,
         }),
-        pending: vec!(WalkDir::from_read_dir(iter)),
+        pending: vec!(ListDir::from_read_dir(iter)),
     })
 }
 
 pub struct Walk {
     // TODO: Add support for stopping at device boundaries.
     root: Option<WalkEntry>,
-    pending: Vec<WalkDir>,
+    pending: Vec<ListDir>,
 }
 
 pub struct WalkEntry {
@@ -32,7 +32,7 @@ impl Walk {
     fn push(&mut self, entry: &WalkEntry) {
         match std::fs::read_dir(&entry.path) {
             Ok(iter) => {
-                self.pending.push(WalkDir::from_read_dir(iter));
+                self.pending.push(ListDir::from_read_dir(iter));
             },
             Err(error) => {
                 warn!("failed to read '{}': {}", entry.path.display(), error);
@@ -77,23 +77,23 @@ impl std::iter::Iterator for Walk {
 /// This iterator is very similar to the standard `ReadDir` iterator, except
 /// that it is forgetful and only yields entries that did not cause any errors.
 ///
-/// Unlike the `ReadDir` iterator entries, `WalkDir` entries are guaranteed to
+/// Unlike the `ReadDir` iterator entries, `ListDir` entries are guaranteed to
 /// have valid metadata objects attached.
-struct WalkDir {
+struct ListDir {
     iter: std::fs::ReadDir,
 }
 
-impl WalkDir {
+impl ListDir {
 
     /// Converts a standard `ReadDir` iterator.
-    fn from_read_dir(iter: std::fs::ReadDir) -> WalkDir {
-        WalkDir {
+    fn from_read_dir(iter: std::fs::ReadDir) -> ListDir {
+        ListDir {
             iter: iter,
         }
     }
 }
 
-impl std::iter::Iterator for WalkDir {
+impl std::iter::Iterator for ListDir {
 
     type Item = WalkEntry;
 
@@ -136,17 +136,17 @@ mod tests {
     // TODO: Add test case for non-existing directory.
 
     #[test]
-    fn test_walk_dir_empty() {
+    fn test_list_dir_empty() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let iter = std::fs::read_dir(&tempdir).unwrap();
-        let mut iter = WalkDir::from_read_dir(iter);
+        let mut iter = ListDir::from_read_dir(iter);
 
         assert!(iter.next().is_none());
     }
 
     #[test]
-    fn test_walk_dir_with_files() {
+    fn test_list_dir_with_files() {
         let tempdir = tempfile::tempdir().unwrap();
         File::create(tempdir.path().join("abc")).unwrap();
         File::create(tempdir.path().join("def")).unwrap();
@@ -154,7 +154,7 @@ mod tests {
 
         let iter = std::fs::read_dir(&tempdir).unwrap();
 
-        let mut results = WalkDir::from_read_dir(iter).collect::<Vec<_>>();
+        let mut results = ListDir::from_read_dir(iter).collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 3);
@@ -170,14 +170,14 @@ mod tests {
     }
 
     #[test]
-    fn test_walk_dir_with_dirs() {
+    fn test_list_dir_with_dirs() {
         let tempdir = tempfile::tempdir().unwrap();
         std::fs::create_dir(tempdir.path().join("abc")).unwrap();
         std::fs::create_dir(tempdir.path().join("def")).unwrap();
 
         let iter = std::fs::read_dir(&tempdir).unwrap();
 
-        let mut results = WalkDir::from_read_dir(iter).collect::<Vec<_>>();
+        let mut results = ListDir::from_read_dir(iter).collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
@@ -191,7 +191,7 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     #[test]
-    fn test_walk_dir_with_links() {
+    fn test_list_dir_with_links() {
         let tempdir = tempfile::tempdir().unwrap();
         let source = tempdir.path().join("abc");
         let target = tempdir.path().join("def");
@@ -201,7 +201,7 @@ mod tests {
 
         let iter = std::fs::read_dir(&tempdir).unwrap();
 
-        let mut results = WalkDir::from_read_dir(iter).collect::<Vec<_>>();
+        let mut results = ListDir::from_read_dir(iter).collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
