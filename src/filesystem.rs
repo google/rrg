@@ -1,13 +1,40 @@
+//! Utilities for working the filesystem.
+//!
+//! This file can be thought as an extension for functionalities missing in the
+//! standard `std::fs` module. All functions are portable and should work on all
+//! supported platforms (perhaps with limited capabilities).
+
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 
 use log::warn;
 
+/// A path to a filesystem item and associated metadata.
+///
+/// This type is very similar to standard `DirEntry` but its `metadata` property
+/// is guaranteed to always be there.
 pub struct Entry {
+    /// A path to the filesystem item.
     pub path: PathBuf,
+    /// Metadata associated with the item.
     pub metadata: Metadata,
 }
 
+/// Returns a deep iterator over entries within a directory.
+///
+/// The iterator will recursively visit all subdirectories under `root` and
+/// yield entries for all encountered files.
+///
+/// Note that symlinked folders or directories mounted to a different device
+/// than the root will not be recursively searched. This is done to avoid cycles
+/// and undesired traversal of network filesystems (which can be very flow).
+///
+/// # Errors
+///
+/// In general, the iterator will ignore all errors encountered along the way.
+/// The only exception are the problems encountering when collecting information
+/// about the root folder in which case an error is returned instead of the
+/// iterator.
 pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     let metadata = std::fs::symlink_metadata(&root)?;
     let pending = vec!(list_dir(&root)?);
@@ -21,6 +48,17 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     })
 }
 
+/// Returns a shallow iterator over entries within a directory.
+///
+/// This function is very similar to the standard `std::fs::read_dir`, except
+/// that the returned iterator always returns valid entries and entry-related
+/// errors are simply ignored.
+///
+/// # Errors
+///
+/// While all entry-related errors are ignored, constructing the iterator itself
+/// can still fail. This can happen when e.g. when the specified path does not
+/// represent a directory or does not exist.
 fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
     let iter = std::fs::read_dir(path)?;
 
@@ -29,6 +67,19 @@ fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
     })
 }
 
+/// Iterator over entries in all subdirectories.
+///
+/// This iterator will recursively descent to all subdirectories and yield
+/// entries for every file encountered along the way. However, during the
+/// traversal it will not cross device boundaries and enter symlinked
+/// directories.
+///
+/// Note that this iterator always returns an entry. All errors are simply
+/// swallowed.
+///
+/// The iterator can be constructed with the [`walk_dir`] function.
+///
+/// [`walk_dir`]: fn.walk_dir.html
 pub struct WalkDir {
     // TODO: Add support for stopping at device boundaries.
     root: Option<Entry>,
@@ -83,10 +134,15 @@ impl std::iter::Iterator for WalkDir {
 /// Iterator over the entries in a directory.
 ///
 /// This iterator is very similar to the standard `ReadDir` iterator, except
-/// that it is forgetful and only yields entries that did not cause any errors.
+/// that it is swallows errors and only yields entries that did not cause any
+/// errors.
 ///
 /// Unlike the `ReadDir` iterator entries, `ListDir` entries are guaranteed to
 /// have valid metadata objects attached.
+///
+/// The iterator can be constructed with the [`list_dir`] function.
+///
+/// [`list_dir`]: fn.list_dir.html
 struct ListDir {
     iter: std::fs::ReadDir,
 }
