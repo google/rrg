@@ -4,7 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 pub mod action;
-pub mod filesystem;
+pub mod fs;
 pub mod message;
 pub mod metadata;
 pub mod opts;

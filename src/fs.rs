@@ -41,7 +41,7 @@ pub struct Entry {
 /// ```no_run
 /// use std::path::PathBuf;
 ///
-/// let iter = rrg::filesystem::walk_dir("/").unwrap();
+/// let iter = rrg::fs::walk_dir("/").unwrap();
 ///
 /// let items = iter.map(|entry| entry.path).collect::<Vec<_>>();
 /// assert!(items.contains(&PathBuf::from("/usr")));
@@ -82,7 +82,7 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
 /// ```no_run
 /// use std::path::PathBuf;
 ///
-/// let iter = rrg::filesystem::list_dir("/").unwrap();
+/// let iter = rrg::fs::list_dir("/").unwrap();
 ///
 /// let items = iter.map(|entry| entry.path).collect::<Vec<_>>();
 /// assert!(items.contains(&PathBuf::from("/home")));
