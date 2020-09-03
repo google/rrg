@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 
 use log::warn;
 
-pub fn walk<P: AsRef<Path>>(root: P) -> std::io::Result<Walk> {
+pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     let metadata = std::fs::symlink_metadata(&root)?;
 
-    Ok(Walk {
+    Ok(WalkDir {
         root: Some(WalkEntry {
             path: root.as_ref().to_path_buf(),
             metadata: metadata,
@@ -23,7 +23,7 @@ fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
     })
 }
 
-pub struct Walk {
+pub struct WalkDir {
     // TODO: Add support for stopping at device boundaries.
     root: Option<WalkEntry>,
     pending: Vec<ListDir>,
@@ -34,7 +34,7 @@ pub struct WalkEntry {
     metadata: Metadata,
 }
 
-impl Walk {
+impl WalkDir {
 
     fn push(&mut self, entry: &WalkEntry) {
         match list_dir(&entry.path) {
@@ -60,7 +60,7 @@ impl Walk {
     }
 }
 
-impl std::iter::Iterator for Walk {
+impl std::iter::Iterator for WalkDir {
 
     type Item = WalkEntry;
 
@@ -204,10 +204,10 @@ mod tests {
     }
 
     #[test]
-    fn test_walk_empty() {
+    fn test_walk_dir_empty() {
         let tempdir = tempfile::tempdir().unwrap();
 
-        let mut iter = walk(&tempdir).unwrap();
+        let mut iter = walk_dir(&tempdir).unwrap();
 
         let entry = iter.next().unwrap();
         assert_eq!(entry.path, tempdir.path());
@@ -217,13 +217,13 @@ mod tests {
     }
 
     #[test]
-    fn test_walk_with_flat_files() {
+    fn test_walk_dir_with_flat_files() {
         let tempdir = tempfile::tempdir().unwrap();
         File::create(tempdir.path().join("abc")).unwrap();
         File::create(tempdir.path().join("def")).unwrap();
         File::create(tempdir.path().join("ghi")).unwrap();
 
-        let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 4);
@@ -242,12 +242,12 @@ mod tests {
     }
 
     #[test]
-    fn test_walk_with_flat_dirs() {
+    fn test_walk_dir_with_flat_dirs() {
         let tempdir = tempfile::tempdir().unwrap();
         std::fs::create_dir(tempdir.path().join("abc")).unwrap();
         std::fs::create_dir(tempdir.path().join("def")).unwrap();
 
-        let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 3);
@@ -263,12 +263,12 @@ mod tests {
     }
 
     #[test]
-    fn test_walk_with_nested_dirs() {
+    fn test_walk_dir_with_nested_dirs() {
         let tempdir = tempfile::tempdir().unwrap();
         std::fs::create_dir(tempdir.path().join("abc")).unwrap();
         std::fs::create_dir(tempdir.path().join("abc").join("def")).unwrap();
 
-        let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 3);
@@ -284,7 +284,7 @@ mod tests {
     }
 
     #[test]
-    fn test_walk_with_deeply_nested_dirs() {
+    fn test_walk_dir_with_deeply_nested_dirs() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let mut dir = tempdir.path().to_path_buf();
@@ -293,7 +293,7 @@ mod tests {
             std::fs::create_dir(&dir).unwrap();
         }
 
-        let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 513);
@@ -306,13 +306,13 @@ mod tests {
     }
 
     #[test]
-    fn test_walk_with_files_inside_dir() {
+    fn test_walk_dir_with_files_inside_dir() {
         let tempdir = tempfile::tempdir().unwrap();
         std::fs::create_dir(tempdir.path().join("foo")).unwrap();
         File::create(tempdir.path().join("foo").join("abc")).unwrap();
         File::create(tempdir.path().join("foo").join("def")).unwrap();
 
-        let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 4);
@@ -332,7 +332,7 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     #[test]
-    fn test_walk_with_dir_symlinks() {
+    fn test_walk_dir_with_dir_symlinks() {
         let tempdir = tempfile::tempdir().unwrap();
         let dir = tempdir.path().join("abc");
         let file = dir.join("def");
@@ -342,7 +342,7 @@ mod tests {
         File::create(&file).unwrap();
         std::os::unix::fs::symlink(&dir, &symlink).unwrap();
 
-        let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 4);
@@ -362,7 +362,7 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     #[test]
-    fn test_walk_with_circular_symlinks() {
+    fn test_walk_dir_with_circular_symlinks() {
         let tempdir = tempfile::tempdir().unwrap();
         let dir = tempdir.path().join("foo");
         let symlink = tempdir.path().join("foo").join("bar");
@@ -370,7 +370,7 @@ mod tests {
         std::fs::create_dir(&dir).unwrap();
         std::os::unix::fs::symlink(&dir, &symlink).unwrap();
 
-        let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 3);
@@ -386,11 +386,11 @@ mod tests {
     }
 
     #[test]
-    fn test_walk_with_unicode_names() {
+    fn test_walk_dir_with_unicode_names() {
         let tempdir = tempfile::tempdir().unwrap();
         File::create(tempdir.path().join("zażółć gęślą jaźń")).unwrap();
 
-        let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
@@ -399,11 +399,11 @@ mod tests {
     }
 
     #[test]
-    fn test_walk_metadata_size() {
+    fn test_walk_dir_metadata_size() {
         let tempdir = tempfile::tempdir().unwrap();
         std::fs::write(tempdir.path().join("foo"), b"123456789").unwrap();
 
-        let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
