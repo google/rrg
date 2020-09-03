@@ -1,3 +1,8 @@
+// Copyright 2020 Google LLC
+//
+// Use of this source code is governed by an MIT-style license that can be found
+// in the LICENSE file or at https://opensource.org/licenses/MIT.
+
 //! Utilities for working with the filesystem.
 //!
 //! This file can be thought as an extension for functionalities missing in the
