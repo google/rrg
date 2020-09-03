@@ -1,4 +1,4 @@
-//! Utilities for working the filesystem.
+//! Utilities for working with the filesystem.
 //!
 //! This file can be thought as an extension for functionalities missing in the
 //! standard `std::fs` module. All functions are portable and should work on all
