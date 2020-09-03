@@ -152,7 +152,7 @@ impl WalkDir {
     }
 
     #[cfg(target_family = "windows")]
-    fn same_dev(&self, entry: &Entry) -> bool {
+    fn same_dev(&self, _entry: &Entry) -> bool {
         true
     }
 }
