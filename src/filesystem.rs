@@ -268,7 +268,6 @@ mod tests {
         std::fs::create_dir(tempdir.path().join("abc")).unwrap();
         std::fs::create_dir(tempdir.path().join("abc").join("def")).unwrap();
 
-
         let mut results = walk(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
