@@ -3,12 +3,17 @@ use std::path::{Path, PathBuf};
 
 use log::warn;
 
+pub struct Entry {
+    pub path: PathBuf,
+    pub metadata: Metadata,
+}
+
 pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     let metadata = std::fs::symlink_metadata(&root)?;
     let pending = vec!(list_dir(&root)?);
 
     Ok(WalkDir {
-        root: Some(WalkEntry {
+        root: Some(Entry {
             path: root.as_ref().to_path_buf(),
             metadata: metadata,
         }),
@@ -26,18 +31,13 @@ fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
 
 pub struct WalkDir {
     // TODO: Add support for stopping at device boundaries.
-    root: Option<WalkEntry>,
+    root: Option<Entry>,
     pending: Vec<ListDir>,
-}
-
-pub struct WalkEntry {
-    path: PathBuf,
-    metadata: Metadata,
 }
 
 impl WalkDir {
 
-    fn push(&mut self, entry: &WalkEntry) {
+    fn push(&mut self, entry: &Entry) {
         match list_dir(&entry.path) {
             Ok(iter) => {
                 self.pending.push(iter);
@@ -48,7 +48,7 @@ impl WalkDir {
         }
     }
 
-    fn pop(&mut self) -> Option<WalkEntry> {
+    fn pop(&mut self) -> Option<Entry> {
         while let Some(iter) = self.pending.last_mut() {
             for entry in iter {
                 return Some(entry);
@@ -63,9 +63,9 @@ impl WalkDir {
 
 impl std::iter::Iterator for WalkDir {
 
-    type Item = WalkEntry;
+    type Item = Entry;
 
-    fn next(&mut self) -> Option<WalkEntry> {
+    fn next(&mut self) -> Option<Entry> {
         if self.root.is_some() {
             return self.root.take();
         }
@@ -93,9 +93,9 @@ struct ListDir {
 
 impl std::iter::Iterator for ListDir {
 
-    type Item = WalkEntry;
+    type Item = Entry;
 
-    fn next(&mut self) -> Option<WalkEntry> {
+    fn next(&mut self) -> Option<Entry> {
         for entry in &mut self.iter {
             let entry = match entry {
                 Ok(entry) => entry,
@@ -114,7 +114,7 @@ impl std::iter::Iterator for ListDir {
                 },
             };
 
-            return Some(WalkEntry {
+            return Some(Entry {
                 path: path,
                 metadata: metadata,
             });
