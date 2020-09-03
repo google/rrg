@@ -311,6 +311,7 @@ mod tests {
         assert!(results[1].metadata.file_type().is_symlink());
     }
 
+    #[cfg_attr(target_os = "macos", ignore)] // macOS mangles unicode names.
     #[test]
     fn test_walk_list_with_unicode_names() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -413,6 +414,7 @@ mod tests {
         assert!(results[2].metadata.is_dir());
     }
 
+    #[cfg_attr(target_os = "macos", ignore)] // macOS has a path length limit.
     #[test]
     fn test_walk_dir_with_deeply_nested_dirs() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -515,6 +517,7 @@ mod tests {
         assert!(results[2].metadata.file_type().is_symlink());
     }
 
+    #[cfg_attr(target_os = "macos", ignore)] // macOS mangles unicode names.
     #[test]
     fn test_walk_dir_with_unicode_names() {
         let tempdir = tempfile::tempdir().unwrap();
