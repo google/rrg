@@ -131,7 +131,13 @@ mod tests {
 
     use super::*;
 
-    // TODO: Add test case for non-existing directory.
+    #[test]
+    fn test_list_dir_non_existing() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let iter = list_dir(tempdir.path().join("foo"));
+        assert!(iter.is_err());
+    }
 
     #[test]
     fn test_list_dir_empty() {
@@ -202,6 +208,14 @@ mod tests {
 
         assert_eq!(results[1].path, target);
         assert!(results[1].metadata.file_type().is_symlink());
+    }
+
+    #[test]
+    fn test_walk_dir_non_existing() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let iter = walk_dir(tempdir.path().join("foo"));
+        assert!(iter.is_err());
     }
 
     #[test]
