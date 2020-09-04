@@ -289,6 +289,7 @@ mod tests {
         assert!(results[1].metadata.is_dir());
     }
 
+    // Symlinking is supported only on Unix-like systems.
     #[cfg(target_family = "unix")]
     #[test]
     fn test_list_dir_with_links() {
@@ -311,7 +312,8 @@ mod tests {
         assert!(results[1].metadata.file_type().is_symlink());
     }
 
-    #[cfg_attr(target_os = "macos", ignore)] // macOS mangles unicode names.
+    // macOS mangles Unicode-specific characters in filenames.
+    #[cfg_attr(target_os = "macos", ignore)]
     #[test]
     fn test_walk_list_with_unicode_names() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -414,8 +416,12 @@ mod tests {
         assert!(results[2].metadata.is_dir());
     }
 
-    #[cfg_attr(target_os = "macos", ignore)] // macOS has a path length limit.
-    #[cfg_attr(target_os = "windows", ignore)] // Windows has a path length limit.
+    // Both Windows and macOS have limits on the path length. Both of these
+    // limits are very low (260 and 1016 respectively), so making the created
+    // hierarchy to fit these would render the test quite useless. Hence, we
+    // simply ignore it on these platforms.
+    #[cfg_attr(target_os = "macos", ignore)]
+    #[cfg_attr(target_os = "windows", ignore)]
     #[test]
     fn test_walk_dir_with_deeply_nested_dirs() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -463,6 +469,7 @@ mod tests {
         assert!(results[3].metadata.is_file());
     }
 
+    // Symlinking is supported only on Unix-like systems.
     #[cfg(target_family = "unix")]
     #[test]
     fn test_walk_dir_with_dir_symlinks() {
@@ -493,6 +500,7 @@ mod tests {
         assert!(results[3].metadata.file_type().is_symlink());
     }
 
+    // Symlinking is supported only on Unix-like systems.
     #[cfg(target_family = "unix")]
     #[test]
     fn test_walk_dir_with_circular_symlinks() {
@@ -518,7 +526,8 @@ mod tests {
         assert!(results[2].metadata.file_type().is_symlink());
     }
 
-    #[cfg_attr(target_os = "macos", ignore)] // macOS mangles unicode names.
+    // macOS mangles Unicode-specific characters in filenames.
+    #[cfg_attr(target_os = "macos", ignore)]
     #[test]
     fn test_walk_dir_with_unicode_names() {
         let tempdir = tempfile::tempdir().unwrap();
