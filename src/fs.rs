@@ -415,6 +415,7 @@ mod tests {
     }
 
     #[cfg_attr(target_os = "macos", ignore)] // macOS has a path length limit.
+    #[cfg_attr(target_os = "windows", ignore)] // Windows has a path length limit.
     #[test]
     fn test_walk_dir_with_deeply_nested_dirs() {
         let tempdir = tempfile::tempdir().unwrap();
