@@ -3,6 +3,17 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+mod convert;
+
+pub use convert::IntoLossy;
+
+pub fn convert<T, U>(item: T) -> U
+where
+    T: IntoLossy<U>,
+{
+    item.into_lossy()
+}
+
 include!(concat!(env!("OUT_DIR"), "/grr.rs"));
 
 impl From<bool> for DataBlob {
