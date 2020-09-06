@@ -7,9 +7,9 @@
 //!
 //! A file stat action responses with stat of a given file
 
-use std::fs::{self, File, Metadata};
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime};
 
 use log::warn;
 use rrg_proto::{GetFileStatRequest, path_spec::Options, path_spec::PathType, PathSpec, StatEntry};
@@ -110,10 +110,11 @@ fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
 }
 
 #[cfg(not(target_family = "unix"))]
-fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
+fn get_ext_attrs(_path: &Path) -> Vec<ExtAttr> {
     vec![]
 }
 
+#[cfg(target_os = "linux")]
 fn get_time_option<E: std::fmt::Display>(time: Result<SystemTime, E>) -> Option<SystemTime> {
     match time {
         Ok(time_value) => Some(time_value),
@@ -138,9 +139,10 @@ fn get_time_since_unix_epoch(sys_time: &Option<SystemTime>) -> Option<u64> {
 }
 
 #[cfg(target_os = "linux")]
-fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
+fn get_status_change_time(metadata: &fs::Metadata) -> Option<SystemTime> {
     use std::time::Duration;
     use std::os::unix::fs::MetadataExt;
+    use std::time::UNIX_EPOCH;
 
     UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
 }
@@ -181,7 +183,7 @@ fn form_response(original_path: &Path, destination: &Path)
 }
 
 #[cfg(not(target_os = "linux"))]
-fn form_response(original_path: &PathBuf, destination: &PathBuf)
+fn form_response(_original_path: &PathBuf, _destination: &PathBuf)
                  -> Result<Response, session::Error> {
     Err(session::Error::Dispatch(
         String::from("This functionality has not yet been implemented for your platform.")))
@@ -212,6 +214,7 @@ fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
 fn get_linux_flags(path: &Path) -> Option<u32> {
     use std::os::raw::c_long;
     use std::os::unix::io::AsRawFd;
+    use std::fs::File;
 
     let file = match File::open(path) {
         Ok(file) => file,
@@ -344,6 +347,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_empty_request() {
         let request: Result<super::Request, _> =
             Request::from_proto(GetFileStatRequest::default());
@@ -351,6 +355,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_no_error_with_existing_file() {
         let dir = tempdir().unwrap();
 
@@ -361,6 +366,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_file_does_not_exist() {
         let dir = tempdir().unwrap();
 
@@ -370,6 +376,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_mode_and_size() {
         let new_size = 42;
         let new_mode = 0o100444;
@@ -393,6 +400,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_hard_link() {
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("temp_file.txt");
@@ -415,6 +423,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_family = "unix")]
     fn test_extended_attributes() {
         fn check_attribute(attribute: &ExtAttr,
                            name: &str, value: Vec<u8>) {
@@ -439,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_family = "unix")]
+    #[cfg(target_os = "linux")]
     fn test_chain_of_symlinks() {
         use std::os::unix;
 
