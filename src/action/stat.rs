@@ -438,13 +438,14 @@ mod tests {
         xattr::set(&file_path, "user.ⓤⓝⓘⓒⓞⓓⓔ ⓝⓐⓜⓔ", &[0, 1]).unwrap();
         xattr::set(&file_path, "user.без значения", &[]).unwrap();
 
-        let extended_attributes = get_ext_attrs(&file_path);
+        let mut extended_attributes = get_ext_attrs(&file_path);
+        extended_attributes.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
 
         assert_eq!(extended_attributes.len(), 3);
 
         check_attribute(&extended_attributes[0], "user.simple_name", vec![0, 28, 42]);
-        check_attribute(&extended_attributes[1], "user.ⓤⓝⓘⓒⓞⓓⓔ ⓝⓐⓜⓔ", vec![0, 1]);
-        check_attribute(&extended_attributes[2], "user.без значения", vec![]);
+        check_attribute(&extended_attributes[1], "user.без значения", vec![]);
+        check_attribute(&extended_attributes[2], "user.ⓤⓝⓘⓒⓞⓓⓔ ⓝⓐⓜⓔ", vec![0, 1]);
     }
 
     #[test]
