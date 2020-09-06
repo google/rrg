@@ -182,8 +182,9 @@ fn form_response(original_path: &Path, destination: &Path)
 
 #[cfg(not(target_os = "linux"))]
 fn form_response(original_path: &PathBuf, destination: &PathBuf)
-                 -> Result<Response, std::io::Error> {
-    Ok(Response::default())
+                 -> Result<Response, session::Error> {
+    Err(session::Error::Dispatch(
+        String::from("This functionality has not yet been implemented for your platform.")))
 }
 
 fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
