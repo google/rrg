@@ -31,12 +31,12 @@ fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
             if j >= n {
                 res = res + r"\[";
             } else {
-                let mut stuff = pat[i..j].replace(r"\", r"\\");
-                let stuff_chars : Vec<char> = stuff.chars().collect();
+                let mut stuff = pat[i..j].replace(r"\", r"\\").to_owned();
+                let stuff_first_char: char = stuff.chars().next().unwrap();
                 i = j + 1;
-                if stuff_chars[0] == '!' {
+                if stuff_first_char == '!' {
                     stuff = String::from("^") + &stuff[1..];
-                } else if stuff_chars[0] == '^' {
+                } else if stuff_first_char == '^' {
                     stuff = String::from(r"\") + &stuff;
                 }
                 res = format!("{}[{}]", res, stuff);
@@ -45,6 +45,9 @@ fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
             res = res + &regex::escape(&c.to_string());
         }
     }
+
+    // cpython version produces outpupt with excaped slashes, which is not desired here.
+    res = res.replace(r"\\", r"\");
 
     match Regex::new(&res) {
         Ok(v) => Ok(v),
@@ -58,6 +61,7 @@ mod tests {
 
     #[test]
     fn glob_to_regex_test() {
+        // cpython tests:
         assert_eq!(glob_to_regex("*").unwrap().as_str(), ".*");
         assert_eq!(glob_to_regex("?").unwrap().as_str(), ".");
         assert_eq!(glob_to_regex("a?b*").unwrap().as_str(), "a.b.*");
@@ -66,6 +70,10 @@ mod tests {
         assert_eq!(glob_to_regex("[!x]").unwrap().as_str(), "[^x]");
         assert_eq!(glob_to_regex("[^x]").unwrap().as_str(), r"[\^x]");
         assert_eq!(glob_to_regex("[x").unwrap().as_str(), r"\[x");
+
+        // additional tests:
+        assert_eq!(glob_to_regex("[a]]").unwrap().as_str(), r"[a]\]");
+        assert_eq!(glob_to_regex(r"[\\]\\").unwrap().as_str(), r"[\\]\\");
         assert_eq!(glob_to_regex("ąźć").unwrap().as_str(), "ąźć");
     }
 }
