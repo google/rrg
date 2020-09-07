@@ -46,7 +46,7 @@ fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
         }
     }
 
-    // cpython version produces outpupt with excaped slashes, which is not desired here.
+    // cpython version produces output with escaped slashes, which is not desired here.
     res = res.replace(r"\\", r"\");
 
     match Regex::new(&res) {
