@@ -294,6 +294,35 @@ impl From<std::num::TryFromIntError> for MicrosError {
     }
 }
 
+/// An error type for failures of converting timestamps to seconds.
+#[derive(Clone, Debug)]
+pub struct SecsError {
+    error: MicrosError,
+}
+
+impl std::fmt::Display for SecsError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.error.fmt(fmt)
+    }
+}
+
+impl From<MicrosError> for SecsError {
+
+    fn from(error: MicrosError) -> SecsError {
+        SecsError {
+            error: error,
+        }
+    }
+}
+
+impl From<SecsError> for MicrosError {
+
+    fn from(error: SecsError) -> MicrosError {
+        error.error
+    }
+}
+
 /// Converts system time into epoch microseconds.
 ///
 /// Because most GRR messages use epoch microseconds for representing timestamps
@@ -309,4 +338,20 @@ impl From<std::num::TryFromIntError> for MicrosError {
 pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
     let time_micros = time.duration_since(std::time::UNIX_EPOCH)?.as_micros();
     Ok(std::convert::TryInto::try_into(time_micros)?)
+}
+
+/// Converts system time into epoch seconds.
+///
+/// Some GRR messages use epoch seconds for representing timestamps. In such
+/// cases this function can be useful to convert from more idiomatic types.
+///
+/// # Examples
+///
+/// ```
+/// use rrg_proto::secs;
+///
+/// assert_eq!(secs(std::time::UNIX_EPOCH).unwrap(), 0);
+/// ```
+pub fn secs(time: std::time::SystemTime) -> Result<u64, SecsError> {
+    Ok(micros(time)?)
 }
