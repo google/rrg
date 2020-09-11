@@ -168,6 +168,9 @@ where
 impl FromLossy<std::fs::Metadata> for StatEntry {
 
     fn from_lossy(metadata: std::fs::Metadata) -> StatEntry {
+        #[cfg(target_family = "unix")]
+        use std::os::unix::fs::MetadataExt;
+
         // TODO: Fix definition of `StatEntry`.
         // `StatEntry` defines insufficient integer width for some fields. For
         // now we just ignore errors, but the definition should be improved.
@@ -206,27 +209,27 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
 
         StatEntry {
             #[cfg(target_family = "unix")]
-            st_mode: Some(std::os::unix::fs::MetadataExt::mode(&metadata).into()),
+            st_mode: Some(metadata.mode().into()),
             #[cfg(target_family = "unix")]
-            st_ino: some(std::os::unix::fs::MetadataExt::ino(&metadata)),
+            st_ino: some(metadata.ino()),
             #[cfg(target_family = "unix")]
-            st_dev: some(std::os::unix::fs::MetadataExt::dev(&metadata)),
+            st_dev: some(metadata.dev()),
             #[cfg(target_family = "unix")]
-            st_rdev: some(std::os::unix::fs::MetadataExt::rdev(&metadata)),
+            st_rdev: some(metadata.rdev()),
             #[cfg(target_family = "unix")]
-            st_nlink: some(std::os::unix::fs::MetadataExt::nlink(&metadata)),
+            st_nlink: some(metadata.nlink()),
             #[cfg(target_family = "unix")]
-            st_uid: Some(std::os::unix::fs::MetadataExt::uid(&metadata)),
+            st_uid: Some(metadata.uid()),
             #[cfg(target_family = "unix")]
-            st_gid: Some(std::os::unix::fs::MetadataExt::gid(&metadata)),
+            st_gid: Some(metadata.gid()),
             st_size: Some(metadata.len()),
             st_atime: atime_micros,
             st_mtime: mtime_micros,
             st_ctime: ctime_micros,
             #[cfg(target_family = "unix")]
-            st_blocks: some(std::os::unix::fs::MetadataExt::blocks(&metadata)),
+            st_blocks: some(metadata.blocks()),
             #[cfg(target_family = "unix")]
-            st_blksize: some(std::os::unix::fs::MetadataExt::blksize(&metadata)),
+            st_blksize: some(metadata.blksize()),
             ..Default::default()
         }
     }
