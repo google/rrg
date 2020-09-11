@@ -5,7 +5,9 @@
 
 mod convert;
 
-pub use convert::IntoLossy;
+pub use convert::{FromLossy, IntoLossy};
+
+use log::error;
 
 pub fn convert<T, U>(item: T) -> U
 where
@@ -160,6 +162,73 @@ where
     {
         let pair = |(key, value)| KeyValue::pair(key, value);
         iter.into_iter().map(pair).collect()
+    }
+}
+
+impl FromLossy<std::fs::Metadata> for StatEntry {
+
+    fn from_lossy(metadata: std::fs::Metadata) -> StatEntry {
+        // TODO: Fix definition of `StatEntry`.
+        // `StatEntry` defines insufficient integer width for some fields. For
+        // now we just ignore errors, but the definition should be improved.
+        use std::convert::TryInto;
+        let some = |value: u64| Some(value.try_into().unwrap_or(0));
+
+        let atime_micros = match metadata.accessed().ok().map(micros) {
+            Some(Ok(atime_micros)) => Some(atime_micros),
+            Some(Err(err)) => {
+                error!("failed to convert access time: {}", err);
+                None
+            },
+            None => None,
+        };
+
+        let mtime_micros = match metadata.modified().ok().map(micros) {
+            Some(Ok(mtime_micros)) => Some(mtime_micros),
+            Some(Err(err)) => {
+                error!("failed to convert modification time: {}", err);
+                None
+            },
+            None => None,
+        };
+
+        // TODO: `ctime` is actually not creation time on Linux (it is the inode
+        // change time). `StatEntry` is lacking in this regard and mixes just
+        // mixes the two.
+        let ctime_micros = match metadata.created().ok().map(micros) {
+            Some(Ok(ctime_micros)) => Some(ctime_micros),
+            Some(Err(err)) => {
+                error!("failed to convert creation time: {}", err);
+                None
+            },
+            None => None,
+        };
+
+        StatEntry {
+            #[cfg(target_family = "unix")]
+            st_mode: Some(std::os::unix::fs::MetadataExt::mode(&metadata).into()),
+            #[cfg(target_family = "unix")]
+            st_ino: some(std::os::unix::fs::MetadataExt::ino(&metadata)),
+            #[cfg(target_family = "unix")]
+            st_dev: some(std::os::unix::fs::MetadataExt::dev(&metadata)),
+            #[cfg(target_family = "unix")]
+            st_rdev: some(std::os::unix::fs::MetadataExt::rdev(&metadata)),
+            #[cfg(target_family = "unix")]
+            st_nlink: some(std::os::unix::fs::MetadataExt::nlink(&metadata)),
+            #[cfg(target_family = "unix")]
+            st_uid: Some(std::os::unix::fs::MetadataExt::uid(&metadata)),
+            #[cfg(target_family = "unix")]
+            st_gid: Some(std::os::unix::fs::MetadataExt::gid(&metadata)),
+            st_size: Some(metadata.len()),
+            st_atime: atime_micros,
+            st_mtime: mtime_micros,
+            st_ctime: ctime_micros,
+            #[cfg(target_family = "unix")]
+            st_blocks: some(std::os::unix::fs::MetadataExt::blocks(&metadata)),
+            #[cfg(target_family = "unix")]
+            st_blksize: some(std::os::unix::fs::MetadataExt::blksize(&metadata)),
+            ..Default::default()
+        }
     }
 }
 
