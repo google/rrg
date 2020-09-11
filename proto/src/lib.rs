@@ -168,13 +168,13 @@ where
 impl FromLossy<std::fs::Metadata> for StatEntry {
 
     fn from_lossy(metadata: std::fs::Metadata) -> StatEntry {
+        use std::convert::{TryFrom, TryInto};
         #[cfg(target_family = "unix")]
         use std::os::unix::fs::MetadataExt;
 
         // TODO: Fix definition of `StatEntry`.
         // `StatEntry` defines insufficient integer width for some fields. For
         // now we just ignore errors, but the definition should be improved.
-        use std::convert::TryInto;
         let some = |value: u64| Some(value.try_into().unwrap_or(0));
 
         let atime_micros = match metadata.accessed().ok().map(micros) {
@@ -195,11 +195,17 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             None => None,
         };
 
-        // TODO: `ctime` is actually not creation time on Linux (it is the inode
-        // change time). `StatEntry` is lacking in this regard and mixes just
-        // mixes the two.
-        let ctime_micros = match metadata.created().ok().map(micros) {
-            Some(Ok(ctime_micros)) => Some(ctime_micros),
+        #[cfg(target_family = "unix")]
+        let ctime_micros = match u64::try_from(metadata.ctime_nsec()) {
+            Ok(ctime_nanos) => Some(ctime_nanos / 1000u64),
+            Err(err) => {
+                error!("negative inode change time: {}", err);
+                None
+            },
+        };
+
+        let crtime_micros = match metadata.created().ok().map(micros) {
+            Some(Ok(crtime_micros)) => Some(crtime_micros),
             Some(Err(err)) => {
                 error!("failed to convert creation time: {}", err);
                 None
@@ -225,7 +231,9 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             st_size: Some(metadata.len()),
             st_atime: atime_micros,
             st_mtime: mtime_micros,
+            #[cfg(target_family = "unix")]
             st_ctime: ctime_micros,
+            st_crtime: crtime_micros,
             #[cfg(target_family = "unix")]
             st_blocks: some(metadata.blocks()),
             #[cfg(target_family = "unix")]
