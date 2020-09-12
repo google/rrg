@@ -353,5 +353,5 @@ pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
 /// assert_eq!(secs(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
 pub fn secs(time: std::time::SystemTime) -> Result<u64, SecsError> {
-    Ok(micros(time)?)
+    Ok(micros(time)? / 1_000_000)
 }
