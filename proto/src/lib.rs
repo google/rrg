@@ -3,9 +3,9 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-mod convert;
+pub mod convert;
 
-pub use convert::{FromLossy, IntoLossy};
+use convert::{FromLossy, IntoLossy};
 
 pub fn convert<T, U>(item: T) -> U
 where
