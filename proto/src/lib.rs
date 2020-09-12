@@ -177,8 +177,8 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
         // now we just ignore errors, but the definition should be improved.
         let some = |value: u64| Some(value.try_into().unwrap_or(0));
 
-        let atime_micros = match metadata.accessed().ok().map(micros) {
-            Some(Ok(atime_micros)) => Some(atime_micros),
+        let atime_secs = match metadata.accessed().ok().map(secs) {
+            Some(Ok(atime_secs)) => Some(atime_secs),
             Some(Err(err)) => {
                 error!("failed to convert access time: {}", err);
                 None
@@ -186,8 +186,8 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             None => None,
         };
 
-        let mtime_micros = match metadata.modified().ok().map(micros) {
-            Some(Ok(mtime_micros)) => Some(mtime_micros),
+        let mtime_secs = match metadata.modified().ok().map(secs) {
+            Some(Ok(mtime_secs)) => Some(mtime_secs),
             Some(Err(err)) => {
                 error!("failed to convert modification time: {}", err);
                 None
@@ -196,16 +196,16 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
         };
 
         #[cfg(target_family = "unix")]
-        let ctime_micros = match u64::try_from(metadata.ctime_nsec()) {
-            Ok(ctime_nanos) => Some(ctime_nanos / 1000u64),
+        let ctime_secs = match u64::try_from(metadata.ctime()) {
+            Ok(ctime_secs) => Some(ctime_secs),
             Err(err) => {
                 error!("negative inode change time: {}", err);
                 None
             },
         };
 
-        let crtime_micros = match metadata.created().ok().map(micros) {
-            Some(Ok(crtime_micros)) => Some(crtime_micros),
+        let crtime_secs = match metadata.created().ok().map(secs) {
+            Some(Ok(crtime_secs)) => Some(crtime_secs),
             Some(Err(err)) => {
                 error!("failed to convert creation time: {}", err);
                 None
@@ -229,11 +229,11 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             #[cfg(target_family = "unix")]
             st_gid: Some(metadata.gid()),
             st_size: Some(metadata.len()),
-            st_atime: atime_micros,
-            st_mtime: mtime_micros,
+            st_atime: atime_secs,
+            st_mtime: mtime_secs,
             #[cfg(target_family = "unix")]
-            st_ctime: ctime_micros,
-            st_crtime: crtime_micros,
+            st_ctime: ctime_secs,
+            st_crtime: crtime_secs,
             #[cfg(target_family = "unix")]
             st_blocks: some(metadata.blocks()),
             #[cfg(target_family = "unix")]
