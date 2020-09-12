@@ -5,14 +5,7 @@
 
 pub mod convert;
 
-use convert::{FromLossy, IntoLossy};
-
-pub fn convert<T, U>(item: T) -> U
-where
-    T: IntoLossy<U>,
-{
-    item.into_lossy()
-}
+use convert::FromLossy;
 
 include!(concat!(env!("OUT_DIR"), "/grr.rs"));
 
