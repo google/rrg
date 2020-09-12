@@ -207,7 +207,7 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             error: "failed to convert modification time to seconds"
         });
 
-        let crtime_secs = ack! {
+        let btime_secs = ack! {
             metadata.created(),
             error: "failed to obtain file creation time"
         }.and_then(|crtime| ack! {
@@ -244,7 +244,7 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             st_mtime: mtime_secs,
             #[cfg(target_family = "unix")]
             st_ctime: ctime_secs,
-            st_crtime: crtime_secs,
+            st_crtime: btime_secs,
             #[cfg(target_family = "unix")]
             st_blocks: some(metadata.blocks()),
             #[cfg(target_family = "unix")]
