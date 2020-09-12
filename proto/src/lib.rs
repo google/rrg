@@ -177,23 +177,43 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
         // now we just ignore errors, but the definition should be improved.
         let some = |value: u64| Some(value.try_into().unwrap_or(0));
 
-        let atime_secs = match metadata.accessed().ok().map(secs) {
-            Some(Ok(atime_secs)) => Some(atime_secs),
-            Some(Err(err)) => {
-                error!("failed to convert access time: {}", err);
-                None
-            },
-            None => None,
-        };
+        // TODO: Move this into some utility module.
+        // TODO: Add support for other log types.
+        macro_rules! ack {
+            { $expr:expr, error: $message:literal } => {
+                match $expr {
+                    Ok(value) => Some(value),
+                    Err(err) => {
+                        ::log::error!(concat!($message, ": {}"), err);
+                        None
+                    },
+                }
+            };
+        }
 
-        let mtime_secs = match metadata.modified().ok().map(secs) {
-            Some(Ok(mtime_secs)) => Some(mtime_secs),
-            Some(Err(err)) => {
-                error!("failed to convert modification time: {}", err);
-                None
-            },
-            None => None,
-        };
+        let atime_secs = ack! {
+            metadata.accessed(),
+            error: "failed to obtain file access time"
+        }.and_then(|atime| ack! {
+            secs(atime),
+            error: "failed to convert access time to seconds"
+        });
+
+        let mtime_secs = ack! {
+            metadata.modified(),
+            error: "failed to obtain file modification time"
+        }.and_then(|mtime| ack! {
+            secs(mtime),
+            error: "failed to convert modification time to seconds"
+        });
+
+        let crtime_secs = ack! {
+            metadata.created(),
+            error: "failed to obtain file creation time"
+        }.and_then(|crtime| ack! {
+            secs(crtime),
+            error: "failed to convert creation time to seconds"
+        });
 
         #[cfg(target_family = "unix")]
         let ctime_secs = match u64::try_from(metadata.ctime()) {
@@ -202,15 +222,6 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
                 error!("negative inode change time: {}", err);
                 None
             },
-        };
-
-        let crtime_secs = match metadata.created().ok().map(secs) {
-            Some(Ok(crtime_secs)) => Some(crtime_secs),
-            Some(Err(err)) => {
-                error!("failed to convert creation time: {}", err);
-                None
-            },
-            None => None,
         };
 
         StatEntry {
