@@ -7,8 +7,6 @@ mod convert;
 
 pub use convert::{FromLossy, IntoLossy};
 
-use log::error;
-
 pub fn convert<T, U>(item: T) -> U
 where
     T: IntoLossy<U>,
@@ -216,12 +214,9 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
         });
 
         #[cfg(target_family = "unix")]
-        let ctime_secs = match u64::try_from(metadata.ctime()) {
-            Ok(ctime_secs) => Some(ctime_secs),
-            Err(err) => {
-                error!("negative inode change time: {}", err);
-                None
-            },
+        let ctime_secs = ack! {
+            u64::try_from(metadata.ctime()),
+            error: "negative inode change time"
         };
 
         StatEntry {
