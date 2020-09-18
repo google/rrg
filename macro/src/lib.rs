@@ -78,6 +78,34 @@ macro_rules! trace {
     }
 }
 
+/// Acknowledges a possible error and transforms the value into optional.
+///
+/// The `ack` macro will evaluate given expression that returns a result and,
+/// in case of an error, log it at the specified level. Then, the errors is
+/// simply discarded at the value is transformed into an `Option`.
+///
+/// This macro can be useful in cases where errors are not critical and are to
+/// some extent expected. Just throwing them away without logging is not always
+/// a good option, since they may include some useful information.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use rrg_macro::ack;
+/// use std::path::PathBuf;
+///
+/// let profile = ack! {
+///     std::env::var("HOME"),
+///     error: "home folder not specified"
+/// }.and_then(|home| ack! {
+///     std::fs::read([&home, ".profile"].iter().collect::<PathBuf>()),
+///     error: "failed to read the profile file"
+/// });
+///
+/// if let Some(profile) = profile {
+///     println!("size of the profile file: {}", profile.len());
+/// }
+/// ```
 #[macro_export]
 macro_rules! ack {
     { $expr:expr, $level:ident: $message:literal } => {
