@@ -125,8 +125,8 @@ impl TryFrom<rrg_proto::FileFinderAction> for Action {
     fn try_from(
         proto: rrg_proto::FileFinderAction,
     ) -> Result<Self, Self::Error> {
-        // FileFinderAction::action_type defines which action will be performed. Only
-        // options from selected action are read.
+        // FileFinderAction::action_type defines which action will be performed.
+        // Only options from selected action are read.
         let action_type: ActionType = parse_enum(proto.action_type)?;
         Ok(match action_type {
             ActionType::Stat => Action::from(proto.stat.unwrap_or_default()),
