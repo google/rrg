@@ -379,7 +379,6 @@ mod tests {
     #[cfg(target_os = "linux")]
     fn test_mode_and_size() {
         let new_size = 42;
-        let new_mode = 0o100444;
 
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("temp_file.txt");
@@ -396,7 +395,8 @@ mod tests {
 
         let response = response.unwrap();
         assert_eq!(response.size, new_size);
-        assert_eq!(response.mode, new_mode);
+        // We check only user permissions since others might not be set.
+        assert_eq!(response.mode & 0o700, 0o400);
     }
 
     #[test]
