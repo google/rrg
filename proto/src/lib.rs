@@ -251,6 +251,14 @@ pub enum MicrosError {
     Overflow(std::num::TryFromIntError),
 }
 
+impl MicrosError {
+
+    /// Creates a microsecond conversion error from an integer overflow error.
+    pub fn overflow(error: std::num::TryFromIntError) -> MicrosError {
+        MicrosError::Overflow(error)
+    }
+}
+
 impl std::fmt::Display for MicrosError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -283,13 +291,6 @@ impl From<std::time::SystemTimeError> for MicrosError {
 
     fn from(error: std::time::SystemTimeError) -> MicrosError {
         MicrosError::Epoch(error)
-    }
-}
-
-impl From<std::num::TryFromIntError> for MicrosError {
-
-    fn from(error: std::num::TryFromIntError) -> MicrosError {
-        MicrosError::Overflow(error)
     }
 }
 
@@ -336,7 +337,9 @@ impl From<SecsError> for MicrosError {
 /// ```
 pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
     let time_micros = time.duration_since(std::time::UNIX_EPOCH)?.as_micros();
-    Ok(std::convert::TryInto::try_into(time_micros)?)
+
+    use std::convert::TryInto as _;
+    time_micros.try_into().map_err(MicrosError::overflow)
 }
 
 /// Converts system time into epoch seconds.
