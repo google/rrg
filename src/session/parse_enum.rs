@@ -15,13 +15,12 @@ pub trait ProtoEnum<Proto> {
 pub fn parse_enum<T: ProtoEnum<T>>(raw_enum_value: Option<i32>)
     -> Result<T, UnknownEnumValueError> {
     match raw_enum_value {
-        Some(int_value) => match T::from_i32(int_value) {
-            Some(parsed_value) => Ok(parsed_value),
-            None => Err(UnknownEnumValueError {
+        Some(int_value) => T::from_i32(int_value).ok_or_else(
+            || UnknownEnumValueError {
                 name: std::any::type_name::<T>(),
                 value: int_value,
-            }),
-        },
+            }
+        ),
         None => Ok(T::default()),
     }
 }
