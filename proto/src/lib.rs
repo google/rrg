@@ -7,6 +7,8 @@ pub mod convert;
 
 use convert::FromLossy;
 
+use rrg_macro::ack;
+
 include!(concat!(env!("OUT_DIR"), "/grr.rs"));
 
 impl From<bool> for DataBlob {
@@ -167,20 +169,6 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
         // `StatEntry` defines insufficient integer width for some fields. For
         // now we just ignore errors, but the definition should be improved.
         let some = |value: u64| Some(value.try_into().unwrap_or(0));
-
-        // TODO: Move this into some utility module.
-        // TODO: Add support for other log types.
-        macro_rules! ack {
-            { $expr:expr, error: $message:literal } => {
-                match $expr {
-                    Ok(value) => Some(value),
-                    Err(err) => {
-                        ::log::error!(concat!($message, ": {}"), err);
-                        None
-                    },
-                }
-            };
-        }
 
         let atime_secs = ack! {
             metadata.accessed(),
