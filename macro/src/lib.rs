@@ -3,6 +3,14 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+/// Logs a RRG-specific message at the error level.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use rrg_macro::error;
+/// error!("some awkward error occured (code: {})", 42);
+/// ```
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => {
@@ -10,6 +18,14 @@ macro_rules! error {
     }
 }
 
+/// Logs a RRG-specific message at the warn level.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use rrg_macro::warn;
+/// warn!("received a strange number: {}", 1337);
+/// ```
 #[macro_export]
 macro_rules! warn {
     ($($arg:tt)*) => {
@@ -17,6 +33,14 @@ macro_rules! warn {
     }
 }
 
+/// Logs a RRG-specific message at the info level.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use rrg_macro::info;
+/// info!("running as '{}'", std::env::var("USER").unwrap());
+/// ```
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {
@@ -24,6 +48,14 @@ macro_rules! info {
     }
 }
 
+/// Logs a RRG-specific message at the debug level.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use rrg_macro::debug;
+/// debug!("a bunch of very important numbers: {:?}", &[4, 8, 15, 16, 23, 42]);
+/// ```
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => {
@@ -31,6 +63,14 @@ macro_rules! debug {
     }
 }
 
+/// Logs a RRG-specific message at the trace level.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use rrg_macro::trace;
+/// trace!("we are at ({}; {})", std::f32::consts::PI, std::f32::consts::E);
+/// ```
 #[macro_export]
 macro_rules! trace {
     ($($arg:tt)*) => {
