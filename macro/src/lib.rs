@@ -77,3 +77,17 @@ macro_rules! trace {
         ::log::trace!(target: "rrg", $($arg)*);
     }
 }
+
+// TODO: Add support for other log types.
+#[macro_export]
+macro_rules! ack {
+    { $expr:expr, error: $message:literal } => {
+        match $expr {
+            Ok(value) => Some(value),
+            Err(err) => {
+                ::rrg_macro::error!(concat!($message, ": {}"), err);
+                None
+            },
+        }
+    };
+}
