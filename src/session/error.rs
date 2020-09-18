@@ -91,7 +91,8 @@ pub enum ParseError {
     Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
-    /// An error occurred when converting time micros from proto to std::time::SystemTime.
+    /// An error occurred when converting time micros from proto
+    /// to `std::time::SystemTime`.
     TimeMicrosConversion(TimeMicrosConversionError)
 }
 
@@ -186,7 +187,8 @@ impl From<MissingFieldError> for ParseError {
     }
 }
 
-/// An error type for situations where time micros cannot be convert to std::time::SystemTime.
+/// An error type for situations where time micros cannot be converted
+/// to `std::time::SystemTime`.
 #[derive(Debug)]
 pub struct TimeMicrosConversionError {
     /// Time micros value causing the conversion error.
