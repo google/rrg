@@ -188,25 +188,18 @@ impl From<MissingFieldError> for ParseError {
 
 #[derive(Debug)]
 pub struct RegexParseError {
+    /// Raw data of the string which could not be converted to Regex.
     pub raw_data: Vec<u8>,
-    pub error_message: String
-}
 
-impl RegexParseError {
-
-    /// Creates a new error indicating that a regex cannot be parsed.
-    pub fn new(raw_data: Vec<u8>, error_message: String) -> RegexParseError {
-        RegexParseError {
-            raw_data,
-            error_message
-        }
-    }
+    /// Error message caught during the conversion.
+    pub error_message: String,
 }
 
 impl Display for RegexParseError {
 
     fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "Regex parse error happened on parsing '{:?}'. Error message: '{}'",
+        write!(fmt, "Regex parse error happened on parsing '{:?}'. \
+                     Error message: '{}'",
                self.raw_data,
                self.error_message)
     }
