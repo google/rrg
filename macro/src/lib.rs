@@ -78,14 +78,13 @@ macro_rules! trace {
     }
 }
 
-// TODO: Add support for other log types.
 #[macro_export]
 macro_rules! ack {
-    { $expr:expr, error: $message:literal } => {
+    { $expr:expr, $level:ident: $message:literal } => {
         match $expr {
             Ok(value) => Some(value),
             Err(err) => {
-                ::rrg_macro::error!(concat!($message, ": {}"), err);
+                ::rrg_macro::$level!(concat!($message, ": {}"), err);
                 None
             },
         }
