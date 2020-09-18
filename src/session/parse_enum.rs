@@ -45,21 +45,17 @@ mod tests {
 
     #[test]
     fn parse_empty_enum_test() {
-        let empty: Option<i32> = None;
-        let parsed : TestEnum = parse_enum(empty).unwrap();
-        assert_eq!(parsed, TestEnum::Default);
+        assert_eq!(parse_enum::<TestEnum>(None).unwrap(), TestEnum::Default);
     }
 
     #[test]
     fn parse_correct_enum_value_test() {
-        let parsed : TestEnum = parse_enum(Some(2)).unwrap();
-        assert_eq!(parsed, TestEnum::Two);
+        assert_eq!(parse_enum::<TestEnum>(Some(2)).unwrap(), TestEnum::Two);
     }
 
     #[test]
     fn parse_incorrect_enum_value_test() {
-        let parsed : Result<TestEnum, UnknownEnumValueError> = parse_enum(Some(3));
-        let error = parsed.unwrap_err();
+        let error = parse_enum::<TestEnum>(Some(3)).unwrap_err();
         assert_eq!(error.name, std::any::type_name::<TestEnum>());
         assert_eq!(error.value, 3);
     }
