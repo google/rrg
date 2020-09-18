@@ -547,8 +547,7 @@ mod tests {
     }
 
     fn get_parse_error(args: FileFinderArgs) -> ParseError {
-        let request: Result<Request, ParseError> =
-            Base::from_proto(args);
+        let request: Result<Request, ParseError> = Base::from_proto(args);
         request.unwrap_err()
     }
 
