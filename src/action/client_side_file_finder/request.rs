@@ -540,19 +540,14 @@ impl super::super::Request for Request {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::super::Request as Base;
 
     fn get_request(args: FileFinderArgs) -> Request {
-        let request: Result<Request, ParseError> =
-            super::super::super::Request::from_proto(args);
-        assert!(request.is_ok());
-        request.unwrap()
+        Base::from_proto(args).unwrap()
     }
 
     fn get_parse_error(args: FileFinderArgs) -> ParseError {
-        let request: Result<Request, ParseError> =
-            super::super::super::Request::from_proto(args);
-        assert!(request.is_err());
-        request.unwrap_err()
+        Base::from_proto(args).unwrap_err()
     }
 
     #[test]
@@ -753,13 +748,7 @@ mod tests {
         });
 
         match err {
-            ParseError::UnknownEnumValue(error) => {
-                assert_eq!(
-                    error.enum_name,
-                    std::any::type_name::<ActionType>()
-                );
-                assert_eq!(error.value, 345);
-            }
+            ParseError::Malformed(_) => {}
             e @ _ => panic!("Unexpected error type: {:?}", e),
         }
     }
