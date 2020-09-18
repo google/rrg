@@ -3,8 +3,9 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-//! Defines an internal type for client side file finder action and provides a function converting
-//! proto format of the request (rrg_proto::FileFinderArgs) to the internal format.
+//! Defines an internal type for client side file finder action and provides
+//! a function converting proto format of the request
+//! `rrg_proto::FileFinderArgs` to the internal format.
 
 use crate::session::{
     parse_enum, time_from_micros, ParseError, ProtoEnum, RegexParseError,
