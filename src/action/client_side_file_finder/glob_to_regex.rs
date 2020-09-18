@@ -3,17 +3,17 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use regex::Regex;
 use crate::session::RegexParseError;
+use regex::Regex;
 
 /// Converts glob expression into a Rust Regex.
 /// E.g. "asd*[!123]??" will be converted into "asd.*[^123]..".
 /// This implementation is a Rust port of the cpython code:
 /// https://github.com/python/cpython/blob/2.7/Lib/fnmatch.py
 fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
-    let chars : Vec<char> = pat.chars().collect();
-    let mut i : usize = 0;
-    let n : usize = chars.len();
+    let chars: Vec<char> = pat.chars().collect();
+    let mut i: usize = 0;
+    let n: usize = chars.len();
     let mut res = String::new();
     while i < n {
         let c = chars[i];
@@ -56,7 +56,9 @@ fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
 
     match Regex::new(&res) {
         Ok(v) => Ok(v),
-        Err(e) => Err(RegexParseError::new(res.bytes().collect(), e.to_string())),
+        Err(e) => {
+            Err(RegexParseError::new(res.bytes().collect(), e.to_string()))
+        }
     }
 }
 
@@ -66,7 +68,7 @@ mod tests {
 
     #[test]
     fn glob_to_regex_test() {
-        // cpython tests:
+        // Original cpython tests:
         assert_eq!(glob_to_regex("*").unwrap().as_str(), ".*");
         assert_eq!(glob_to_regex("?").unwrap().as_str(), ".");
         assert_eq!(glob_to_regex("a?b*").unwrap().as_str(), "a.b.*");
@@ -76,7 +78,7 @@ mod tests {
         assert_eq!(glob_to_regex("[^x]").unwrap().as_str(), r"[\^x]");
         assert_eq!(glob_to_regex("[x").unwrap().as_str(), r"\[x");
 
-        // additional tests:
+        // Additional tests:
         assert_eq!(glob_to_regex("[a]]").unwrap().as_str(), r"[a]\]");
         assert_eq!(glob_to_regex(r"[\\]\\").unwrap().as_str(), r"[\\]\\");
         assert_eq!(glob_to_regex("ąźć").unwrap().as_str(), "ąźć");
