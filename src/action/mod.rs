@@ -26,6 +26,7 @@ pub mod startup;
 pub mod listdir;
 pub mod timeline;
 pub mod network;
+pub mod stat;
 pub mod insttime;
 pub mod memsize;
 pub mod client_side_file_finder;
@@ -108,6 +109,7 @@ where
         "ListDirectory" => task.execute(self::listdir::handle), 
         "Timeline" => task.execute(self::timeline::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
+        "GetFileStat" => task.execute(self::stat::handle),
         "GetInstallDate" => task.execute(self::insttime::handle),
 
         #[cfg(target_family = "unix")]
