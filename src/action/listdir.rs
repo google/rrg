@@ -138,7 +138,7 @@ pub struct Response {
     flags_linux: Option<u32>,
     symlink: Option<PathBuf>,
     path: PathBuf,
-    crtime: Option<SystemTime>,
+    btime: Option<SystemTime>,
 }
 
 impl Default for Response {
@@ -161,7 +161,7 @@ impl Default for Response {
             flags_linux: None,
             symlink: None,
             path: Default::default(),
-            crtime: None,
+            btime: None,
         }
     }
 }
@@ -196,7 +196,7 @@ fn get_modification_time(metadata: &Metadata) -> Option<SystemTime> {
 /// Returns the creation time of provided `Metadata`.
 fn get_creation_time(metadata: &Metadata) -> Option<SystemTime> {
     match metadata.created() {
-        Ok(crtime) => Some(crtime),
+        Ok(btime) => Some(btime),
         Err(err) => {
             warn!("unable to get creation time: {}", err);
             None
@@ -251,7 +251,7 @@ fn fill_response(file_path: &Path) -> Result<Response, Error> {
         flags_linux: get_linux_flags(file_path),
         symlink: get_symlink(&metadata, file_path),
         path: file_path.clone().to_path_buf(),
-        crtime: get_creation_time(&metadata),
+        btime: get_creation_time(&metadata),
     })
 }
 
@@ -266,7 +266,7 @@ fn fill_response(file_path: &Path) -> Result<Response, Error> {
         atime: get_access_time(&metadata),
         mtime: get_modification_time(&metadata),
         path: file_path.clone().to_path_buf(),
-        crtime: get_creation_time(&metadata),
+        btime: get_creation_time(&metadata),
         ..Default::default()
     })
 }
@@ -393,7 +393,7 @@ impl super::Response for Response {
                 ..Default::default()
             }),
             registry_data: None,
-            st_btime: get_time_since_unix_epoch(&self.crtime),
+            st_btime: get_time_since_unix_epoch(&self.btime),
             ext_attrs: vec![],
         }
     }
@@ -570,7 +570,7 @@ mod tests {
         assert!(inner_dir.atime.unwrap() <= SystemTime::now());
         assert!(inner_dir.ctime.unwrap() <= SystemTime::now());
         assert!(inner_dir.mtime.unwrap() <= SystemTime::now());
-        assert!(inner_dir.crtime.unwrap() <= SystemTime::now());
+        assert!(inner_dir.btime.unwrap() <= SystemTime::now());
     }
 
     #[test]
@@ -597,7 +597,7 @@ mod tests {
         assert!(symlink.atime.unwrap() <= SystemTime::now());
         assert!(symlink.ctime.unwrap() <= SystemTime::now());
         assert!(symlink.mtime.unwrap() <= SystemTime::now());
-        assert!(symlink.crtime.unwrap() <= SystemTime::now());
+        assert!(symlink.btime.unwrap() <= SystemTime::now());
     }
 
     #[test]
@@ -630,7 +630,7 @@ mod tests {
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.ctime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.crtime.unwrap() <= SystemTime::now());
+        assert!(file.btime.unwrap() <= SystemTime::now());
     }
 
     #[test]
@@ -650,7 +650,7 @@ mod tests {
         assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.crtime.unwrap() <= SystemTime::now());
+        assert!(file.btime.unwrap() <= SystemTime::now());
     }
 
     #[test]
@@ -697,27 +697,27 @@ mod tests {
         assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.crtime.unwrap() <= SystemTime::now());
+        assert!(file.btime.unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(1);
         assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.crtime.unwrap() <= SystemTime::now());
+        assert!(file.btime.unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(2);
         assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.crtime.unwrap() <= SystemTime::now());
+        assert!(file.btime.unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(3);
         assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.crtime.unwrap() <= SystemTime::now());
+        assert!(file.btime.unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(4);
         assert_eq!(file.size, 0);
         assert!(file.atime.unwrap() <= SystemTime::now());
         assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.crtime.unwrap() <= SystemTime::now());
+        assert!(file.btime.unwrap() <= SystemTime::now());
     }
 
     #[test]

@@ -189,8 +189,8 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
         let btime_secs = ack! {
             metadata.created(),
             error: "failed to obtain file creation time"
-        }.and_then(|crtime| ack! {
-            secs(crtime),
+        }.and_then(|btime| ack! {
+            secs(btime),
             error: "failed to convert creation time to seconds"
         });
 
