@@ -5,6 +5,8 @@
 
 pub mod convert;
 
+use std::path::PathBuf;
+
 use convert::FromLossy;
 
 use rrg_macro::ack;
@@ -226,6 +228,65 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             #[cfg(target_family = "unix")]
             st_blksize: some(metadata.blksize()),
             ..Default::default()
+        }
+    }
+}
+
+/// An error type for situations where parsing path specification failed.
+#[derive(Clone, Debug)]
+pub enum ParsePathSpecError {
+    /// Attempted to parse an empty path.
+    Empty,
+    /// Attempted to parse a path of unknown type.
+    UnknownType(i32),
+    /// Attempted to parse a path of invalid type.
+    InvalidType(path_spec::PathType),
+}
+
+impl std::fmt::Display for ParsePathSpecError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use ParsePathSpecError::*;
+
+        match *self {
+            Empty => {
+                write!(fmt, "empty path")
+            }
+            UnknownType(value) => {
+                write!(fmt, "unknown path type value: {}", value)
+            }
+            InvalidType(value) => {
+                write!(fmt, "invalid path type: {:?}", value)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParsePathSpecError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl std::convert::TryFrom<PathSpec> for PathBuf {
+
+    type Error = ParsePathSpecError;
+
+    fn try_from(spec: PathSpec) -> Result<PathBuf, ParsePathSpecError> {
+        let path_type = spec.pathtype.unwrap_or_default();
+        let path_type = match path_spec::PathType::from_i32(path_type) {
+            Some(path_type) => path_type,
+            None => return Err(ParsePathSpecError::UnknownType(path_type)),
+        };
+
+        if path_type != path_spec::PathType::Os {
+            return Err(ParsePathSpecError::InvalidType(path_type));
+        }
+
+        match spec.path {
+            Some(path) if path.len() > 0 => Ok(PathBuf::from(path)),
+            _ => Err(ParsePathSpecError::Empty),
         }
     }
 }
