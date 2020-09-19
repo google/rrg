@@ -55,71 +55,6 @@ impl From<Error> for session::Error {
     }
 }
 
-/// Contains information about an `UnsupportedValue` error.
-#[derive(Debug)]
-struct UnsupportedValueError {
-    field: String,
-    value: String,
-}
-
-impl ParseError {
-
-    /// Constructs an `UnsupportedValue` from provided `field` and
-    /// `value`, then  converts it to `ParseError`.
-    fn unsupported_value<F, V>(field: F, value: V) -> ParseError
-    where
-        F: Into<String>,
-        V: Into<String>,
-    {
-        ParseError::UnsupportedValue(UnsupportedValueError {
-            field: field.into(),
-            value: value.into(),
-        })
-    }
-}
-
-/// Enum of possible errors, which can occur during parsing data from protocol
-/// buffer.
-#[derive(Debug)]
-enum ParseError {
-    /// An error type used when the value which comes from protocol buffer is
-    /// unsupported by the current client.
-    UnsupportedValue(UnsupportedValueError),
-}
-
-impl std::error::Error for ParseError {
-
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use ParseError::*;
-
-        match *self {
-            UnsupportedValue(_) => None,
-        }
-    }
-}
-
-impl Display for ParseError {
-
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        use ParseError::*;
-
-        match *self {
-            UnsupportedValue(ref message) => {
-                write!(fmt, "value {} in {} field is not supported",
-                       message.value, message.field)
-            }
-        }
-    }
-}
-
-impl From<ParseError> for session::ParseError {
-
-    fn from(error: ParseError) -> session::ParseError {
-        session::ParseError::malformed(error)
-    }
-}
-
-
 /// A response type for the list directory action.
 pub struct Response {
     mode: Option<u64>,
@@ -328,14 +263,20 @@ impl super::Request for Request {
         let path_type = pathspec.pathtype
             .ok_or(missing("path type"))?;
         if path_type != PathType::Os as i32 {
-            return Err(ParseError::unsupported_value(
-                "path type", path_type.to_string()).into());
+            let error = session::UnsupportedValueError {
+                name: "path type",
+                value: path_type.to_string(),
+            };
+            return Err(session::ParseError::malformed(error));
         }
         let path_option = pathspec.path_options
             .unwrap_or(Options::CaseLiteral as i32);
         if path_option != Options::CaseLiteral as i32 {
-            return Err(ParseError::unsupported_value(
-                "path option", path_option.to_string()).into());
+            let error = session::UnsupportedValueError {
+                name: "path option",
+                value: path_option.to_string(),
+            };
+            return Err(session::ParseError::malformed(error));
         };
         Ok(Request {
             path: get_path(&pathspec.path),
