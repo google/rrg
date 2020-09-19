@@ -57,48 +57,8 @@ impl From<Error> for session::Error {
 
 /// A response type for the list directory action.
 pub struct Response {
-    mode: Option<u64>,
-    ino: Option<u64>,
-    dev: Option<u64>,
-    nlink: Option<u64>,
-    uid: Option<u32>,
-    gid: Option<u32>,
-    size: u64,
-    atime: Option<SystemTime>,
-    mtime: Option<SystemTime>,
-    ctime: Option<SystemTime>,
-    blocks: Option<u64>,
-    blksize: Option<u64>,
-    rdev: Option<u64>,
-    flags_linux: Option<u32>,
-    symlink: Option<PathBuf>,
     path: PathBuf,
-    btime: Option<SystemTime>,
-}
-
-impl Default for Response {
-
-    fn default() -> Response {
-        Response {
-            mode: None,
-            ino: None,
-            dev: None,
-            nlink: None,
-            uid: None,
-            gid: None,
-            size: Default::default(),
-            atime: None,
-            mtime: None,
-            ctime: None,
-            blocks: None,
-            blksize: None,
-            rdev: None,
-            flags_linux: None,
-            symlink: None,
-            path: Default::default(),
-            btime: None,
-        }
-    }
+    metadata: Metadata,
 }
 
 /// A request type for the list directory action.
@@ -163,46 +123,14 @@ fn get_symlink(metadata: &Metadata, file_path: &Path) -> Option<PathBuf> {
 }
 
 /// Fills all fields of `Response` using path to the file.
-#[cfg(target_os = "linux")]
 fn fill_response(file_path: &Path) -> Result<Response, Error> {
     use std::os::unix::fs::MetadataExt;
     let metadata = fs::symlink_metadata(file_path)
         .map_err(Error::ReadPath)?;
 
     Ok(Response {
-        mode: Some(u64::from(metadata.mode())),
-        ino: Some(metadata.ino()),
-        dev: Some(metadata.dev()),
-        nlink: Some(metadata.nlink()),
-        uid: Some(metadata.uid()),
-        gid: Some(metadata.gid()),
-        size: metadata.size(),
-        atime: get_access_time(&metadata),
-        mtime: get_modification_time(&metadata),
-        ctime: get_status_change_time(&metadata),
-        blocks: Some(metadata.blocks()),
-        blksize: Some(metadata.blksize()),
-        rdev: Some(metadata.rdev()),
-        flags_linux: get_linux_flags(file_path),
-        symlink: get_symlink(&metadata, file_path),
-        path: file_path.clone().to_path_buf(),
-        btime: get_creation_time(&metadata),
-    })
-}
-
-/// Fills all fields of `Response` using path to the file.
-#[cfg(not(target_os = "linux"))]
-fn fill_response(file_path: &Path) -> Result<Response, Error> {
-    let metadata = fs::symlink_metadata(file_path)
-        .map_err(Error::ReadPath)?;
-
-    Ok(Response {
-        size: metadata.len(),
-        atime: get_access_time(&metadata),
-        mtime: get_modification_time(&metadata),
-        path: file_path.clone().to_path_buf(),
-        btime: get_creation_time(&metadata),
-        ..Default::default()
+        path: file_path.to_path_buf(),
+        metadata: metadata,
     })
 }
 
@@ -282,39 +210,11 @@ impl super::Response for Response {
     type Proto = StatEntry;
 
     fn into_proto(self) -> Self::Proto {
+        use rrg_proto::convert::IntoLossy as _;
+
         StatEntry {
-            st_mode: self.mode,
-            st_ino: self.ino,
-            st_dev: self.dev,
-            st_nlink: self.nlink,
-            st_uid: self.uid,
-            st_gid: self.gid,
-            st_size: Some(self.size),
-            st_atime: get_time_since_unix_epoch(&self.atime),
-            st_mtime: get_time_since_unix_epoch(&self.mtime),
-            st_ctime: get_time_since_unix_epoch(&self.ctime),
-            st_blocks: self.blocks,
-            st_blksize: self.blksize,
-            st_rdev: self.rdev,
-            st_flags_osx: None,
-            st_flags_linux: self.flags_linux,
-            symlink:
-            self.symlink
-                .map(|symlink| symlink.to_string_lossy().to_string()),
-            registry_type: None,
-            resident: None,
-            pathspec: Some(rrg_proto::PathSpec {
-                // Represents `CaseLiteral` path option (other options are not
-                // supported).
-                path_options: Some(Options::CaseLiteral as i32),
-                // Represents OS path type (other types are not supported).
-                pathtype: Some(PathType::Os as i32),
-                path: Some(self.path.to_string_lossy().to_string()),
-                ..Default::default()
-            }),
-            registry_data: None,
-            st_btime: get_time_since_unix_epoch(&self.btime),
-            ext_attrs: vec![],
+            pathspec: Some(self.path.into()),
+            ..self.metadata.into_lossy()
         }
     }
 }
@@ -362,15 +262,6 @@ mod tests {
     }
 
     #[test]
-    fn test_unsupported_path_options() {
-        let request: Result<super::Request, _> = Request::from_proto(
-            fill_proto_request(Some(Options::Regex as i32),
-                               Some(PathType::Os as i32),
-                               Some(String::from("/"))));
-        assert!(request.is_err());
-    }
-
-    #[test]
     fn test_ok_path_options() {
         let request: Result<super::Request, _> = Request::from_proto(
             fill_proto_request(Some(Options::CaseLiteral as i32),
@@ -395,20 +286,11 @@ mod tests {
         assert!(request.is_err());
     }
 
-
-    #[test]
-    fn test_empty_pathtype() {
-        let request: Result<super::Request, _> = Request::from_proto(
-            fill_proto_request(None, None, Some(String::from("/"))));
-        assert!(request.is_err());
-    }
-
     #[test]
     fn test_empty_path() {
         let request: Result<super::Request, _> = Request::from_proto(
             fill_proto_request(None, Some(PathType::Os as i32), None));
-        assert!(&request.is_ok());
-        assert_eq!(request.unwrap().path, PathBuf::from("/"));
+        assert!(request.is_err());
     }
 
     #[test]
@@ -468,6 +350,8 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_dir_response() {
+        use std::os::linux::fs::MetadataExt as _;
+
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
         let inner_dir_path = &dir_path.join("dir");
@@ -480,22 +364,23 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let inner_dir = &session.reply::<Response>(0);
         assert_eq!(&inner_dir.path, inner_dir_path);
-        assert!(inner_dir.symlink.is_none());
-        assert_eq!(inner_dir.uid.unwrap(), users::get_current_uid());
-        assert_eq!(inner_dir.gid.unwrap(), users::get_current_gid());
-        assert_eq!(inner_dir.dev.unwrap(),
+        assert_eq!(inner_dir.metadata.uid(), users::get_current_uid());
+        assert_eq!(inner_dir.metadata.gid(), users::get_current_gid());
+        assert_eq!(inner_dir.metadata.dev(),
                    dir_path.metadata().unwrap().dev());
-        assert_eq!(inner_dir.mode.unwrap() & 0o40000, 0o40000);
-        assert_eq!(inner_dir.nlink.unwrap(), 2);
-        assert!(inner_dir.atime.unwrap() <= SystemTime::now());
-        assert!(inner_dir.ctime.unwrap() <= SystemTime::now());
-        assert!(inner_dir.mtime.unwrap() <= SystemTime::now());
-        assert!(inner_dir.btime.unwrap() <= SystemTime::now());
+        assert_eq!(inner_dir.metadata.mode() & 0o40000, 0o40000);
+        assert_eq!(inner_dir.metadata.nlink(), 2);
+
+        assert!(inner_dir.metadata.accessed().unwrap() <= SystemTime::now());
+        assert!(inner_dir.metadata.modified().unwrap() <= SystemTime::now());
+        assert!(inner_dir.metadata.created().unwrap() <= SystemTime::now());
     }
 
     #[test]
     #[cfg(target_os = "linux")]
     fn test_symlink_response() {
+        use std::os::linux::fs::MetadataExt as _;
+
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
         let file_path = dir_path.join("file");
@@ -510,19 +395,17 @@ mod tests {
         assert_eq!(session.reply_count(), 2);
         let symlink = &session.reply::<Response>(1);
         assert_eq!(&symlink.path, &sl_path);
-        assert!(&symlink.symlink.is_some());
-        assert_eq!(&symlink.symlink, &Some(file_path));
-        assert_eq!(symlink.mode.unwrap() & 0o120000, 0o120000);
-        assert_eq!(symlink.nlink.unwrap(), 1);
-        assert!(symlink.atime.unwrap() <= SystemTime::now());
-        assert!(symlink.ctime.unwrap() <= SystemTime::now());
-        assert!(symlink.mtime.unwrap() <= SystemTime::now());
-        assert!(symlink.btime.unwrap() <= SystemTime::now());
+        assert_eq!(symlink.metadata.mode() & 0o120000, 0o120000);
+        assert_eq!(symlink.metadata.nlink(), 1);
+        assert!(symlink.metadata.accessed().unwrap() <= SystemTime::now());
+        assert!(symlink.metadata.modified().unwrap() <= SystemTime::now());
+        assert!(symlink.metadata.created().unwrap() <= SystemTime::now());
     }
 
     #[test]
     #[cfg(target_os = "linux")]
     fn test_file_response_linux() {
+        use std::os::linux::fs::MetadataExt as _;
         use std::os::unix::fs::PermissionsExt;
 
         let dir = tempdir().unwrap();
@@ -539,22 +422,22 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
         assert_eq!(file.path, file_path);
-        assert_eq!(file.size, 0);
-        assert_eq!(file.mode.unwrap(), 0o100664);
-        assert_eq!(file.uid.unwrap(), users::get_current_uid());
-        assert_eq!(file.gid.unwrap(), users::get_current_gid());
-        assert_eq!(file.dev.unwrap(),
+        assert_eq!(file.metadata.size(), 0);
+        assert_eq!(file.metadata.mode(), 0o100664);
+        assert_eq!(file.metadata.uid(), users::get_current_uid());
+        assert_eq!(file.metadata.gid(), users::get_current_gid());
+        assert_eq!(file.metadata.dev(),
                    dir_path.metadata().unwrap().dev());
-        assert_eq!(file.nlink.unwrap(), 1);
-        assert!(file.symlink.is_none());
-        assert!(file.atime.unwrap() <= SystemTime::now());
-        assert!(file.ctime.unwrap() <= SystemTime::now());
-        assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.btime.unwrap() <= SystemTime::now());
+        assert_eq!(file.metadata.nlink(), 1);
+        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
+        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
+        assert!(file.metadata.created().unwrap() <= SystemTime::now());
     }
 
     #[test]
     fn test_file_response() {
+        use std::os::linux::fs::MetadataExt as _;
+
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
         let file_path = dir_path.join("file");
@@ -567,15 +450,17 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
         assert_eq!(file.path, file_path);
-        assert_eq!(file.size, 0);
-        assert!(file.atime.unwrap() <= SystemTime::now());
-        assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.btime.unwrap() <= SystemTime::now());
+        assert_eq!(file.metadata.size(), 0);
+        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
+        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
+        assert!(file.metadata.created().unwrap() <= SystemTime::now());
     }
 
     #[test]
     #[cfg(target_os = "linux")]
     fn test_st_flags_linux() {
+        use std::os::linux::fs::MetadataExt as _;
+
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
         let file_path = dir_path.join("file");
@@ -588,7 +473,6 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
         assert_eq!(file.path, file_path);
-        assert_ne!(file.flags_linux.unwrap(), 0);
     }
 
     #[test]
@@ -614,30 +498,30 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
         assert_eq!(session.reply_count(), 5);
         let file = &session.reply::<Response>(0);
-        assert_eq!(file.size, 0);
-        assert!(file.atime.unwrap() <= SystemTime::now());
-        assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.btime.unwrap() <= SystemTime::now());
+        assert_eq!(file.metadata.size(), 0);
+        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
+        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
+        assert!(file.metadata.created().unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(1);
-        assert_eq!(file.size, 0);
-        assert!(file.atime.unwrap() <= SystemTime::now());
-        assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.btime.unwrap() <= SystemTime::now());
+        assert_eq!(file.metadata.size(), 0);
+        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
+        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
+        assert!(file.metadata.created().unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(2);
-        assert_eq!(file.size, 0);
-        assert!(file.atime.unwrap() <= SystemTime::now());
-        assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.btime.unwrap() <= SystemTime::now());
+        assert_eq!(file.metadata.size(), 0);
+        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
+        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
+        assert!(file.metadata.created().unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(3);
-        assert_eq!(file.size, 0);
-        assert!(file.atime.unwrap() <= SystemTime::now());
-        assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.btime.unwrap() <= SystemTime::now());
+        assert_eq!(file.metadata.size(), 0);
+        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
+        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
+        assert!(file.metadata.created().unwrap() <= SystemTime::now());
         let file = &session.reply::<Response>(4);
-        assert_eq!(file.size, 0);
-        assert!(file.atime.unwrap() <= SystemTime::now());
-        assert!(file.mtime.unwrap() <= SystemTime::now());
-        assert!(file.btime.unwrap() <= SystemTime::now());
+        assert_eq!(file.metadata.size(), 0);
+        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
+        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
+        assert!(file.metadata.created().unwrap() <= SystemTime::now());
     }
 
     #[test]
