@@ -274,15 +274,14 @@ impl std::convert::TryFrom<PathSpec> for PathBuf {
     type Error = ParsePathSpecError;
 
     fn try_from(spec: PathSpec) -> Result<PathBuf, ParsePathSpecError> {
-        let path_type = spec.pathtype.unwrap_or_default();
-        let path_type = match path_spec::PathType::from_i32(path_type) {
-            Some(path_type) => path_type,
-            None => return Err(ParsePathSpecError::UnknownType(path_type)),
-        };
+        use ParsePathSpecError::*;
 
-        if path_type != path_spec::PathType::Os {
-            return Err(ParsePathSpecError::InvalidType(path_type));
-        }
+        let path_type = spec.pathtype.unwrap_or_default();
+        match path_spec::PathType::from_i32(path_type) {
+            Some(path_spec::PathType::Os) => (),
+            Some(path_type) => return Err(InvalidType(path_type)),
+            None => return Err(UnknownType(path_type)),
+        };
 
         match spec.path {
             Some(path) if path.len() > 0 => Ok(PathBuf::from(path)),
