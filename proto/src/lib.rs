@@ -291,6 +291,17 @@ impl std::convert::TryFrom<PathSpec> for PathBuf {
     }
 }
 
+impl From<PathBuf> for PathSpec {
+
+    fn from(path: PathBuf) -> PathSpec {
+        PathSpec {
+            path: Some(path.to_string_lossy().into_owned()),
+            pathtype: Some(path_spec::PathType::Os.into()),
+            ..Default::default()
+        }
+    }
+}
+
 /// An error type for failures of converting timestamps to microseconds.
 #[derive(Clone, Debug)]
 pub enum MicrosError {
