@@ -223,15 +223,6 @@ where
     Ok(())
 }
 
-/// Constructs `PathBuf` from `String`. If provided string is empty constructs
-/// `PathBuf` from "/".
-fn get_path(path: &Option<String>) -> PathBuf {
-    match path {
-        Some(path) if !path.is_empty() => PathBuf::from(path),
-        _ => PathBuf::from("/"),
-    }
-}
-
 /// Fills `st_linux_flags` field.
 #[cfg(target_os = "linux")]
 fn get_linux_flags(path: &Path) -> Option<u32> {
@@ -258,30 +249,14 @@ impl super::Request for Request {
     type Proto = ListDirRequest;
 
     fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
-        let missing = session::MissingFieldError::new;
+        use std::convert::TryInto as _;
 
-        let pathspec = proto.pathspec.ok_or(missing("path spec"))?;
-
-        let pathtype = pathspec.pathtype.ok_or(missing("path type"))?;
-        if pathtype != PathType::Os as i32 {
-            let error = session::UnsupportedValueError {
-                name: "path type",
-                value: pathtype.to_string(),
-            };
-            return Err(session::ParseError::malformed(error));
-        }
-
-        let pathopt = pathspec.path_options.unwrap_or_default();
-        if pathopt != Options::CaseLiteral as i32 {
-            let error = session::UnsupportedValueError {
-                name: "path option",
-                value: pathopt.to_string(),
-            };
-            return Err(session::ParseError::malformed(error));
-        };
+        let path = proto.pathspec
+            .ok_or(session::MissingFieldError::new("path spec"))?
+            .try_into().map_err(session::ParseError::malformed)?;
 
         Ok(Request {
-            path: get_path(&pathspec.path),
+            path: path,
         })
     }
 }
