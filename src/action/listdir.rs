@@ -259,25 +259,27 @@ impl super::Request for Request {
 
     fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
         let missing = session::MissingFieldError::new;
+
         let pathspec = proto.pathspec.ok_or(missing("path spec"))?;
-        let path_type = pathspec.pathtype
-            .ok_or(missing("path type"))?;
-        if path_type != PathType::Os as i32 {
+
+        let pathtype = pathspec.pathtype.ok_or(missing("path type"))?;
+        if pathtype != PathType::Os as i32 {
             let error = session::UnsupportedValueError {
                 name: "path type",
-                value: path_type.to_string(),
+                value: pathtype.to_string(),
             };
             return Err(session::ParseError::malformed(error));
         }
-        let path_option = pathspec.path_options
-            .unwrap_or(Options::CaseLiteral as i32);
-        if path_option != Options::CaseLiteral as i32 {
+
+        let pathopt = pathspec.path_options.unwrap_or_default();
+        if pathopt != Options::CaseLiteral as i32 {
             let error = session::UnsupportedValueError {
                 name: "path option",
-                value: path_option.to_string(),
+                value: pathopt.to_string(),
             };
             return Err(session::ParseError::malformed(error));
         };
+
         Ok(Request {
             path: get_path(&pathspec.path),
         })
