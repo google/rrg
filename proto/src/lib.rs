@@ -220,7 +220,7 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             st_mtime: mtime_secs,
             #[cfg(target_family = "unix")]
             st_ctime: ctime_secs,
-            st_crtime: btime_secs,
+            st_btime: btime_secs,
             #[cfg(target_family = "unix")]
             st_blocks: some(metadata.blocks()),
             #[cfg(target_family = "unix")]

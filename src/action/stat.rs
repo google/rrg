@@ -26,18 +26,18 @@ impl From<std::io::Error> for Error {
 #[derive(Debug)]
 pub struct Response {
     mode: u64,
-    inode: u32,
-    device: u32,
-    hard_links: u32,
+    inode: u64,
+    device: u64,
+    hard_links: u64,
     uid: u32,
     gid: u32,
     size: u64,
     access_time: Option<SystemTime>,
     modification_time: Option<SystemTime>,
     status_change_time: Option<SystemTime>,
-    block_count: u32,
-    block_size: u32,
-    represented_device: u32,
+    block_count: u64,
+    block_size: u64,
+    represented_device: u64,
     flags_linux: Option<u32>,
     symlink: Option<PathBuf>,
     path: PathBuf,
@@ -157,18 +157,18 @@ fn form_response(original_path: &Path, destination: &Path)
 
     Ok(Response {
         mode: metadata.mode() as u64,
-        inode: metadata.ino() as u32,
-        device: metadata.dev() as u32,
-        hard_links: metadata.nlink() as u32,
+        inode: metadata.ino(),
+        device: metadata.dev(),
+        hard_links: metadata.nlink(),
         uid: metadata.uid() as u32,
         gid: metadata.gid() as u32,
-        size: metadata.size() as u64,
+        size: metadata.size(),
         access_time: get_time_option(metadata.accessed()),
         modification_time: get_time_option(metadata.modified()),
         status_change_time: get_status_change_time(&metadata),
-        block_count: metadata.blocks() as u32,
-        block_size: metadata.blksize() as u32,
-        represented_device: metadata.rdev() as u32,
+        block_count: metadata.blocks(),
+        block_size: metadata.blksize(),
+        represented_device: metadata.rdev(),
         flags_linux: get_linux_flags(destination),
 
         symlink: match original_metadata.file_type().is_symlink() {
@@ -292,7 +292,7 @@ impl super::Response for Response {
             }),
 
             registry_data: None,
-            st_crtime: None,
+            st_btime: None,
             ext_attrs: self.extended_attributes.into_iter()
                 .map(|attr| attr.into()).collect(),
         }

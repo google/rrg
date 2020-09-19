@@ -104,9 +104,6 @@ where
 
     for line in buffer.lines() {
         writeln!(output, "{}", line)?;
-        if line.starts_with("syntax =") {
-            writeln!(output, "package grr;")?;
-        }
     }
 
     Ok(())

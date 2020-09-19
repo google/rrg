@@ -123,18 +123,18 @@ impl From<ParseError> for session::ParseError {
 /// A response type for the list directory action.
 pub struct Response {
     mode: Option<u64>,
-    ino: Option<u32>,
-    dev: Option<u32>,
-    nlink: Option<u32>,
+    ino: Option<u64>,
+    dev: Option<u64>,
+    nlink: Option<u64>,
     uid: Option<u32>,
     gid: Option<u32>,
     size: u64,
     atime: Option<SystemTime>,
     mtime: Option<SystemTime>,
     ctime: Option<SystemTime>,
-    blocks: Option<u32>,
-    blksize: Option<u32>,
-    rdev: Option<u32>,
+    blocks: Option<u64>,
+    blksize: Option<u64>,
+    rdev: Option<u64>,
     flags_linux: Option<u32>,
     symlink: Option<PathBuf>,
     path: PathBuf,
@@ -235,19 +235,19 @@ fn fill_response(file_path: &Path) -> Result<Response, Error> {
         .map_err(Error::ReadPath)?;
 
     Ok(Response {
-        mode: Some(metadata.mode().into()),
-        ino: Some(metadata.ino() as u32),
-        dev: Some(metadata.dev() as u32),
-        nlink: Some(metadata.nlink() as u32),
-        uid: Some(metadata.uid() as u32),
-        gid: Some(metadata.gid() as u32),
+        mode: Some(u64::from(metadata.mode())),
+        ino: Some(metadata.ino()),
+        dev: Some(metadata.dev()),
+        nlink: Some(metadata.nlink()),
+        uid: Some(metadata.uid()),
+        gid: Some(metadata.gid()),
         size: metadata.size(),
         atime: get_access_time(&metadata),
         mtime: get_modification_time(&metadata),
         ctime: get_status_change_time(&metadata),
-        blocks: Some(metadata.blocks() as u32),
-        blksize: Some(metadata.blksize() as u32),
-        rdev: Some(metadata.rdev() as u32),
+        blocks: Some(metadata.blocks()),
+        blksize: Some(metadata.blksize()),
+        rdev: Some(metadata.rdev()),
         flags_linux: get_linux_flags(file_path),
         symlink: get_symlink(&metadata, file_path),
         path: file_path.clone().to_path_buf(),
@@ -393,7 +393,7 @@ impl super::Response for Response {
                 ..Default::default()
             }),
             registry_data: None,
-            st_crtime: get_time_since_unix_epoch(&self.crtime),
+            st_btime: get_time_since_unix_epoch(&self.crtime),
             ext_attrs: vec![],
         }
     }
@@ -564,7 +564,7 @@ mod tests {
         assert_eq!(inner_dir.uid.unwrap(), users::get_current_uid());
         assert_eq!(inner_dir.gid.unwrap(), users::get_current_gid());
         assert_eq!(inner_dir.dev.unwrap(),
-                   dir_path.metadata().unwrap().dev() as u32);
+                   dir_path.metadata().unwrap().dev());
         assert_eq!(inner_dir.mode.unwrap() & 0o40000, 0o40000);
         assert_eq!(inner_dir.nlink.unwrap(), 2);
         assert!(inner_dir.atime.unwrap() <= SystemTime::now());
@@ -624,7 +624,7 @@ mod tests {
         assert_eq!(file.uid.unwrap(), users::get_current_uid());
         assert_eq!(file.gid.unwrap(), users::get_current_gid());
         assert_eq!(file.dev.unwrap(),
-                   dir_path.metadata().unwrap().dev() as u32);
+                   dir_path.metadata().unwrap().dev());
         assert_eq!(file.nlink.unwrap(), 1);
         assert!(file.symlink.is_none());
         assert!(file.atime.unwrap() <= SystemTime::now());
