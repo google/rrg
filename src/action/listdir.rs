@@ -271,8 +271,10 @@ fn fill_response(file_path: &Path) -> Result<Response, Error> {
     })
 }
 
-pub fn handle<S: Session>(session: &mut S, request: Request)
-                          -> session::Result<()> {
+pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
+where
+    S: Session,
+{
     let dir_path = &request.path;
     let mut paths: Vec<PathBuf> = dir_path.read_dir()
         .map_err(Error::ReadPath)?.filter_map(|entry| entry.ok())
