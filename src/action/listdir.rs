@@ -5,7 +5,14 @@
 
 //! A handler and associated types for the list directory action.
 //!
-//! A list directory action stats all files in the provided directory.
+//! A list directory action collects basic metadata for all files in the
+//! provided directory.
+//!
+//! Note that this includes only entries directly under the specified directory.
+//! For more sophisticated recursive traversals, please look into the [timeline]
+//! action.
+//!
+//! [timeline]: ../timeline/index.html
 
 use crate::session::{self, Session};
 
@@ -14,12 +21,15 @@ use std::path::{PathBuf, Path};
 
 /// A request type for the list directory action.
 pub struct Request {
+    /// A path to the directory ought to be listed.
     path: PathBuf,
 }
 
 /// A response type for the list directory action.
 pub struct Response {
+    /// A full path to a particular file within the listed directory.
     path: PathBuf,
+    /// Metadata about a particular file within the listed directory.
     metadata: Metadata,
 }
 
@@ -61,6 +71,7 @@ impl From<Error> for session::Error {
     }
 }
 
+/// Handles requests for the list directory action.
 pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
 where
     S: Session,
