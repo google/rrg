@@ -17,11 +17,11 @@ use std::fmt::{Display, Formatter};
 use log::warn;
 use std::time::SystemTime;
 
-/// An error type used when some path can't be read. E.g. listed directory
-/// path or some inner file path.
+/// An error type for failures that can occur during the listdir action.
 #[derive(Debug)]
 enum Error {
-    ReadPath(std::io::Error),
+    /// A failure occurred during the attempt to list a directory.
+    ListDir(std::io::Error),
 }
 
 impl std::error::Error for Error {
@@ -30,7 +30,7 @@ impl std::error::Error for Error {
         use Error::*;
 
         match *self {
-            ReadPath(ref error) => Some(error),
+            ListDir(ref error) => Some(error),
         }
     }
 }
@@ -41,8 +41,8 @@ impl Display for Error {
         use Error::*;
 
         match *self {
-            ReadPath(ref error) => {
-                write!(fmt, "unable to read path: {}", error)
+            ListDir(ref error) => {
+                write!(fmt, "unable to list directory: {}", error)
             }
         }
     }
@@ -126,7 +126,7 @@ fn get_symlink(metadata: &Metadata, file_path: &Path) -> Option<PathBuf> {
 fn fill_response(file_path: &Path) -> Result<Response, Error> {
     use std::os::unix::fs::MetadataExt;
     let metadata = fs::symlink_metadata(file_path)
-        .map_err(Error::ReadPath)?;
+        .map_err(Error::ListDir)?;
 
     Ok(Response {
         path: file_path.to_path_buf(),
@@ -138,7 +138,10 @@ pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
 where
     S: Session,
 {
-    for entry in crate::fs::list_dir(&request.path)? {
+    let entries = crate::fs::list_dir(&request.path)
+        .map_err(Error::ListDir)?;
+
+    for entry in entries {
         session.reply(Response {
             path: entry.path,
             metadata: entry.metadata,
