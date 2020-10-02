@@ -8,11 +8,9 @@
 //! A list directory action stats all files in the provided directory.
 
 use crate::session::{self, Session};
-use rrg_proto::{ListDirRequest, StatEntry};
 
 use std::fs::{Metadata};
 use std::path::{PathBuf, Path};
-use std::fmt::{Display, Formatter};
 
 /// An error type for failures that can occur during the list directory action.
 #[derive(Debug)]
@@ -32,9 +30,9 @@ impl std::error::Error for Error {
     }
 }
 
-impl Display for Error {
+impl std::fmt::Display for Error {
 
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         use Error::*;
 
         match *self {
@@ -105,7 +103,7 @@ fn get_linux_flags(path: &Path) -> Option<u32> {
 
 impl super::Request for Request {
 
-    type Proto = ListDirRequest;
+    type Proto = rrg_proto::ListDirRequest;
 
     fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
         use std::convert::TryInto as _;
@@ -124,12 +122,12 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("StatEntry");
 
-    type Proto = StatEntry;
+    type Proto = rrg_proto::StatEntry;
 
     fn into_proto(self) -> Self::Proto {
         use rrg_proto::convert::IntoLossy as _;
 
-        StatEntry {
+        rrg_proto::StatEntry {
             pathspec: Some(self.path.into()),
             ..self.metadata.into_lossy()
         }
