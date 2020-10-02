@@ -17,7 +17,7 @@
 use crate::session::{self, Session};
 
 use std::fs::{Metadata};
-use std::path::{PathBuf, Path};
+use std::path::{PathBuf};
 
 /// A request type for the list directory action.
 pub struct Request {
