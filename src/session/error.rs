@@ -2,7 +2,7 @@
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 /// An error type for failures that can occur during a session.
 #[derive(Debug)]
@@ -177,5 +177,28 @@ impl From<MissingFieldError> for ParseError {
 
     fn from(error: MissingFieldError) -> ParseError {
         ParseError::malformed(error)
+    }
+}
+
+/// An error type for situations where a given proto value is not supported.
+#[derive(Debug)]
+pub struct UnsupportedValueError<T> {
+    /// A name of the field the value belongs to.
+    pub name: &'static str,
+    /// A value that is not supported.
+    pub value: T,
+}
+
+impl<T: Debug> Display for UnsupportedValueError<T> {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "unsupported value for '{}': {:?}", self.name, self.value)
+    }
+}
+
+impl<T: Debug> std::error::Error for UnsupportedValueError<T> {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
     }
 }
