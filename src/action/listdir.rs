@@ -78,29 +78,6 @@ where
     Ok(())
 }
 
-// TODO: This should be moved to the `fs` module (and should not be used by
-// this action).
-/// Fills `st_linux_flags` field.
-#[cfg(target_os = "linux")]
-fn get_linux_flags(path: &Path) -> Option<u32> {
-    use std::os::raw::c_long;
-    use std::fs::File;
-    use std::os::unix::io::AsRawFd;
-
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return None,
-    };
-    let mut linux_flags: c_long = 0;
-    let linux_flags_ptr: *mut c_long = &mut linux_flags;
-    unsafe {
-        match ioctls::fs_ioc_getflags(file.as_raw_fd(), linux_flags_ptr) {
-            0 => Some(linux_flags as u32),
-            _ => None,
-        }
-    }
-}
-
 impl super::Request for Request {
 
     type Proto = rrg_proto::ListDirRequest;
@@ -326,13 +303,6 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let file = &session.reply::<Response>(0);
         assert_eq!(file.path, file_path);
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_linux_flags_non_existing_path() {
-        let path_buf = PathBuf::from("some non existing path");
-        assert!(get_linux_flags(&path_buf).is_none());
     }
 
     #[test]

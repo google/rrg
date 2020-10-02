@@ -102,6 +102,8 @@ pub fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
     })
 }
 
+// TODO: Write a function for extracting extended file flags (on Linux).
+
 /// Iterator over entries in all subdirectories.
 ///
 /// This iterator will recursively descent to all subdirectories and yield
