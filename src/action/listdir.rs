@@ -278,6 +278,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_file_response() {
         use std::os::unix::fs::MetadataExt as _;
 
@@ -317,6 +318,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_unicode_paths() {
         use std::os::unix::fs::MetadataExt as _;
 
