@@ -12,6 +12,17 @@ use crate::session::{self, Session};
 use std::fs::{Metadata};
 use std::path::{PathBuf, Path};
 
+/// A request type for the list directory action.
+pub struct Request {
+    path: PathBuf,
+}
+
+/// A response type for the list directory action.
+pub struct Response {
+    path: PathBuf,
+    metadata: Metadata,
+}
+
 /// An error type for failures that can occur during the list directory action.
 #[derive(Debug)]
 enum Error {
@@ -48,17 +59,6 @@ impl From<Error> for session::Error {
     fn from(error: Error) -> session::Error {
         session::Error::action(error)
     }
-}
-
-/// A response type for the list directory action.
-pub struct Response {
-    path: PathBuf,
-    metadata: Metadata,
-}
-
-/// A request type for the list directory action.
-pub struct Request {
-    path: PathBuf,
 }
 
 pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
