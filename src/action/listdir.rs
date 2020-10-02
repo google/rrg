@@ -138,14 +138,11 @@ pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
 where
     S: Session,
 {
-    let dir_path = &request.path;
-    let mut paths: Vec<PathBuf> = dir_path.read_dir()
-        .map_err(Error::ReadPath)?.filter_map(|entry| entry.ok())
-        .map(|entry| entry.path()).collect();
-    paths.sort();
-
-    for file_path in &paths {
-        session.reply(fill_response(file_path)?)?;
+    for entry in crate::fs::list_dir(&request.path)? {
+        session.reply(Response {
+            path: entry.path,
+            metadata: entry.metadata,
+        })?;
     }
 
     Ok(())
@@ -330,20 +327,24 @@ mod tests {
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
-        assert_eq!(session.reply_count(), 7);
-        assert_eq!(&session.reply::<Response>(0).path,
+
+        let mut replies = session.replies().collect::<Vec<&Response>>();
+        replies.sort_by_key(|reply| reply.path.clone());
+
+        assert_eq!(replies.len(), 7);
+        assert_eq!(&replies[0].path,
                    &dir_path.join("CamelCase"));
-        assert_eq!(&session.reply::<Response>(1).path,
+        assert_eq!(&replies[1].path,
                    &dir_path.join("Datei"));
-        assert_eq!(&session.reply::<Response>(2).path,
+        assert_eq!(&replies[2].path,
                    &dir_path.join("afile"));
-        assert_eq!(&session.reply::<Response>(3).path,
+        assert_eq!(&replies[3].path,
                    &dir_path.join("file"));
-        assert_eq!(&session.reply::<Response>(4).path,
+        assert_eq!(&replies[4].path,
                    &dir_path.join("snake_case"));
-        assert_eq!(&session.reply::<Response>(5).path,
+        assert_eq!(&replies[5].path,
                    &dir_path.join("unicode"));
-        assert_eq!(&session.reply::<Response>(6).path,
+        assert_eq!(&replies[6].path,
                    &dir_path.join("юникод"));
     }
 
@@ -392,8 +393,12 @@ mod tests {
         };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
-        assert_eq!(session.reply_count(), 2);
-        let symlink = &session.reply::<Response>(1);
+
+        let mut replies = session.replies().collect::<Vec<&Response>>();
+        replies.sort_by_key(|reply| reply.path.clone());
+
+        assert_eq!(replies.len(), 2);
+        let symlink = replies[1];
         assert_eq!(&symlink.path, &sl_path);
         assert_eq!(symlink.metadata.mode() & 0o120000, 0o120000);
         assert_eq!(symlink.metadata.nlink(), 1);
