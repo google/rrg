@@ -124,111 +124,76 @@ impl super::Response for Response {
 
 #[cfg(test)]
 mod tests {
+
+    use std::fs::File;
+
     use super::*;
-    use std::time::SystemTime;
-    use tempfile::tempdir;
 
     #[test]
-    fn test_empty_dir() {
-        let dir = tempdir().unwrap();
-        let request = super::Request {
-            path: PathBuf::from(dir.path()),
-        };
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, request).is_ok());
-        assert_eq!(session.reply_count(), 0);
-    }
+    fn test_non_existent_dir() {
+        let tempdir = tempfile::tempdir().unwrap();
 
-    #[test]
-    fn test_nonexistent_path() {
-        let dir = tempdir().unwrap();
-        let request = super::Request {
-            path: PathBuf::from(dir.path().join("nonexistent_subdir")),
+        let request = Request {
+            path: tempdir.path().join("foo").to_path_buf(),
         };
+
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_err());
     }
 
     #[test]
-    fn test_lexicographical_order() {
-        let dir = tempdir().unwrap();
-        let dir_path = dir.path();
-        std::fs::File::create(dir_path.join("юникод")).unwrap();
-        std::fs::File::create(dir_path.join("unicode")).unwrap();
-        std::fs::File::create(dir_path.join("file")).unwrap();
-        std::fs::File::create(dir_path.join("afile")).unwrap();
-        std::fs::File::create(dir_path.join("Datei")).unwrap();
-        std::fs::File::create(dir_path.join("snake_case")).unwrap();
-        std::fs::File::create(dir_path.join("CamelCase")).unwrap();
-        let request = super::Request {
-            path: PathBuf::from(&dir_path),
+    fn test_empty_dir() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let request = Request {
+            path: tempdir.path().to_path_buf(),
         };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[test]
+    fn test_dir_with_files() {
+        let tempdir = tempfile::tempdir().unwrap();
+        File::create(tempdir.path().join("abc")).unwrap();
+        File::create(tempdir.path().join("def")).unwrap();
+        File::create(tempdir.path().join("ghi")).unwrap();
+
+        let request = Request {
+            path: tempdir.path().to_path_buf(),
+        };
+
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut replies = session.replies().collect::<Vec<&Response>>();
         replies.sort_by_key(|reply| reply.path.clone());
 
-        assert_eq!(replies.len(), 7);
-        assert_eq!(&replies[0].path,
-                   &dir_path.join("CamelCase"));
-        assert_eq!(&replies[1].path,
-                   &dir_path.join("Datei"));
-        assert_eq!(&replies[2].path,
-                   &dir_path.join("afile"));
-        assert_eq!(&replies[3].path,
-                   &dir_path.join("file"));
-        assert_eq!(&replies[4].path,
-                   &dir_path.join("snake_case"));
-        assert_eq!(&replies[5].path,
-                   &dir_path.join("unicode"));
-        assert_eq!(&replies[6].path,
-                   &dir_path.join("юникод"));
+        assert_eq!(replies.len(), 3);
+
+        assert_eq!(replies[0].path, tempdir.path().join("abc"));
+        assert!(replies[0].metadata.is_file());
+
+        assert_eq!(replies[1].path, tempdir.path().join("def"));
+        assert!(replies[1].metadata.is_file());
+
+        assert_eq!(replies[2].path, tempdir.path().join("ghi"));
+        assert!(replies[2].metadata.is_file());
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_dir_response() {
-        use std::os::unix::fs::MetadataExt as _;
+    fn test_dir_with_dirs() {
+        let tempdir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tempdir.path().join("abc")).unwrap();
+        std::fs::create_dir(tempdir.path().join("def")).unwrap();
 
-        let dir = tempdir().unwrap();
-        let dir_path = dir.path();
-        let inner_dir_path = &dir_path.join("dir");
-        std::fs::create_dir(&inner_dir_path).unwrap();
-        let request = super::Request {
-            path: PathBuf::from(&dir_path),
+        let request = Request {
+            path: tempdir.path().to_path_buf(),
         };
-        let mut session = session::test::Fake::new();
-        handle(&mut session, request).unwrap();
-        assert_eq!(session.reply_count(), 1);
-        let inner_dir = &session.reply::<Response>(0);
-        assert_eq!(&inner_dir.path, inner_dir_path);
-        assert_eq!(inner_dir.metadata.uid(), users::get_current_uid());
-        assert_eq!(inner_dir.metadata.gid(), users::get_current_gid());
-        assert_eq!(inner_dir.metadata.dev(),
-                   dir_path.metadata().unwrap().dev());
-        assert_eq!(inner_dir.metadata.mode() & 0o40000, 0o40000);
-        assert_eq!(inner_dir.metadata.nlink(), 2);
 
-        assert!(inner_dir.metadata.accessed().unwrap() <= SystemTime::now());
-        assert!(inner_dir.metadata.modified().unwrap() <= SystemTime::now());
-        assert!(inner_dir.metadata.created().unwrap() <= SystemTime::now());
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_symlink_response() {
-        use std::os::unix::fs::MetadataExt as _;
-
-        let dir = tempdir().unwrap();
-        let dir_path = dir.path();
-        let file_path = dir_path.join("file");
-        std::fs::File::create(&file_path).unwrap();
-        let sl_path = dir_path.join("symlink");
-        std::os::unix::fs::symlink(&file_path, &sl_path).unwrap();
-        let request = super::Request {
-            path: PathBuf::from(&dir_path),
-        };
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
 
@@ -236,129 +201,81 @@ mod tests {
         replies.sort_by_key(|reply| reply.path.clone());
 
         assert_eq!(replies.len(), 2);
-        let symlink = replies[1];
-        assert_eq!(&symlink.path, &sl_path);
-        assert_eq!(symlink.metadata.mode() & 0o120000, 0o120000);
-        assert_eq!(symlink.metadata.nlink(), 1);
-        assert!(symlink.metadata.accessed().unwrap() <= SystemTime::now());
-        assert!(symlink.metadata.modified().unwrap() <= SystemTime::now());
-        assert!(symlink.metadata.created().unwrap() <= SystemTime::now());
+
+        assert_eq!(replies[0].path, tempdir.path().join("abc"));
+        assert!(replies[0].metadata.is_dir());
+
+        assert_eq!(replies[1].path, tempdir.path().join("def"));
+        assert!(replies[1].metadata.is_dir());
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_file_response_linux() {
-        use std::os::unix::fs::MetadataExt as _;
-        use std::os::unix::fs::PermissionsExt;
+    fn test_dir_with_nested_dirs() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("abc").join("def").join("ghi");
 
-        let dir = tempdir().unwrap();
-        let dir_path = dir.path();
-        let file_path = dir_path.join("file");
-        std::fs::File::create(&file_path).unwrap();
-        std::fs::set_permissions(&file_path,
-                                 PermissionsExt::from_mode(0o664)).unwrap();
-        let request = super::Request {
-            path: PathBuf::from(&dir_path),
+        std::fs::create_dir_all(path).unwrap();
+
+        let request = Request {
+            path: tempdir.path().to_path_buf(),
         };
+
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
+
         assert_eq!(session.reply_count(), 1);
-        let file = &session.reply::<Response>(0);
-        assert_eq!(file.path, file_path);
-        assert_eq!(file.metadata.size(), 0);
-        assert_eq!(file.metadata.mode(), 0o100664);
-        assert_eq!(file.metadata.uid(), users::get_current_uid());
-        assert_eq!(file.metadata.gid(), users::get_current_gid());
-        assert_eq!(file.metadata.dev(),
-                   dir_path.metadata().unwrap().dev());
-        assert_eq!(file.metadata.nlink(), 1);
-        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
-        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
-        assert!(file.metadata.created().unwrap() <= SystemTime::now());
     }
 
+    // Symlinking is supported only on Unix-like systems.
+    #[cfg(target_family = "unix")]
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_file_response() {
-        use std::os::unix::fs::MetadataExt as _;
+    fn test_list_dir_with_links() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let source = tempdir.path().join("abc");
+        let target = tempdir.path().join("def");
 
-        let dir = tempdir().unwrap();
-        let dir_path = dir.path();
-        let file_path = dir_path.join("file");
-        std::fs::File::create(&file_path).unwrap();
-        let request = super::Request {
-            path: PathBuf::from(&dir_path),
+        File::create(&source).unwrap();
+        std::os::unix::fs::symlink(&source, &target).unwrap();
+
+        let request = Request {
+            path: tempdir.path().to_path_buf(),
         };
+
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
-        assert_eq!(session.reply_count(), 1);
-        let file = &session.reply::<Response>(0);
-        assert_eq!(file.path, file_path);
-        assert_eq!(file.metadata.size(), 0);
-        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
-        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
-        assert!(file.metadata.created().unwrap() <= SystemTime::now());
+
+        let mut replies = session.replies().collect::<Vec<&Response>>();
+        replies.sort_by_key(|reply| reply.path.clone());
+
+        assert_eq!(replies.len(), 2);
+
+        assert_eq!(replies[0].path, tempdir.path().join("abc"));
+        assert!(replies[0].metadata.file_type().is_file());
+
+        assert_eq!(replies[1].path, tempdir.path().join("def"));
+        assert!(replies[1].metadata.file_type().is_symlink());
     }
 
+    // macOS mangles Unicode-specific characters in filenames.
+    #[cfg_attr(target_os = "macos", ignore)]
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_st_flags_linux() {
-        let dir = tempdir().unwrap();
-        let dir_path = dir.path();
-        let file_path = dir_path.join("file");
-        std::fs::File::create(&file_path).unwrap();
-        let request = super::Request {
-            path: PathBuf::from(&dir_path),
+    fn test_dir_with_unicode_files() {
+        let tempdir = tempfile::tempdir().unwrap();
+        File::create(tempdir.path().join("zażółć gęślą jaźń")).unwrap();
+        File::create(tempdir.path().join("што й па мору")).unwrap();
+
+        let request = Request {
+            path: tempdir.path().to_path_buf(),
         };
+
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, request).is_ok());
-        assert_eq!(session.reply_count(), 1);
-        let file = &session.reply::<Response>(0);
-        assert_eq!(file.path, file_path);
-    }
 
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_unicode_paths() {
-        use std::os::unix::fs::MetadataExt as _;
+        let mut replies = session.replies().collect::<Vec<&Response>>();
+        replies.sort_by_key(|reply| reply.path.clone());
 
-        let dir = tempdir().unwrap();
-        let dir_path = dir.path();
-        std::fs::File::create(dir_path.join("❤ℝℝG❤")).unwrap();
-        std::fs::File::create(dir_path.join("файл")).unwrap();
-        std::fs::File::create(dir_path.join("ファイル")).unwrap();
-        std::fs::File::create(dir_path.join("αρχείο")).unwrap();
-        std::fs::File::create(dir_path.join("फ़ाइल")).unwrap();
-        let request = super::Request {
-            path: PathBuf::from(&dir_path),
-        };
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, request).is_ok());
-        assert_eq!(session.reply_count(), 5);
-        let file = &session.reply::<Response>(0);
-        assert_eq!(file.metadata.size(), 0);
-        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
-        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
-        assert!(file.metadata.created().unwrap() <= SystemTime::now());
-        let file = &session.reply::<Response>(1);
-        assert_eq!(file.metadata.size(), 0);
-        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
-        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
-        assert!(file.metadata.created().unwrap() <= SystemTime::now());
-        let file = &session.reply::<Response>(2);
-        assert_eq!(file.metadata.size(), 0);
-        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
-        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
-        assert!(file.metadata.created().unwrap() <= SystemTime::now());
-        let file = &session.reply::<Response>(3);
-        assert_eq!(file.metadata.size(), 0);
-        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
-        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
-        assert!(file.metadata.created().unwrap() <= SystemTime::now());
-        let file = &session.reply::<Response>(4);
-        assert_eq!(file.metadata.size(), 0);
-        assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
-        assert!(file.metadata.modified().unwrap() <= SystemTime::now());
-        assert!(file.metadata.created().unwrap() <= SystemTime::now());
+        assert_eq!(replies.len(), 2);
+        assert_eq!(replies[0].path, tempdir.path().join("zażółć gęślą jaźń"));
+        assert_eq!(replies[1].path, tempdir.path().join("што й па мору"));
     }
 }
