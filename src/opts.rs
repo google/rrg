@@ -93,9 +93,6 @@ impl std::str::FromStr for Verbosity {
     }
 }
 
-// TODO: This should just be a wrapper around `simplelog::TerminalMode`, but
-// it does not implement standard traits. So, for now, we just re-implement it
-// like that.
 /// A type listing different options for logging to standard streams.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Stream {
