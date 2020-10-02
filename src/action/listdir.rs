@@ -8,16 +8,13 @@
 //! A list directory action stats all files in the provided directory.
 
 use crate::session::{self, Session};
-use rrg_proto::{ListDirRequest, StatEntry, path_spec::PathType,
-                path_spec::Options, micros};
+use rrg_proto::{ListDirRequest, StatEntry};
 
-use std::fs::{self, Metadata};
+use std::fs::{Metadata};
 use std::path::{PathBuf, Path};
 use std::fmt::{Display, Formatter};
-use log::warn;
-use std::time::SystemTime;
 
-/// An error type for failures that can occur during the listdir action.
+/// An error type for failures that can occur during the list directory action.
 #[derive(Debug)]
 enum Error {
     /// A failure occurred during the attempt to list a directory.
@@ -66,74 +63,6 @@ pub struct Request {
     path: PathBuf,
 }
 
-/// Returns the last access time of provided `Metadata`.
-fn get_access_time(metadata: &Metadata) -> Option<SystemTime> {
-    match metadata.accessed() {
-        Ok(atime) => Some(atime),
-        Err(err) => {
-            warn!("unable to get last access time: {}", err);
-            None
-        }
-    }
-}
-
-/// Returns the last modification time of provided `Metadata`.
-fn get_modification_time(metadata: &Metadata) -> Option<SystemTime> {
-    match metadata.modified() {
-        Ok(mtime) => Some(mtime),
-        Err(err) => {
-            warn!("unable to get last modification time: {}", err);
-            None
-        }
-    }
-}
-
-/// Returns the creation time of provided `Metadata`.
-fn get_creation_time(metadata: &Metadata) -> Option<SystemTime> {
-    match metadata.created() {
-        Ok(btime) => Some(btime),
-        Err(err) => {
-            warn!("unable to get creation time: {}", err);
-            None
-        }
-    }
-}
-
-/// Returns the last status change time of provided `Metadata`.
-#[cfg(target_os = "linux")]
-fn get_status_change_time(metadata: &Metadata) -> Option<SystemTime> {
-    use std::time::{Duration, UNIX_EPOCH};
-    use std::os::unix::fs::MetadataExt;
-
-    UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
-}
-
-/// Reads a symbolic link, returning the path to the file that the link points to.
-#[cfg(target_os = "linux")]
-fn get_symlink(metadata: &Metadata, file_path: &Path) -> Option<PathBuf> {
-    if !metadata.file_type().is_symlink() { return None; }
-
-    match fs::read_link(file_path) {
-        Ok(file) => Some(file),
-        Err(error) => {
-            warn!("unable to read symlink: {}", error);
-            None
-        }
-    }
-}
-
-/// Fills all fields of `Response` using path to the file.
-fn fill_response(file_path: &Path) -> Result<Response, Error> {
-    use std::os::unix::fs::MetadataExt;
-    let metadata = fs::symlink_metadata(file_path)
-        .map_err(Error::ListDir)?;
-
-    Ok(Response {
-        path: file_path.to_path_buf(),
-        metadata: metadata,
-    })
-}
-
 pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
 where
     S: Session,
@@ -151,6 +80,8 @@ where
     Ok(())
 }
 
+// TODO: This should be moved to the `fs` module (and should not be used by
+// this action).
 /// Fills `st_linux_flags` field.
 #[cfg(target_os = "linux")]
 fn get_linux_flags(path: &Path) -> Option<u32> {
@@ -189,20 +120,6 @@ impl super::Request for Request {
     }
 }
 
-/// Converts idiomatic `SystemTime` to `u64` for the protocol buffer.
-fn get_time_since_unix_epoch(sys_time: &Option<SystemTime>) -> Option<u64> {
-    match sys_time {
-        Some(time) => match micros(*time) {
-            Ok(time) => Some(time),
-            Err(error) => {
-                warn!("failed to convert time: {}", error);
-                None
-            }
-        }
-        None => None,
-    }
-}
-
 impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("StatEntry");
@@ -222,76 +139,8 @@ impl super::Response for Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::action::Request;
+    use std::time::SystemTime;
     use tempfile::tempdir;
-
-    #[cfg(target_os = "linux")]
-    use std::os::unix::fs::MetadataExt;
-
-    /// Fills `ListDirRequest` with provided fields.
-    fn fill_proto_request(path_options: Option<i32>,
-                          pathtype: Option<i32>,
-                          path: Option<String>) -> ListDirRequest {
-        ListDirRequest {
-            pathspec: Some(rrg_proto::PathSpec {
-                path_options,
-                pathtype,
-                path,
-                ..Default::default()
-            }),
-            iterator: None,
-        }
-    }
-
-    #[test]
-    fn test_empty_pathspec_field() {
-        let request: Result<super::Request, _> =
-            Request::from_proto(ListDirRequest {
-                pathspec: None,
-                iterator: None,
-            });
-        assert!(request.is_err());
-    }
-
-    #[test]
-    fn test_empty_path_options() {
-        let request: Result<super::Request, _> = Request::from_proto(
-            fill_proto_request(None, Some(PathType::Os as i32),
-                               Some(String::from("/"))));
-        assert!(request.is_ok());
-    }
-
-    #[test]
-    fn test_ok_path_options() {
-        let request: Result<super::Request, _> = Request::from_proto(
-            fill_proto_request(Some(Options::CaseLiteral as i32),
-                               Some(PathType::Os as i32),
-                               Some(String::from("/"))));
-        assert!(request.is_ok());
-    }
-
-    #[test]
-    fn test_unset_pathtype() {
-        let request: Result<super::Request, _> = Request::from_proto(
-            fill_proto_request(None, Some(PathType::Unset as i32),
-                               Some(String::from("/"))));
-        assert!(request.is_err());
-    }
-
-    #[test]
-    fn test_unsupported_pathtype() {
-        let request: Result<super::Request, _> = Request::from_proto(
-            fill_proto_request(None, Some(PathType::Tsk as i32),
-                               Some(String::from("/"))));
-        assert!(request.is_err());
-    }
-
-    #[test]
-    fn test_empty_path() {
-        let request: Result<super::Request, _> = Request::from_proto(
-            fill_proto_request(None, Some(PathType::Os as i32), None));
-        assert!(request.is_err());
-    }
 
     #[test]
     fn test_empty_dir() {
@@ -354,7 +203,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_dir_response() {
-        use std::os::linux::fs::MetadataExt as _;
+        use std::os::unix::fs::MetadataExt as _;
 
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
@@ -383,7 +232,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_symlink_response() {
-        use std::os::linux::fs::MetadataExt as _;
+        use std::os::unix::fs::MetadataExt as _;
 
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
@@ -413,7 +262,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_file_response_linux() {
-        use std::os::linux::fs::MetadataExt as _;
+        use std::os::unix::fs::MetadataExt as _;
         use std::os::unix::fs::PermissionsExt;
 
         let dir = tempdir().unwrap();
@@ -444,7 +293,7 @@ mod tests {
 
     #[test]
     fn test_file_response() {
-        use std::os::linux::fs::MetadataExt as _;
+        use std::os::unix::fs::MetadataExt as _;
 
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
@@ -467,8 +316,6 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_st_flags_linux() {
-        use std::os::linux::fs::MetadataExt as _;
-
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
         let file_path = dir_path.join("file");
@@ -492,6 +339,8 @@ mod tests {
 
     #[test]
     fn test_unicode_paths() {
+        use std::os::unix::fs::MetadataExt as _;
+
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
         std::fs::File::create(dir_path.join("❤ℝℝG❤")).unwrap();
@@ -530,15 +379,5 @@ mod tests {
         assert!(file.metadata.accessed().unwrap() <= SystemTime::now());
         assert!(file.metadata.modified().unwrap() <= SystemTime::now());
         assert!(file.metadata.created().unwrap() <= SystemTime::now());
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_fill_response_nonexistent_path() {
-        let dir = tempdir().unwrap();
-        let nonexistent_path = PathBuf::from(dir.path()
-            .join("nonexistent_subdir"));
-        assert!(!nonexistent_path.exists());
-        assert!(fill_response(&nonexistent_path).is_err());
     }
 }
