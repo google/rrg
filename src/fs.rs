@@ -9,6 +9,7 @@
 //! standard `std::fs` module. All functions are portable and should work on all
 //! supported platforms (perhaps with limited capabilities).
 
+use std::ffi::OsString;
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 
@@ -23,6 +24,11 @@ pub struct Entry {
     pub path: PathBuf,
     /// Metadata associated with the item.
     pub metadata: Metadata,
+}
+
+pub struct ExtAttr {
+    pub key: OsString,
+    pub value: Option<Vec<u8>>,
 }
 
 /// Returns a deep iterator over entries within a directory.
@@ -224,6 +230,61 @@ impl std::iter::Iterator for ListDir {
         }
 
         None
+    }
+}
+
+#[cfg(target_family = "unix")]
+pub mod unix {
+
+    use std::path::{Path, PathBuf};
+
+    use log::warn;
+
+    pub fn ext_attrs<P>(path: P) -> std::io::Result<ExtAttrs>
+    where
+        P: AsRef<Path>,
+    {
+        let iter = xattr::list(&path)?;
+
+        Ok(ExtAttrs {
+            path: path.as_ref().to_path_buf(),
+            iter: iter,
+        })
+    }
+
+    pub struct ExtAttrs {
+        // TODO: Try to avoid copying the path.
+        path: PathBuf,
+        iter: xattr::XAttrs,
+    }
+
+    impl Iterator for ExtAttrs {
+
+        type Item = super::ExtAttr;
+
+        fn next(&mut self) -> Option<super::ExtAttr> {
+            for key in &mut self.iter {
+                let value = match xattr::get(&self.path, &key) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        warn! {
+                            "failed to collect {key:?} of '{path}': {cause}",
+                            key = key,
+                            path = self.path.display(),
+                            cause = error,
+                        };
+                        continue
+                    },
+                };
+
+                return Some(super::ExtAttr {
+                    key: key,
+                    value: value,
+                });
+            }
+
+            None
+        }
     }
 }
 
