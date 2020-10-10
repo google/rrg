@@ -38,10 +38,7 @@ pub struct ExtAttr {
 /// # Examples
 ///
 /// ```no_run
-/// let attrs = rrg::fs::unix::ext_attrs(&"/tmp/foo")
-///     .expect("failed to collect extended attributes");
-///
-/// for attr in attrs {
+/// for attr in rrg::fs::unix::ext_attrs(&"/tmp/foo").unwrap() {
 ///     let name = attr.name.to_string_lossy();
 ///     match attr.value {
 ///         Some(value) => println!("{}: {}", name, value.to_string_lossy()),
