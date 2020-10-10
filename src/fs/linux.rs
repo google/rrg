@@ -3,8 +3,29 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+//! Linux-specific utilities for working with the filesystem.
+
 use std::path::Path;
 
+/// Collects extended flags of the specified file.
+///
+/// The returned mask represents file attributes specific to the Linux extended
+/// file system. Normally, they can be inspected using the `lsattr` command and
+/// can be set through the `chattr` command.
+///
+/// See the [Wikipedia] article and the [man] page for more details.
+///
+/// [Wikipedia]: https://en.wikipedia.org/wiki/Chattr
+/// [man]: https://linux.die.net/man/1/chattr
+///
+/// # Examples
+///
+/// ```no_run
+/// const FS_FL_USER_VISIBLE: u32 = 0x0003DFFF;
+///
+/// let flags = rrg::fs::linux::flags("/tmp/foo").unwrap();
+/// assert_eq!(flags & FS_FL_USER_VISIBLE, 0);
+/// ```
 pub fn flags<P>(path: P) -> std::io::Result<u32> where
     P: AsRef<Path>
 {
