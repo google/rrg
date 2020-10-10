@@ -9,11 +9,13 @@
 //! standard `std::fs` module. All functions are portable and should work on all
 //! supported platforms (perhaps with limited capabilities).
 
-use std::ffi::OsString;
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 
 use log::warn;
+
+#[cfg(target_family = "unix")]
+pub mod unix;
 
 /// A path to a filesystem item and associated metadata.
 ///
@@ -24,11 +26,6 @@ pub struct Entry {
     pub path: PathBuf,
     /// Metadata associated with the item.
     pub metadata: Metadata,
-}
-
-pub struct ExtAttr {
-    pub key: OsString,
-    pub value: Option<Vec<u8>>,
 }
 
 /// Returns a deep iterator over entries within a directory.
@@ -230,60 +227,6 @@ impl std::iter::Iterator for ListDir {
         }
 
         None
-    }
-}
-
-#[cfg(target_family = "unix")]
-pub mod unix {
-
-    use std::path::Path;
-
-    use log::warn;
-
-    pub fn ext_attrs<'p, P>(path: &'p P) -> std::io::Result<ExtAttrs<'p>>
-    where
-        P: AsRef<Path>,
-    {
-        let iter = xattr::list(&path)?;
-
-        Ok(ExtAttrs {
-            path: path.as_ref(),
-            iter: iter,
-        })
-    }
-
-    pub struct ExtAttrs<'p> {
-        path: &'p Path,
-        iter: xattr::XAttrs,
-    }
-
-    impl<'p> Iterator for ExtAttrs<'p> {
-
-        type Item = super::ExtAttr;
-
-        fn next(&mut self) -> Option<super::ExtAttr> {
-            for key in &mut self.iter {
-                let value = match xattr::get(self.path, &key) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        warn! {
-                            "failed to collect {key:?} of '{path}': {cause}",
-                            key = key,
-                            path = self.path.display(),
-                            cause = error,
-                        };
-                        continue
-                    },
-                };
-
-                return Some(super::ExtAttr {
-                    key: key,
-                    value: value,
-                });
-            }
-
-            None
-        }
     }
 }
 
