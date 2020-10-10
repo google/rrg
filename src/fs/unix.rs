@@ -1,4 +1,4 @@
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use log::warn;
@@ -31,17 +31,9 @@ impl<'p> Iterator for ExtAttrs<'p> {
 
     fn next(&mut self) -> Option<ExtAttr> {
         for key in &mut self.iter {
-            let value = match xattr::get(self.path, &key) {
+            let value = match ext_attr_value(self.path, &key) {
                 Ok(value) => value,
-                Err(error) => {
-                    warn! {
-                        "failed to collect {key:?} of '{path}': {cause}",
-                        key = key,
-                        path = self.path.display(),
-                        cause = error,
-                    };
-                    continue
-                },
+                Err(()) => continue,
             };
 
             return Some(ExtAttr {
@@ -52,4 +44,18 @@ impl<'p> Iterator for ExtAttrs<'p> {
 
         None
     }
+}
+
+fn ext_attr_value<P>(path: P, key: &OsStr) -> Result<Option<Vec<u8>>, ()>
+where
+    P: AsRef<Path>,
+{
+    xattr::get(&path, key).map_err(|error| {
+        warn! {
+            "failed to collect {key:?} of '{path}': {cause}",
+            key = key,
+            path = path.as_ref().display(),
+            cause = error,
+        };
+    })
 }
