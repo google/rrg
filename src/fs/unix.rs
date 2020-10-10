@@ -16,7 +16,7 @@ use log::warn;
 /// [Wikipedia]: https://en.wikipedia.org/wiki/Extended_file_attributes
 pub struct ExtAttr {
     /// A name of the extended attribute.
-    pub key: OsString,
+    pub name: OsString,
     /// A value of the extended attribute.
     pub value: Option<Vec<u8>>,
 }
@@ -37,15 +37,15 @@ pub struct ExtAttr {
 ///     .expect("failed to collect extended attributes");
 ///
 /// for attr in attrs {
-///     let key = attr.key.to_string_lossy();
+///     let name = attr.name.to_string_lossy();
 ///     match attr.value {
 ///         Some(value) => {
 ///             let value = std::str::from_utf8(&value)
 ///                 .expect("failed to convert attribute value");
 ///
-///             println!("{}: {}", key, value);
+///             println!("{}: {}", name, value);
 ///         },
-///         None => println!("{}", key),
+///         None => println!("{}", name),
 ///     }
 /// }
 /// ```
@@ -79,14 +79,14 @@ impl<'p> Iterator for ExtAttrs<'p> {
     type Item = ExtAttr;
 
     fn next(&mut self) -> Option<ExtAttr> {
-        for key in &mut self.iter {
-            let value = match ext_attr_value(self.path, &key) {
+        for name in &mut self.iter {
+            let value = match ext_attr_value(self.path, &name) {
                 Ok(value) => value,
                 Err(()) => continue,
             };
 
             return Some(ExtAttr {
-                key: key,
+                name: name,
                 value: value,
             });
         }
@@ -95,18 +95,18 @@ impl<'p> Iterator for ExtAttrs<'p> {
     }
 }
 
-/// Collects value of an extended attribute at the given `key`.
+/// Collects value of an extended attribute with the specified name.
 ///
 /// This is a tiny wrapper around `xattr::get`, but logs and forgets the error
 /// (if occurs).
-fn ext_attr_value<P>(path: P, key: &OsStr) -> Result<Option<Vec<u8>>, ()>
+fn ext_attr_value<P>(path: P, name: &OsStr) -> Result<Option<Vec<u8>>, ()>
 where
     P: AsRef<Path>,
 {
-    xattr::get(&path, key).map_err(|error| {
+    xattr::get(&path, name).map_err(|error| {
         warn! {
-            "failed to collect {key:?} of '{path}': {cause}",
-            key = key,
+            "failed to collect attribute '{:?}' of '{path}': {cause}",
+            name = name,
             path = path.as_ref().display(),
             cause = error,
         };
