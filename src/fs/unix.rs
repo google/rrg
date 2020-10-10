@@ -1,3 +1,8 @@
+// Copyright 2020 Google LLC
+//
+// Use of this source code is governed by an MIT-style license that can be found
+// in the LICENSE file or at https://opensource.org/licenses/MIT.
+
 //! Unix-specific utilities for working with the filesystem.
 
 use std::ffi::{OsStr, OsString};
