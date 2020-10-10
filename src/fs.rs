@@ -236,35 +236,34 @@ impl std::iter::Iterator for ListDir {
 #[cfg(target_family = "unix")]
 pub mod unix {
 
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     use log::warn;
 
-    pub fn ext_attrs<P>(path: P) -> std::io::Result<ExtAttrs>
+    pub fn ext_attrs<'p, P>(path: &'p P) -> std::io::Result<ExtAttrs<'p>>
     where
         P: AsRef<Path>,
     {
         let iter = xattr::list(&path)?;
 
         Ok(ExtAttrs {
-            path: path.as_ref().to_path_buf(),
+            path: path.as_ref(),
             iter: iter,
         })
     }
 
-    pub struct ExtAttrs {
-        // TODO: Try to avoid copying the path.
-        path: PathBuf,
+    pub struct ExtAttrs<'p> {
+        path: &'p Path,
         iter: xattr::XAttrs,
     }
 
-    impl Iterator for ExtAttrs {
+    impl<'p> Iterator for ExtAttrs<'p> {
 
         type Item = super::ExtAttr;
 
         fn next(&mut self) -> Option<super::ExtAttr> {
             for key in &mut self.iter {
-                let value = match xattr::get(&self.path, &key) {
+                let value = match xattr::get(self.path, &key) {
                     Ok(value) => value,
                     Err(error) => {
                         warn! {
