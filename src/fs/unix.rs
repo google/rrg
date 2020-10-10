@@ -18,7 +18,7 @@ pub struct ExtAttr {
     /// A name of the extended attribute.
     pub name: OsString,
     /// A value of the extended attribute.
-    pub value: Option<Vec<u8>>,
+    pub value: Option<OsString>,
 }
 
 /// Returns an iterator over extended attributes of the specified file.
@@ -39,12 +39,7 @@ pub struct ExtAttr {
 /// for attr in attrs {
 ///     let name = attr.name.to_string_lossy();
 ///     match attr.value {
-///         Some(value) => {
-///             let value = std::str::from_utf8(&value)
-///                 .expect("failed to convert attribute value");
-///
-///             println!("{}: {}", name, value);
-///         },
+///         Some(value) => println!("{}: {}", name, value.to_string_lossy()),
 ///         None => println!("{}", name),
 ///     }
 /// }
@@ -99,16 +94,17 @@ impl<'p> Iterator for ExtAttrs<'p> {
 ///
 /// This is a tiny wrapper around `xattr::get`, but logs and forgets the error
 /// (if occurs).
-fn ext_attr_value<P>(path: P, name: &OsStr) -> Result<Option<Vec<u8>>, ()>
+fn ext_attr_value<P>(path: P, name: &OsStr) -> Result<Option<OsString>, ()>
 where
     P: AsRef<Path>,
 {
-    xattr::get(&path, name).map_err(|error| {
-        warn! {
+    match xattr::get(&path, name) {
+        Ok(value) => Ok(value.map(std::os::unix::ffi::OsStringExt::from_vec)),
+        Err(error) => Err(warn! {
             "failed to collect attribute '{:?}' of '{path}': {cause}",
             name = name,
             path = path.as_ref().display(),
             cause = error,
-        };
-    })
+        }),
+    }
 }
