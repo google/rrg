@@ -14,6 +14,12 @@ use std::path::{Path, PathBuf};
 
 use log::warn;
 
+#[cfg(target_os = "linux")]
+pub mod linux;
+
+#[cfg(target_family = "unix")]
+pub mod unix;
+
 /// A path to a filesystem item and associated metadata.
 ///
 /// This type is very similar to standard `DirEntry` but its `metadata` property
@@ -101,8 +107,6 @@ pub fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
         iter: iter,
     })
 }
-
-// TODO: Write a function for extracting extended file flags (on Linux).
 
 /// Iterator over entries in all subdirectories.
 ///
