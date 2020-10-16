@@ -23,7 +23,7 @@ pub struct ExtAttr {
     /// A name of the extended attribute.
     pub name: OsString,
     /// A value of the extended attribute.
-    pub value: Option<OsString>,
+    pub value: Option<Vec<u8>>,
 }
 
 /// Returns an iterator over extended attributes of the specified file.
@@ -41,7 +41,7 @@ pub struct ExtAttr {
 /// for attr in rrg::fs::unix::ext_attrs(&"/tmp/foo").unwrap() {
 ///     let name = attr.name.to_string_lossy();
 ///     match attr.value {
-///         Some(value) => println!("{}: {}", name, value.to_string_lossy()),
+///         Some(value) => println!("{}: {:?}", name, value),
 ///         None => println!("{}", name),
 ///     }
 /// }
@@ -96,19 +96,16 @@ impl<'p> Iterator for ExtAttrs<'p> {
 ///
 /// This is a tiny wrapper around `xattr::get`, but logs and forgets the error
 /// (if occurs).
-fn ext_attr_value<P>(path: P, name: &OsStr) -> Result<Option<OsString>, ()>
+fn ext_attr_value<P>(path: P, name: &OsStr) -> Result<Option<Vec<u8>>, ()>
 where
     P: AsRef<Path>,
 {
-    match xattr::get(&path, name) {
-        Ok(value) => Ok(value.map(std::os::unix::ffi::OsStringExt::from_vec)),
-        Err(error) => Err(warn! {
-            "failed to collect attribute '{:?}' of '{path}': {cause}",
-            name = name,
-            path = path.as_ref().display(),
-            cause = error,
-        }),
-    }
+    xattr::get(&path, name).map_err(|error| warn! {
+        "failed to collect attribute '{:?}' of '{path}': {cause}",
+        name = name,
+        path = path.as_ref().display(),
+        cause = error,
+    })
 }
 
 #[cfg(test)]
@@ -210,7 +207,7 @@ mod tests {
 
         let attr = iter.next().unwrap();
         assert_eq!(attr.name, "user.abc");
-        assert_eq!(attr.value, Some(OsStr::from_bytes(b"\xff\xfe\xff\xfe\xff").into()));
+        assert_eq!(attr.value, Some(b"\xff\xfe\xff\xfe\xff".to_vec()));
 
         assert!(iter.next().is_none());
     }
