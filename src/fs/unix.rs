@@ -110,3 +110,110 @@ where
         }),
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_ext_attrs_non_existing() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        assert!(ext_attrs(&tempdir.path().join("foo")).is_err());
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-attr"))]
+    #[test]
+    fn test_ext_attrs_with_multiple_values() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempfile = tempdir.path().join("foo");
+        std::fs::File::create(&tempfile).unwrap();
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--name").arg("user.abc")
+                .arg("--value").arg("quux")
+                .arg(&tempfile)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--name").arg("user.def")
+                .arg("--value").arg("norf")
+                .arg(&tempfile)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let mut results = ext_attrs(&tempfile).unwrap().collect::<Vec<_>>();
+        results.sort_by_key(|attr| attr.name.clone());
+
+        assert_eq!(results.len(), 2);
+
+        assert_eq!(results[0].name, "user.abc");
+        assert_eq!(results[0].value, Some("quux".into()));
+
+        assert_eq!(results[1].name, "user.def");
+        assert_eq!(results[1].value, Some("norf".into()));
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-attr"))]
+    #[test]
+    fn test_ext_attrs_with_empty_value() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempfile = tempdir.path().join("foo");
+        std::fs::File::create(&tempfile).unwrap();
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--name").arg("user.abc")
+                .arg(&tempfile)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let mut iter = ext_attrs(&tempfile).unwrap();
+
+        let attr = iter.next().unwrap();
+        assert_eq!(attr.name, "user.abc");
+        assert_eq!(attr.value, Some("".into()));
+
+        assert!(iter.next().is_none());
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-attr"))]
+    #[test]
+    fn test_ext_attrs_with_bytes_value() {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempfile = tempdir.path().join("foo");
+        std::fs::File::create(&tempfile).unwrap();
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--name").arg("user.abc")
+                .arg("--value").arg(OsStr::from_bytes(b"\xff\xfe\xff\xfe\xff"))
+                .arg(&tempfile)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let mut iter = ext_attrs(&tempfile).unwrap();
+
+        let attr = iter.next().unwrap();
+        assert_eq!(attr.name, "user.abc");
+        assert_eq!(attr.value, Some(OsStr::from_bytes(b"\xff\xfe\xff\xfe\xff").into()));
+
+        assert!(iter.next().is_none());
+    }
+
+    // TODO: Add macOS tests.
+}
