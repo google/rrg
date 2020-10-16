@@ -28,7 +28,7 @@ pub mod timeline;
 pub mod network;
 pub mod insttime;
 pub mod memsize;
-pub mod client_side_file_finder;
+pub mod finder;
 
 use crate::session::{self, Session, Task};
 
