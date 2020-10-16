@@ -2,7 +2,7 @@
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 /// An error type for failures that can occur during a session.
 #[derive(Debug)]
@@ -264,7 +264,8 @@ impl From<RegexParseError> for ParseError {
     }
 }
 
-/// An error type for situations where time micros cannot be convert to std::time::SystemTime.
+/// An error type for situations where time micros cannot be converted
+/// to std::time::SystemTime.
 #[derive(Debug)]
 pub struct TimeMicrosConversionError {
 /// Time micros value causing the conversion error.
@@ -287,7 +288,30 @@ impl std::error::Error for TimeMicrosConversionError {
 
 impl From<TimeMicrosConversionError> for ParseError {
 
-fn from(error: TimeMicrosConversionError) -> ParseError {
+    fn from(error: TimeMicrosConversionError) -> ParseError {
         ParseError::TimeMicrosConversion(error)
+    }
+}
+
+/// An error type for situations where a given proto value is not supported.
+#[derive(Debug)]
+pub struct UnsupportedValueError<T> {
+    /// A name of the field the value belongs to.
+    pub name: &'static str,
+    /// A value that is not supported.
+    pub value: T,
+}
+
+impl<T: Debug> Display for UnsupportedValueError<T> {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "unsupported value for '{}': {:?}", self.name, self.value)
+    }
+}
+
+impl<T: Debug> std::error::Error for UnsupportedValueError<T> {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
     }
 }

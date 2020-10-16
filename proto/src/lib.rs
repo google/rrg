@@ -5,7 +5,11 @@
 
 pub mod convert;
 
+use std::path::PathBuf;
+
 use convert::FromLossy;
+
+use rrg_macro::ack;
 
 include!(concat!(env!("OUT_DIR"), "/grr.rs"));
 
@@ -168,20 +172,6 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
         // now we just ignore errors, but the definition should be improved.
         let some = |value: u64| Some(value.try_into().unwrap_or(0));
 
-        // TODO: Move this into some utility module.
-        // TODO: Add support for other log types.
-        macro_rules! ack {
-            { $expr:expr, error: $message:literal } => {
-                match $expr {
-                    Ok(value) => Some(value),
-                    Err(err) => {
-                        ::log::error!(concat!($message, ": {}"), err);
-                        None
-                    },
-                }
-            };
-        }
-
         let atime_secs = ack! {
             metadata.accessed(),
             error: "failed to obtain file access time"
@@ -201,8 +191,8 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
         let btime_secs = ack! {
             metadata.created(),
             error: "failed to obtain file creation time"
-        }.and_then(|crtime| ack! {
-            secs(crtime),
+        }.and_then(|btime| ack! {
+            secs(btime),
             error: "failed to convert creation time to seconds"
         });
 
@@ -232,11 +222,80 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             st_mtime: mtime_secs,
             #[cfg(target_family = "unix")]
             st_ctime: ctime_secs,
-            st_crtime: btime_secs,
+            st_btime: btime_secs,
             #[cfg(target_family = "unix")]
             st_blocks: some(metadata.blocks()),
             #[cfg(target_family = "unix")]
             st_blksize: some(metadata.blksize()),
+            ..Default::default()
+        }
+    }
+}
+
+/// An error type for situations where parsing path specification failed.
+#[derive(Clone, Debug)]
+pub enum ParsePathSpecError {
+    /// Attempted to parse an empty path.
+    Empty,
+    /// Attempted to parse a path of unknown type.
+    UnknownType(i32),
+    /// Attempted to parse a path of invalid type.
+    InvalidType(path_spec::PathType),
+}
+
+impl std::fmt::Display for ParsePathSpecError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use ParsePathSpecError::*;
+
+        match *self {
+            Empty => {
+                write!(fmt, "empty path")
+            }
+            UnknownType(value) => {
+                write!(fmt, "unknown path type value: {}", value)
+            }
+            InvalidType(value) => {
+                write!(fmt, "invalid path type: {:?}", value)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParsePathSpecError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl std::convert::TryFrom<PathSpec> for PathBuf {
+
+    type Error = ParsePathSpecError;
+
+    fn try_from(spec: PathSpec) -> Result<PathBuf, ParsePathSpecError> {
+        use ParsePathSpecError::*;
+
+        let path_type = spec.pathtype.unwrap_or_default();
+        match path_spec::PathType::from_i32(path_type) {
+            Some(path_spec::PathType::Os) => (),
+            Some(path_type) => return Err(InvalidType(path_type)),
+            None => return Err(UnknownType(path_type)),
+        };
+
+        match spec.path {
+            Some(path) if path.len() > 0 => Ok(PathBuf::from(path)),
+            _ => Err(ParsePathSpecError::Empty),
+        }
+    }
+}
+
+impl From<PathBuf> for PathSpec {
+
+    fn from(path: PathBuf) -> PathSpec {
+        PathSpec {
+            path: Some(path.to_string_lossy().into_owned()),
+            pathtype: Some(path_spec::PathType::Os.into()),
             ..Default::default()
         }
     }
@@ -249,6 +308,14 @@ pub enum MicrosError {
     Epoch(std::time::SystemTimeError),
     /// Attempted to convert a value outside of 64-bit unsigned integer range.
     Overflow(std::num::TryFromIntError),
+}
+
+impl MicrosError {
+
+    /// Creates a microsecond conversion error from an integer overflow error.
+    pub fn overflow(error: std::num::TryFromIntError) -> MicrosError {
+        MicrosError::Overflow(error)
+    }
 }
 
 impl std::fmt::Display for MicrosError {
@@ -283,13 +350,6 @@ impl From<std::time::SystemTimeError> for MicrosError {
 
     fn from(error: std::time::SystemTimeError) -> MicrosError {
         MicrosError::Epoch(error)
-    }
-}
-
-impl From<std::num::TryFromIntError> for MicrosError {
-
-    fn from(error: std::num::TryFromIntError) -> MicrosError {
-        MicrosError::Overflow(error)
     }
 }
 
@@ -336,7 +396,9 @@ impl From<SecsError> for MicrosError {
 /// ```
 pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
     let time_micros = time.duration_since(std::time::UNIX_EPOCH)?.as_micros();
-    Ok(std::convert::TryInto::try_into(time_micros)?)
+
+    use std::convert::TryInto as _;
+    time_micros.try_into().map_err(MicrosError::overflow)
 }
 
 /// Converts system time into epoch seconds.

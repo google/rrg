@@ -12,6 +12,7 @@ log = { version = "0.4.8" }
 netstat2 = { version = "0.8.1" }
 prost = { version = "0.6.1" }
 prost-types = { version = "0.6.1" }
+rrg-macro = { path = "macro/" }
 rrg-proto = { path = "proto/" }
 simplelog = { version = "0.7.6" }
 structopt = { version = "0.3.12" }
@@ -42,3 +43,6 @@ winreg = { version = "0.7.0" }
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 fuse = { version = "0.3.1" }
 users = { version = "0.10.0" }
+
+[features]
+test-setfattr = []
