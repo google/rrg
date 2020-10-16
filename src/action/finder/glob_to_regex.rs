@@ -67,7 +67,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn glob_to_regex_test() {
+    fn test_glob_to_regex() {
         // Original cpython tests:
         assert_eq!(glob_to_regex("*").unwrap().as_str(), ".*");
         assert_eq!(glob_to_regex("?").unwrap().as_str(), ".");
