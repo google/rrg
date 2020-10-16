@@ -955,7 +955,7 @@ mod tests {
             ..Default::default()
         })
         .unwrap();
-        
+
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MaxInodeChangeTime(time) => {
