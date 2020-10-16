@@ -128,8 +128,7 @@ impl TryFrom<rrg_proto::FileFinderAction> for Action {
     ) -> Result<Self, Self::Error> {
         // FileFinderAction::action_type defines which action will be performed.
         // Only options from selected action are read.
-        let action_type: ActionType = parse_enum(proto.action_type)?;
-        Ok(match action_type {
+        Ok(match parse_enum(proto.action_type)? {
             ActionType::Stat => Action::from(proto.stat.unwrap_or_default()),
             ActionType::Hash => {
                 Action::try_from(proto.hash.unwrap_or_default())?
@@ -156,10 +155,8 @@ impl TryFrom<FileFinderHashActionOptions> for Action {
     fn try_from(
         proto: FileFinderHashActionOptions,
     ) -> Result<Self, Self::Error> {
-        let oversized_file_policy: HashActionOversizedFilePolicy =
-            parse_enum(proto.oversized_file_policy)?;
         Ok(Action::Hash(HashActionOptions {
-            oversized_file_policy,
+            oversized_file_policy: parse_enum(proto.oversized_file_policy)?,
             collect_ext_attrs: proto.collect_ext_attrs(),
             max_size: proto.max_size(),
         }))
@@ -172,10 +169,8 @@ impl TryFrom<FileFinderDownloadActionOptions> for Action {
     fn try_from(
         proto: FileFinderDownloadActionOptions,
     ) -> Result<Self, Self::Error> {
-        let oversized_file_policy: DownloadActionOversizedFilePolicy =
-            parse_enum(proto.oversized_file_policy)?;
         Ok(Action::Download(DownloadActionOptions {
-            oversized_file_policy,
+            oversized_file_policy: parse_enum(proto.oversized_file_policy)?,
             max_size: proto.max_size(),
             collect_ext_attrs: proto.collect_ext_attrs(),
             use_external_stores: proto.use_external_stores(),
@@ -421,8 +416,8 @@ fn get_contents_regex_match_condition(
             let bytes_after = options.bytes_after();
             let start_offset = options.start_offset();
             let length = options.length();
-            let proto_mode: RegexMatchMode = parse_enum(options.mode)?;
-            let mode = MatchMode::from(proto_mode);
+            let mode =
+                MatchMode::from(parse_enum::<RegexMatchMode>(options.mode)?);
 
             if options.regex.is_none() {
                 return Ok(vec![]);
@@ -454,8 +449,8 @@ fn get_contents_literal_match_condition(
             let length = options.length();
             let xor_in_key = options.xor_in_key();
             let xor_out_key = options.xor_out_key();
-            let proto_mode: LiteralMatchMode = parse_enum(options.mode)?;
-            let mode = MatchMode::from(proto_mode);
+            let mode =
+                MatchMode::from(parse_enum::<LiteralMatchMode>(options.mode)?);
 
             if options.literal.is_none() {
                 return Ok(vec![]);
@@ -484,9 +479,8 @@ fn get_conditions(
     if proto.condition_type.is_none() {
         return Ok(vec![]);
     }
-    let condition_type = parse_enum(proto.condition_type)?;
 
-    Ok(match condition_type {
+    Ok(match parse_enum(proto.condition_type)? {
         ConditionType::ModificationTime => {
             get_modification_time_conditions(proto.modification_time)?
         }
@@ -544,10 +538,12 @@ mod tests {
     use crate::action::Request as _;
 
     #[test]
-    fn empty_request_test() {
+    fn test_empty_request() {
         let request = Request::from_proto(FileFinderArgs {
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.paths.is_empty());
         assert!(request.action.is_none());
         assert!(request.conditions.is_empty());
@@ -558,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn basic_root_parameters_test() {
+    fn test_basic_root_parameters() {
         let request = Request::from_proto(FileFinderArgs {
             paths: vec!["abc".to_string(), "cba".to_string()],
             pathtype: Some(PathType::Registry as i32),
@@ -566,7 +562,9 @@ mod tests {
             follow_links: Some(true),
             xdev: Some(rrg_proto::file_finder_args::XDev::Always as i32),
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert_eq!(request.paths, vec!["abc".to_string(), "cba".to_string()]);
         assert!(request.action.is_none());
         assert_eq!(request.path_type, PathType::Registry);
@@ -576,14 +574,16 @@ mod tests {
     }
 
     #[test]
-    fn default_stats_action_test() {
+    fn test_default_stats_action() {
         let request = Request::from_proto(FileFinderArgs {
             action: Some(FileFinderAction {
                 action_type: Some(ActionType::Stat as i32),
                 ..Default::default()
             }),
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.action.is_some());
         match request.action.unwrap() {
             Action::Stat(options) => {
@@ -595,7 +595,7 @@ mod tests {
     }
 
     #[test]
-    fn stats_action_test() {
+    fn test_stats_action() {
         let request = Request::from_proto(FileFinderArgs {
             action: Some(FileFinderAction {
                 action_type: Some(ActionType::Stat as i32),
@@ -606,7 +606,9 @@ mod tests {
                 ..Default::default()
             }),
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.action.is_some());
         match request.action.unwrap() {
             Action::Stat(options) => {
@@ -618,14 +620,16 @@ mod tests {
     }
 
     #[test]
-    fn default_hash_action_test() {
+    fn test_default_hash_action() {
         let request = Request::from_proto(FileFinderArgs {
             action: Some(FileFinderAction {
                 action_type: Some(ActionType::Hash as i32),
                 ..Default::default()
             }),
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.action.is_some());
         match request.action.unwrap() {
             Action::Hash(options) => {
@@ -641,7 +645,7 @@ mod tests {
     }
 
     #[test]
-    fn hash_action_test() {
+    fn test_hash_action() {
         let request = Request::from_proto(FileFinderArgs {
             action: Some(FileFinderAction {
                 action_type: Some(ActionType::Hash as i32),
@@ -655,7 +659,9 @@ mod tests {
                 ..Default::default()
             }),
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.action.is_some());
         match request.action.unwrap() {
             Action::Hash(options) => {
@@ -671,14 +677,16 @@ mod tests {
     }
 
     #[test]
-    fn default_download_action_test() {
+    fn test_default_download_action() {
         let request = Request::from_proto(FileFinderArgs {
             action: Some(FileFinderAction {
                 action_type: Some(ActionType::Download as i32),
                 ..Default::default()
             }),
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.action.is_some());
         match request.action.unwrap() {
             Action::Download(options) => {
@@ -696,7 +704,7 @@ mod tests {
     }
 
     #[test]
-    fn download_action_test() {
+    fn test_download_action() {
         let request = Request::from_proto(FileFinderArgs {
             action: Some(FileFinderAction {
                 action_type: Some(ActionType::Download as i32),
@@ -713,7 +721,9 @@ mod tests {
                 ..Default::default()
             }),
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.action.is_some());
         match request.action.unwrap() {
             Action::Download(options) => {
@@ -731,14 +741,15 @@ mod tests {
     }
 
     #[test]
-    fn error_on_parsing_unknown_enum_value_test() {
+    fn test_error_on_parsing_unknown_enum_value() {
         let err = Request::from_proto(FileFinderArgs {
             action: Some(FileFinderAction {
                 action_type: Some(345 as i32),
                 ..Default::default()
             }),
             ..Default::default()
-        }).unwrap_err();
+        })
+        .unwrap_err();
 
         match err {
             ParseError::Malformed(_) => {}
@@ -747,18 +758,20 @@ mod tests {
     }
 
     #[test]
-    fn default_condition_test() {
+    fn test_default_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.conditions.is_empty())
     }
 
     #[test]
-    fn default_modification_time_condition_test() {
+    fn test_default_modification_time_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ModificationTime as i32),
@@ -768,12 +781,14 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.conditions.is_empty());
     }
 
     #[test]
-    fn min_modification_time_condition_test() {
+    fn test_min_modification_time_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ModificationTime as i32),
@@ -784,7 +799,9 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MinModificationTime(time) => {
@@ -795,7 +812,7 @@ mod tests {
     }
 
     #[test]
-    fn max_modification_time_condition_test() {
+    fn test_max_modification_time_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ModificationTime as i32),
@@ -806,7 +823,9 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MaxModificationTime(time) => {
@@ -817,7 +836,7 @@ mod tests {
     }
 
     #[test]
-    fn default_access_time_condition_test() {
+    fn test_default_access_time_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::AccessTime as i32),
@@ -827,12 +846,14 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.conditions.is_empty());
     }
 
     #[test]
-    fn min_access_time_condition_test() {
+    fn test_min_access_time_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::AccessTime as i32),
@@ -843,7 +864,9 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MinAccessTime(time) => {
@@ -854,7 +877,7 @@ mod tests {
     }
 
     #[test]
-    fn max_access_time_condition_test() {
+    fn test_max_access_time_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::AccessTime as i32),
@@ -865,7 +888,9 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MaxAccessTime(time) => {
@@ -876,7 +901,7 @@ mod tests {
     }
 
     #[test]
-    fn default_inode_change_time_condition_test() {
+    fn test_default_inode_change_time_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::InodeChangeTime as i32),
@@ -886,12 +911,14 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert!(request.conditions.is_empty());
     }
 
     #[test]
-    fn min_inode_change_time_condition_test() {
+    fn test_min_inode_change_time_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::InodeChangeTime as i32),
@@ -902,7 +929,9 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MinInodeChangeTime(time) => {
@@ -913,7 +942,7 @@ mod tests {
     }
 
     #[test]
-    fn max_inode_change_time_condition_test() {
+    fn test_max_inode_change_time_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::InodeChangeTime as i32),
@@ -924,7 +953,9 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
+        
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::MaxInodeChangeTime(time) => {
@@ -935,7 +966,7 @@ mod tests {
     }
 
     #[test]
-    fn default_size_condition_test() {
+    fn test_default_size_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::Size as i32),
@@ -945,7 +976,8 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
@@ -957,7 +989,7 @@ mod tests {
     }
 
     #[test]
-    fn min_size_condition_test() {
+    fn test_min_size_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::Size as i32),
@@ -968,7 +1000,8 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
@@ -980,7 +1013,7 @@ mod tests {
     }
 
     #[test]
-    fn max_size_condition_test() {
+    fn test_max_size_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::Size as i32),
@@ -991,7 +1024,8 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
@@ -1003,7 +1037,7 @@ mod tests {
     }
 
     #[test]
-    fn default_ext_flags_condition_test() {
+    fn test_default_ext_flags_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ExtFlags as i32),
@@ -1013,13 +1047,14 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 0);
     }
 
     #[test]
-    fn linux_bits_set_condition_test() {
+    fn test_linux_bits_set_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ExtFlags as i32),
@@ -1030,7 +1065,8 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
@@ -1042,7 +1078,7 @@ mod tests {
     }
 
     #[test]
-    fn linux_bits_unset_condition_test() {
+    fn test_linux_bits_unset_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ExtFlags as i32),
@@ -1053,7 +1089,8 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
@@ -1065,7 +1102,7 @@ mod tests {
     }
 
     #[test]
-    fn osx_bits_set_condition_test() {
+    fn test_osx_bits_set_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ExtFlags as i32),
@@ -1076,7 +1113,8 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
@@ -1088,7 +1126,7 @@ mod tests {
     }
 
     #[test]
-    fn osx_bits_unset_condition_test() {
+    fn test_osx_bits_unset_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ExtFlags as i32),
@@ -1099,7 +1137,8 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
@@ -1111,7 +1150,7 @@ mod tests {
     }
 
     #[test]
-    fn default_contents_regex_match_condition_test() {
+    fn test_default_contents_regex_match_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ContentsRegexMatch as i32),
@@ -1123,13 +1162,14 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 0);
     }
 
     #[test]
-    fn contents_regex_match_condition_test() {
+    fn test_contents_regex_match_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ContentsRegexMatch as i32),
@@ -1146,7 +1186,8 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
@@ -1163,7 +1204,7 @@ mod tests {
     }
 
     #[test]
-    fn regex_parse_error_test() {
+    fn test_regex_parse_error() {
         let err = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ContentsRegexMatch as i32),
@@ -1180,7 +1221,8 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap_err();
+        })
+        .unwrap_err();
 
         match err {
             ParseError::RegexParse(error) => {
@@ -1192,7 +1234,7 @@ mod tests {
     }
 
     #[test]
-    fn default_contents_literal_match_condition_test() {
+    fn test_default_contents_literal_match_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(
@@ -1206,13 +1248,14 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 0);
     }
 
     #[test]
-    fn contents_literal_match_condition_test() {
+    fn test_contents_literal_match_condition() {
         let request = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(
@@ -1233,7 +1276,8 @@ mod tests {
                 ..Default::default()
             }],
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
