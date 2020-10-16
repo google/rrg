@@ -120,7 +120,7 @@ mod tests {
         assert!(ext_attrs(&tempdir.path().join("foo")).is_err());
     }
 
-    #[cfg(all(target_os = "linux", feature = "test-attr"))]
+    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn test_ext_attrs_with_multiple_values() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(results[1].value, Some("norf".into()));
     }
 
-    #[cfg(all(target_os = "linux", feature = "test-attr"))]
+    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn test_ext_attrs_with_empty_value() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -184,7 +184,7 @@ mod tests {
         assert!(iter.next().is_none());
     }
 
-    #[cfg(all(target_os = "linux", feature = "test-attr"))]
+    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn test_ext_attrs_with_bytes_value() {
         use std::os::unix::ffi::OsStrExt as _;

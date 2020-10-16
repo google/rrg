@@ -44,4 +44,4 @@ fuse = { version = "0.3.1" }
 users = { version = "0.10.0" }
 
 [features]
-test-attr = []
+test-setfattr = []
