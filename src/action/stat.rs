@@ -22,21 +22,21 @@ impl From<std::io::Error> for Error {
 }
 
 #[derive(Debug)]
-pub struct Response {
-    metadata: Metadata,
-    #[cfg(target_os = "linux")]
-    flags_linux: Option<u32>,
-    symlink: Option<PathBuf>,
-    path: PathBuf,
-    #[cfg(target_family = "unix")]
-    ext_attrs: Vec<crate::fs::unix::ExtAttr>,
-}
-
-#[derive(Debug)]
 pub struct Request {
     path: PathBuf,
     collect_ext_attrs: bool,
     follow_symlink: bool,
+}
+
+#[derive(Debug)]
+pub struct Response {
+    path: PathBuf,
+    metadata: Metadata,
+    symlink: Option<PathBuf>,
+    #[cfg(target_family = "unix")]
+    ext_attrs: Vec<crate::fs::unix::ExtAttr>,
+    #[cfg(target_os = "linux")]
+    flags_linux: Option<u32>,
 }
 
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
@@ -124,10 +124,10 @@ impl super::Response for Response {
 
         rrg_proto::StatEntry {
             pathspec: Some(self.path.into()),
-            #[cfg(target_os = "linux")]
-            st_flags_linux: self.flags_linux,
             #[cfg(target_family = "unix")]
             ext_attrs: self.ext_attrs.into_iter().map(Into::into).collect(),
+            #[cfg(target_os = "linux")]
+            st_flags_linux: self.flags_linux,
             ..self.metadata.into_lossy()
         }
     }
