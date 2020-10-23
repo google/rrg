@@ -38,6 +38,7 @@ pub struct Response {
     block_count: u64,
     block_size: u64,
     represented_device: u64,
+    #[cfg(target_os = "linux")]
     flags_linux: Option<u32>,
     symlink: Option<PathBuf>,
     path: PathBuf,
@@ -130,7 +131,16 @@ fn form_response(original_path: &Path, destination: &Path)
         block_count: metadata.blocks(),
         block_size: metadata.blksize(),
         represented_device: metadata.rdev(),
-        flags_linux: get_linux_flags(destination),
+
+        #[cfg(target_os = "linux")]
+        flags_linux: crate::fs::linux::flags(destination).map_err(|error| {
+            // TODO: Make the `ack!` macro more expressive and rewrite it.
+            warn! {
+                "failed to collect flags for '{path}': {cause}",
+                path = destination.display(),
+                cause = error,
+            }
+        }).ok(),
 
         symlink: match original_metadata.file_type().is_symlink() {
             true => Some(fs::read_link(original_path).unwrap()),
@@ -169,30 +179,6 @@ fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
         result = PathBuf::from("/").join(result);
     }
     result
-}
-
-#[cfg(target_os = "linux")]
-fn get_linux_flags(path: &Path) -> Option<u32> {
-    use std::os::raw::c_long;
-    use std::os::unix::io::AsRawFd;
-    use std::fs::File;
-
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(err) => {
-            warn!("Unable to get linux flags: {}", err);
-            return None;
-        }
-    };
-
-    let mut linux_flags: c_long = 0;
-    let linux_flags_ptr: *mut c_long = &mut linux_flags;
-    unsafe {
-        match ioctls::fs_ioc_getflags(file.as_raw_fd(), linux_flags_ptr) {
-            0 => Some(linux_flags as u32),
-            _ => None,
-        }
-    }
 }
 
 impl super::Request for Request {
