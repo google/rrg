@@ -41,7 +41,8 @@ pub struct Response {
     flags_linux: Option<u32>,
     symlink: Option<PathBuf>,
     path: PathBuf,
-    extended_attributes: Vec<ExtAttr>,
+    #[cfg(target_family = "unix")]
+    ext_attrs: Vec<crate::fs::unix::ExtAttr>,
 }
 
 #[derive(Debug)]
@@ -49,22 +50,6 @@ pub struct Request {
     path: PathBuf,
     collect_ext_attrs: bool,
     follow_symlink: bool,
-}
-
-#[derive(Debug)]
-pub struct ExtAttr {
-    name: Vec<u8>,
-    value: Vec<u8>,
-}
-
-impl Into<rrg_proto::stat_entry::ExtAttr> for ExtAttr {
-
-    fn into(self) -> rrg_proto::stat_entry::ExtAttr {
-        rrg_proto::stat_entry::ExtAttr {
-            name: Some(self.name),
-            value: Some(self.value),
-        }
-    }
 }
 
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
@@ -75,43 +60,19 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
     };
 
     let mut response = form_response(&request.path, &destination)?;
+
     if request.collect_ext_attrs {
-        response.extended_attributes = get_ext_attrs(&destination);
+        // TODO: This is not pretty. Consider creating a blank `ext_attrs`
+        // implementation for Windows and make this code compile regardless of
+        // the platform.
+        #[cfg(target_family = "unix")]
+        {
+            response.ext_attrs = crate::fs::unix::ext_attrs(&destination)?.collect();
+        }
     }
 
     session.reply(response)?;
     Ok(())
-}
-
-#[cfg(target_family = "unix")]
-fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
-    use std::os::unix::ffi::OsStringExt;
-
-    let xattrs = match xattr::list(path) {
-        Ok(xattr_list) => xattr_list,
-        Err(err) => {
-            warn!("Unable to get extended attributes: {}", err);
-            return vec![]
-        }
-    };
-
-    let mut result = vec![];
-    for attr in xattrs {
-        match xattr::get(path, &attr) {
-            Ok(attr_value) => result.push(ExtAttr {
-                name: attr.into_vec(),
-                value: attr_value.unwrap_or_default(),
-            }),
-
-            Err(err) => warn!("Unable to get an extended attribute: {}", err),
-        }
-    }
-    result
-}
-
-#[cfg(not(target_family = "unix"))]
-fn get_ext_attrs(_path: &Path) -> Vec<ExtAttr> {
-    vec![]
 }
 
 #[cfg(target_os = "linux")]
@@ -178,7 +139,7 @@ fn form_response(original_path: &Path, destination: &Path)
 
         path: original_path.to_owned(),
 
-        extended_attributes: vec![],
+        ext_attrs: vec![],
     })
 }
 
@@ -293,8 +254,7 @@ impl super::Response for Response {
 
             registry_data: None,
             st_btime: None,
-            ext_attrs: self.extended_attributes.into_iter()
-                .map(|attr| attr.into()).collect(),
+            ext_attrs: self.ext_attrs.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -420,32 +380,6 @@ mod tests {
         assert_eq!(file_response.hard_links, 2);
         assert_eq!(link_response.hard_links, 2);
         assert_eq!(file_response.inode, link_response.inode);
-    }
-
-    #[test]
-    #[cfg(target_family = "unix")]
-    fn test_extended_attributes() {
-        fn check_attribute(attribute: &ExtAttr,
-                           name: &str, value: Vec<u8>) {
-            assert_eq!(attribute.name.clone(), name.as_bytes().to_vec());
-            assert_eq!(attribute.value.clone(), value);
-        }
-
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("temp_file");
-        fs::File::create(file_path.to_path_buf()).unwrap();
-        xattr::set(&file_path, "user.simple_name", &[0, 28, 42]).unwrap();
-        xattr::set(&file_path, "user.ⓤⓝⓘⓒⓞⓓⓔ ⓝⓐⓜⓔ", &[0, 1]).unwrap();
-        xattr::set(&file_path, "user.без значения", &[]).unwrap();
-
-        let mut extended_attributes = get_ext_attrs(&file_path);
-        extended_attributes.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
-
-        assert_eq!(extended_attributes.len(), 3);
-
-        check_attribute(&extended_attributes[0], "user.simple_name", vec![0, 28, 42]);
-        check_attribute(&extended_attributes[1], "user.без значения", vec![]);
-        check_attribute(&extended_attributes[2], "user.ⓤⓝⓘⓒⓞⓓⓔ ⓝⓐⓜⓔ", vec![0, 1]);
     }
 
     #[test]
