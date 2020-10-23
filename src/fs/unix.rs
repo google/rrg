@@ -19,6 +19,7 @@ use log::warn;
 /// See the [Wikipedia] article for more details.
 ///
 /// [Wikipedia]: https://en.wikipedia.org/wiki/Extended_file_attributes
+#[derive(Debug)]
 pub struct ExtAttr {
     /// A name of the extended attribute.
     pub name: OsString,
