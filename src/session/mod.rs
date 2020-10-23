@@ -26,7 +26,8 @@ use log::{error, info};
 use crate::action;
 use crate::message;
 pub use self::demand::{Demand, Header, Payload};
-pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError};
+pub use self::error::{Error, ParseError, MissingFieldError,
+                      UnsupportedValueError, RegexParseError};
 use self::response::{Response, Status};
 pub use self::sink::{Sink};
 
@@ -38,7 +39,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// This is just a convenience type used to avoid threading large numbers of
 /// parameters through different function calls.
 ///
-/// Note that the payload can be quite large object, so it should not be stored
+/// Note that the payload can be a quite large object, so it should not be stored
 /// with the session itself. The payload should be consumed as soon as the
 /// request is dispatched to a particular handler and parsed to a concrete type.
 pub struct Task<'s, S: Session> {

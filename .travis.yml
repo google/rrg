@@ -16,7 +16,12 @@ before_install:
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get update; fi
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install libfuse-dev; fi
 
+addons:
+ apt:
+   packages:
+     - attr
+
 script:
   - cargo build --verbose
-  - cargo test --verbose --package rrg-proto --package rrg
+  - cargo test --verbose --package rrg-macro --package rrg-proto --package rrg --features 'test-setfattr'
   - cargo run -- --version

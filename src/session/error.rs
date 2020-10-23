@@ -2,7 +2,7 @@
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 /// An error type for failures that can occur during a session.
 #[derive(Debug)]
@@ -91,8 +91,6 @@ pub enum ParseError {
     Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
-    /// An error occurred when parsing Vec<u8> to Regex.
-    RegexParse(RegexParseError)
 }
 
 impl ParseError {
@@ -121,9 +119,6 @@ impl Display for ParseError {
             Decode(ref error) => {
                 write!(fmt, "failed to decode proto message: {}", error)
             }
-            RegexParse(ref error) => {
-                write!(fmt, "regex parse error: {}", error)
-            }
         }
     }
 }
@@ -136,7 +131,6 @@ impl std::error::Error for ParseError {
         match *self {
             Malformed(ref error) => Some(error.as_ref()),
             Decode(ref error) => Some(error),
-            RegexParse(ref error) => Some(error)
         }
     }
 }
@@ -186,6 +180,29 @@ impl From<MissingFieldError> for ParseError {
     }
 }
 
+/// An error type for situations where a given proto value is not supported.
+#[derive(Debug)]
+pub struct UnsupportedValueError<T> {
+    /// A name of the field the value belongs to.
+    pub name: &'static str,
+    /// A value that is not supported.
+    pub value: T,
+}
+
+impl<T: Debug> Display for UnsupportedValueError<T> {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "unsupported value for '{}': {:?}", self.name, self.value)
+    }
+}
+
+impl<T: Debug> std::error::Error for UnsupportedValueError<T> {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
 #[derive(Debug)]
 pub struct RegexParseError {
     /// Raw data of the string which could not be converted to Regex.
@@ -215,6 +232,6 @@ impl std::error::Error for RegexParseError {
 impl From<RegexParseError> for ParseError {
 
     fn from(error: RegexParseError) -> ParseError {
-        ParseError::RegexParse(error)
+        ParseError::malformed(error)
     }
 }

@@ -12,6 +12,7 @@ log = { version = "0.4.8" }
 netstat2 = { version = "0.8.1" }
 prost = { version = "0.6.1" }
 prost-types = { version = "0.6.1" }
+rrg-macro = { path = "macro/" }
 rrg-proto = { path = "proto/" }
 simplelog = { version = "0.7.6" }
 structopt = { version = "0.3.12" }
@@ -29,6 +30,7 @@ diff = { version = "0.1.12" }
 
 [target.'cfg(target_family = "unix")'.dependencies]
 pnet = { version = "0.26.0" }
+xattr = { version = "0.2.2" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 proc-mounts = { version = "0.2.4" }
@@ -40,3 +42,6 @@ winreg = { version = "0.7.0" }
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 fuse = { version = "0.3.1" }
 users = { version = "0.10.0" }
+
+[features]
+test-setfattr = []
