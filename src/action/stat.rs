@@ -59,6 +59,24 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
         None
     };
 
+    #[cfg(target_family = "unix")]
+    let ext_attrs = if request.collect_ext_attrs {
+        // TODO: Make the `ack!` macro more expressive and then simplify it.
+        match crate::fs::unix::ext_attrs(&request.path) {
+            Ok(ext_attrs) => ext_attrs.collect(),
+            Err(error) => {
+                warn! {
+                    "failed to collect attributes for '{path}': {cause}",
+                    path = request.path.display(),
+                    cause = error,
+                };
+                vec!()
+            },
+        }
+    } else {
+        vec!()
+    };
+
     #[cfg(target_os = "linux")]
     let flags_linux = crate::fs::linux::flags(&request.path).map_err(|error| {
         // TODO: Make the `ack!` macro more expressive and rewrite it.
@@ -69,26 +87,15 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
         }
     }).ok();
 
-    let mut response = Response {
+    let response = Response {
         path: request.path,
         metadata: metadata,
         symlink: symlink,
         #[cfg(target_family = "unix")]
-        ext_attrs: vec!(),
+        ext_attrs: ext_attrs,
         #[cfg(target_os = "linux")]
         flags_linux: flags_linux,
     };
-
-    if request.collect_ext_attrs {
-        // TODO: This is not pretty. Consider creating a blank `ext_attrs`
-        // implementation for Windows and make this code compile regardless of
-        // the platform.
-        #[cfg(target_family = "unix")]
-        {
-            // TODO: Do not fail on error.
-            response.ext_attrs.extend(crate::fs::unix::ext_attrs(&response.path)?);
-        }
-    }
 
     session.reply(response)?;
     Ok(())
