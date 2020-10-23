@@ -14,6 +14,12 @@ use std::path::{Path, PathBuf};
 
 use log::warn;
 
+#[cfg(target_os = "linux")]
+pub mod linux;
+
+#[cfg(target_family = "unix")]
+pub mod unix;
+
 /// A path to a filesystem item and associated metadata.
 ///
 /// This type is very similar to standard `DirEntry` but its `metadata` property

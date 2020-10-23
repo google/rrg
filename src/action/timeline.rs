@@ -115,15 +115,17 @@ fn entry_from_metadata(metadata: &Metadata, path: &Path) -> std::io::Result<Time
             use std::os::unix::fs::MetadataExt;
             Ok(TimelineEntry {
                 path: Some(bytes_from_os_str(path.as_os_str())?),
-                mode: Some(metadata.mode()),
+                mode: Some(i64::from(metadata.mode())),
                 size: Some(metadata.size()),
-                dev: Some(metadata.dev()),
+                dev: Some(metadata.dev() as i64),
                 ino: Some(metadata.ino()),
                 uid: Some(metadata.uid() as i64),
                 gid: Some(metadata.gid() as i64),
-                atime_ns: Some(metadata.atime_nsec() as u64),
-                ctime_ns: Some(metadata.ctime_nsec() as u64),
-                mtime_ns: Some(metadata.mtime_nsec() as u64),
+                atime_ns: Some(metadata.atime_nsec() as i64),
+                ctime_ns: Some(metadata.ctime_nsec() as i64),
+                mtime_ns: Some(metadata.mtime_nsec() as i64),
+                btime_ns: None,
+                attributes: None,
             })
         } else if #[cfg(target_family = "windows")] {
             use std::os::windows::fs::MetadataExt;
@@ -135,9 +137,11 @@ fn entry_from_metadata(metadata: &Metadata, path: &Path) -> std::io::Result<Time
                 ino: None,
                 uid: None,
                 gid: None,
-                atime_ns: Some(metadata.last_access_time()),
-                ctime_ns: Some(metadata.creation_time()),
-                mtime_ns: Some(metadata.last_write_time()),
+                atime_ns: Some(metadata.last_access_time() as i64),
+                ctime_ns: Some(metadata.creation_time() as i64),
+                mtime_ns: Some(metadata.last_write_time() as i64),
+                btime_ns: None,
+                attributes: None,
             })
         } else {
             compile_error!("unsupported OS family");
