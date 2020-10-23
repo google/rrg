@@ -282,7 +282,7 @@ fn get_modification_time_conditions(
             if options.min_last_modified_time.is_some() {
                 conditions.push(Condition::MinModificationTime(
                     time_from_micros(options.min_last_modified_time.unwrap())?,
-                ))
+                ));
             }
             if options.max_last_modified_time.is_some() {
                 conditions.push(Condition::MaxModificationTime(
@@ -304,7 +304,7 @@ fn get_access_time_conditions(
             if options.min_last_access_time.is_some() {
                 conditions.push(Condition::MinAccessTime(time_from_micros(
                     options.min_last_access_time.unwrap(),
-                )?))
+                )?));
             }
             if options.max_last_access_time.is_some() {
                 conditions.push(Condition::MaxAccessTime(time_from_micros(
@@ -328,7 +328,7 @@ fn get_inode_change_time_conditions(
                     time_from_micros(
                         options.min_last_inode_change_time.unwrap(),
                     )?,
-                ))
+                ));
             }
             if options.max_last_inode_change_time.is_some() {
                 conditions.push(Condition::MaxInodeChangeTime(
