@@ -68,7 +68,10 @@ impl From<Error> for session::Error {
     }
 }
 
-pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
+pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
+where
+    S: Session,
+{
     let metadata = if request.follow_symlink {
         std::fs::metadata(&request.path)
     } else {
@@ -127,6 +130,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
     };
 
     session.reply(response)?;
+
     Ok(())
 }
 
