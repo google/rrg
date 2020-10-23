@@ -73,6 +73,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
         path: request.path,
         metadata: metadata,
         symlink: symlink,
+        #[cfg(target_family = "unix")]
         ext_attrs: vec!(),
         #[cfg(target_os = "linux")]
         flags_linux: flags_linux,
@@ -123,7 +124,9 @@ impl super::Response for Response {
 
         rrg_proto::StatEntry {
             pathspec: Some(self.path.into()),
+            #[cfg(target_os = "linux")]
             st_flags_linux: self.flags_linux,
+            #[cfg(target_family = "unix")]
             ext_attrs: self.ext_attrs.into_iter().map(Into::into).collect(),
             ..self.metadata.into_lossy()
         }
