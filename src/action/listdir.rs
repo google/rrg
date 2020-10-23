@@ -562,10 +562,10 @@ mod tests {
         assert_eq!(&inner_dir.path, inner_dir_path);
         assert!(inner_dir.symlink.is_none());
         assert_eq!(inner_dir.uid.unwrap(), users::get_current_uid());
-        assert_eq!(inner_dir.gid.unwrap(), users::get_current_uid());
+        assert_eq!(inner_dir.gid.unwrap(), users::get_current_gid());
         assert_eq!(inner_dir.dev.unwrap(),
                    dir_path.metadata().unwrap().dev() as u32);
-        assert_eq!(inner_dir.mode.unwrap(), 0o40775);
+        assert_eq!(inner_dir.mode.unwrap() & 0o40000, 0o40000);
         assert_eq!(inner_dir.nlink.unwrap(), 2);
         assert!(inner_dir.atime.unwrap() <= SystemTime::now());
         assert!(inner_dir.ctime.unwrap() <= SystemTime::now());
@@ -592,7 +592,7 @@ mod tests {
         assert_eq!(&symlink.path, &sl_path);
         assert!(&symlink.symlink.is_some());
         assert_eq!(&symlink.symlink, &Some(file_path));
-        assert_eq!(symlink.mode.unwrap(), 0o120777);
+        assert_eq!(symlink.mode.unwrap() & 0o120000, 0o120000);
         assert_eq!(symlink.nlink.unwrap(), 1);
         assert!(symlink.atime.unwrap() <= SystemTime::now());
         assert!(symlink.ctime.unwrap() <= SystemTime::now());
@@ -622,7 +622,7 @@ mod tests {
         assert_eq!(file.size, 0);
         assert_eq!(file.mode.unwrap(), 0o100664);
         assert_eq!(file.uid.unwrap(), users::get_current_uid());
-        assert_eq!(file.gid.unwrap(), users::get_current_uid());
+        assert_eq!(file.gid.unwrap(), users::get_current_gid());
         assert_eq!(file.dev.unwrap(),
                    dir_path.metadata().unwrap().dev() as u32);
         assert_eq!(file.nlink.unwrap(), 1);
