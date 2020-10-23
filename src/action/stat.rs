@@ -8,6 +8,7 @@
 //! A file stat action responses with stat of a given file
 
 use std::fs;
+use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime};
 
@@ -25,19 +26,7 @@ impl From<std::io::Error> for Error {
 
 #[derive(Debug)]
 pub struct Response {
-    mode: u64,
-    inode: u64,
-    device: u64,
-    hard_links: u64,
-    uid: u32,
-    gid: u32,
-    size: u64,
-    access_time: Option<SystemTime>,
-    modification_time: Option<SystemTime>,
-    status_change_time: Option<SystemTime>,
-    block_count: u64,
-    block_size: u64,
-    represented_device: u64,
+    metadata: Metadata,
     #[cfg(target_os = "linux")]
     flags_linux: Option<u32>,
     symlink: Option<PathBuf>,
@@ -54,13 +43,43 @@ pub struct Request {
 }
 
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let destination = if request.follow_symlink {
-        fs::canonicalize(&request.path)?
+    let metadata = if request.follow_symlink {
+        std::fs::metadata(&request.path)?
     } else {
-        request.path.clone()
+        std::fs::symlink_metadata(&request.path)?
     };
 
-    let mut response = form_response(&request.path, &destination)?;
+    let symlink = if metadata.file_type().is_symlink() {
+        std::fs::read_link(&request.path).map_err(|error| {
+            // TODO: Make the `ack!` macro more expressive and rewrite it.
+            warn! {
+                "failed to read symlink for '{path}': {cause}",
+                path = request.path.display(),
+                cause = error,
+            }
+        }).ok()
+    } else {
+        None
+    };
+
+    #[cfg(target_os = "linux")]
+    let flags_linux = crate::fs::linux::flags(&request.path).map_err(|error| {
+        // TODO: Make the `ack!` macro more expressive and rewrite it.
+        warn! {
+            "failed to collect flags for '{path}': {cause}",
+            path = request.path.display(),
+            cause = error,
+        }
+    }).ok();
+
+    let mut response = Response {
+        path: request.path,
+        metadata: metadata,
+        symlink: symlink,
+        ext_attrs: vec!(),
+        #[cfg(target_os = "linux")]
+        flags_linux: flags_linux,
+    };
 
     if request.collect_ext_attrs {
         // TODO: This is not pretty. Consider creating a blank `ext_attrs`
@@ -68,7 +87,8 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
         // the platform.
         #[cfg(target_family = "unix")]
         {
-            response.ext_attrs = crate::fs::unix::ext_attrs(&destination)?.collect();
+            // TODO: Do not fail on error.
+            response.ext_attrs.extend(crate::fs::unix::ext_attrs(&response.path)?);
         }
     }
 
@@ -107,57 +127,6 @@ fn get_status_change_time(metadata: &fs::Metadata) -> Option<SystemTime> {
     use std::time::UNIX_EPOCH;
 
     UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
-}
-
-#[cfg(target_os = "linux")]
-fn form_response(original_path: &Path, destination: &Path)
-                 -> Result<Response, std::io::Error> {
-    use std::os::unix::fs::MetadataExt;
-
-    let metadata = fs::symlink_metadata(destination)?;
-    let original_metadata = fs::symlink_metadata(original_path)?;
-
-    Ok(Response {
-        mode: metadata.mode() as u64,
-        inode: metadata.ino(),
-        device: metadata.dev(),
-        hard_links: metadata.nlink(),
-        uid: metadata.uid() as u32,
-        gid: metadata.gid() as u32,
-        size: metadata.size(),
-        access_time: get_time_option(metadata.accessed()),
-        modification_time: get_time_option(metadata.modified()),
-        status_change_time: get_status_change_time(&metadata),
-        block_count: metadata.blocks(),
-        block_size: metadata.blksize(),
-        represented_device: metadata.rdev(),
-
-        #[cfg(target_os = "linux")]
-        flags_linux: crate::fs::linux::flags(destination).map_err(|error| {
-            // TODO: Make the `ack!` macro more expressive and rewrite it.
-            warn! {
-                "failed to collect flags for '{path}': {cause}",
-                path = destination.display(),
-                cause = error,
-            }
-        }).ok(),
-
-        symlink: match original_metadata.file_type().is_symlink() {
-            true => Some(fs::read_link(original_path).unwrap()),
-            false => None
-        },
-
-        path: original_path.to_owned(),
-
-        ext_attrs: vec![],
-    })
-}
-
-#[cfg(not(target_os = "linux"))]
-fn form_response(_original_path: &PathBuf, _destination: &PathBuf)
-                 -> Result<Response, session::Error> {
-    Err(session::Error::Dispatch(
-        String::from("This functionality has not yet been implemented for your platform.")))
 }
 
 fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
@@ -206,41 +175,13 @@ impl super::Response for Response {
     type Proto = StatEntry;
 
     fn into_proto(self) -> Self::Proto {
-        StatEntry {
-            st_mode: Some(self.mode),
-            st_ino: Some(self.inode),
-            st_dev: Some(self.device),
-            st_nlink: Some(self.hard_links),
-            st_uid: Some(self.uid),
-            st_gid: Some(self.gid),
-            st_size: Some(self.size),
-            st_atime: get_time_since_unix_epoch(&self.access_time),
-            st_mtime: get_time_since_unix_epoch(&self.modification_time),
-            st_ctime: get_time_since_unix_epoch(&self.status_change_time),
-            st_blocks: Some(self.block_count),
-            st_blksize: Some(self.block_size),
-            st_rdev: Some(self.represented_device),
-            st_flags_osx: None,
+        use rrg_proto::convert::IntoLossy as _;
+
+        rrg_proto::StatEntry {
+            pathspec: Some(self.path.into()),
             st_flags_linux: self.flags_linux,
-
-            symlink: match self.symlink {
-                Some(path) => Some(path.to_str().unwrap().to_string()),
-                None => None
-            },
-
-            registry_type: None,
-            resident: None,
-
-            pathspec: Some(PathSpec {
-                path_options: Some(Options::CaseLiteral as i32),
-                pathtype: Some(PathType::Os as i32),
-                path: Some(self.path.to_str().unwrap().to_string()),
-                ..Default::default()
-            }),
-
-            registry_data: None,
-            st_btime: None,
             ext_attrs: self.ext_attrs.into_iter().map(Into::into).collect(),
+            ..self.metadata.into_lossy()
         }
     }
 }
@@ -290,131 +231,5 @@ mod tests {
         };
 
         assert_eq!(collapse_pathspec(pathspec), PathBuf::from("/path/to/some/file/on/device"));
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_empty_request() {
-        let request: Result<super::Request, _> =
-            Request::from_proto(GetFileStatRequest::default());
-        assert!(request.is_err());
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_no_error_with_existing_file() {
-        let dir = tempdir().unwrap();
-
-        let file_path = dir.path().join("temp_file.txt");
-        fs::File::create(file_path.to_path_buf()).unwrap();
-        let response = form_response(&file_path, &file_path);
-        assert!(response.is_ok());
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_file_does_not_exist() {
-        let dir = tempdir().unwrap();
-
-        let file_path = dir.path().join("temp_file.txt");
-        let response = form_response(&file_path, &file_path);
-        assert!(response.is_err());
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_mode_and_size() {
-        let new_size = 42;
-
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("temp_file.txt");
-        let file = fs::File::create(file_path.to_path_buf()).unwrap();
-
-        file.set_len(new_size).unwrap();
-        let mut permissions = fs::metadata(&file_path).unwrap().permissions();
-        permissions.set_readonly(true);
-        file.set_permissions(permissions).unwrap();
-
-        let response = form_response(&file_path, &file_path);
-
-        assert!(response.is_ok());
-
-        let response = response.unwrap();
-        assert_eq!(response.size, new_size);
-        // We check only user permissions since others might not be set.
-        assert_eq!(response.mode & 0o700, 0o400);
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_hard_link() {
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("temp_file.txt");
-        let hard_link_path = dir.path().join("hard_link.txt");
-        fs::File::create(file_path.to_path_buf()).unwrap();
-        fs::hard_link(&file_path, &hard_link_path).unwrap();
-
-        let file_response = form_response(&file_path, &file_path);
-        let link_response = form_response(&hard_link_path, &hard_link_path);
-
-        assert!(file_response.is_ok());
-        assert!(link_response.is_ok());
-
-        let file_response = file_response.unwrap();
-        let link_response = link_response.unwrap();
-
-        assert_eq!(file_response.hard_links, 2);
-        assert_eq!(link_response.hard_links, 2);
-        assert_eq!(file_response.inode, link_response.inode);
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_chain_of_symlinks() {
-        use std::os::unix;
-
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("temp_file.txt");
-        fs::File::create(file_path.to_path_buf()).unwrap();
-
-        let chain_length = 5;
-        unix::fs::symlink(&file_path, dir.path().join("symlink 0")).unwrap();
-
-        for i in 1..chain_length {
-            unix::fs::symlink(dir.path().join(format!("symlink {}", i - 1)),
-                              dir.path().join(format!("symlink {}", i))).unwrap();
-        }
-
-        let last_symlink = dir.path().join(format!("symlink {}", chain_length - 1));
-        let previous_symlink = dir.path().join(format!("symlink {}", chain_length - 2));
-
-        let response = form_response(&last_symlink,
-                                     &fs::canonicalize(&last_symlink).unwrap());
-        let original_response = form_response(&file_path, &file_path);
-
-        assert!(response.is_ok());
-        let response = response.unwrap();
-
-        assert!(original_response.is_ok());
-        let original_response = original_response.unwrap();
-
-        assert!(response.symlink.is_some());
-        assert!(original_response.symlink.is_none());
-        assert_eq!(response.symlink.unwrap(), previous_symlink);
-
-        assert_eq!(response.mode, original_response.mode);
-        assert_eq!(response.inode, original_response.inode);
-        assert_eq!(response.device, original_response.device);
-        assert_eq!(response.hard_links, original_response.hard_links);
-        assert_eq!(response.uid, original_response.uid);
-        assert_eq!(response.gid, original_response.gid);
-        assert_eq!(response.size, original_response.size);
-        assert_eq!(response.access_time, original_response.access_time);
-        assert_eq!(response.modification_time, original_response.modification_time);
-        assert_eq!(response.status_change_time, original_response.status_change_time);
-        assert_eq!(response.block_count, original_response.block_count);
-        assert_eq!(response.block_size, original_response.block_size);
-        assert_eq!(response.represented_device, original_response.represented_device);
-        assert_eq!(response.flags_linux, original_response.flags_linux);
     }
 }
