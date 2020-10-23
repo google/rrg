@@ -5,7 +5,13 @@
 
 //! A handler and associated types for the file stat action.
 //!
-//! A file stat action responses with stat of a given file
+//! A file stat action collects filesystem metadata associated with a particular
+//! file.
+//!
+//! Note that the gathered bits of information differ across platforms, e.g. on
+//! Linux there is a notion of symlinks whereas on Windows no such thing exists.
+//! Therefore, on Linux the results might include additional information about
+//! the symlink (like the file it points to).
 
 use std::fs::Metadata;
 use std::path::PathBuf;
@@ -14,26 +20,38 @@ use log::warn;
 
 use crate::session::{self, Session};
 
+/// A request type for the stat action.
 #[derive(Debug)]
 pub struct Request {
+    /// A path to the file to stat.
     path: PathBuf,
+    /// Whether to collect extended file attributes.
     collect_ext_attrs: bool,
+    /// Whether, in case of a symlink, to collect data about the linked file.
     follow_symlink: bool,
 }
 
+/// A response type for the stat action.
 #[derive(Debug)]
 pub struct Response {
+    /// A path to the file that the result corresponds to.
     path: PathBuf,
+    /// Metadata about the file.
     metadata: Metadata,
+    /// A path to the pointed file (in case of a symlink).
     symlink: Option<PathBuf>,
+    /// Extended attributes of the file.
     #[cfg(target_family = "unix")]
     ext_attrs: Vec<crate::fs::unix::ExtAttr>,
+    /// Additional Linux-specific file flags.
     #[cfg(target_os = "linux")]
     flags_linux: Option<u32>,
 }
 
+/// An error type for failures that can occur during the stat action.
 #[derive(Debug)]
 enum Error {
+    /// A failure occurred during the attempt to collect file metadata.
     Metadata(std::io::Error),
 }
 
@@ -68,6 +86,7 @@ impl From<Error> for session::Error {
     }
 }
 
+/// Handles requests for the file stat action.
 pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
 where
     S: Session,
