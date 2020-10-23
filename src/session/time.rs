@@ -8,9 +8,5 @@ pub fn time_from_micros(
     let result = std::time::UNIX_EPOCH
         .checked_add(std::time::Duration::from_micros(micros));
 
-    if result.is_none() {
-        return Err(TimeMicrosConversionError { micros });
-    }
-
-    Ok(result.unwrap())
+    result.ok_or(TimeMicrosConversionError { micros })
 }
