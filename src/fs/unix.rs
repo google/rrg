@@ -214,3 +214,17 @@ mod tests {
 
     // TODO: Add macOS tests.
 }
+
+// TODO: Move this into the `rrg-proto` crate once generic purpose utilities are
+// moved to a separate crate.
+impl Into<rrg_proto::stat_entry::ExtAttr> for ExtAttr {
+
+    fn into(self) -> rrg_proto::stat_entry::ExtAttr {
+        use std::os::unix::ffi::OsStringExt as _;
+
+        rrg_proto::stat_entry::ExtAttr {
+            name: Some(self.name.into_vec()),
+            value: self.value,
+        }
+    }
+}
