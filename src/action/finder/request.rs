@@ -279,15 +279,19 @@ fn get_modification_time_conditions(
     Ok(match proto {
         Some(options) => {
             let mut conditions: Vec<Condition> = vec![];
-            if options.min_last_modified_time.is_some() {
-                conditions.push(Condition::MinModificationTime(
-                    time_from_micros(options.min_last_modified_time.unwrap())?,
-                ));
+            match options.min_last_modified_time {
+                Some(micros) => {
+                    let time = time_from_micros(micros)?;
+                    conditions.push(Condition::MinModificationTime(time));
+                }
+                None => {}
             }
-            if options.max_last_modified_time.is_some() {
-                conditions.push(Condition::MaxModificationTime(
-                    time_from_micros(options.max_last_modified_time.unwrap())?,
-                ));
+            match options.max_last_modified_time {
+                Some(micros) => {
+                    let time = time_from_micros(micros)?;
+                    conditions.push(Condition::MaxModificationTime(time));
+                }
+                None => {}
             }
             conditions
         }
@@ -301,15 +305,19 @@ fn get_access_time_conditions(
     Ok(match proto {
         Some(options) => {
             let mut conditions: Vec<Condition> = vec![];
-            if options.min_last_access_time.is_some() {
-                conditions.push(Condition::MinAccessTime(time_from_micros(
-                    options.min_last_access_time.unwrap(),
-                )?));
+            match options.min_last_access_time {
+                Some(micros) => {
+                    let time = time_from_micros(micros)?;
+                    conditions.push(Condition::MinAccessTime(time));
+                }
+                None => {}
             }
-            if options.max_last_access_time.is_some() {
-                conditions.push(Condition::MaxAccessTime(time_from_micros(
-                    options.max_last_access_time.unwrap(),
-                )?));
+            match options.max_last_access_time {
+                Some(micros) => {
+                    let time = time_from_micros(micros)?;
+                    conditions.push(Condition::MaxAccessTime(time));
+                }
+                None => {}
             }
             conditions
         }
@@ -323,19 +331,19 @@ fn get_inode_change_time_conditions(
     Ok(match proto {
         Some(options) => {
             let mut conditions: Vec<Condition> = vec![];
-            if options.min_last_inode_change_time.is_some() {
-                conditions.push(Condition::MinInodeChangeTime(
-                    time_from_micros(
-                        options.min_last_inode_change_time.unwrap(),
-                    )?,
-                ));
+            match options.min_last_inode_change_time {
+                Some(micros) => {
+                    let time = time_from_micros(micros)?;
+                    conditions.push(Condition::MinInodeChangeTime(time));
+                }
+                None => {}
             }
-            if options.max_last_inode_change_time.is_some() {
-                conditions.push(Condition::MaxInodeChangeTime(
-                    time_from_micros(
-                        options.max_last_inode_change_time.unwrap(),
-                    )?,
-                ));
+            match options.max_last_inode_change_time {
+                Some(micros) => {
+                    let time = time_from_micros(micros)?;
+                    conditions.push(Condition::MaxInodeChangeTime(time));
+                }
+                None => {}
             }
             conditions
         }
@@ -349,9 +357,11 @@ fn get_size_conditions(
     match proto {
         Some(options) => {
             let mut conditions: Vec<Condition> = vec![];
-            if options.min_file_size.is_some() {
-                conditions
-                    .push(Condition::MinSize(options.min_file_size.unwrap()));
+            match options.min_file_size {
+                Some(size) => {
+                    conditions.push(Condition::MinSize(size));
+                }
+                None => {}
             }
             if options.max_file_size() < u64::MAX {
                 conditions.push(Condition::MaxSize(options.max_file_size()));
@@ -368,25 +378,29 @@ fn get_ext_flags_condition(
     match proto {
         Some(options) => {
             let mut conditions: Vec<Condition> = vec![];
-            if options.linux_bits_set.is_some() {
-                conditions.push(Condition::ExtFlagsLinuxBitsSet(
-                    options.linux_bits_set.unwrap(),
-                ));
+            match options.linux_bits_set {
+                Some(bits) => {
+                    conditions.push(Condition::ExtFlagsLinuxBitsSet(bits));
+                }
+                None => {}
             }
-            if options.linux_bits_unset.is_some() {
-                conditions.push(Condition::ExtFlagsLinuxBitsUnset(
-                    options.linux_bits_unset.unwrap(),
-                ));
+            match options.linux_bits_unset {
+                Some(bits) => {
+                    conditions.push(Condition::ExtFlagsLinuxBitsUnset(bits));
+                }
+                None => {}
             }
-            if options.osx_bits_set.is_some() {
-                conditions.push(Condition::ExtFlagsOsxBitsSet(
-                    options.osx_bits_set.unwrap(),
-                ));
+            match options.osx_bits_set {
+                Some(bits) => {
+                    conditions.push(Condition::ExtFlagsOsxBitsSet(bits));
+                }
+                None => {}
             }
-            if options.osx_bits_unset.is_some() {
-                conditions.push(Condition::ExtFlagsOsxBitsUnset(
-                    options.osx_bits_unset.unwrap(),
-                ));
+            match options.osx_bits_unset {
+                Some(bits) => {
+                    conditions.push(Condition::ExtFlagsOsxBitsUnset(bits));
+                }
+                None => {}
             }
 
             conditions
