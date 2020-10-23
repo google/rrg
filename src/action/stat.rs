@@ -12,14 +12,7 @@ use std::path::PathBuf;
 
 use log::warn;
 
-use crate::session::{self, Error, Session};
-
-impl From<std::io::Error> for Error {
-
-    fn from(e: std::io::Error) -> Error {
-        Error::action(e)
-    }
-}
+use crate::session::{self, Session};
 
 #[derive(Debug)]
 pub struct Request {
@@ -39,12 +32,48 @@ pub struct Response {
     flags_linux: Option<u32>,
 }
 
+#[derive(Debug)]
+enum Error {
+    Metadata(std::io::Error),
+}
+
+impl std::error::Error for Error {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use Error::*;
+
+        match *self {
+            Metadata(ref error) => Some(error),
+        }
+    }
+}
+
+impl std::fmt::Display for Error {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use Error::*;
+
+        match *self {
+            Metadata(ref error) => {
+                write!(fmt, "unable to collect metadata: {}", error)
+            }
+        }
+    }
+}
+
+impl From<Error> for session::Error {
+
+    fn from(error: Error) -> session::Error {
+        session::Error::action(error)
+    }
+}
+
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
     let metadata = if request.follow_symlink {
-        std::fs::metadata(&request.path)?
+        std::fs::metadata(&request.path)
     } else {
-        std::fs::symlink_metadata(&request.path)?
-    };
+        std::fs::symlink_metadata(&request.path)
+    }.map_err(Error::Metadata)?;
 
     let symlink = if metadata.file_type().is_symlink() {
         std::fs::read_link(&request.path).map_err(|error| {
