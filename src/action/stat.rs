@@ -155,16 +155,17 @@ impl super::Request for Request {
     type Proto = GetFileStatRequest;
 
     fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError> {
-        match proto.pathspec {
-            Some(pathspec) => Ok(Request {
-                path: collapse_pathspec(pathspec),
-                collect_ext_attrs: proto.collect_ext_attrs.unwrap_or(false),
-                follow_symlink: proto.follow_symlink.unwrap_or(false),
-            }),
+        use std::convert::TryInto as _;
 
-            None => Err(session::ParseError::from(
-                session::MissingFieldError::new("path spec"))),
-        }
+        let path = proto.pathspec
+            .ok_or(session::MissingFieldError::new("path spec"))?
+            .try_into().map_err(session::ParseError::malformed)?;
+
+        Ok(Request {
+            path: path,
+            follow_symlink: proto.follow_symlink.unwrap_or(false),
+            collect_ext_attrs: proto.collect_ext_attrs.unwrap_or(false),
+        })
     }
 }
 
