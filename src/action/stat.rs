@@ -46,6 +46,7 @@ pub struct Response {
     /// Additional Linux-specific file flags.
     #[cfg(target_os = "linux")]
     flags_linux: Option<u32>,
+    // TODO: Add support for collecting file flags on macOS.
 }
 
 /// An error type for failures that can occur during the stat action.
@@ -112,6 +113,8 @@ where
 
     #[cfg(target_family = "unix")]
     let ext_attrs = if request.collect_ext_attrs {
+        // TODO: Extended attributes should be collected for a symlink if the
+        // `follow_symlinks` option is enabled.
         // TODO: Make the `ack!` macro more expressive and then simplify it.
         match crate::fs::unix::ext_attrs(&request.path) {
             Ok(ext_attrs) => ext_attrs.collect(),
@@ -194,4 +197,235 @@ impl super::Response for Response {
 
 #[cfg(test)]
 mod tests {
+
+    use std::fs::File;
+
+    use super::*;
+
+    #[test]
+    fn test_handle_with_non_existent_file() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let request = Request {
+            path: tempdir.path().join("foo").to_path_buf(),
+            follow_symlink: false,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_err());
+    }
+
+    #[test]
+    fn test_handle_with_regular_file() {
+        let tempdir = tempfile::tempdir().unwrap();
+        File::create(tempdir.path().join("foo")).unwrap();
+
+        let request = Request {
+            path: tempdir.path().join("foo").to_path_buf(),
+            follow_symlink: false,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.path, tempdir.path().join("foo"));
+        assert!(reply.metadata.is_file());
+    }
+
+    // Symlinking is supported only on Unix-like systems.
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_handle_with_link() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
+
+        File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
+
+        let request = Request {
+            path: symlink.clone(),
+            follow_symlink: false,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.path, symlink);
+        assert_eq!(reply.symlink, Some(target));
+        assert!(reply.metadata.file_type().is_symlink());
+    }
+
+    // Symlinking is supported only on Unix-like systems.
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_handle_with_two_links() {
+        use std::os::unix::fs::symlink;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink_to_symlink = tempdir.path().join("foo");
+        let symlink_to_target = tempdir.path().join("bar");
+        let target = tempdir.path().join("baz");
+
+        File::create(&target).unwrap();
+        symlink(&target, &symlink_to_target).unwrap();
+        symlink(&symlink_to_target, &symlink_to_symlink).unwrap();
+
+        let request = Request {
+            path: symlink_to_symlink.clone(),
+            follow_symlink: false,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.path, symlink_to_symlink);
+        assert_eq!(reply.symlink, Some(symlink_to_target));
+        assert!(reply.metadata.file_type().is_symlink());
+    }
+
+    // Symlinking is supported only on Unix-like systems.
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_handle_with_link_and_follow_symlink() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
+
+        File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
+
+        let request = Request {
+            path: symlink.clone(),
+            follow_symlink: true,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.path, symlink);
+        assert_eq!(reply.symlink, None);
+        assert!(reply.metadata.is_file());
+    }
+
+    // Symlinking is supported only on Unix-like systems.
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_handle_with_two_links_and_follow_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink_to_symlink = tempdir.path().join("foo");
+        let symlink_to_target = tempdir.path().join("bar");
+        let target = tempdir.path().join("baz");
+
+        File::create(&target).unwrap();
+        symlink(&target, &symlink_to_target).unwrap();
+        symlink(&symlink_to_target, &symlink_to_symlink).unwrap();
+
+        let request = Request {
+            path: symlink_to_symlink.clone(),
+            follow_symlink: true,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.path, symlink_to_symlink);
+        assert_eq!(reply.symlink, None);
+        assert!(reply.metadata.is_file());
+    }
+
+    // TODO: Write tests for collection of extra file flags on Linux.
+
+    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
+    #[test]
+    fn test_handle_with_ext_attrs_on_linux() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempfile = tempdir.path().join("foo");
+        std::fs::File::create(&tempfile).unwrap();
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--name").arg("user.norf")
+                .arg("--value").arg("quux")
+                .arg(&tempfile)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: tempfile.clone(),
+            follow_symlink: false,
+            collect_ext_attrs: true,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.ext_attrs.len(), 1);
+        assert_eq!(reply.ext_attrs[0].name, "user.norf");
+        assert_eq!(reply.ext_attrs[0].value, Some(b"quux".to_vec()));
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
+    #[ignore] // TODO: Fix the behaviour.
+    #[test]
+    fn test_handle_with_ext_attrs_and_follow_symlink_on_linux() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
+
+        std::fs::File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--name").arg("user.norf")
+                .arg("--value").arg("quux")
+                .arg(&target)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: symlink.clone(),
+            follow_symlink: true,
+            collect_ext_attrs: true,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.ext_attrs.len(), 1);
+        assert_eq!(reply.ext_attrs[0].name, "user.norf");
+        assert_eq!(reply.ext_attrs[0].value, Some(b"quux".to_vec()));
+    }
 }
