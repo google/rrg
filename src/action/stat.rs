@@ -143,14 +143,21 @@ where
     };
 
     #[cfg(target_os = "linux")]
-    let flags_linux = crate::fs::linux::flags(&request.path).map_err(|error| {
-        // TODO: Make the `ack!` macro more expressive and rewrite it.
-        warn! {
-            "failed to collect flags for '{path}': {cause}",
-            path = request.path.display(),
-            cause = error,
-        }
-    }).ok();
+    let flags_linux = if !metadata.file_type().is_symlink() {
+        crate::fs::linux::flags(&request.path).map_err(|error| {
+            // TODO: Make the `ack!` macro more expressive and rewrite it.
+            warn! {
+                "failed to collect flags for '{path}': {cause}",
+                path = request.path.display(),
+                cause = error,
+            }
+        }).ok()
+    } else {
+        // Flags are available only for non-symlinks. For symlinks, the function
+        // would return flags mask for the target file, which can look confusing
+        // in the results.
+        None
+    };
 
     let response = Response {
         path: request.path,
@@ -503,12 +510,8 @@ mod tests {
     }
 
     #[cfg(all(target_os = "linux", feature = "test-chattr"))]
-    #[ignore] // TODO: Fix behaviour.
     #[test]
     fn test_handle_with_symlink_flags_on_linux() {
-        // https://elixir.bootlin.com/linux/v5.8.14/source/include/uapi/linux/fs.h#L245
-        const FS_NODUMP_FL: std::os::raw::c_long = 0x00000040;
-
         let tempdir = tempfile::tempdir().unwrap();
         let symlink = tempdir.path().join("foo");
         let target = tempdir.path().join("bar");
@@ -536,8 +539,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let reply = session.reply::<Response>(0);
-        let flags = reply.flags_linux.unwrap();
-        assert_eq!(flags & FS_NODUMP_FL as u32, 0);
+        assert_eq!(reply.flags_linux, None);
     }
 
     #[cfg(all(target_os = "linux", feature = "test-chattr"))]
