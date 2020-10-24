@@ -206,7 +206,7 @@ impl super::Response for Response {
     }
 }
 
-/// Collects extended attributes of a file.
+/// Collects extended attributes of a file specified by the request.
 #[cfg(target_family = "unix")]
 fn ext_attrs(request: &Request) -> Vec<crate::fs::unix::ExtAttr> {
     use std::borrow::Borrow as _;
