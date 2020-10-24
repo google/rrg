@@ -31,6 +31,30 @@ pub struct Request {
     follow_symlink: bool,
 }
 
+impl Request {
+
+    /// Obtains a (potentially expanded) path that this request corresponds to.
+    ///
+    /// In case of requests that wish to follow symlinks, it will return a path
+    /// to the symlink target (in case there is such). Otherwise, it will just
+    /// return the requested path unchanged.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the path needs to be expanded but
+    /// the expansion fails for some reason (e.g. the requested path does not
+    /// exist).
+    fn target(&self) -> std::io::Result<std::borrow::Cow<PathBuf>> {
+        use std::borrow::Cow::*;
+
+        if self.follow_symlink {
+            self.path.canonicalize().map(Owned)
+        } else {
+            Ok(Borrowed(&self.path))
+        }
+    }
+}
+
 /// A response type for the stat action.
 #[derive(Debug)]
 pub struct Response {
@@ -113,20 +137,7 @@ where
 
     #[cfg(target_family = "unix")]
     let ext_attrs = if request.collect_ext_attrs {
-        // TODO: Extended attributes should be collected for a symlink if the
-        // `follow_symlinks` option is enabled.
-        // TODO: Make the `ack!` macro more expressive and then simplify it.
-        match crate::fs::unix::ext_attrs(&request.path) {
-            Ok(ext_attrs) => ext_attrs.collect(),
-            Err(error) => {
-                warn! {
-                    "failed to collect attributes for '{path}': {cause}",
-                    path = request.path.display(),
-                    cause = error,
-                };
-                vec!()
-            },
-        }
+        ext_attrs(&request)
     } else {
         vec!()
     };
@@ -192,6 +203,37 @@ impl super::Response for Response {
             st_flags_linux: self.flags_linux,
             ..self.metadata.into_lossy()
         }
+    }
+}
+
+/// Collects extended attributes of a file.
+#[cfg(target_family = "unix")]
+fn ext_attrs(request: &Request) -> Vec<crate::fs::unix::ExtAttr> {
+    use std::borrow::Borrow as _;
+
+    let path = match request.target() {
+        Ok(path) => path,
+        Err(error) => {
+            warn! {
+                "failed to expand '{path}': {cause}",
+                path = request.path.display(),
+                cause = error
+            };
+            return vec!();
+        }
+    };
+
+    // TODO: Make the `ack!` macro more expressive and then simplify it.
+    match crate::fs::unix::ext_attrs::<PathBuf>(path.borrow()) {
+        Ok(ext_attrs) => ext_attrs.collect(),
+        Err(error) => {
+            warn! {
+                "failed to collect attributes for '{path}': {cause}",
+                path = request.path.display(),
+                cause = error,
+            };
+            vec!()
+        },
     }
 }
 
@@ -392,7 +434,6 @@ mod tests {
     }
 
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
-    #[ignore] // TODO: Fix the behaviour.
     #[test]
     fn test_handle_with_ext_attrs_and_follow_symlink_on_linux() {
         let tempdir = tempfile::tempdir().unwrap();
