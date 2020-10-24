@@ -397,8 +397,6 @@ mod tests {
         assert!(reply.metadata.is_file());
     }
 
-    // TODO: Write tests for collection of extra file flags on Linux.
-
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn test_handle_with_ext_attrs_on_linux() {
@@ -468,5 +466,114 @@ mod tests {
         assert_eq!(reply.ext_attrs.len(), 1);
         assert_eq!(reply.ext_attrs[0].name, "user.norf");
         assert_eq!(reply.ext_attrs[0].value, Some(b"quux".to_vec()));
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-chattr"))]
+    #[test]
+    fn test_handle_with_file_flags_on_linux() {
+        // https://elixir.bootlin.com/linux/v5.8.14/source/include/uapi/linux/fs.h#L245
+        const FS_NOATIME_FL: std::os::raw::c_long = 0x00000080;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempfile = tempdir.path().join("foo");
+        std::fs::File::create(&tempfile).unwrap();
+
+        assert! {
+            std::process::Command::new("chattr")
+                .arg("+A").arg(&tempfile)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: tempfile,
+            follow_symlink: false,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        let flags = reply.flags_linux.unwrap();
+        assert_eq!(flags & FS_NOATIME_FL as u32, FS_NOATIME_FL as u32);
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-chattr"))]
+    #[ignore] // TODO: Fix behaviour.
+    #[test]
+    fn test_handle_with_symlink_flags_on_linux() {
+        // https://elixir.bootlin.com/linux/v5.8.14/source/include/uapi/linux/fs.h#L245
+        const FS_NODUMP_FL: std::os::raw::c_long = 0x00000040;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
+
+        std::fs::File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
+
+        assert! {
+            std::process::Command::new("chattr")
+                .arg("+d").arg(&target)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: symlink,
+            follow_symlink: false,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        let flags = reply.flags_linux.unwrap();
+        assert_eq!(flags & FS_NODUMP_FL as u32, 0);
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-chattr"))]
+    #[test]
+    fn test_handle_with_symlink_flags_and_follow_symlink_on_linux() {
+        // https://elixir.bootlin.com/linux/v5.8.14/source/include/uapi/linux/fs.h#L245
+        const FS_NODUMP_FL: std::os::raw::c_long = 0x00000040;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
+
+        std::fs::File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
+
+        assert! {
+            std::process::Command::new("chattr")
+                .arg("+d").arg(&target)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: symlink,
+            follow_symlink: true,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        let flags = reply.flags_linux.unwrap();
+        assert_eq!(flags & FS_NODUMP_FL as u32, FS_NODUMP_FL as u32);
     }
 }
