@@ -214,6 +214,7 @@ mod tests {
     }
 
     // TODO: Add macOS tests.
+    // TODO: Document and add tests for collecting attributes of a symlink.
 }
 
 // TODO: Move this into the `rrg-proto` crate once generic purpose utilities are

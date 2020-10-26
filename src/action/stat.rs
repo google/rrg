@@ -406,7 +406,7 @@ mod tests {
 
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
-    fn test_handle_with_ext_attrs_on_linux() {
+    fn test_handle_with_file_ext_attrs_on_linux() {
         let tempdir = tempfile::tempdir().unwrap();
         let tempfile = tempdir.path().join("foo");
         std::fs::File::create(&tempfile).unwrap();
@@ -440,7 +440,54 @@ mod tests {
 
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
-    fn test_handle_with_ext_attrs_and_follow_symlink_on_linux() {
+    fn test_handle_with_symlink_ext_attrs_on_linux() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
+
+        std::fs::File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
+
+        // Turns out, the kernel disallows setting extended attributes on a
+        // symlink [1]. However, the kernel itself can hypothetically set such
+        // bits.
+        //
+        // In order to verify that we really collect attributes for the symlink
+        // and no for the target, we set some attributes for the target and then
+        // we collect attributes of the symlink. Then, the expected result is to
+        // have a reply with no extended attributes.
+        //
+        // [1]: https://man7.org/linux/man-pages/man7/xattr.7.html
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--name").arg("user.norf")
+                .arg("--value").arg("quux")
+                .arg("--no-dereference")
+                .arg(&target)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: symlink,
+            follow_symlink: false,
+            collect_ext_attrs: true,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert!(reply.ext_attrs.is_empty());
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
+    #[test]
+    fn test_handle_with_symlink_ext_attrs_and_follow_symlink_on_linux() {
         let tempdir = tempfile::tempdir().unwrap();
         let symlink = tempdir.path().join("foo");
         let target = tempdir.path().join("bar");
