@@ -106,13 +106,41 @@ macro_rules! trace {
 ///     println!("size of the profile file: {}", profile.len());
 /// }
 /// ```
+///
+/// ```no_run
+/// # use rrg_macro::ack;
+/// let path = std::env::args().next().unwrap();
+///
+/// let mut content = String::new();
+/// ack! {
+///     std::fs::read_to_string(&mut content),
+///     error: "failed to read '{}'", path
+/// };
+///
+/// println!("{}", content);
+/// ```
 #[macro_export]
 macro_rules! ack {
+    // TODO: Find a way to remove this nasty code duplication.
+    // TODO: Allow trailing comma for arguments.
     { $expr:expr, $level:ident: $message:literal } => {
         match $expr {
             Ok(value) => Some(value),
             Err(err) => {
-                ::rrg_macro::$level!(concat!($message, ": {}"), err);
+                ::rrg_macro::$level! {
+                    concat!($message, ": {}"), err
+                };
+                None
+            },
+        }
+    };
+    { $expr:expr, $level:ident: $message:literal, $($arg:expr),* } => {
+        match $expr {
+            Ok(value) => Some(value),
+            Err(err) => {
+                ::rrg_macro::$level! {
+                    concat!($message, ": {}"), $($arg),*, err
+                };
                 None
             },
         }
