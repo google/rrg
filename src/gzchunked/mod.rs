@@ -5,108 +5,11 @@
 
 //! Utils for forming gzchunked streams.
 
-use std::collections::VecDeque;
-use std::io::{Read as _, Write as _};
+mod read;
+mod write;
 
-use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
-
-/// Size of a gzchunked block.
-const BLOCK_SIZE: usize = 10 << 20;
-
-/// A wrapper type for gzip compression level.
-pub struct Compression(flate2::Compression);
-
-/// A gzchunked streaming encoder.
-pub struct Encoder {
-    encoder: flate2::write::GzEncoder<Vec<u8>>,
-    compression: Compression,
-}
-
-/// A gzchunked streaming decoder.
-pub struct Decoder {
-    queue: VecDeque<Vec<u8>>,
-}
-
-/// A type for defining gzip compression level for gzchunked.
-impl Compression {
-    pub fn new(level: u32) -> Compression {
-        Compression(flate2::Compression::new(level))
-    }
-}
-
-impl Default for Compression {
-    fn default() -> Compression {
-        Compression(flate2::Compression::new(5))
-    }
-}
-
-impl Encoder {
-    /// Creates a new encoder with specified gzip compression level.
-    pub fn new(compression: Compression) -> Encoder {
-        Encoder {
-            encoder: flate2::write::GzEncoder::new(Vec::new(), compression.0),
-            compression,
-        }
-    }
-
-    /// Writes next data chunk into the stream.
-    pub fn write(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.encoder.write_u64::<BigEndian>(buf.len() as u64)?;
-        self.encoder.write_all(buf)?;
-        Ok(())
-    }
-
-    /// Attempts to retrieve next gzipped block.
-    /// Returns `Ok(None)` if there's not enough data for a whole block.
-    pub fn try_next_chunk(&mut self) -> std::io::Result<Option<Vec<u8>>> {
-        self.encoder.flush()?;
-        if self.encoder.get_ref().len() < BLOCK_SIZE {
-            return Ok(None)
-        }
-
-        Ok(Some(self.next_chunk()?))
-    }
-
-    /// Retrieves next gzipped block without checking its size.
-    pub fn next_chunk(&mut self) -> std::io::Result<Vec<u8>> {
-        self.encoder.flush()?;
-        let new_encoder = flate2::write::GzEncoder::new(Vec::new(), self.compression.0);
-        let old_encoder = std::mem::replace(&mut self.encoder, new_encoder);
-        let encoded_data = old_encoder.finish()?;
-
-        Ok(encoded_data)
-    }
-}
-
-impl Decoder {
-    /// Creates a new decoder.
-    pub fn new() -> Decoder {
-        Decoder {
-            queue: VecDeque::new()
-        }
-    }
-
-    /// Decodes next gzchunked block and puts all results into the internal queue.
-    pub fn write(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        let mut decoder = flate2::read::GzDecoder::new(buf);
-        let mut chunked_data_vec: Vec<u8> = Vec::new();
-        decoder.read_to_end(&mut chunked_data_vec)?;
-        let mut chunked_data = chunked_data_vec.as_slice();
-        while !chunked_data.is_empty() {
-            let length = chunked_data.read_u64::<BigEndian>()?;
-            let mut data = vec![0; length as usize];
-            chunked_data.read_exact(data.as_mut_slice())?;
-            self.queue.push_back(data);
-        }
-        Ok(())
-    }
-
-    /// Attempts to retrieve next data piece from queue.
-    /// Returns `None` if the queue is empty.
-    pub fn try_next_data(&mut self) -> Option<Vec<u8>> {
-        self.queue.pop_front()
-    }
-}
+pub use write::{Encoder, Compression};
+pub use read::{Decoder};
 
 #[cfg(test)]
 mod tests {
