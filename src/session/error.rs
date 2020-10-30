@@ -3,6 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::fmt::{Debug, Display, Formatter};
+use regex::Error as RegexError;
 
 /// An error type for failures that can occur during a session.
 #[derive(Debug)]
@@ -228,6 +229,38 @@ impl std::error::Error for TimeMicrosConversionError {
 impl From<TimeMicrosConversionError> for ParseError {
 
     fn from(error: TimeMicrosConversionError) -> ParseError {
+        ParseError::malformed(error)
+    }
+}
+
+#[derive(Debug)]
+pub struct RegexParseError {
+    /// Raw data of the string which could not be converted to Regex.
+    pub raw_data: Vec<u8>,
+    /// Error message caught during the conversion.
+    pub error: RegexError,
+}
+
+impl Display for RegexParseError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "Regex parse error happened on parsing '{:?}'. \
+                     Regex error: '{}'",
+               self.raw_data,
+               self.error.to_string())
+    }
+}
+
+impl std::error::Error for RegexParseError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl From<RegexParseError> for ParseError {
+
+    fn from(error: RegexParseError) -> ParseError {
         ParseError::malformed(error)
     }
 }
