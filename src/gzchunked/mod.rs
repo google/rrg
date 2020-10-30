@@ -5,13 +5,10 @@
 
 //! Utils for forming gzchunked streams.
 
-use std::vec::Vec;
-use std::mem;
 use std::collections::VecDeque;
-use std::io::{Read, Write};
-use std::default::Default;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use flate2::{write::GzEncoder, read::GzDecoder};
+use std::io::{Read as _, Write as _};
+
+use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 
 /// Size of a gzchunked block.
 const BLOCK_SIZE: usize = 10 << 20;
@@ -21,7 +18,7 @@ pub struct Compression(flate2::Compression);
 
 /// A gzchunked streaming encoder.
 pub struct Encoder {
-    encoder: GzEncoder<Vec<u8>>,
+    encoder: flate2::write::GzEncoder<Vec<u8>>,
     compression: Compression,
 }
 
@@ -47,7 +44,7 @@ impl Encoder {
     /// Creates a new encoder with specified gzip compression level.
     pub fn new(compression: Compression) -> Encoder {
         Encoder {
-            encoder: GzEncoder::new(Vec::new(), compression.0),
+            encoder: flate2::write::GzEncoder::new(Vec::new(), compression.0),
             compression,
         }
     }
@@ -73,8 +70,8 @@ impl Encoder {
     /// Retrieves next gzipped block without checking its size.
     pub fn next_chunk(&mut self) -> std::io::Result<Vec<u8>> {
         self.encoder.flush()?;
-        let new_encoder = GzEncoder::new(Vec::new(), self.compression.0);
-        let old_encoder = mem::replace(&mut self.encoder, new_encoder);
+        let new_encoder = flate2::write::GzEncoder::new(Vec::new(), self.compression.0);
+        let old_encoder = std::mem::replace(&mut self.encoder, new_encoder);
         let encoded_data = old_encoder.finish()?;
 
         Ok(encoded_data)
@@ -91,7 +88,7 @@ impl Decoder {
 
     /// Decodes next gzchunked block and puts all results into the internal queue.
     pub fn write(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        let mut decoder = GzDecoder::new(buf);
+        let mut decoder = flate2::read::GzDecoder::new(buf);
         let mut chunked_data_vec: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut chunked_data_vec)?;
         let mut chunked_data = chunked_data_vec.as_slice();
@@ -115,7 +112,6 @@ impl Decoder {
 mod tests {
 
     use super::*;
-    use rand::{Rng, SeedableRng, rngs::StdRng};
 
     #[test]
     fn test_encode_and_decode_empty() {
@@ -183,7 +179,9 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_random() {
-        let mut rng = StdRng::seed_from_u64(20200509);
+        use rand::{Rng as _, SeedableRng as _};
+        let mut rng = rand::rngs::StdRng::seed_from_u64(20200509);
+
         let mut encoder = Encoder::new(Compression::default());
         let mut decoder = Decoder::new();
         let mut expected_data: Vec<Vec<u8>> = Vec::new();
