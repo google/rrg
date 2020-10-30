@@ -7,6 +7,7 @@
 
 use std::path::Path;
 
+// TODO: Document behaviour for symlinks.
 /// Collects extended flags of the specified file.
 ///
 /// The returned mask represents file attributes specific to the Linux extended
@@ -50,6 +51,8 @@ mod tests {
     use std::fs::File;
 
     use super::*;
+
+    // TODO: Write tests for symlinks.
 
     #[test]
     fn test_flags_non_existing() {
