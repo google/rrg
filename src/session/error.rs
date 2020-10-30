@@ -92,8 +92,6 @@ pub enum ParseError {
     Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
-    /// An error occurred when parsing Vec<u8> to Regex.
-    RegexParse(RegexParseError)
 }
 
 impl ParseError {
@@ -122,9 +120,6 @@ impl Display for ParseError {
             Decode(ref error) => {
                 write!(fmt, "failed to decode proto message: {}", error)
             }
-            RegexParse(ref error) => {
-                write!(fmt, "regex parse error: {}", error)
-            }
         }
     }
 }
@@ -137,7 +132,6 @@ impl std::error::Error for ParseError {
         match *self {
             Malformed(ref error) => Some(error.as_ref()),
             Decode(ref error) => Some(error),
-            RegexParse(ref error) => Some(error)
         }
     }
 }
