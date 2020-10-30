@@ -5,4 +5,4 @@
 
 //! Handler for `client side file finder` action.
 
-mod expand_groups;
+mod groups;
