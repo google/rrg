@@ -180,6 +180,29 @@ impl From<MissingFieldError> for ParseError {
     }
 }
 
+/// An error type for situations where a given proto value is not supported.
+#[derive(Debug)]
+pub struct UnsupportedValueError<T> {
+    /// A name of the field the value belongs to.
+    pub name: &'static str,
+    /// A value that is not supported.
+    pub value: T,
+}
+
+impl<T: Debug> Display for UnsupportedValueError<T> {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "unsupported value for '{}': {:?}", self.name, self.value)
+    }
+}
+
+impl<T: Debug> std::error::Error for UnsupportedValueError<T> {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
 /// An error type for situations where proto enum has a value for which
 /// the definition is not known.
 #[derive(Debug)]
