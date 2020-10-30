@@ -10,6 +10,8 @@ use regex::Regex;
 ///
 /// # Examples
 /// ```
+/// use rrg::action::finder::glob::glob_to_regex;
+///
 /// assert_eq!(glob_to_regex("as*[!12]??").unwrap().as_str(), "^as.*[^12]..$");
 /// ```
 ///
@@ -56,17 +58,17 @@ pub fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
         }
     }
 
-    // cpython version produces output with escaped slashes, which is not desired here.
+    // CPython version produces output with escaped slashes,
+    // which is not desired here.
     res = res.replace(r"\\", r"\");
 
-    // resulting regex is supposed to perform full matches on the text.
+    // Resulting regex is supposed to perform full matches on the text.
     res = format!("^{}$", res);
 
     match Regex::new(&res) {
         Ok(v) => Ok(v),
-        Err(e) => {
-            Err(RegexParseError::new(res.bytes().collect(), e.to_string()))
-        }
+        Err(e) =>
+            Err(RegexParseError{raw_data: res.bytes().collect(), error: e})
     }
 }
 
