@@ -17,6 +17,7 @@ use std::fs::Metadata;
 use std::path::PathBuf;
 
 use log::warn;
+use rrg_macro::ack;
 
 use crate::session::{self, Session};
 
@@ -123,14 +124,10 @@ where
     }.map_err(Error::Metadata)?;
 
     let symlink = if metadata.file_type().is_symlink() {
-        std::fs::read_link(&request.path).map_err(|error| {
-            // TODO: Make the `ack!` macro more expressive and rewrite it.
-            warn! {
-                "failed to read symlink for '{path}': {cause}",
-                path = request.path.display(),
-                cause = error,
-            }
-        }).ok()
+        ack! {
+            std::fs::read_link(&request.path),
+            warn: "failed to read symlink for '{}'", request.path.display()
+        }
     } else {
         None
     };
@@ -144,14 +141,10 @@ where
 
     #[cfg(target_os = "linux")]
     let flags_linux = if !metadata.file_type().is_symlink() {
-        crate::fs::linux::flags(&request.path).map_err(|error| {
-            // TODO: Make the `ack!` macro more expressive and rewrite it.
-            warn! {
-                "failed to collect flags for '{path}': {cause}",
-                path = request.path.display(),
-                cause = error,
-            }
-        }).ok()
+        ack! {
+            crate::fs::linux::flags(&request.path),
+            warn: "failed to collect flags for '{}'", request.path.display()
+        }
     } else {
         // Flags are available only for non-symlinks. For symlinks, the function
         // would return flags mask for the target file, which can look confusing
@@ -230,18 +223,12 @@ fn ext_attrs(request: &Request) -> Vec<crate::fs::unix::ExtAttr> {
         }
     };
 
-    // TODO: Make the `ack!` macro more expressive and then simplify it.
-    match crate::fs::unix::ext_attrs::<PathBuf>(path.borrow()) {
-        Ok(ext_attrs) => ext_attrs.collect(),
-        Err(error) => {
-            warn! {
-                "failed to collect attributes for '{path}': {cause}",
-                path = request.path.display(),
-                cause = error,
-            };
-            vec!()
-        },
-    }
+    let ext_attrs = ack! {
+        crate::fs::unix::ext_attrs::<PathBuf>(path.borrow()),
+        warn: "failed to collect attributes for '{}'", request.path.display()
+    };
+
+    ext_attrs.map(Iterator::collect).unwrap_or_default()
 }
 
 #[cfg(test)]
