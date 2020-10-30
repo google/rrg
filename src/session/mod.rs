@@ -27,7 +27,8 @@ use log::{error, info};
 use crate::action;
 use crate::message;
 pub use self::demand::{Demand, Header, Payload};
-pub use self::error::{Error, ParseError, MissingFieldError, UnknownEnumValueError};
+pub use self::error::{Error, ParseError, MissingFieldError,
+                      UnsupportedValueError, UnknownEnumValueError};
 use self::response::{Response, Status};
 pub use self::sink::{Sink};
 
