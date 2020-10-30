@@ -11,42 +11,42 @@ use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::default::Default;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use flate2::{Compression, write::GzEncoder, read::GzDecoder};
+use flate2::{write::GzEncoder, read::GzDecoder};
 
 /// Size of a gzchunked block.
 const BLOCK_SIZE: usize = 10 << 20;
 
 /// A wrapper type for gzip compression level.
-pub struct GzChunkedCompression(Compression);
+pub struct Compression(flate2::Compression);
 
 /// A gzchunked streaming encoder.
-pub struct GzChunkedEncoder {
+pub struct Encoder {
     encoder: GzEncoder<Vec<u8>>,
-    compression: GzChunkedCompression,
+    compression: Compression,
 }
 
 /// A gzchunked streaming decoder.
-pub struct GzChunkedDecoder {
+pub struct Decoder {
     queue: VecDeque<Vec<u8>>,
 }
 
 /// A type for defining gzip compression level for gzchunked.
-impl GzChunkedCompression {
-    pub fn new(level: u32) -> GzChunkedCompression {
-        GzChunkedCompression(Compression::new(level))
+impl Compression {
+    pub fn new(level: u32) -> Compression {
+        Compression(flate2::Compression::new(level))
     }
 }
 
-impl Default for GzChunkedCompression {
-    fn default() -> GzChunkedCompression {
-        GzChunkedCompression(Compression::new(5))
+impl Default for Compression {
+    fn default() -> Compression {
+        Compression(flate2::Compression::new(5))
     }
 }
 
-impl GzChunkedEncoder {
+impl Encoder {
     /// Creates a new encoder with specified gzip compression level.
-    pub fn new(compression: GzChunkedCompression) -> GzChunkedEncoder {
-        GzChunkedEncoder {
+    pub fn new(compression: Compression) -> Encoder {
+        Encoder {
             encoder: GzEncoder::new(Vec::new(), compression.0),
             compression,
         }
@@ -81,10 +81,10 @@ impl GzChunkedEncoder {
     }
 }
 
-impl GzChunkedDecoder {
+impl Decoder {
     /// Creates a new decoder.
-    pub fn new() -> GzChunkedDecoder {
-        GzChunkedDecoder {
+    pub fn new() -> Decoder {
+        Decoder {
             queue: VecDeque::new()
         }
     }
@@ -119,8 +119,8 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_empty() {
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::default());
+        let mut decoder = Decoder::new();
 
         let encoded_block = encoder.next_chunk().unwrap();
         // This is because the block should at least contain gzip header.
@@ -133,8 +133,8 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_all_in_one_block() {
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::default());
+        let mut decoder = Decoder::new();
 
         encoder.write(&[1, 2, 3, 4]).unwrap();
         encoder.write(&[]).unwrap();
@@ -153,8 +153,8 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_one_per_block() {
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::default());
+        let mut decoder = Decoder::new();
 
         encoder.write(&[1, 2, 3, 4]).unwrap();
         let encoded_block = encoder.next_chunk().unwrap();
@@ -184,8 +184,8 @@ mod tests {
     #[test]
     fn test_encode_and_decode_random() {
         let mut rng = StdRng::seed_from_u64(20200509);
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::default());
+        let mut decoder = Decoder::new();
         let mut expected_data: Vec<Vec<u8>> = Vec::new();
         let mut decoded_data: Vec<Vec<u8>> = Vec::new();
         for _ in 0..256 {
@@ -210,8 +210,8 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_max_compression() {
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::new(9));
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::new(9));
+        let mut decoder = Decoder::new();
 
         encoder.write(&[1, 2, 3, 4]).unwrap();
         let encoded_block = encoder.next_chunk().unwrap();
@@ -222,8 +222,8 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_min_compression() {
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::new(0));
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::new(0));
+        let mut decoder = Decoder::new();
 
         encoder.write(&[1, 2, 3, 4]).unwrap();
         let encoded_block = encoder.next_chunk().unwrap();
@@ -236,6 +236,6 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_huge_compression() {
-        GzChunkedEncoder::new(GzChunkedCompression::new(100500));
+        Encoder::new(Compression::new(100500));
     }
 }
