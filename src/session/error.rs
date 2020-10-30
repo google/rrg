@@ -90,7 +90,7 @@ pub enum ParseError {
     /// An error occurred because the decoded proto message was malformed.
     Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
-    Decode(prost::DecodeError)
+    Decode(prost::DecodeError),
 }
 
 impl ParseError {
@@ -208,7 +208,7 @@ impl<T: Debug> std::error::Error for UnsupportedValueError<T> {
 #[derive(Debug)]
 pub struct TimeMicrosConversionError {
     /// Time micros value causing the conversion error.
-    pub micros: u64
+    pub micros: u64,
 }
 
 impl Display for TimeMicrosConversionError {
