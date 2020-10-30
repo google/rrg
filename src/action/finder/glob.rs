@@ -10,12 +10,12 @@ use regex::Regex;
 ///
 /// # Examples
 /// ```
-/// assert_eq!(glob_to_regex("asd*[!12]??").unwrap().as_str(), "asd.*[^12]..");
+/// assert_eq!(glob_to_regex("as*[!12]??").unwrap().as_str(), "^as.*[^12]..$");
 /// ```
 ///
 /// This implementation is inspired by CPython code:
 /// https://github.com/python/cpython/blob/2.7/Lib/fnmatch.py
-fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
+pub fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
     let chars: Vec<char> = pat.chars().collect();
     let mut i: usize = 0;
     let n: usize = chars.len();
@@ -56,9 +56,11 @@ fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
         }
     }
 
-    // CPython version produces output with escaped slashes, which is
-    // not desired here.
+    // cpython version produces output with escaped slashes, which is not desired here.
     res = res.replace(r"\\", r"\");
+
+    // resulting regex is supposed to perform full matches on the text.
+    res = format!("^{}$", res);
 
     match Regex::new(&res) {
         Ok(v) => Ok(v),
@@ -74,16 +76,16 @@ mod tests {
 
     #[test]
     fn test_glob_to_regex() {
-        assert_eq!(glob_to_regex("*").unwrap().as_str(), ".*");
-        assert_eq!(glob_to_regex("?").unwrap().as_str(), ".");
-        assert_eq!(glob_to_regex("a?b*").unwrap().as_str(), "a.b.*");
-        assert_eq!(glob_to_regex("[abc]").unwrap().as_str(), "[abc]");
-        assert_eq!(glob_to_regex("[]]").unwrap().as_str(), "[]]");
-        assert_eq!(glob_to_regex("[!x]").unwrap().as_str(), "[^x]");
-        assert_eq!(glob_to_regex("[^x]").unwrap().as_str(), r"[\^x]");
-        assert_eq!(glob_to_regex("[x").unwrap().as_str(), r"\[x");
-        assert_eq!(glob_to_regex("[a]]").unwrap().as_str(), r"[a]\]");
-        assert_eq!(glob_to_regex(r"[\\]\\").unwrap().as_str(), r"[\\]\\");
-        assert_eq!(glob_to_regex("ąźć").unwrap().as_str(), "ąźć");
+        assert_eq!(glob_to_regex("*").unwrap().as_str(), "^.*$");
+        assert_eq!(glob_to_regex("?").unwrap().as_str(), "^.$");
+        assert_eq!(glob_to_regex("a?b*").unwrap().as_str(), "^a.b.*$");
+        assert_eq!(glob_to_regex("[abc]").unwrap().as_str(), "^[abc]$");
+        assert_eq!(glob_to_regex("[]]").unwrap().as_str(), "^[]]$");
+        assert_eq!(glob_to_regex("[!x]").unwrap().as_str(), "^[^x]$");
+        assert_eq!(glob_to_regex("[^x]").unwrap().as_str(), r"^[\^x]$");
+        assert_eq!(glob_to_regex("[x").unwrap().as_str(), r"^\[x$");
+        assert_eq!(glob_to_regex("[a]]").unwrap().as_str(), r"^[a]\]$");
+        assert_eq!(glob_to_regex(r"[\\]\\").unwrap().as_str(), r"^[\\]\\$");
+        assert_eq!(glob_to_regex("ąźć").unwrap().as_str(), "^ąźć$");
     }
 }
