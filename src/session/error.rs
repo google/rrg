@@ -208,7 +208,6 @@ impl<T: Debug> std::error::Error for UnsupportedValueError<T> {
 pub struct RegexParseError {
     /// Raw data of the string which could not be converted to Regex.
     pub raw_data: Vec<u8>,
-
     /// Error message caught during the conversion.
     pub error: RegexError,
 }
