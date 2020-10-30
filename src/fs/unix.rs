@@ -19,6 +19,7 @@ use log::warn;
 /// See the [Wikipedia] article for more details.
 ///
 /// [Wikipedia]: https://en.wikipedia.org/wiki/Extended_file_attributes
+#[derive(Debug)]
 pub struct ExtAttr {
     /// A name of the extended attribute.
     pub name: OsString,
@@ -213,4 +214,19 @@ mod tests {
     }
 
     // TODO: Add macOS tests.
+    // TODO: Document and add tests for collecting attributes of a symlink.
+}
+
+// TODO: Move this into the `rrg-proto` crate once generic purpose utilities are
+// moved to a separate crate.
+impl Into<rrg_proto::stat_entry::ExtAttr> for ExtAttr {
+
+    fn into(self) -> rrg_proto::stat_entry::ExtAttr {
+        use std::os::unix::ffi::OsStringExt as _;
+
+        rrg_proto::stat_entry::ExtAttr {
+            name: Some(self.name.into_vec()),
+            value: self.value,
+        }
+    }
 }

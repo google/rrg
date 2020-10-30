@@ -5,250 +5,184 @@
 
 //! A handler and associated types for the file stat action.
 //!
-//! A file stat action responses with stat of a given file
+//! A file stat action collects filesystem metadata associated with a particular
+//! file.
+//!
+//! Note that the gathered bits of information differ across platforms, e.g. on
+//! Linux there is a notion of symlinks whereas on Windows no such thing exists.
+//! Therefore, on Linux the results might include additional information about
+//! the symlink (like the file it points to).
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime};
+use std::fs::Metadata;
+use std::path::PathBuf;
 
 use log::warn;
-use rrg_proto::{GetFileStatRequest, path_spec::Options, path_spec::PathType, PathSpec, StatEntry};
+use rrg_macro::ack;
 
-use crate::session::{self, Error, Session};
+use crate::session::{self, Session};
 
-impl From<std::io::Error> for Error {
-
-    fn from(e: std::io::Error) -> Error {
-        Error::action(e)
-    }
-}
-
-#[derive(Debug)]
-pub struct Response {
-    mode: u64,
-    inode: u64,
-    device: u64,
-    hard_links: u64,
-    uid: u32,
-    gid: u32,
-    size: u64,
-    access_time: Option<SystemTime>,
-    modification_time: Option<SystemTime>,
-    status_change_time: Option<SystemTime>,
-    block_count: u64,
-    block_size: u64,
-    represented_device: u64,
-    flags_linux: Option<u32>,
-    symlink: Option<PathBuf>,
-    path: PathBuf,
-    extended_attributes: Vec<ExtAttr>,
-}
-
+/// A request type for the stat action.
 #[derive(Debug)]
 pub struct Request {
+    /// A path to the file to stat.
     path: PathBuf,
+    /// Whether to collect extended file attributes.
     collect_ext_attrs: bool,
+    /// Whether, in case of a symlink, to collect data about the linked file.
     follow_symlink: bool,
 }
 
-#[derive(Debug)]
-pub struct ExtAttr {
-    name: Vec<u8>,
-    value: Vec<u8>,
-}
+impl Request {
 
-impl Into<rrg_proto::stat_entry::ExtAttr> for ExtAttr {
+    /// Obtains a (potentially expanded) path that this request corresponds to.
+    ///
+    /// In case of requests that wish to follow symlinks, it will return a path
+    /// to the symlink target (in case there is such). Otherwise, it will just
+    /// return the requested path unchanged.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the path needs to be expanded but
+    /// the expansion fails for some reason (e.g. the requested path does not
+    /// exist).
+    fn target(&self) -> std::io::Result<std::borrow::Cow<PathBuf>> {
+        use std::borrow::Cow::*;
 
-    fn into(self) -> rrg_proto::stat_entry::ExtAttr {
-        rrg_proto::stat_entry::ExtAttr {
-            name: Some(self.name),
-            value: Some(self.value),
+        if self.follow_symlink {
+            self.path.canonicalize().map(Owned)
+        } else {
+            Ok(Borrowed(&self.path))
         }
     }
 }
 
-pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let destination = if request.follow_symlink {
-        fs::canonicalize(&request.path)?
+/// A response type for the stat action.
+#[derive(Debug)]
+pub struct Response {
+    /// A path to the file that the result corresponds to.
+    path: PathBuf,
+    /// Metadata about the file.
+    metadata: Metadata,
+    /// A path to the pointed file (in case of a symlink).
+    symlink: Option<PathBuf>,
+    /// Extended attributes of the file.
+    #[cfg(target_family = "unix")]
+    ext_attrs: Vec<crate::fs::unix::ExtAttr>,
+    /// Additional Linux-specific file flags.
+    #[cfg(target_os = "linux")]
+    flags_linux: Option<u32>,
+    // TODO: Add support for collecting file flags on macOS.
+}
+
+/// An error type for failures that can occur during the stat action.
+#[derive(Debug)]
+enum Error {
+    /// A failure occurred during the attempt to collect file metadata.
+    Metadata(std::io::Error),
+}
+
+impl std::error::Error for Error {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use Error::*;
+
+        match *self {
+            Metadata(ref error) => Some(error),
+        }
+    }
+}
+
+impl std::fmt::Display for Error {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use Error::*;
+
+        match *self {
+            Metadata(ref error) => {
+                write!(fmt, "unable to collect metadata: {}", error)
+            }
+        }
+    }
+}
+
+impl From<Error> for session::Error {
+
+    fn from(error: Error) -> session::Error {
+        session::Error::action(error)
+    }
+}
+
+/// Handles requests for the file stat action.
+pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
+where
+    S: Session,
+{
+    let metadata = if request.follow_symlink {
+        std::fs::metadata(&request.path)
     } else {
-        request.path.clone()
+        std::fs::symlink_metadata(&request.path)
+    }.map_err(Error::Metadata)?;
+
+    let symlink = if metadata.file_type().is_symlink() {
+        ack! {
+            std::fs::read_link(&request.path),
+            warn: "failed to read symlink for '{}'", request.path.display()
+        }
+    } else {
+        None
     };
 
-    let mut response = form_response(&request.path, &destination)?;
-    if request.collect_ext_attrs {
-        response.extended_attributes = get_ext_attrs(&destination);
-    }
+    #[cfg(target_family = "unix")]
+    let ext_attrs = if request.collect_ext_attrs {
+        ext_attrs(&request)
+    } else {
+        vec!()
+    };
+
+    #[cfg(target_os = "linux")]
+    let flags_linux = if !metadata.file_type().is_symlink() {
+        ack! {
+            crate::fs::linux::flags(&request.path),
+            warn: "failed to collect flags for '{}'", request.path.display()
+        }
+    } else {
+        // Flags are available only for non-symlinks. For symlinks, the function
+        // would return flags mask for the target file, which can look confusing
+        // in the results.
+        None
+    };
+
+    let response = Response {
+        path: request.path,
+        metadata: metadata,
+        symlink: symlink,
+        #[cfg(target_family = "unix")]
+        ext_attrs: ext_attrs,
+        #[cfg(target_os = "linux")]
+        flags_linux: flags_linux,
+    };
 
     session.reply(response)?;
+
     Ok(())
-}
-
-#[cfg(target_family = "unix")]
-fn get_ext_attrs(path: &Path) -> Vec<ExtAttr> {
-    use std::os::unix::ffi::OsStringExt;
-
-    let xattrs = match xattr::list(path) {
-        Ok(xattr_list) => xattr_list,
-        Err(err) => {
-            warn!("Unable to get extended attributes: {}", err);
-            return vec![]
-        }
-    };
-
-    let mut result = vec![];
-    for attr in xattrs {
-        match xattr::get(path, &attr) {
-            Ok(attr_value) => result.push(ExtAttr {
-                name: attr.into_vec(),
-                value: attr_value.unwrap_or_default(),
-            }),
-
-            Err(err) => warn!("Unable to get an extended attribute: {}", err),
-        }
-    }
-    result
-}
-
-#[cfg(not(target_family = "unix"))]
-fn get_ext_attrs(_path: &Path) -> Vec<ExtAttr> {
-    vec![]
-}
-
-#[cfg(target_os = "linux")]
-fn get_time_option<E: std::fmt::Display>(time: Result<SystemTime, E>) -> Option<SystemTime> {
-    match time {
-        Ok(time_value) => Some(time_value),
-        Err(err) => {
-            warn!("Unable to get time value: {}", err);
-            None
-        }
-    }
-}
-
-fn get_time_since_unix_epoch(sys_time: &Option<SystemTime>) -> Option<u64> {
-    match sys_time {
-        Some(time_value) => match rrg_proto::micros(*time_value) {
-            Ok(micros_value) => Some(micros_value),
-            Err(error) => {
-                warn!("failed to convert time: {}", error);
-                None
-            }
-        }
-        None => None
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn get_status_change_time(metadata: &fs::Metadata) -> Option<SystemTime> {
-    use std::time::Duration;
-    use std::os::unix::fs::MetadataExt;
-    use std::time::UNIX_EPOCH;
-
-    UNIX_EPOCH.checked_add(Duration::from_secs(metadata.ctime() as u64))
-}
-
-#[cfg(target_os = "linux")]
-fn form_response(original_path: &Path, destination: &Path)
-                 -> Result<Response, std::io::Error> {
-    use std::os::unix::fs::MetadataExt;
-
-    let metadata = fs::symlink_metadata(destination)?;
-    let original_metadata = fs::symlink_metadata(original_path)?;
-
-    Ok(Response {
-        mode: metadata.mode() as u64,
-        inode: metadata.ino(),
-        device: metadata.dev(),
-        hard_links: metadata.nlink(),
-        uid: metadata.uid() as u32,
-        gid: metadata.gid() as u32,
-        size: metadata.size(),
-        access_time: get_time_option(metadata.accessed()),
-        modification_time: get_time_option(metadata.modified()),
-        status_change_time: get_status_change_time(&metadata),
-        block_count: metadata.blocks(),
-        block_size: metadata.blksize(),
-        represented_device: metadata.rdev(),
-        flags_linux: get_linux_flags(destination),
-
-        symlink: match original_metadata.file_type().is_symlink() {
-            true => Some(fs::read_link(original_path).unwrap()),
-            false => None
-        },
-
-        path: original_path.to_owned(),
-
-        extended_attributes: vec![],
-    })
-}
-
-#[cfg(not(target_os = "linux"))]
-fn form_response(_original_path: &PathBuf, _destination: &PathBuf)
-                 -> Result<Response, session::Error> {
-    Err(session::Error::Dispatch(
-        String::from("This functionality has not yet been implemented for your platform.")))
-}
-
-fn collapse_pathspec(pathspec: PathSpec) -> PathBuf {
-    fn recursive_collapse(pathspec: PathSpec) -> PathBuf {
-        match pathspec.path {
-            Some(path) => {
-                let path_buf = PathBuf::from(path);
-                match pathspec.nested_path {
-                    Some(nested_path_box) => path_buf.join(recursive_collapse(*nested_path_box)),
-                    None => path_buf,
-                }
-            }
-            None => PathBuf::default()
-        }
-    }
-
-    let mut result = recursive_collapse(pathspec);
-    if !result.has_root() {
-        result = PathBuf::from("/").join(result);
-    }
-    result
-}
-
-#[cfg(target_os = "linux")]
-fn get_linux_flags(path: &Path) -> Option<u32> {
-    use std::os::raw::c_long;
-    use std::os::unix::io::AsRawFd;
-    use std::fs::File;
-
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(err) => {
-            warn!("Unable to get linux flags: {}", err);
-            return None;
-        }
-    };
-
-    let mut linux_flags: c_long = 0;
-    let linux_flags_ptr: *mut c_long = &mut linux_flags;
-    unsafe {
-        match ioctls::fs_ioc_getflags(file.as_raw_fd(), linux_flags_ptr) {
-            0 => Some(linux_flags as u32),
-            _ => None,
-        }
-    }
 }
 
 impl super::Request for Request {
 
-    type Proto = GetFileStatRequest;
+    type Proto = rrg_proto::GetFileStatRequest;
 
     fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError> {
-        match proto.pathspec {
-            Some(pathspec) => Ok(Request {
-                path: collapse_pathspec(pathspec),
-                collect_ext_attrs: proto.collect_ext_attrs.unwrap_or(false),
-                follow_symlink: proto.follow_symlink.unwrap_or(false),
-            }),
+        use std::convert::TryInto as _;
 
-            None => Err(session::ParseError::from(
-                session::MissingFieldError::new("path spec"))),
-        }
+        let path = proto.pathspec
+            .ok_or(session::MissingFieldError::new("path spec"))?
+            .try_into().map_err(session::ParseError::malformed)?;
+
+        Ok(Request {
+            path: path,
+            follow_symlink: proto.follow_symlink.unwrap_or(false),
+            collect_ext_attrs: proto.collect_ext_attrs.unwrap_or(false),
+        })
     }
 }
 
@@ -256,245 +190,426 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("StatEntry");
 
-    type Proto = StatEntry;
+    type Proto = rrg_proto::StatEntry;
 
     fn into_proto(self) -> Self::Proto {
-        StatEntry {
-            st_mode: Some(self.mode),
-            st_ino: Some(self.inode),
-            st_dev: Some(self.device),
-            st_nlink: Some(self.hard_links),
-            st_uid: Some(self.uid),
-            st_gid: Some(self.gid),
-            st_size: Some(self.size),
-            st_atime: get_time_since_unix_epoch(&self.access_time),
-            st_mtime: get_time_since_unix_epoch(&self.modification_time),
-            st_ctime: get_time_since_unix_epoch(&self.status_change_time),
-            st_blocks: Some(self.block_count),
-            st_blksize: Some(self.block_size),
-            st_rdev: Some(self.represented_device),
-            st_flags_osx: None,
+        use rrg_proto::convert::IntoLossy as _;
+
+        rrg_proto::StatEntry {
+            pathspec: Some(self.path.into()),
+            #[cfg(target_family = "unix")]
+            ext_attrs: self.ext_attrs.into_iter().map(Into::into).collect(),
+            #[cfg(target_os = "linux")]
             st_flags_linux: self.flags_linux,
-
-            symlink: match self.symlink {
-                Some(path) => Some(path.to_str().unwrap().to_string()),
-                None => None
-            },
-
-            registry_type: None,
-            resident: None,
-
-            pathspec: Some(PathSpec {
-                path_options: Some(Options::CaseLiteral as i32),
-                pathtype: Some(PathType::Os as i32),
-                path: Some(self.path.to_str().unwrap().to_string()),
-                ..Default::default()
-            }),
-
-            registry_data: None,
-            st_btime: None,
-            ext_attrs: self.extended_attributes.into_iter()
-                .map(|attr| attr.into()).collect(),
+            ..self.metadata.into_lossy()
         }
     }
 }
 
+/// Collects extended attributes of a file specified by the request.
+#[cfg(target_family = "unix")]
+fn ext_attrs(request: &Request) -> Vec<crate::fs::unix::ExtAttr> {
+    use std::borrow::Borrow as _;
+
+    let path = match request.target() {
+        Ok(path) => path,
+        Err(error) => {
+            warn! {
+                "failed to expand '{path}': {cause}",
+                path = request.path.display(),
+                cause = error
+            };
+            return vec!();
+        }
+    };
+
+    let ext_attrs = ack! {
+        crate::fs::unix::ext_attrs::<PathBuf>(path.borrow()),
+        warn: "failed to collect attributes for '{}'", request.path.display()
+    };
+
+    ext_attrs.map(Iterator::collect).unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
-    use tempfile::tempdir;
 
-    use crate::action::Request;
+    use std::fs::File;
 
     use super::*;
 
     #[test]
-    fn test_path_collapse() {
-        let pathspec = PathSpec {
-            nested_path: Some(Box::new(
-                PathSpec {
-                    nested_path: Some(Box::new(
-                        PathSpec {
-                            path: Some(String::from("file")),
-                            ..Default::default()
-                        }
-                    )),
-                    path: Some(String::from("to")),
-                    ..Default::default()
-                })),
-            path: Some(String::from("path")),
-            ..Default::default()
+    fn test_handle_with_non_existent_file() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let request = Request {
+            path: tempdir.path().join("foo").to_path_buf(),
+            follow_symlink: false,
+            collect_ext_attrs: false,
         };
 
-        assert_eq!(collapse_pathspec(pathspec), PathBuf::from("/path/to/file"));
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_err());
+    }
 
-        let pathspec = PathSpec {
-            nested_path: Some(Box::new(
-                PathSpec {
-                    nested_path: Some(Box::new(
-                        PathSpec {
-                            path: Some(String::from("on/device")),
-                            ..Default::default()
-                        }
-                    )),
-                    path: Some(String::from("some/file")),
-                    ..Default::default()
-                })),
-            path: Some(String::from("path/to")),
-            ..Default::default()
+    #[test]
+    fn test_handle_with_regular_file() {
+        let tempdir = tempfile::tempdir().unwrap();
+        File::create(tempdir.path().join("foo")).unwrap();
+
+        let request = Request {
+            path: tempdir.path().join("foo").to_path_buf(),
+            follow_symlink: false,
+            collect_ext_attrs: false,
         };
 
-        assert_eq!(collapse_pathspec(pathspec), PathBuf::from("/path/to/some/file/on/device"));
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.path, tempdir.path().join("foo"));
+        assert!(reply.metadata.is_file());
     }
 
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_empty_request() {
-        let request: Result<super::Request, _> =
-            Request::from_proto(GetFileStatRequest::default());
-        assert!(request.is_err());
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_no_error_with_existing_file() {
-        let dir = tempdir().unwrap();
-
-        let file_path = dir.path().join("temp_file.txt");
-        fs::File::create(file_path.to_path_buf()).unwrap();
-        let response = form_response(&file_path, &file_path);
-        assert!(response.is_ok());
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_file_does_not_exist() {
-        let dir = tempdir().unwrap();
-
-        let file_path = dir.path().join("temp_file.txt");
-        let response = form_response(&file_path, &file_path);
-        assert!(response.is_err());
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_mode_and_size() {
-        let new_size = 42;
-
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("temp_file.txt");
-        let file = fs::File::create(file_path.to_path_buf()).unwrap();
-
-        file.set_len(new_size).unwrap();
-        let mut permissions = fs::metadata(&file_path).unwrap().permissions();
-        permissions.set_readonly(true);
-        file.set_permissions(permissions).unwrap();
-
-        let response = form_response(&file_path, &file_path);
-
-        assert!(response.is_ok());
-
-        let response = response.unwrap();
-        assert_eq!(response.size, new_size);
-        // We check only user permissions since others might not be set.
-        assert_eq!(response.mode & 0o700, 0o400);
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_hard_link() {
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("temp_file.txt");
-        let hard_link_path = dir.path().join("hard_link.txt");
-        fs::File::create(file_path.to_path_buf()).unwrap();
-        fs::hard_link(&file_path, &hard_link_path).unwrap();
-
-        let file_response = form_response(&file_path, &file_path);
-        let link_response = form_response(&hard_link_path, &hard_link_path);
-
-        assert!(file_response.is_ok());
-        assert!(link_response.is_ok());
-
-        let file_response = file_response.unwrap();
-        let link_response = link_response.unwrap();
-
-        assert_eq!(file_response.hard_links, 2);
-        assert_eq!(link_response.hard_links, 2);
-        assert_eq!(file_response.inode, link_response.inode);
-    }
-
-    #[test]
+    // Symlinking is supported only on Unix-like systems.
     #[cfg(target_family = "unix")]
-    fn test_extended_attributes() {
-        fn check_attribute(attribute: &ExtAttr,
-                           name: &str, value: Vec<u8>) {
-            assert_eq!(attribute.name.clone(), name.as_bytes().to_vec());
-            assert_eq!(attribute.value.clone(), value);
-        }
+    #[test]
+    fn test_handle_with_link() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
 
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("temp_file");
-        fs::File::create(file_path.to_path_buf()).unwrap();
-        xattr::set(&file_path, "user.simple_name", &[0, 28, 42]).unwrap();
-        xattr::set(&file_path, "user.ⓤⓝⓘⓒⓞⓓⓔ ⓝⓐⓜⓔ", &[0, 1]).unwrap();
-        xattr::set(&file_path, "user.без значения", &[]).unwrap();
+        File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
 
-        let mut extended_attributes = get_ext_attrs(&file_path);
-        extended_attributes.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
+        let request = Request {
+            path: symlink.clone(),
+            follow_symlink: false,
+            collect_ext_attrs: false,
+        };
 
-        assert_eq!(extended_attributes.len(), 3);
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
 
-        check_attribute(&extended_attributes[0], "user.simple_name", vec![0, 28, 42]);
-        check_attribute(&extended_attributes[1], "user.без значения", vec![]);
-        check_attribute(&extended_attributes[2], "user.ⓤⓝⓘⓒⓞⓓⓔ ⓝⓐⓜⓔ", vec![0, 1]);
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.path, symlink);
+        assert_eq!(reply.symlink, Some(target));
+        assert!(reply.metadata.file_type().is_symlink());
     }
 
+    // Symlinking is supported only on Unix-like systems.
+    #[cfg(target_family = "unix")]
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_chain_of_symlinks() {
-        use std::os::unix;
+    fn test_handle_with_two_links() {
+        use std::os::unix::fs::symlink;
 
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("temp_file.txt");
-        fs::File::create(file_path.to_path_buf()).unwrap();
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink_to_symlink = tempdir.path().join("foo");
+        let symlink_to_target = tempdir.path().join("bar");
+        let target = tempdir.path().join("baz");
 
-        let chain_length = 5;
-        unix::fs::symlink(&file_path, dir.path().join("symlink 0")).unwrap();
+        File::create(&target).unwrap();
+        symlink(&target, &symlink_to_target).unwrap();
+        symlink(&symlink_to_target, &symlink_to_symlink).unwrap();
 
-        for i in 1..chain_length {
-            unix::fs::symlink(dir.path().join(format!("symlink {}", i - 1)),
-                              dir.path().join(format!("symlink {}", i))).unwrap();
-        }
+        let request = Request {
+            path: symlink_to_symlink.clone(),
+            follow_symlink: false,
+            collect_ext_attrs: false,
+        };
 
-        let last_symlink = dir.path().join(format!("symlink {}", chain_length - 1));
-        let previous_symlink = dir.path().join(format!("symlink {}", chain_length - 2));
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
 
-        let response = form_response(&last_symlink,
-                                     &fs::canonicalize(&last_symlink).unwrap());
-        let original_response = form_response(&file_path, &file_path);
+        assert_eq!(session.reply_count(), 1);
 
-        assert!(response.is_ok());
-        let response = response.unwrap();
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.path, symlink_to_symlink);
+        assert_eq!(reply.symlink, Some(symlink_to_target));
+        assert!(reply.metadata.file_type().is_symlink());
+    }
 
-        assert!(original_response.is_ok());
-        let original_response = original_response.unwrap();
+    // Symlinking is supported only on Unix-like systems.
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_handle_with_link_and_follow_symlink() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
 
-        assert!(response.symlink.is_some());
-        assert!(original_response.symlink.is_none());
-        assert_eq!(response.symlink.unwrap(), previous_symlink);
+        File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
 
-        assert_eq!(response.mode, original_response.mode);
-        assert_eq!(response.inode, original_response.inode);
-        assert_eq!(response.device, original_response.device);
-        assert_eq!(response.hard_links, original_response.hard_links);
-        assert_eq!(response.uid, original_response.uid);
-        assert_eq!(response.gid, original_response.gid);
-        assert_eq!(response.size, original_response.size);
-        assert_eq!(response.access_time, original_response.access_time);
-        assert_eq!(response.modification_time, original_response.modification_time);
-        assert_eq!(response.status_change_time, original_response.status_change_time);
-        assert_eq!(response.block_count, original_response.block_count);
-        assert_eq!(response.block_size, original_response.block_size);
-        assert_eq!(response.represented_device, original_response.represented_device);
-        assert_eq!(response.flags_linux, original_response.flags_linux);
+        let request = Request {
+            path: symlink.clone(),
+            follow_symlink: true,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.path, symlink);
+        assert_eq!(reply.symlink, None);
+        assert!(reply.metadata.is_file());
+    }
+
+    // Symlinking is supported only on Unix-like systems.
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_handle_with_two_links_and_follow_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink_to_symlink = tempdir.path().join("foo");
+        let symlink_to_target = tempdir.path().join("bar");
+        let target = tempdir.path().join("baz");
+
+        File::create(&target).unwrap();
+        symlink(&target, &symlink_to_target).unwrap();
+        symlink(&symlink_to_target, &symlink_to_symlink).unwrap();
+
+        let request = Request {
+            path: symlink_to_symlink.clone(),
+            follow_symlink: true,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.path, symlink_to_symlink);
+        assert_eq!(reply.symlink, None);
+        assert!(reply.metadata.is_file());
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
+    #[test]
+    fn test_handle_with_file_ext_attrs_on_linux() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempfile = tempdir.path().join("foo");
+        std::fs::File::create(&tempfile).unwrap();
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--name").arg("user.norf")
+                .arg("--value").arg("quux")
+                .arg(&tempfile)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: tempfile.clone(),
+            follow_symlink: false,
+            collect_ext_attrs: true,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.ext_attrs.len(), 1);
+        assert_eq!(reply.ext_attrs[0].name, "user.norf");
+        assert_eq!(reply.ext_attrs[0].value, Some(b"quux".to_vec()));
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
+    #[test]
+    fn test_handle_with_symlink_ext_attrs_on_linux() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
+
+        std::fs::File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
+
+        // Turns out, the kernel disallows setting extended attributes on a
+        // symlink [1]. However, the kernel itself can hypothetically set such
+        // bits.
+        //
+        // In order to verify that we really collect attributes for the symlink
+        // and no for the target, we set some attributes for the target and then
+        // we collect attributes of the symlink. Then, the expected result is to
+        // have a reply with no extended attributes.
+        //
+        // [1]: https://man7.org/linux/man-pages/man7/xattr.7.html
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--name").arg("user.norf")
+                .arg("--value").arg("quux")
+                .arg("--no-dereference")
+                .arg(&target)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: symlink,
+            follow_symlink: false,
+            collect_ext_attrs: true,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert!(reply.ext_attrs.is_empty());
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
+    #[test]
+    fn test_handle_with_symlink_ext_attrs_and_follow_symlink_on_linux() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
+
+        std::fs::File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--name").arg("user.norf")
+                .arg("--value").arg("quux")
+                .arg(&target)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: symlink.clone(),
+            follow_symlink: true,
+            collect_ext_attrs: true,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.ext_attrs.len(), 1);
+        assert_eq!(reply.ext_attrs[0].name, "user.norf");
+        assert_eq!(reply.ext_attrs[0].value, Some(b"quux".to_vec()));
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-chattr"))]
+    #[test]
+    fn test_handle_with_file_flags_on_linux() {
+        // https://elixir.bootlin.com/linux/v5.8.14/source/include/uapi/linux/fs.h#L245
+        const FS_NOATIME_FL: std::os::raw::c_long = 0x00000080;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempfile = tempdir.path().join("foo");
+        std::fs::File::create(&tempfile).unwrap();
+
+        assert! {
+            std::process::Command::new("chattr")
+                .arg("+A").arg(&tempfile)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: tempfile,
+            follow_symlink: false,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        let flags = reply.flags_linux.unwrap();
+        assert_eq!(flags & FS_NOATIME_FL as u32, FS_NOATIME_FL as u32);
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-chattr"))]
+    #[test]
+    fn test_handle_with_symlink_flags_on_linux() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
+
+        std::fs::File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
+
+        assert! {
+            std::process::Command::new("chattr")
+                .arg("+d").arg(&target)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: symlink,
+            follow_symlink: false,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        assert_eq!(reply.flags_linux, None);
+    }
+
+    #[cfg(all(target_os = "linux", feature = "test-chattr"))]
+    #[test]
+    fn test_handle_with_symlink_flags_and_follow_symlink_on_linux() {
+        // https://elixir.bootlin.com/linux/v5.8.14/source/include/uapi/linux/fs.h#L245
+        const FS_NODUMP_FL: std::os::raw::c_long = 0x00000040;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let symlink = tempdir.path().join("foo");
+        let target = tempdir.path().join("bar");
+
+        std::fs::File::create(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &symlink).unwrap();
+
+        assert! {
+            std::process::Command::new("chattr")
+                .arg("+d").arg(&target)
+                .status()
+                .unwrap()
+                .success()
+        };
+
+        let request = Request {
+            path: symlink,
+            follow_symlink: true,
+            collect_ext_attrs: false,
+        };
+
+        let mut session = session::test::Fake::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let reply = session.reply::<Response>(0);
+        let flags = reply.flags_linux.unwrap();
+        assert_eq!(flags & FS_NODUMP_FL as u32, FS_NODUMP_FL as u32);
     }
 }
