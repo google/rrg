@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use byteorder::LittleEndian;
+use byteorder::BigEndian;
 
 struct Encode<I> {
     iter: I,
@@ -27,7 +27,7 @@ where
         self.cur.get_mut().clear();
         self.cur.set_position(0);
 
-        self.cur.write_u64::<LittleEndian>(data.len() as u64)?;
+        self.cur.write_u64::<BigEndian>(data.len() as u64)?;
         self.cur.write_all(data)?;
 
         Ok(())
@@ -63,7 +63,7 @@ impl<R: std::io::Read> Decode<R> {
             _ => return Err(SizeTagError.into()),
         }
 
-        let len = (&buf[..]).read_u64::<LittleEndian>()? as usize;
+        let len = (&buf[..]).read_u64::<BigEndian>()? as usize;
         Ok(Some(len))
     }
 }
