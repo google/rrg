@@ -58,8 +58,6 @@ pub fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
         }
     }
 
-    // CPython version produces output with escaped slashes,
-    // which is not desired here.
     res = res.replace(r"\\", r"\");
 
     // Resulting regex is supposed to perform full matches on the text.
