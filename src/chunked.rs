@@ -3,10 +3,39 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+//! Utilities for working with the chunked format.
+//!
+//! The chunked file format is extremely simple serialization procedure where
+//! each chunk of raw bytes is prepended with the size of the chunk (as 64-bit
+//! unsigned big-endian integer).
+//!
+//! Its primary application is streaming encoding and decoding of blobs of data
+//! in formats that do not support or are inefficient for these purposes (such
+//! as serialized Protocol Buffer messages).
+
 use std::io::Cursor;
 
 use byteorder::BigEndian;
 
+/// Encodes a given iterator over binary blobs into the chunked format.
+///
+/// This is a streaming encoder and performs the encoding in a lazy way. It
+/// should compose well with other streaming encoders (e.g. these offered by
+/// the [`flate2`] crate).
+///
+/// [`flate2`]: https://crates.io/crates/flate2
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::fs::File;
+///
+/// let data = [b"foo", b"bar", b"baz"];
+///
+/// let mut stream = rrg::chunked::encode(data.iter().map(|blob| &blob[..]));
+/// let mut file = File::create("output.chunked").unwrap();
+/// std::io::copy(&mut stream, &mut file).unwrap();
+/// ```
 pub fn encode<'a, I>(iter: I) -> Encode<I>
 where
     I: Iterator<Item = &'a [u8]>,
@@ -17,6 +46,24 @@ where
     }
 }
 
+/// Decodes a buffer in the chunked format into binary blobs.
+///
+/// This is a streaming decoder and performs the decoding in a lazy way. It
+/// should compose well with other streaming decoders (e.g. these offered by the
+/// [`flate2`] crate).
+///
+/// [`flate2`]: https://crates.io/crates/flate2
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::fs::File;
+///
+/// let file = File::open("input.chunked").unwrap();
+/// for (idx, blob) in rrg::chunked::decode(file).enumerate() {
+///     println!("blob #{}: {:?}", idx, blob.unwrap());
+/// }
+/// ```
 pub fn decode<R>(buf: R) -> Decode<R>
 where
     R: std::io::Read,
@@ -26,6 +73,14 @@ where
     }
 }
 
+/// Streaming encoder for the chunked format.
+///
+/// It implements the `Read` trait, lazily polling the underlying chunk iterator
+/// as more bytes is needed.
+///
+/// Instances of this type can be constructed using the [`encode`] function.
+///
+/// [`encode`]: fn.encode.html
 pub struct Encode<I> {
     iter: I,
     cur: Cursor<Vec<u8>>,
@@ -35,10 +90,12 @@ impl<'a, I> Encode<I>
 where
     I: Iterator<Item = &'a [u8]>,
 {
+    /// Checks whether all the data from the underlying cursor has been read.
     fn is_empty(&self) -> bool {
         self.cur.position() == self.cur.get_ref().len() as u64
     }
 
+    /// Pulls another blob of data from the underlying iterator.
     fn pull(&mut self) -> std::io::Result<()> {
         use std::io::Write as _;
         use byteorder::WriteBytesExt as _;
@@ -72,12 +129,23 @@ where
     }
 }
 
+/// Streaming decoder for the chunked format.
+///
+/// It implements the `Iterator` trait yielding chunks of decoded blobs, lazily
+/// decoding data from the underlying buffer.
+///
+/// Instances of this type can be constructed using the [`decode`] function.
+///
+/// [`decode`]: fn.decode.html
 pub struct Decode<R> {
     buf: R,
 }
 
 impl<R: std::io::Read> Decode<R> {
 
+    /// Reads a size tag from the underlying buffer.
+    ///
+    /// It will return `None` if the is no more data in the buffer.
     fn read_len(&mut self) -> std::io::Result<Option<usize>> {
         use byteorder::ReadBytesExt as _;
 
@@ -114,6 +182,7 @@ impl<R: std::io::Read> Iterator for Decode<R> {
     }
 }
 
+/// An error type for errors encountered when reading the size tag.
 #[derive(Debug)]
 struct SizeTagError;
 
