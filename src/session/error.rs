@@ -3,6 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::fmt::{Debug, Display, Formatter};
+use regex::Error as RegexError;
 
 /// An error type for failures that can occur during a session.
 #[derive(Debug)]
@@ -91,10 +92,6 @@ pub enum ParseError {
     Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
-    /// An error occurred when parsing Vec<u8> to Regex.
-    RegexParse(RegexParseError),
-    /// An error occurred when converting time micros from proto to std::time::SystemTime.
-    TimeMicrosConversion(TimeMicrosConversionError),
 }
 
 impl ParseError {
@@ -123,12 +120,6 @@ impl Display for ParseError {
             Decode(ref error) => {
                 write!(fmt, "failed to decode proto message: {}", error)
             }
-            RegexParse(ref error) => {
-                write!(fmt, "regex parse error: {}", error)
-            }
-            TimeMicrosConversion(ref error) => {
-                write!(fmt, "time micros conversion error: {}", error)
-            }
         }
     }
 }
@@ -141,8 +132,6 @@ impl std::error::Error for ParseError {
         match *self {
             Malformed(ref error) => Some(error.as_ref()),
             Decode(ref error) => Some(error),
-            RegexParse(ref error) => Some(error),
-            TimeMicrosConversion(ref error) => Some(error),
         }
     }
 }
@@ -225,74 +214,6 @@ impl From<UnknownEnumValueError> for ParseError {
     }
 }
 
-#[derive(Debug)]
-pub struct RegexParseError {
-    pub raw_data: Vec<u8>,
-    pub error_message: String
-}
-
-impl RegexParseError {
-
-    /// Creates a new error indicating that a regex cannot be parsed.
-    pub fn new(raw_data: Vec<u8>, error_message: String) -> RegexParseError {
-        RegexParseError {
-            raw_data,
-            error_message
-        }
-    }
-}
-
-impl Display for RegexParseError {
-
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "Regex parse error happened on parsing '{:?}'. Error message: '{}'",
-               self.raw_data,
-               self.error_message)
-    }
-}
-
-impl std::error::Error for RegexParseError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
-impl From<RegexParseError> for ParseError {
-
-    fn from(error: RegexParseError) -> ParseError {
-        ParseError::RegexParse(error)
-    }
-}
-
-/// An error type for situations where time micros cannot be converted
-/// to std::time::SystemTime.
-#[derive(Debug)]
-pub struct TimeMicrosConversionError {
-/// Time micros value causing the conversion error.
-    pub micros: u64
-}
-
-impl Display for TimeMicrosConversionError {
-
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "cannot convert micros to std::time::SystemTime: {}", self.micros)
-    }
-}
-
-impl std::error::Error for TimeMicrosConversionError {
-
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
-impl From<TimeMicrosConversionError> for ParseError {
-
-    fn from(error: TimeMicrosConversionError) -> ParseError {
-        ParseError::TimeMicrosConversion(error)
-    }
-}
-
 /// An error type for situations where a given proto value is not supported.
 #[derive(Debug)]
 pub struct UnsupportedValueError<T> {
@@ -313,5 +234,66 @@ impl<T: Debug> std::error::Error for UnsupportedValueError<T> {
 
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
+    }
+}
+
+/// An error type for situations where time micros cannot be converted
+/// to `std::time::SystemTime`.
+#[derive(Debug)]
+pub struct TimeMicrosConversionError {
+    /// Time micros value causing the conversion error.
+    pub micros: u64,
+}
+
+impl Display for TimeMicrosConversionError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "cannot convert micros to std::time::SystemTime: {}", self.micros)
+    }
+}
+
+impl std::error::Error for TimeMicrosConversionError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl From<TimeMicrosConversionError> for ParseError {
+
+    fn from(error: TimeMicrosConversionError) -> ParseError {
+        ParseError::malformed(error)
+    }
+}
+
+#[derive(Debug)]
+pub struct RegexParseError {
+    /// Raw data of the string which could not be converted to Regex.
+    pub raw_data: Vec<u8>,
+    /// Error message caught during the conversion.
+    pub error: RegexError,
+}
+
+impl Display for RegexParseError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "Regex parse error happened on parsing '{:?}'. \
+                     Regex error: '{}'",
+               self.raw_data,
+               self.error.to_string())
+    }
+}
+
+impl std::error::Error for RegexParseError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl From<RegexParseError> for ParseError {
+
+    fn from(error: RegexParseError) -> ParseError {
+        ParseError::malformed(error)
     }
 }

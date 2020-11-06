@@ -7,6 +7,7 @@
 
 use std::path::Path;
 
+// TODO: Document behaviour for symlinks.
 /// Collects extended flags of the specified file.
 ///
 /// The returned mask represents file attributes specific to the Linux extended
@@ -33,6 +34,9 @@ pub fn flags<P>(path: P) -> std::io::Result<u32> where
 
     let mut flags = 0;
     let code = unsafe {
+        // This block is safe: we simply pass a raw file descriptor (that is
+        // valid until the end of the scope of this function) because this is
+        // what the low-level API expects.
         use std::os::unix::io::AsRawFd as _;
         ioctls::fs_ioc_getflags(file.as_raw_fd(), &mut flags)
     };
@@ -50,6 +54,8 @@ mod tests {
     use std::fs::File;
 
     use super::*;
+
+    // TODO: Write tests for symlinks.
 
     #[test]
     fn test_flags_non_existing() {

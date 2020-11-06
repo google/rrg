@@ -20,8 +20,9 @@ addons:
  apt:
    packages:
      - attr
+     - e2fsprogs
 
 script:
   - cargo build --verbose
-  - cargo test --verbose --package rrg-macro --package rrg-proto --package rrg --features 'test-setfattr'
+  - cargo test --verbose --package rrg-macro --package rrg-proto --package rrg --features 'test-chattr test-setfattr'
   - cargo run -- --version

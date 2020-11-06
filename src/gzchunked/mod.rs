@@ -5,122 +5,21 @@
 
 //! Utils for forming gzchunked streams.
 
-use std::vec::Vec;
-use std::mem;
-use std::collections::VecDeque;
-use std::io::{Read, Write};
-use std::default::Default;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use flate2::{Compression, write::GzEncoder, read::GzDecoder};
+mod read;
+mod write;
 
-/// Size of a gzchunked block.
-const BLOCK_SIZE: usize = 10 << 20;
-
-/// A wrapper type for gzip compression level.
-pub struct GzChunkedCompression(Compression);
-
-/// A gzchunked streaming encoder.
-pub struct GzChunkedEncoder {
-    encoder: GzEncoder<Vec<u8>>,
-    compression: GzChunkedCompression,
-}
-
-/// A gzchunked streaming decoder.
-pub struct GzChunkedDecoder {
-    queue: VecDeque<Vec<u8>>,
-}
-
-/// A type for defining gzip compression level for gzchunked.
-impl GzChunkedCompression {
-    pub fn new(level: u32) -> GzChunkedCompression {
-        GzChunkedCompression(Compression::new(level))
-    }
-}
-
-impl Default for GzChunkedCompression {
-    fn default() -> GzChunkedCompression {
-        GzChunkedCompression(Compression::new(5))
-    }
-}
-
-impl GzChunkedEncoder {
-    /// Creates a new encoder with specified gzip compression level.
-    pub fn new(compression: GzChunkedCompression) -> GzChunkedEncoder {
-        GzChunkedEncoder {
-            encoder: GzEncoder::new(Vec::new(), compression.0),
-            compression,
-        }
-    }
-
-    /// Writes next data chunk into the stream.
-    pub fn write(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.encoder.write_u64::<BigEndian>(buf.len() as u64)?;
-        self.encoder.write_all(buf)?;
-        Ok(())
-    }
-
-    /// Attempts to retrieve next gzipped block.
-    /// Returns `Ok(None)` if there's not enough data for a whole block.
-    pub fn try_next_chunk(&mut self) -> std::io::Result<Option<Vec<u8>>> {
-        self.encoder.flush()?;
-        if self.encoder.get_ref().len() < BLOCK_SIZE {
-            return Ok(None)
-        }
-
-        Ok(Some(self.next_chunk()?))
-    }
-
-    /// Retrieves next gzipped block without checking its size.
-    pub fn next_chunk(&mut self) -> std::io::Result<Vec<u8>> {
-        self.encoder.flush()?;
-        let new_encoder = GzEncoder::new(Vec::new(), self.compression.0);
-        let old_encoder = mem::replace(&mut self.encoder, new_encoder);
-        let encoded_data = old_encoder.finish()?;
-
-        Ok(encoded_data)
-    }
-}
-
-impl GzChunkedDecoder {
-    /// Creates a new decoder.
-    pub fn new() -> GzChunkedDecoder {
-        GzChunkedDecoder {
-            queue: VecDeque::new()
-        }
-    }
-
-    /// Decodes next gzchunked block and puts all results into the internal queue.
-    pub fn write(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        let mut decoder = GzDecoder::new(buf);
-        let mut chunked_data_vec: Vec<u8> = Vec::new();
-        decoder.read_to_end(&mut chunked_data_vec)?;
-        let mut chunked_data = chunked_data_vec.as_slice();
-        while !chunked_data.is_empty() {
-            let length = chunked_data.read_u64::<BigEndian>()?;
-            let mut data = vec![0; length as usize];
-            chunked_data.read_exact(data.as_mut_slice())?;
-            self.queue.push_back(data);
-        }
-        Ok(())
-    }
-
-    /// Attempts to retrieve next data piece from queue.
-    /// Returns `None` if the queue is empty.
-    pub fn try_next_data(&mut self) -> Option<Vec<u8>> {
-        self.queue.pop_front()
-    }
-}
+pub use write::{Encoder, Compression};
+pub use read::{Decoder};
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use rand::{Rng, SeedableRng, rngs::StdRng};
 
     #[test]
     fn test_encode_and_decode_empty() {
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::default());
+        let mut decoder = Decoder::new();
 
         let encoded_block = encoder.next_chunk().unwrap();
         // This is because the block should at least contain gzip header.
@@ -133,8 +32,8 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_all_in_one_block() {
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::default());
+        let mut decoder = Decoder::new();
 
         encoder.write(&[1, 2, 3, 4]).unwrap();
         encoder.write(&[]).unwrap();
@@ -153,8 +52,8 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_one_per_block() {
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::default());
+        let mut decoder = Decoder::new();
 
         encoder.write(&[1, 2, 3, 4]).unwrap();
         let encoded_block = encoder.next_chunk().unwrap();
@@ -183,9 +82,11 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_random() {
-        let mut rng = StdRng::seed_from_u64(20200509);
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::default());
-        let mut decoder = GzChunkedDecoder::new();
+        use rand::{Rng as _, SeedableRng as _};
+        let mut rng = rand::rngs::StdRng::seed_from_u64(20200509);
+
+        let mut encoder = Encoder::new(Compression::default());
+        let mut decoder = Decoder::new();
         let mut expected_data: Vec<Vec<u8>> = Vec::new();
         let mut decoded_data: Vec<Vec<u8>> = Vec::new();
         for _ in 0..256 {
@@ -210,8 +111,8 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_max_compression() {
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::new(9));
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::new(9));
+        let mut decoder = Decoder::new();
 
         encoder.write(&[1, 2, 3, 4]).unwrap();
         let encoded_block = encoder.next_chunk().unwrap();
@@ -222,8 +123,8 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_min_compression() {
-        let mut encoder = GzChunkedEncoder::new(GzChunkedCompression::new(0));
-        let mut decoder = GzChunkedDecoder::new();
+        let mut encoder = Encoder::new(Compression::new(0));
+        let mut decoder = Decoder::new();
 
         encoder.write(&[1, 2, 3, 4]).unwrap();
         let encoded_block = encoder.next_chunk().unwrap();
@@ -236,6 +137,6 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_huge_compression() {
-        GzChunkedEncoder::new(GzChunkedCompression::new(100500));
+        Encoder::new(Compression::new(100500));
     }
 }

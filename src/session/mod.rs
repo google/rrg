@@ -28,9 +28,11 @@ use log::{error, info};
 use crate::action;
 use crate::message;
 pub use self::demand::{Demand, Header, Payload};
-pub use self::error::{Error, ParseError, MissingFieldError, UnknownEnumValueError, RegexParseError};
+pub use self::error::{Error, ParseError, MissingFieldError,
+                      UnknownEnumValueError, UnsupportedValueError,
+                      RegexParseError};
 use self::response::{Response, Status};
-pub use self::sink::{Sink};
+pub use self::sink::Sink;
 pub use self::time::time_from_micros;
 pub use self::parse_enum::{ProtoEnum, parse_enum};
 

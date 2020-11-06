@@ -409,15 +409,19 @@ fn get_ext_flags_condition(
     }
 }
 
-fn parse_regex(bytes: Vec<u8>) -> Result<Regex, RegexParseError> {
+fn parse_regex(bytes: Vec<u8>) -> Result<Regex, ParseError> {
     let str = match std::str::from_utf8(bytes.as_slice()) {
         Ok(v) => Ok(v),
-        Err(e) => Err(RegexParseError::new(bytes.clone(), e.to_string())),
+        Err(e) => Err(ParseError::Malformed(Box::new(e))),
     }?;
 
     match Regex::new(str) {
         Ok(v) => Ok(v),
-        Err(e) => Err(RegexParseError::new(bytes, e.to_string())),
+        Err(e) => Err(RegexParseError {
+            raw_data: bytes,
+            error: e,
+        }
+        .into()),
     }
 }
 
@@ -1218,7 +1222,7 @@ mod tests {
     }
 
     #[test]
-    fn test_regex_parse_error() {
+    fn test_invalid_utf8_sequence_error() {
         let err = Request::from_proto(FileFinderArgs {
             conditions: vec![FileFinderCondition {
                 condition_type: Some(ConditionType::ContentsRegexMatch as i32),
@@ -1238,13 +1242,7 @@ mod tests {
         })
         .unwrap_err();
 
-        match err {
-            ParseError::RegexParse(error) => {
-                assert_eq!(error.raw_data, vec![255, 255, 255]);
-                assert!(error.error_message.contains("invalid utf-8 sequence"));
-            }
-            e @ _ => panic!("Unexpected error type: {:?}", e),
-        }
+        assert!(matches!(err, ParseError::Malformed(_)));
     }
 
     #[test]

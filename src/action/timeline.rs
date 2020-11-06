@@ -15,7 +15,7 @@ use cfg_if::cfg_if;
 use sha2::{Digest, Sha256};
 use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
 
-use crate::gzchunked::{GzChunkedEncoder, GzChunkedCompression};
+use crate::gzchunked;
 use crate::session::{self, Session, Error, ParseError, MissingFieldError};
 
 /// A request type for the timeline action.
@@ -42,7 +42,7 @@ struct ChunkResponse {
 struct RecurseState {
     device: u64,
     ids: Vec<ChunkDigest>,
-    encoder: GzChunkedEncoder,
+    encoder: gzchunked::Encoder,
 }
 
 /// Retrieves device ID from metadata.
@@ -155,7 +155,7 @@ impl RecurseState {
         RecurseState {
             device,
             ids: Vec::new(),
-            encoder: GzChunkedEncoder::new(GzChunkedCompression::default()),
+            encoder: gzchunked::Encoder::new(gzchunked::Compression::default()),
         }
     }
 
@@ -290,7 +290,6 @@ mod tests {
     use super::*;
     use std::fs::{hard_link, create_dir, write};
     use tempfile::tempdir;
-    use crate::gzchunked::GzChunkedDecoder;
 
     fn entries_from_session_response(session: &session::test::Fake) -> Vec<TimelineEntry> {
         assert_eq!(session.reply_count(), 1);
@@ -301,7 +300,7 @@ mod tests {
         assert_eq!(block_count, expected_ids.len());
         expected_ids.sort_by(|a, b| a.0.cmp(&b.0));
 
-        let mut decoder = GzChunkedDecoder::new();
+        let mut decoder = gzchunked::Decoder::new();
         for block_number in 0..block_count {
             let block = session.response::<ChunkResponse>(session::Sink::TRANSFER_STORE, block_number);
             let response_digest = ChunkDigest(Sha256::digest(&block.data).into());
