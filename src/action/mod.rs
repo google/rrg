@@ -29,6 +29,7 @@ pub mod network;
 pub mod stat;
 pub mod insttime;
 pub mod memsize;
+pub mod finder;
 
 use crate::session::{self, Session, Task};
 
