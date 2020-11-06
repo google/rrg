@@ -2,7 +2,26 @@ use std::io::Cursor;
 
 use byteorder::BigEndian;
 
-struct Encode<I> {
+pub fn encode<'a, I>(iter: I) -> Encode<I>
+where
+    I: Iterator<Item = &'a [u8]>,
+{
+    Encode {
+        iter: iter,
+        cur: Cursor::new(vec!()),
+    }
+}
+
+pub fn decode<R>(buf: R) -> Decode<R>
+where
+    R: std::io::Read,
+{
+    Decode {
+        buf: buf,
+    }
+}
+
+pub struct Encode<I> {
     iter: I,
     cur: Cursor<Vec<u8>>,
 }
@@ -47,7 +66,7 @@ where
     }
 }
 
-struct Decode<R> {
+pub struct Decode<R> {
     buf: R,
 }
 
