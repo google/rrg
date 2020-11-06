@@ -48,6 +48,7 @@ where
 
         self.cur.write_u64::<BigEndian>(data.len() as u64)?;
         self.cur.write_all(data)?;
+        self.cur.set_position(0);
 
         Ok(())
     }
