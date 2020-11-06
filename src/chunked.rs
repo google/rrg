@@ -128,3 +128,122 @@ impl From<SizeTagError> for std::io::Error {
         std::io::Error::new(std::io::ErrorKind::InvalidData, error)
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+
+    use std::io::Read as _;
+
+    use super::*;
+
+    #[test]
+    pub fn test_encode_empty() {
+        let mut stream = encode(std::iter::empty());
+
+        let mut output = vec!();
+        stream.read_to_end(&mut output).unwrap();
+
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    pub fn test_encode_single_chunk() {
+        let mut stream = encode(vec!(&b"foo"[..]).into_iter());
+
+        let mut output = vec!();
+        stream.read_to_end(&mut output).unwrap();
+
+        assert_eq!(output, b"\x00\x00\x00\x00\x00\x00\x00\x03foo");
+    }
+
+    #[test]
+    pub fn test_encode_single_empty_chunk() {
+        let mut stream = encode(vec!(&b""[..]).into_iter());
+
+        let mut output = vec!();
+        stream.read_to_end(&mut output).unwrap();
+
+        assert_eq!(output, b"\x00\x00\x00\x00\x00\x00\x00\x00");
+    }
+
+    #[test]
+    pub fn test_encode_multiple_empty_chunks() {
+        let mut stream = encode(vec!(&b""[..], &b""[..]).into_iter());
+
+        let mut output = vec!();
+        stream.read_to_end(&mut output).unwrap();
+
+        assert_eq!(&output[..8], b"\x00\x00\x00\x00\x00\x00\x00\x00");
+        assert_eq!(&output[8..], b"\x00\x00\x00\x00\x00\x00\x00\x00");
+    }
+
+    #[test]
+    pub fn test_decode_empty() {
+        let mut iter = decode(&b""[..]);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    pub fn test_decode_single_chunk() {
+        let mut iter = decode(&b"\x00\x00\x00\x00\x00\x00\x00\x03foo"[..])
+            .map(Result::unwrap);
+
+        assert_eq!(iter.next(), Some(b"foo".to_vec()));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    pub fn test_decode_empty_chunk() {
+        let mut iter = decode(&b"\x00\x00\x00\x00\x00\x00\x00\x00"[..])
+            .map(Result::unwrap);
+
+        assert_eq!(iter.next(), Some(b"".to_vec()));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    pub fn test_decode_incorrect_size_tag() {
+        let mut iter = decode(&b"\x12\x34\x56"[..]);
+
+        let error = iter.next().unwrap().unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    pub fn test_decode_short_input() {
+        let mut iter = decode(&b"\x00\x00\x00\x00\x00\x00\x00\x42foo"[..]);
+
+        let error = iter.next().unwrap().unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::UnexpectedEof);
+    }
+
+    #[test]
+    pub fn test_encode_and_decode_multiple_chunks() {
+        let chunks = vec! {
+            &b"foo"[..],
+            &b"bar"[..],
+            &b"baz"[..],
+        };
+
+        let mut iter = decode(encode(chunks.into_iter()))
+            .map(Result::unwrap);
+
+        assert_eq!(iter.next(), Some(b"foo".to_vec()));
+        assert_eq!(iter.next(), Some(b"bar".to_vec()));
+        assert_eq!(iter.next(), Some(b"baz".to_vec()));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    pub fn test_encode_and_decode_multiple_empty_chunks() {
+        let chunks = vec!(&b""[..], &b""[..], &b""[..]);
+
+        let mut iter = decode(encode(chunks.into_iter()))
+            .map(Result::unwrap);
+
+        assert_eq!(iter.next(), Some(b"".to_vec()));
+        assert_eq!(iter.next(), Some(b"".to_vec()));
+        assert_eq!(iter.next(), Some(b"".to_vec()));
+        assert_eq!(iter.next(), None);
+    }
+}
