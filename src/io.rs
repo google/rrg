@@ -15,13 +15,15 @@ where
     // TODO: Move the magic number to a constant.
     let mut buf = [0; 1024];
     loop {
-        // TODO: Retry on interrupted errors (just like `std::io::copy` does).
-        let size = reader.read(&mut buf[..])?;
-        if size == 0 {
-            break;
-        }
+        use std::io::ErrorKind::*;
+        let len = match reader.read(&mut buf[..]) {
+            Ok(0) => break,
+            Ok(len) => len,
+            Err(ref error) if error.kind() == Interrupted => continue,
+            Err(error) => return Err(error),
+        };
 
-        writer.write_all(&buf[..size])?;
+        writer.write_all(&buf[..len])?;
         if pred(reader, writer) {
             break;
         }
