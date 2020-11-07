@@ -73,26 +73,48 @@ impl Encoder {
     }
 }
 
+pub struct EncodeOpts {
+    pub compression: Compression,
+    pub part_size: u64,
+}
+
+impl Default for EncodeOpts {
+
+    fn default() -> EncodeOpts {
+        EncodeOpts {
+            compression: Compression::default(),
+            part_size: 1 * 1024 * 1024, // 1 MiB.
+        }
+    }
+}
+
 pub struct Encode<I> {
     chunked: crate::chunked::Encode<I>,
+    opts: EncodeOpts,
 }
 
 impl<'a, I> Encode<I>
 where
     I: Iterator<Item = &'a [u8]>,
 {
-    pub fn new(iter: I) -> Encode<I> {
+    pub fn with_default_opts(iter: I) -> Encode<I> {
+        Encode::with_opts(iter, EncodeOpts::default())
+    }
+
+    pub fn with_opts(iter: I, opts: EncodeOpts) -> Encode<I> {
         Encode {
             chunked: crate::chunked::encode(iter),
+            opts: opts,
         }
     }
 
     fn pull(&mut self) -> std::io::Result<Option<Vec<u8>>> {
-        // TODO: Customize compression.
-        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        let compression = self.opts.compression.0;
+        let part_size = self.opts.part_size;
+
+        let mut encoder = flate2::write::GzEncoder::new(vec!(), compression);
         crate::io::copy_until(&mut self.chunked, &mut encoder, |_, encoder| {
-            // TODO: Move the magic number to a constant.
-            encoder.get_ref().len() >= 1024
+            encoder.get_ref().len() as u64 >= part_size
         })?;
 
         let chunk = encoder.finish()?;
