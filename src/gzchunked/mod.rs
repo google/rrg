@@ -31,6 +31,7 @@ where
         let mut buf = [0; 1024];
         // TODO: Customize compression.
         let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        // TODO: Refactor this to some `copy_at_most` procedure.
         loop {
             let size = self.chunked.read(&mut buf[..])?;
             if size == 0 {
@@ -40,13 +41,13 @@ where
             encoder.write_all(&buf[..size])?;
             // TODO: Move the magic number to a constant.
             if encoder.get_ref().len() > 1024 {
-                return Ok(Some(encoder.finish()?));
+                break;
             }
         }
 
-        let leftover = encoder.finish()?;
-        if !leftover.is_empty() {
-            Ok(Some(leftover))
+        let chunk = encoder.finish()?;
+        if !chunk.is_empty() {
+            Ok(Some(chunk))
         } else {
             Ok(None)
         }
