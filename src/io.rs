@@ -20,9 +20,7 @@ const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 /// the difference that it can be given a condition when copying should stop.
 ///
 /// Note that the predicate is not checked after each copied byte. Therefore,
-/// there are not guarantees about when exactly and how often it will be called.
-/// In particular, the input stream can finish even before the predicate is
-/// called at all.
+/// there are no guarantees about when exactly and how often it will be called.
 ///
 /// # Errors
 ///
@@ -53,6 +51,10 @@ where
 {
     let mut buf = [0; DEFAULT_BUF_SIZE];
     loop {
+        if pred(reader, writer) {
+            break;
+        }
+
         use std::io::ErrorKind::*;
         let len = match reader.read(&mut buf[..]) {
             Ok(0) => break,
@@ -62,9 +64,6 @@ where
         };
 
         writer.write_all(&buf[..len])?;
-        if pred(reader, writer) {
-            break;
-        }
     }
 
     Ok(())
@@ -81,6 +80,15 @@ mod tests {
         let mut writer = vec!();
 
         assert!(copy_until(&mut reader, &mut writer, |_, _| false).is_ok());
+        assert_eq!(writer, b"");
+    }
+
+    #[test]
+    fn test_copy_until_begin() {
+        let mut reader: &[u8] = b"foobar";
+        let mut writer = vec!();
+
+        assert!(copy_until(&mut reader, &mut writer, |_, _| true).is_ok());
         assert_eq!(writer, b"");
     }
 
