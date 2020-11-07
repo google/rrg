@@ -5,6 +5,9 @@
 
 use std::io::{Read, Write, Result};
 
+// The same as in the Rust's standard library.
+const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+
 pub fn copy_until<R, W, P>(reader: &mut R, writer: &mut W, mut pred: P)
     -> Result<()>
 where
@@ -12,8 +15,7 @@ where
     W: Write,
     P: FnMut(&R, &W) -> bool,
 {
-    // TODO: Move the magic number to a constant.
-    let mut buf = [0; 1024];
+    let mut buf = [0; DEFAULT_BUF_SIZE];
     loop {
         use std::io::ErrorKind::*;
         let len = match reader.read(&mut buf[..]) {
