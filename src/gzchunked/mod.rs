@@ -11,6 +11,59 @@ mod write;
 pub use write::{Encoder, Compression};
 pub use read::{Decoder};
 
+pub struct Encode<I> {
+    chunked: crate::chunked::Encode<I>,
+}
+
+impl<'a, I> Encode<I>
+where
+    I: Iterator<Item = &'a [u8]>,
+{
+    pub fn new(iter: I) -> Encode<I> {
+        Encode {
+            chunked: crate::chunked::encode(iter),
+        }
+    }
+
+    fn pull(&mut self) -> std::io::Result<Option<Vec<u8>>> {
+        use std::io::{Read as _, Write as _};
+        // TODO: Move the magic number to a constant.
+        let mut buf = [0; 1024];
+        // TODO: Customize compression.
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        loop {
+            let size = self.chunked.read(&mut buf[..])?;
+            if size == 0 {
+                break;
+            }
+
+            encoder.write_all(&buf[..size])?;
+            // TODO: Move the magic number to a constant.
+            if encoder.get_ref().len() > 1024 {
+                return Ok(Some(encoder.finish()?));
+            }
+        }
+
+        let leftover = encoder.finish()?;
+        if !leftover.is_empty() {
+            Ok(Some(leftover))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl<'a, I> Iterator for Encode<I>
+where
+    I: Iterator<Item = &'a [u8]>,
+{
+    type Item = std::io::Result<Vec<u8>>;
+
+    fn next(&mut self) -> Option<std::io::Result<Vec<u8>>> {
+        self.pull().transpose()
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
