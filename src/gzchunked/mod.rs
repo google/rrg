@@ -34,10 +34,10 @@ where
         })?;
 
         let chunk = encoder.finish()?;
-        if !chunk.is_empty() {
-            Ok(Some(chunk))
-        } else {
+        if chunk.is_empty() {
             Ok(None)
+        } else {
+            Ok(Some(chunk))
         }
     }
 }
