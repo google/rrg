@@ -59,7 +59,7 @@ mod tests {
 
     #[test]
     fn test_copy_until_specific_size() {
-        const limit: usize = 4 * 1024 * 1024;
+        let limit = 4 * 1024 * 1024;
 
         // An infinite stream of zeros (see explanation below).
         struct Null;
