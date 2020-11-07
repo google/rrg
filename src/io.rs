@@ -3,11 +3,47 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+//! Extensions to the standard I/O utilities.
+//!
+//! This module essentially provides useful, RRG-specific utilities that are not
+//! available in `std::io`, mostly operating on the standard `Read` and `Write`
+//! traits.
+
 use std::io::{Read, Write, Result};
 
 // The same as in the Rust's standard library.
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
+/// Copies contents of one buffer into the other until a condition is met.
+///
+/// This function should behave similarly to the standard `std::io::copy` with
+/// the difference that it can be given a condition when copying should stop.
+///
+/// Note that the predicate is not checked after each copied byte. Therefore,
+/// there are not guarantees about when exactly and how often it will be called.
+/// In particular, the input stream can finish even before the predicate is
+/// called at all.
+///
+/// # Errors
+///
+/// The errors is reported immediately if there is an error when reading from
+/// the input or writing to the output.
+///
+/// Like `std::io::copy`, this function will retry instances of `Interrupted`
+/// errors.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::fs::File;
+///
+/// let mut rand = File::open("/dev/random").unwrap();
+/// let mut buf = vec!();
+///
+/// rrg::io::copy_until(&mut rand, &mut buf, |_, writer| writer.len() >= 1024);
+///
+/// println!("random bytes: {:?}", buf);
+/// ```
 pub fn copy_until<R, W, P>(reader: &mut R, writer: &mut W, mut pred: P)
     -> Result<()>
 where
