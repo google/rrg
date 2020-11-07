@@ -34,4 +34,60 @@ where
     Ok(())
 }
 
-// TODO: Write tests.
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_copy_until_with_empty_buffer() {
+        let mut reader: &[u8] = b"";
+        let mut writer = vec!();
+
+        assert!(copy_until(&mut reader, &mut writer, |_, _| false).is_ok());
+        assert_eq!(writer, b"");
+    }
+
+    #[test]
+    fn test_copy_until_end() {
+        let mut reader: &[u8] = b"foobar";
+        let mut writer = vec!();
+
+        assert!(copy_until(&mut reader, &mut writer, |_, _| false).is_ok());
+        assert_eq!(writer, b"foobar");
+    }
+
+    #[test]
+    fn test_copy_until_specific_size() {
+        const limit: usize = 4 * 1024 * 1024;
+
+        // An infinite stream of zeros (see explanation below).
+        struct Null;
+
+        impl std::io::Read for Null {
+
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                // TODO: Rewriter with `slice::fill` once it stabilizes.
+                for item in buf.iter_mut() {
+                    *item = 0;
+                }
+
+                Ok(buf.len() as usize)
+            }
+        }
+
+        let mut reader = Null;
+        let mut writer = vec!();
+
+        // This should verify that copying eventually stops after the condition
+        // is met since the reader is inifite.
+        assert! {
+            copy_until(&mut reader, &mut writer, |_, writer| {
+                writer.len() > limit
+            }).is_ok()
+        }
+
+        assert!(writer.iter().all(|item| *item == 0));
+        assert!(writer.len() > limit);
+    }
+}
