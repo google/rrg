@@ -26,24 +26,12 @@ where
     }
 
     fn pull(&mut self) -> std::io::Result<Option<Vec<u8>>> {
-        use std::io::{Read as _, Write as _};
-        // TODO: Move the magic number to a constant.
-        let mut buf = [0; 1024];
         // TODO: Customize compression.
         let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-        // TODO: Refactor this to some `copy_at_most` procedure.
-        loop {
-            let size = self.chunked.read(&mut buf[..])?;
-            if size == 0 {
-                break;
-            }
-
-            encoder.write_all(&buf[..size])?;
+        crate::io::copy_until(&mut self.chunked, &mut encoder, |_, encoder| {
             // TODO: Move the magic number to a constant.
-            if encoder.get_ref().len() > 1024 {
-                break;
-            }
-        }
+            encoder.get_ref().len() >= 1024
+        })?;
 
         let chunk = encoder.finish()?;
         if !chunk.is_empty() {
