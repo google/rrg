@@ -105,22 +105,7 @@ mod tests {
     fn test_copy_until_specific_size() {
         let limit = 4 * 1024 * 1024;
 
-        // An infinite stream of zeros (see explanation below).
-        struct Null;
-
-        impl std::io::Read for Null {
-
-            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-                // TODO: Rewriter with `slice::fill` once it stabilizes.
-                for item in buf.iter_mut() {
-                    *item = 0;
-                }
-
-                Ok(buf.len() as usize)
-            }
-        }
-
-        let mut reader = Null;
+        let mut reader = std::io::repeat(0);
         let mut writer = vec!();
 
         // This should verify that copying eventually stops after the condition
