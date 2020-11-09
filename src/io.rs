@@ -105,7 +105,7 @@ mod tests {
     fn test_copy_until_specific_size() {
         let limit = 4 * 1024 * 1024;
 
-        let mut reader = std::io::repeat(0);
+        let mut reader = std::io::repeat(0x42);
         let mut writer = vec!();
 
         // This should verify that copying eventually stops after the condition
@@ -116,7 +116,7 @@ mod tests {
             }).is_ok()
         }
 
-        assert!(writer.iter().all(|item| *item == 0));
+        assert!(writer.iter().all(|item| *item == 0x42));
         assert!(writer.len() > limit);
     }
 }
