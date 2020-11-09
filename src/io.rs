@@ -109,12 +109,12 @@ mod tests {
         let mut writer = vec!();
 
         // This should verify that copying eventually stops after the condition
-        // is met since the reader is inifite.
+        // is met since the reader is infinite.
         assert! {
             copy_until(&mut reader, &mut writer, |_, writer| {
                 writer.len() > limit
             }).is_ok()
-        }
+        };
 
         assert!(writer.iter().all(|item| *item == 0x42));
         assert!(writer.len() > limit);
