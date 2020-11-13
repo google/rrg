@@ -69,16 +69,17 @@ where
     Ok(())
 }
 
-struct IterReader<'a, I> {
+struct IterReader<I, R> {
     iter: I,
-    curr: Option<&'a [u8]>,
+    curr: Option<R>,
 }
 
-impl<'a, I> IterReader<'a, I>
+impl<I, R> IterReader<I, R>
 where
-    I: Iterator<Item=&'a [u8]>,
+    I: Iterator<Item=R>,
+    R: Read,
 {
-    pub fn new(iter: I) -> IterReader<'a, I> {
+    pub fn new(iter: I) -> IterReader<I, R> {
         IterReader {
             iter: iter,
             curr: None,
@@ -86,9 +87,10 @@ where
     }
 }
 
-impl<'a, I> Read for IterReader<'a, I>
+impl<I, R> Read for IterReader<I, R>
 where
-    I: Iterator<Item=&'a [u8]>,
+    I: Iterator<Item=R>,
+    R: Read,
 {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         loop {
@@ -168,7 +170,7 @@ mod tests {
 
     #[test]
     fn test_iter_reader_with_empty_iter() {
-        let mut reader = IterReader::new(std::iter::empty());
+        let mut reader = IterReader::new(std::iter::empty::<&[u8]>());
         let mut buf = vec!();
         reader.read_to_end(&mut buf).unwrap();
 
