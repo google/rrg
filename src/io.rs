@@ -69,6 +69,52 @@ where
     Ok(())
 }
 
+struct IterReader<'a, I> {
+    iter: I,
+    curr: Option<&'a [u8]>,
+}
+
+impl<'a, I> IterReader<'a, I>
+where
+    I: Iterator<Item=&'a [u8]>,
+{
+    pub fn new(iter: I) -> IterReader<'a, I> {
+        IterReader {
+            iter: iter,
+            curr: None,
+        }
+    }
+}
+
+impl<'a, I> Read for IterReader<'a, I>
+where
+    I: Iterator<Item=&'a [u8]>,
+{
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        loop {
+            if self.curr.is_none() {
+                self.curr = self.iter.next();
+            }
+
+            // If after executing the previous line there is still no current
+            // buffer to read from, it means the underlying iterator is finished
+            // and there is no more data.
+            let curr = match self.curr {
+                Some(ref mut buf) => buf,
+                None => return Ok(0),
+            };
+
+            // If we read 0 bytes from the current buffer, it means it is empty
+            // now. By setting it to `None`, we will try to pull a new one in
+            // the next iteration.
+            match curr.read(buf)? {
+                0 => self.curr = None,
+                len => return Ok(len),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
