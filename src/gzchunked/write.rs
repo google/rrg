@@ -11,6 +11,7 @@ use byteorder::{BigEndian, WriteBytesExt as _};
 const BLOCK_SIZE: usize = 10 << 20;
 
 /// A wrapper type for gzip compression level.
+#[derive(Clone, Copy, Debug)]
 pub struct Compression(flate2::Compression);
 
 /// A type for defining gzip compression level for gzchunked.
@@ -87,6 +88,7 @@ where
     Encode::with_opts(iter, opts)
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct EncodeOpts {
     pub compression: Compression,
     pub part_size: u64,
