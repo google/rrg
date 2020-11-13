@@ -44,6 +44,23 @@ impl Decoder {
     }
 }
 
+/// Decodes an iterator of binary blobs in the gzchunked format.
+///
+/// This is a streaming decoder that performs the decoding in a lazy way and can
+/// be used to effectively process megabytes of data.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::fs::File;
+///
+/// let paths = ["foo.gzc.1", "foo.gzc.2", "foo.gzc.3"];
+/// let files = paths.iter().map(|path| File::open(path).unwrap());
+///
+/// for (idx, entry) in rrg::gzchunked::decode(files).enumerate() {
+///     println!("item #{}: {:?}", idx, entry);
+/// }
+/// ```
 pub fn decode<I, R>(iter: I) -> impl Iterator<Item=std::io::Result<Vec<u8>>>
 where
     I: Iterator<Item=R>,
