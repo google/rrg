@@ -73,6 +73,20 @@ impl Encoder {
     }
 }
 
+pub fn encode<'a, I>(iter: I) -> Encode<I>
+where
+    I: Iterator<Item=&'a [u8]>,
+{
+    encode_with_opts(iter, EncodeOpts::default())
+}
+
+pub fn encode_with_opts<'a, I>(iter: I, opts: EncodeOpts) -> Encode<I>
+where
+    I: Iterator<Item=&'a [u8]>,
+{
+    Encode::with_opts(iter, opts)
+}
+
 pub struct EncodeOpts {
     pub compression: Compression,
     pub part_size: u64,
@@ -97,11 +111,7 @@ impl<'a, I> Encode<I>
 where
     I: Iterator<Item = &'a [u8]>,
 {
-    pub fn with_default_opts(iter: I) -> Encode<I> {
-        Encode::with_opts(iter, EncodeOpts::default())
-    }
-
-    pub fn with_opts(iter: I, opts: EncodeOpts) -> Encode<I> {
+    fn with_opts(iter: I, opts: EncodeOpts) -> Encode<I> {
         Encode {
             chunked: crate::chunked::encode(iter),
             opts: opts,
