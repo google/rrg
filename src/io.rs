@@ -19,6 +19,9 @@ const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 /// This function should behave similarly to the standard `std::io::copy` with
 /// the difference that it can be given a condition when copying should stop.
 ///
+/// On success, the total number of bytes copied from `reader` to `writer` is
+/// returned.
+///
 /// Note that the predicate is not checked after each copied byte. Therefore,
 /// there are no guarantees about when exactly and how often it will be called.
 ///
@@ -43,13 +46,15 @@ const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 /// println!("random bytes: {:?}", buf);
 /// ```
 pub fn copy_until<R, W, P>(reader: &mut R, writer: &mut W, mut pred: P)
-    -> Result<()>
+    -> Result<u64>
 where
     R: Read,
     W: Write,
     P: FnMut(&R, &W) -> bool,
 {
     let mut buf = [0; DEFAULT_BUF_SIZE];
+    let mut written = 0;
+
     loop {
         if pred(reader, writer) {
             break;
@@ -64,9 +69,10 @@ where
         };
 
         writer.write_all(&buf[..len])?;
+        written += len as u64;
     }
 
-    Ok(())
+    Ok(written)
 }
 
 /// An reader implementation for a stream of readers.
@@ -149,7 +155,8 @@ mod tests {
         let mut reader: &[u8] = b"";
         let mut writer = vec!();
 
-        assert!(copy_until(&mut reader, &mut writer, |_, _| false).is_ok());
+        let result = copy_until(&mut reader, &mut writer, |_, _| false);
+        assert_eq!(result.unwrap(), 0);
         assert_eq!(writer, b"");
     }
 
@@ -158,7 +165,8 @@ mod tests {
         let mut reader: &[u8] = b"foobar";
         let mut writer = vec!();
 
-        assert!(copy_until(&mut reader, &mut writer, |_, _| true).is_ok());
+        let result = copy_until(&mut reader, &mut writer, |_, _| true);
+        assert_eq!(result.unwrap(), 0);
         assert_eq!(writer, b"");
     }
 
@@ -167,7 +175,8 @@ mod tests {
         let mut reader: &[u8] = b"foobar";
         let mut writer = vec!();
 
-        assert!(copy_until(&mut reader, &mut writer, |_, _| false).is_ok());
+        let result = copy_until(&mut reader, &mut writer, |_, _| false);
+        assert_eq!(result.unwrap(), 6);
         assert_eq!(writer, b"foobar");
     }
 
