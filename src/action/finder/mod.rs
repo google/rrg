@@ -5,4 +5,5 @@
 
 //! Handler for `client side file finder` action.
 
-mod request;
+pub mod request;
+pub mod glob;
