@@ -69,8 +69,29 @@ where
     Ok(())
 }
 
-struct IterReader<I, R> {
+/// An reader implementation for a stream of readers.
+///
+/// It turns a stream of `Read` instances into one `Read` instance where bytes
+/// are pulled sequentially from underlying readers. Once the first reader ends,
+/// the next one starts to be read and so on.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Read as _;
+///
+/// let items: Vec<&[u8]> = vec!(b"foo", b"bar", b"baz");
+/// let mut reader = rrg::io::IterReader::new(items.into_iter());
+///
+/// let mut buf = vec!();
+/// reader.read_to_end(&mut buf).unwrap();
+///
+/// assert_eq!(buf, b"foobarbaz");
+/// ```
+pub struct IterReader<I, R> {
+    /// Underlying iterator with pending readers.
     iter: I,
+    /// Currently active reader.
     curr: Option<R>,
 }
 
@@ -79,6 +100,7 @@ where
     I: Iterator<Item=R>,
     R: Read,
 {
+    /// Constructs a new iterator reader.
     pub fn new(iter: I) -> IterReader<I, R> {
         IterReader {
             iter: iter,
