@@ -11,6 +11,9 @@ mod write;
 pub use write::{Encoder, Compression};
 pub use read::{Decoder};
 
+pub use write::{encode, Encode, EncodeOpts};
+pub use read::{decode};
+
 #[cfg(test)]
 mod tests {
 
