@@ -5,6 +5,7 @@
 
 pub mod action;
 pub mod fs;
+pub mod io;
 pub mod message;
 pub mod metadata;
 pub mod opts;
