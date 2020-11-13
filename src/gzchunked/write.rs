@@ -174,7 +174,7 @@ where
     }
 
     /// Obtains the next part of the output file (if available).
-    fn pull(&mut self) -> std::io::Result<Option<Vec<u8>>> {
+    fn next_part(&mut self) -> std::io::Result<Option<Vec<u8>>> {
         use crate::io::copy_until;
 
         let compression = self.opts.compression.0;
@@ -200,6 +200,6 @@ where
     type Item = std::io::Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<std::io::Result<Vec<u8>>> {
-        self.pull().transpose()
+        self.next_part().transpose()
     }
 }
