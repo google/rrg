@@ -121,19 +121,20 @@ where
     }
 
     fn pull(&mut self) -> std::io::Result<Option<Vec<u8>>> {
+        use crate::io::copy_until;
+
         let compression = self.opts.compression.0;
         let part_size = self.opts.part_size;
 
         let mut encoder = flate2::write::GzEncoder::new(vec!(), compression);
-        crate::io::copy_until(&mut self.chunked, &mut encoder, |_, encoder| {
+        let len = copy_until(&mut self.chunked, &mut encoder, |_, encoder| {
             encoder.get_ref().len() as u64 >= part_size
         })?;
 
-        let chunk = encoder.finish()?;
-        if chunk.is_empty() {
+        if len == 0 {
             Ok(None)
         } else {
-            Ok(Some(chunk))
+            Ok(Some(encoder.finish()?))
         }
     }
 }
