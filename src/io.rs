@@ -165,4 +165,46 @@ mod tests {
         assert!(writer.iter().all(|item| *item == 0x42));
         assert!(writer.len() > limit);
     }
+
+    #[test]
+    fn test_iter_reader_with_empty_iter() {
+        let mut reader = IterReader::new(std::iter::empty());
+        let mut buf = vec!();
+        reader.read_to_end(&mut buf).unwrap();
+
+        assert_eq!(buf, b"");
+    }
+
+    #[test]
+    fn test_iter_reader_with_empty_iter_items() {
+        let items: Vec<&[u8]> = vec!(b"", b"", b"");
+
+        let mut reader = IterReader::new(items.into_iter());
+        let mut buf = vec!();
+        reader.read_to_end(&mut buf).unwrap();
+
+        assert_eq!(buf, b"");
+    }
+
+    #[test]
+    fn test_iter_reader_with_single_iter_item() {
+        let items: Vec<&[u8]> = vec!(b"foo");
+
+        let mut reader = IterReader::new(items.into_iter());
+        let mut buf = vec!();
+        reader.read_to_end(&mut buf).unwrap();
+
+        assert_eq!(buf, b"foo");
+    }
+
+    #[test]
+    fn test_iter_reader_with_multiple_iter_items() {
+        let items: Vec<&[u8]> = vec!(b"foo", b"bar", b"baz");
+
+        let mut reader = IterReader::new(items.into_iter());
+        let mut buf = vec!();
+        reader.read_to_end(&mut buf).unwrap();
+
+        assert_eq!(buf, b"foobarbaz");
+    }
 }
