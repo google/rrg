@@ -20,6 +20,14 @@ impl Compression {
     pub fn new(level: u32) -> Compression {
         Compression(flate2::Compression::new(level))
     }
+
+    pub fn none() -> Compression {
+        Compression(flate2::Compression::none())
+    }
+
+    pub fn best() -> Compression {
+        Compression(flate2::Compression::best())
+    }
 }
 
 impl Default for Compression {
