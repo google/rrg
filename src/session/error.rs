@@ -2,7 +2,8 @@
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use regex::Error as RegexError;
 
 /// An error type for failures that can occur during a session.
 #[derive(Debug)]
@@ -176,6 +177,90 @@ impl std::error::Error for MissingFieldError {
 impl From<MissingFieldError> for ParseError {
 
     fn from(error: MissingFieldError) -> ParseError {
+        ParseError::malformed(error)
+    }
+}
+
+/// An error type for situations where a given proto value is not supported.
+#[derive(Debug)]
+pub struct UnsupportedValueError<T> {
+    /// A name of the field the value belongs to.
+    pub name: &'static str,
+    /// A value that is not supported.
+    pub value: T,
+}
+
+impl<T: Debug> Display for UnsupportedValueError<T> {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "unsupported value for '{}': {:?}", self.name, self.value)
+    }
+}
+
+impl<T: Debug> std::error::Error for UnsupportedValueError<T> {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+/// An error type for situations where time micros cannot be converted
+/// to `std::time::SystemTime`.
+#[derive(Debug)]
+pub struct TimeMicrosConversionError {
+    /// Time micros value causing the conversion error.
+    pub micros: u64,
+}
+
+impl Display for TimeMicrosConversionError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "cannot convert micros to std::time::SystemTime: {}", self.micros)
+    }
+}
+
+impl std::error::Error for TimeMicrosConversionError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl From<TimeMicrosConversionError> for ParseError {
+
+    fn from(error: TimeMicrosConversionError) -> ParseError {
+        ParseError::malformed(error)
+    }
+}
+
+#[derive(Debug)]
+pub struct RegexParseError {
+    /// Raw data of the string which could not be converted to Regex.
+    pub raw_data: Vec<u8>,
+    /// Error message caught during the conversion.
+    pub error: RegexError,
+}
+
+impl Display for RegexParseError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "Regex parse error happened on parsing '{:?}'. \
+                     Regex error: '{}'",
+               self.raw_data,
+               self.error.to_string())
+    }
+}
+
+impl std::error::Error for RegexParseError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl From<RegexParseError> for ParseError {
+
+    fn from(error: RegexParseError) -> ParseError {
         ParseError::malformed(error)
     }
 }

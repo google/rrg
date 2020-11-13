@@ -72,9 +72,9 @@ impl Verbosity {
 
 impl std::str::FromStr for Verbosity {
 
-    type Err = String; // TODO.
+    type Err = ParseVerbosityError;
 
-    fn from_str(string: &str) -> std::result::Result<Verbosity, String> {
+    fn from_str(string: &str) -> std::result::Result<Verbosity, ParseVerbosityError> {
         use log::LevelFilter::*;
 
         let level = match string {
@@ -84,7 +84,7 @@ impl std::str::FromStr for Verbosity {
             "info" => Info,
             "debug" => Debug,
             "trace" => Trace,
-            _ => return Err(format!("invalid verbosity choice '{}'", string)),
+            _ => return Err(ParseVerbosityError::new(string)),
         };
 
         Ok(Verbosity {
@@ -93,9 +93,6 @@ impl std::str::FromStr for Verbosity {
     }
 }
 
-// TODO: This should just be a wrapper around `simplelog::TerminalMode`, but
-// it does not implement standard traits. So, for now, we just re-implement it
-// like that.
 /// A type listing different options for logging to standard streams.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Stream {
@@ -112,20 +109,80 @@ impl Stream {
 
 impl std::str::FromStr for Stream {
 
-    type Err = String; // TODO.
+    type Err = ParseStreamError;
 
-    fn from_str(string: &str) -> std::result::Result<Stream, String> {
+    fn from_str(string: &str) -> std::result::Result<Stream, ParseStreamError> {
         use simplelog::TerminalMode::*;
 
         let mode = match string {
             "stdout" => Stdout,
             "stderr" => Stderr,
             "mixed" => Mixed,
-            _ => return Err(format!("invalid stream choice '{}'", string)),
+            _ => return Err(ParseStreamError::new(string)),
         };
 
         Ok(Stream {
             mode: mode,
         })
+    }
+}
+
+/// An error type for failures related to parsing of verbosity levels.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParseVerbosityError {
+    string: String,
+}
+
+impl ParseVerbosityError {
+
+    /// Constructs a new error indicating failure of parsing given string.
+    fn new<S: Into<String>>(string: S) -> ParseVerbosityError {
+        ParseVerbosityError {
+            string: string.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for ParseVerbosityError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "invalid verbosity level: '{}'", self.string)
+    }
+}
+
+impl std::error::Error for ParseVerbosityError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+/// An error type for failures related to parsing names of standard streams.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParseStreamError {
+    string: String,
+}
+
+impl ParseStreamError {
+
+    /// Constructs a new error indicating failure of parsing given string.
+    fn new<S: Into<String>>(string: S) -> ParseStreamError {
+        ParseStreamError {
+            string: string.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for ParseStreamError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "invalid stream name: '{}'", self.string)
+    }
+}
+
+impl std::error::Error for ParseStreamError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
     }
 }

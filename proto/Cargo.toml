@@ -5,8 +5,10 @@ authors = ["Łukasz Hanuszczak <hanuszczak@google.com>"]
 edition = "2018"
 
 [dependencies]
+log = { version = "0.4.8" }
 prost = { version = "0.6.1" }
 prost-types = { version = "0.6.1" }
+rrg-macro = { path = "../macro/" }
 
 [build-dependencies]
 prost-build = { version = "0.6.1" }

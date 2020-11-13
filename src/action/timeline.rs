@@ -15,7 +15,7 @@ use cfg_if::cfg_if;
 use sha2::{Digest, Sha256};
 use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
 
-use crate::gzchunked::{GzChunkedEncoder, GzChunkedCompression};
+use crate::gzchunked;
 use crate::session::{self, Session, Error, ParseError, MissingFieldError};
 
 /// A request type for the timeline action.
@@ -42,7 +42,7 @@ struct ChunkResponse {
 struct RecurseState {
     device: u64,
     ids: Vec<ChunkDigest>,
-    encoder: GzChunkedEncoder,
+    encoder: gzchunked::Encoder,
 }
 
 /// Retrieves device ID from metadata.
@@ -115,15 +115,17 @@ fn entry_from_metadata(metadata: &Metadata, path: &Path) -> std::io::Result<Time
             use std::os::unix::fs::MetadataExt;
             Ok(TimelineEntry {
                 path: Some(bytes_from_os_str(path.as_os_str())?),
-                mode: Some(metadata.mode()),
+                mode: Some(i64::from(metadata.mode())),
                 size: Some(metadata.size()),
-                dev: Some(metadata.dev()),
+                dev: Some(metadata.dev() as i64),
                 ino: Some(metadata.ino()),
                 uid: Some(metadata.uid() as i64),
                 gid: Some(metadata.gid() as i64),
-                atime_ns: Some(metadata.atime_nsec() as u64),
-                ctime_ns: Some(metadata.ctime_nsec() as u64),
-                mtime_ns: Some(metadata.mtime_nsec() as u64),
+                atime_ns: Some(metadata.atime_nsec() as i64),
+                ctime_ns: Some(metadata.ctime_nsec() as i64),
+                mtime_ns: Some(metadata.mtime_nsec() as i64),
+                btime_ns: None,
+                attributes: None,
             })
         } else if #[cfg(target_family = "windows")] {
             use std::os::windows::fs::MetadataExt;
@@ -135,9 +137,11 @@ fn entry_from_metadata(metadata: &Metadata, path: &Path) -> std::io::Result<Time
                 ino: None,
                 uid: None,
                 gid: None,
-                atime_ns: Some(metadata.last_access_time()),
-                ctime_ns: Some(metadata.creation_time()),
-                mtime_ns: Some(metadata.last_write_time()),
+                atime_ns: Some(metadata.last_access_time() as i64),
+                ctime_ns: Some(metadata.creation_time() as i64),
+                mtime_ns: Some(metadata.last_write_time() as i64),
+                btime_ns: None,
+                attributes: None,
             })
         } else {
             compile_error!("unsupported OS family");
@@ -151,7 +155,7 @@ impl RecurseState {
         RecurseState {
             device,
             ids: Vec::new(),
-            encoder: GzChunkedEncoder::new(GzChunkedCompression::default()),
+            encoder: gzchunked::Encoder::new(gzchunked::Compression::default()),
         }
     }
 
@@ -286,7 +290,6 @@ mod tests {
     use super::*;
     use std::fs::{hard_link, create_dir, write};
     use tempfile::tempdir;
-    use crate::gzchunked::GzChunkedDecoder;
 
     fn entries_from_session_response(session: &session::test::Fake) -> Vec<TimelineEntry> {
         assert_eq!(session.reply_count(), 1);
@@ -297,7 +300,7 @@ mod tests {
         assert_eq!(block_count, expected_ids.len());
         expected_ids.sort_by(|a, b| a.0.cmp(&b.0));
 
-        let mut decoder = GzChunkedDecoder::new();
+        let mut decoder = gzchunked::Decoder::new();
         for block_number in 0..block_count {
             let block = session.response::<ChunkResponse>(session::Sink::TRANSFER_STORE, block_number);
             let response_digest = ChunkDigest(Sha256::digest(&block.data).into());
