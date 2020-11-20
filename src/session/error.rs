@@ -181,39 +181,6 @@ impl From<MissingFieldError> for ParseError {
     }
 }
 
-/// An error type for situations where proto enum has a value for which
-/// the definition is not known.
-#[derive(Debug)]
-pub struct UnknownEnumValueError {
-    /// A name of the enum field having unknown enum value.
-    pub name: &'static str,
-
-    /// An enum value, which definition is not known.
-    pub value: i32,
-}
-
-impl Display for UnknownEnumValueError {
-
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "protobuf enum '{}' has unrecognised value: '{}'",
-               self.name, self.value)
-    }
-}
-
-impl std::error::Error for UnknownEnumValueError {
-
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
-impl From<UnknownEnumValueError> for ParseError {
-
-    fn from(error: UnknownEnumValueError) -> ParseError {
-        ParseError::malformed(error)
-    }
-}
-
 /// An error type for situations where a given proto value is not supported.
 #[derive(Debug)]
 pub struct UnsupportedValueError<T> {
@@ -294,6 +261,39 @@ impl std::error::Error for RegexParseError {
 impl From<RegexParseError> for ParseError {
 
     fn from(error: RegexParseError) -> ParseError {
+        ParseError::malformed(error)
+    }
+}
+
+/// An error type for situations where proto enum has a value for which
+/// the definition is not known.
+#[derive(Debug)]
+pub struct UnknownEnumValueError {
+    /// A name of the enum field having unknown enum value.
+    pub name: &'static str,
+
+    /// An enum value, which definition is not known.
+    pub value: i32,
+}
+
+impl Display for UnknownEnumValueError {
+
+    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+        write!(fmt, "protobuf enum '{}' has unrecognised value: '{}'",
+               self.name, self.value)
+    }
+}
+
+impl std::error::Error for UnknownEnumValueError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl From<UnknownEnumValueError> for ParseError {
+
+    fn from(error: UnknownEnumValueError) -> ParseError {
         ParseError::malformed(error)
     }
 }
