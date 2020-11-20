@@ -4,7 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 use std::collections::VecDeque;
-use std::io::Read as _;
+use std::io::Read;
 
 use byteorder::{BigEndian, ReadBytesExt as _};
 
@@ -42,4 +42,30 @@ impl Decoder {
     pub fn try_next_data(&mut self) -> Option<Vec<u8>> {
         self.queue.pop_front()
     }
+}
+
+/// Decodes an iterator of binary blobs in the gzchunked format.
+///
+/// This is a streaming decoder that performs the decoding in a lazy way and can
+/// be used to effectively process megabytes of data.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::fs::File;
+///
+/// let paths = ["foo.gzc.1", "foo.gzc.2", "foo.gzc.3"];
+/// let files = paths.iter().map(|path| File::open(path).unwrap());
+///
+/// for (idx, entry) in rrg::gzchunked::decode(files).enumerate() {
+///     println!("item #{}: {:?}", idx, entry);
+/// }
+/// ```
+pub fn decode<I, R>(iter: I) -> impl Iterator<Item=std::io::Result<Vec<u8>>>
+where
+    I: Iterator<Item=R>,
+    R: std::io::Read,
+{
+    let parts = iter.map(flate2::read::GzDecoder::new);
+    crate::chunked::decode(crate::io::IterReader::new(parts))
 }

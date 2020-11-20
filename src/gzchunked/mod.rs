@@ -11,6 +11,9 @@ mod write;
 pub use write::{Encoder, Compression};
 pub use read::{Decoder};
 
+pub use write::{encode, encode_with_opts, Encode, EncodeOpts};
+pub use read::{decode};
+
 #[cfg(test)]
 mod tests {
 
@@ -138,5 +141,124 @@ mod tests {
     #[should_panic]
     fn test_huge_compression() {
         Encoder::new(Compression::new(100500));
+    }
+
+    #[test]
+    fn test_encode_with_empty_iter() {
+        let mut iter = encode(std::iter::empty()).map(Result::unwrap);
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_decode_with_empty_iter() {
+        let mut iter = decode(std::iter::empty::<&[u8]>()).map(Result::unwrap);
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_encode_and_decode_with_single_item_iter() {
+        let chunks = encode(std::iter::once(&b"foo"[..]))
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+            .map(Result::unwrap);
+
+        assert_eq!(iter.next(), Some(b"foo".to_vec()));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_encode_and_decode_with_multiple_items_iter() {
+        let data: Vec<&[u8]> = vec!(b"foo", b"bar", b"baz");
+
+        let chunks = encode(data.into_iter())
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+            .map(Result::unwrap);
+
+        assert_eq!(iter.next(), Some(b"foo".to_vec()));
+        assert_eq!(iter.next(), Some(b"bar".to_vec()));
+        assert_eq!(iter.next(), Some(b"baz".to_vec()));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_encode_and_decode_with_empty_items_iter() {
+        let data: Vec<&[u8]> = vec!(b"", b"", b"");
+
+        let chunks = encode(data.into_iter())
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+            .map(Result::unwrap);
+
+        assert_eq!(iter.next(), Some(b"".to_vec()));
+        assert_eq!(iter.next(), Some(b"".to_vec()));
+        assert_eq!(iter.next(), Some(b"".to_vec()));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_encode_and_decode_with_many_items_iter() {
+        let sample = rand::random::<[u8; 32]>();
+        let items = std::iter::repeat(&sample[..]).take(32 * 1024);
+
+        let opts = EncodeOpts {
+            compression: Compression::default(),
+            part_size: 4 * 1024,
+        };
+
+        let chunks = encode_with_opts(items, opts)
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+            .map(Result::unwrap);
+
+        assert!(iter.all(|item| item == sample));
+    }
+
+    #[test]
+    fn test_encode_and_decode_with_no_compression() {
+        let sample = rand::random::<[u8; 32]>();
+        let items = std::iter::repeat(&sample[..]).take(32 * 1024);
+
+        let opts = EncodeOpts {
+            compression: Compression::none(),
+            part_size: 4 * 1024,
+        };
+
+        let chunks = encode_with_opts(items, opts)
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+            .map(Result::unwrap);
+
+        assert!(iter.all(|item| item == sample));
+    }
+
+    #[test]
+    fn test_encode_and_decode_with_best_compression() {
+        let sample = rand::random::<[u8; 32]>();
+        let items = std::iter::repeat(&sample[..]).take(32 * 1024);
+
+        let opts = EncodeOpts {
+            compression: Compression::best(),
+            part_size: 4 * 1024,
+        };
+
+        let chunks = encode_with_opts(items, opts)
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+            .map(Result::unwrap);
+
+        assert!(iter.all(|item| item == sample));
     }
 }
