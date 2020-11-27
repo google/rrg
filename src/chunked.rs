@@ -30,9 +30,13 @@ use byteorder::BigEndian;
 /// ```no_run
 /// use std::fs::File;
 ///
-/// let data = [b"foo", b"bar", b"baz"];
+/// let data = vec! {
+///     String::from("foo"),
+///     String::from("bar"),
+///     String::from("baz")
+/// };
 ///
-/// let mut stream = rrg::chunked::encode(data.iter().map(|blob| &blob[..]));
+/// let mut stream = rrg::chunked::encode(data.into_iter());
 /// let mut file = File::create("output.chunked").unwrap();
 /// std::io::copy(&mut stream, &mut file).unwrap();
 /// ```
@@ -61,8 +65,9 @@ where
 /// use std::fs::File;
 ///
 /// let file = File::open("input.chunked").unwrap();
-/// for (idx, blob) in rrg::chunked::decode(file).enumerate() {
-///     println!("blob #{}: {:?}", idx, blob.unwrap());
+/// for (idx, msg) in rrg::chunked::decode(file).enumerate() {
+///     let msg: String = msg.unwrap();
+///     println!("message #{}: {:?}", idx, msg);
 /// }
 /// ```
 pub fn decode<R, M>(buf: R) -> Decode<R, M>

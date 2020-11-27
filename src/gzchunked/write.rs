@@ -99,7 +99,11 @@ impl Encoder {
 /// use std::fs::File;
 /// use std::io::Write as _;
 ///
-/// let items: Vec<&[u8]> = vec!(b"foo", b"bar", b"baz");
+/// let items = vec! {
+///     String::from("foo"),
+///     String::from("bar"),
+///     String::from("baz"),
+/// };
 ///
 /// let chunks = rrg::gzchunked::encode(items.into_iter());
 /// for (idx, chunk) in chunks.enumerate() {
