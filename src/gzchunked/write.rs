@@ -82,7 +82,7 @@ impl Encoder {
     }
 }
 
-/// Encodes the given iterator over binary entries into the gzchunked format.
+/// Encodes the given iterator over protobuf messages into the gzchunked format.
 ///
 /// This is a streaming encoder that lazily encodes the data and can be used to
 /// effectively process megabytes of data. The function returns an iterator that
@@ -99,7 +99,11 @@ impl Encoder {
 /// use std::fs::File;
 /// use std::io::Write as _;
 ///
-/// let items: Vec<&[u8]> = vec!(b"foo", b"bar", b"baz");
+/// let items = vec! {
+///     String::from("foo"),
+///     String::from("bar"),
+///     String::from("baz"),
+/// };
 ///
 /// let chunks = rrg::gzchunked::encode(items.into_iter());
 /// for (idx, chunk) in chunks.enumerate() {
@@ -107,22 +111,24 @@ impl Encoder {
 ///     file.write_all(chunk.unwrap().as_slice());
 /// }
 /// ```
-pub fn encode<'a, I>(iter: I) -> Encode<I>
+pub fn encode<I, M>(iter: I) -> Encode<I>
 where
-    I: Iterator<Item=&'a [u8]>,
+    I: Iterator<Item=M>,
+    M: prost::Message,
 {
     encode_with_opts(iter, EncodeOpts::default())
 }
 
-/// Encodes the given iterator over binary entries into the gzchunked format.
+/// Encodes the given iterator over protobuf messages into the gzchunked format.
 ///
 /// This is a variant of the [`encode`] function that allows customization of
 /// encoding parameters. Refer to its documentation for more details.
 ///
 /// [`encode`]: fn.encode.html
-pub fn encode_with_opts<'a, I>(iter: I, opts: EncodeOpts) -> Encode<I>
+pub fn encode_with_opts<I, M>(iter: I, opts: EncodeOpts) -> Encode<I>
 where
-    I: Iterator<Item=&'a [u8]>,
+    I: Iterator<Item=M>,
+    M: prost::Message,
 {
     Encode::with_opts(iter, opts)
 }
@@ -148,8 +154,8 @@ impl Default for EncodeOpts {
 
 /// Streaming encoder for the gzchunked format.
 ///
-/// It implements the `Iterator` trait, lazily polling the underlying entry
-/// iterator as more parts are needed.
+/// It implements the `Iterator` trait, lazily polling the underlying iterator
+/// over Protocol Buffers messages as more parts are needed.
 ///
 /// Instances of this type can be constructed using the [`encode_with_opts`] or
 /// [`encode`] function.
@@ -161,9 +167,10 @@ pub struct Encode<I> {
     opts: EncodeOpts,
 }
 
-impl<'a, I> Encode<I>
+impl<I> Encode<I>
 where
-    I: Iterator<Item = &'a [u8]>,
+    I: Iterator,
+    I::Item: prost::Message,
 {
     /// Creates a new encoder instance with the specified options.
     fn with_opts(iter: I, opts: EncodeOpts) -> Encode<I> {
@@ -193,9 +200,10 @@ where
     }
 }
 
-impl<'a, I> Iterator for Encode<I>
+impl<I> Iterator for Encode<I>
 where
-    I: Iterator<Item = &'a [u8]>,
+    I: Iterator,
+    I::Item: prost::Message,
 {
     type Item = std::io::Result<Vec<u8>>;
 
