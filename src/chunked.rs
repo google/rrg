@@ -241,9 +241,11 @@ pub mod tests {
     #[test]
     pub fn test_decode_zero_size_tag() {
         let buf: &[u8] = b"\x00\x00\x00\x00\x00\x00\x00\x00";
-        let mut iter = decode::<_, ()>(buf);
 
-        assert!(iter.next().is_none());
+        let mut iter = decode(buf).map(Result::unwrap);
+
+        assert_eq!(iter.next(), Some(()));
+        assert_eq!(iter.next(), None);
     }
 
     #[test]
@@ -255,7 +257,8 @@ pub mod tests {
         impl std::io::Read for Reader {
 
             fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-                if self.0 > 8 {
+                dbg!(self.0);
+                if self.0 == 8 {
                     Ok(0)
                 } else {
                     buf[0] = 0;
@@ -265,8 +268,10 @@ pub mod tests {
             }
         }
 
-        let mut iter = decode::<_, ()>(Reader(0));
-        assert!(iter.next().is_none());
+        let mut iter = decode(Reader(0)).map(Result::unwrap);
+
+        assert_eq!(iter.next(), Some(()));
+        assert_eq!(iter.next(), None);
     }
 
     #[test]
