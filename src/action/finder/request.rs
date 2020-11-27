@@ -278,7 +278,7 @@ fn get_modification_time_conditions(
 ) -> Result<Vec<Condition>, ParseError> {
     let mut conditions: Vec<Condition> = vec![];
     if let Some(options) = proto {
-        if let Some(micros) = options.min_last_modified_time  {
+        if let Some(micros) = options.min_last_modified_time {
             let time = time_from_micros(micros)?;
             conditions.push(Condition::MinModificationTime(time));
         }
@@ -384,12 +384,13 @@ fn get_contents_regex_match_condition(
         let bytes_after = options.bytes_after();
         let start_offset = options.start_offset();
         let length = options.length();
-        let mode =
-            MatchMode::from(parse_enum::<RegexMatchMode>(options.mode)?);
+        let mode = MatchMode::from(parse_enum::<RegexMatchMode>(options.mode)?);
 
         let regex = match options.regex {
-            None => { return Ok(vec![]); }
-            Some(v) => parse_regex(v)?
+            None => {
+                return Ok(vec![]);
+            }
+            Some(v) => parse_regex(v)?,
         };
 
         let ret = ContentsRegexMatchConditionOptions {
@@ -419,8 +420,10 @@ fn get_contents_literal_match_condition(
             MatchMode::from(parse_enum::<LiteralMatchMode>(options.mode)?);
 
         let literal = match options.literal {
-            None => { return Ok(vec![]); }
-            Some(v) => v
+            None => {
+                return Ok(vec![]);
+            }
+            Some(v) => v,
         };
 
         let ret = ContentsLiteralMatchConditionOptions {
