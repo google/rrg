@@ -107,9 +107,10 @@ impl Encoder {
 ///     file.write_all(chunk.unwrap().as_slice());
 /// }
 /// ```
-pub fn encode<'a, I>(iter: I) -> Encode<I>
+pub fn encode<I, M>(iter: I) -> Encode<I>
 where
-    I: Iterator<Item=&'a [u8]>,
+    I: Iterator<Item=M>,
+    M: prost::Message,
 {
     encode_with_opts(iter, EncodeOpts::default())
 }
@@ -120,9 +121,10 @@ where
 /// encoding parameters. Refer to its documentation for more details.
 ///
 /// [`encode`]: fn.encode.html
-pub fn encode_with_opts<'a, I>(iter: I, opts: EncodeOpts) -> Encode<I>
+pub fn encode_with_opts<I, M>(iter: I, opts: EncodeOpts) -> Encode<I>
 where
-    I: Iterator<Item=&'a [u8]>,
+    I: Iterator<Item=M>,
+    M: prost::Message,
 {
     Encode::with_opts(iter, opts)
 }
@@ -161,9 +163,10 @@ pub struct Encode<I> {
     opts: EncodeOpts,
 }
 
-impl<'a, I> Encode<I>
+impl<I, M> Encode<I>
 where
-    I: Iterator<Item = &'a [u8]>,
+    I: Iterator<Item = M>,
+    M: prost::Message,
 {
     /// Creates a new encoder instance with the specified options.
     fn with_opts(iter: I, opts: EncodeOpts) -> Encode<I> {
@@ -193,9 +196,10 @@ where
     }
 }
 
-impl<'a, I> Iterator for Encode<I>
+impl<I, M> Iterator for Encode<I>
 where
-    I: Iterator<Item = &'a [u8]>,
+    I: Iterator<Item = M>,
+    M: prost::Message,
 {
     type Item = std::io::Result<Vec<u8>>;
 

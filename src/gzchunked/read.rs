@@ -61,10 +61,11 @@ impl Decoder {
 ///     println!("item #{}: {:?}", idx, entry);
 /// }
 /// ```
-pub fn decode<I, R>(iter: I) -> impl Iterator<Item=std::io::Result<Vec<u8>>>
+pub fn decode<I, R, M>(iter: I) -> impl Iterator<Item=std::io::Result<M>>
 where
     I: Iterator<Item=R>,
     R: std::io::Read,
+    M: prost::Message + Default,
 {
     let parts = iter.map(flate2::read::GzDecoder::new);
     crate::chunked::decode(crate::io::IterReader::new(parts))
