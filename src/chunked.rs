@@ -280,7 +280,7 @@ pub mod tests {
 
     #[test]
     pub fn test_encode_and_decode_single_message() {
-        let mut iter = decode(encode(vec!(String::from("foo")).into_iter()))
+        let mut iter = decode(encode(std::iter::once(String::from("foo"))))
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), Some(String::from("foo")));
@@ -289,7 +289,7 @@ pub mod tests {
 
     #[test]
     pub fn test_encode_and_decode_single_unit_message() {
-        let mut iter = decode(encode(vec!(()).into_iter()))
+        let mut iter = decode(encode(std::iter::once(())))
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), Some(()));
