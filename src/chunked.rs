@@ -257,7 +257,6 @@ pub mod tests {
         impl std::io::Read for Reader {
 
             fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-                dbg!(self.0);
                 if self.0 == 8 {
                     Ok(0)
                 } else {
