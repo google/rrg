@@ -6,4 +6,5 @@
 //! Handler for `client side file finder` action.
 
 pub mod request;
+pub mod groups;
 pub mod glob;
