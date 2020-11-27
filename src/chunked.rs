@@ -13,8 +13,6 @@
 //! in formats that do not support or are inefficient for these purposes (such
 //! as serialized Protocol Buffer messages).
 
-use std::io::Cursor;
-
 use byteorder::BigEndian;
 
 /// Encodes a given iterator over protobuf messages into the chunked format.
@@ -47,7 +45,7 @@ where
 {
     Encode {
         iter: iter,
-        cur: Cursor::new(vec!()),
+        cur: std::io::Cursor::new(vec!()),
     }
 }
 
@@ -92,7 +90,7 @@ where
 /// [`encode`]: fn.encode.html
 pub struct Encode<I> {
     iter: I,
-    cur: Cursor<Vec<u8>>,
+    cur: std::io::Cursor<Vec<u8>>,
 }
 
 impl<I, M> Encode<I>
