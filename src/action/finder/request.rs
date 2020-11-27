@@ -276,137 +276,88 @@ impl From<LiteralMatchMode> for MatchMode {
 fn get_modification_time_conditions(
     proto: Option<FileFinderModificationTimeCondition>,
 ) -> Result<Vec<Condition>, ParseError> {
-    Ok(match proto {
-        Some(options) => {
-            let mut conditions: Vec<Condition> = vec![];
-            match options.min_last_modified_time {
-                Some(micros) => {
-                    let time = time_from_micros(micros)?;
-                    conditions.push(Condition::MinModificationTime(time));
-                }
-                None => {}
-            }
-            match options.max_last_modified_time {
-                Some(micros) => {
-                    let time = time_from_micros(micros)?;
-                    conditions.push(Condition::MaxModificationTime(time));
-                }
-                None => {}
-            }
-            conditions
+    let mut conditions: Vec<Condition> = vec![];
+    if let Some(options) = proto {
+        if let Some(micros) = options.min_last_modified_time  {
+            let time = time_from_micros(micros)?;
+            conditions.push(Condition::MinModificationTime(time));
         }
-        None => vec![],
-    })
+        if let Some(micros) = options.max_last_modified_time {
+            let time = time_from_micros(micros)?;
+            conditions.push(Condition::MaxModificationTime(time));
+        }
+    }
+    Ok(conditions)
 }
 
 fn get_access_time_conditions(
     proto: Option<FileFinderAccessTimeCondition>,
 ) -> Result<Vec<Condition>, ParseError> {
-    Ok(match proto {
-        Some(options) => {
-            let mut conditions: Vec<Condition> = vec![];
-            match options.min_last_access_time {
-                Some(micros) => {
-                    let time = time_from_micros(micros)?;
-                    conditions.push(Condition::MinAccessTime(time));
-                }
-                None => {}
-            }
-            match options.max_last_access_time {
-                Some(micros) => {
-                    let time = time_from_micros(micros)?;
-                    conditions.push(Condition::MaxAccessTime(time));
-                }
-                None => {}
-            }
-            conditions
+    let mut conditions: Vec<Condition> = vec![];
+    if let Some(options) = proto {
+        if let Some(micros) = options.min_last_access_time {
+            let time = time_from_micros(micros)?;
+            conditions.push(Condition::MinAccessTime(time));
         }
-        None => vec![],
-    })
+        if let Some(micros) = options.max_last_access_time {
+            let time = time_from_micros(micros)?;
+            conditions.push(Condition::MaxAccessTime(time));
+        }
+    }
+    Ok(conditions)
 }
 
 fn get_inode_change_time_conditions(
     proto: Option<FileFinderInodeChangeTimeCondition>,
 ) -> Result<Vec<Condition>, ParseError> {
-    Ok(match proto {
-        Some(options) => {
-            let mut conditions: Vec<Condition> = vec![];
-            match options.min_last_inode_change_time {
-                Some(micros) => {
-                    let time = time_from_micros(micros)?;
-                    conditions.push(Condition::MinInodeChangeTime(time));
-                }
-                None => {}
-            }
-            match options.max_last_inode_change_time {
-                Some(micros) => {
-                    let time = time_from_micros(micros)?;
-                    conditions.push(Condition::MaxInodeChangeTime(time));
-                }
-                None => {}
-            }
-            conditions
+    let mut conditions: Vec<Condition> = vec![];
+    if let Some(options) = proto {
+        if let Some(micros) = options.min_last_inode_change_time {
+            let time = time_from_micros(micros)?;
+            conditions.push(Condition::MinInodeChangeTime(time));
         }
-        None => vec![],
-    })
+        if let Some(micros) = options.max_last_inode_change_time {
+            let time = time_from_micros(micros)?;
+            conditions.push(Condition::MaxInodeChangeTime(time));
+        }
+    }
+    Ok(conditions)
 }
 
 fn get_size_conditions(
     proto: Option<FileFinderSizeCondition>,
 ) -> Vec<Condition> {
-    match proto {
-        Some(options) => {
-            let mut conditions: Vec<Condition> = vec![];
-            match options.min_file_size {
-                Some(size) => {
-                    conditions.push(Condition::MinSize(size));
-                }
-                None => {}
-            }
-            if options.max_file_size() < u64::MAX {
-                conditions.push(Condition::MaxSize(options.max_file_size()));
-            }
-            conditions
+    let mut conditions: Vec<Condition> = vec![];
+    if let Some(options) = proto {
+        if let Some(size) = options.min_file_size {
+            conditions.push(Condition::MinSize(size));
         }
-        None => vec![],
+        if options.max_file_size() < u64::MAX {
+            conditions.push(Condition::MaxSize(options.max_file_size()));
+        }
     }
+    conditions
 }
 
 fn get_ext_flags_condition(
     proto: Option<FileFinderExtFlagsCondition>,
 ) -> Vec<Condition> {
-    match proto {
-        Some(options) => {
-            let mut conditions: Vec<Condition> = vec![];
-            match options.linux_bits_set {
-                Some(bits) => {
-                    conditions.push(Condition::ExtFlagsLinuxBitsSet(bits));
-                }
-                None => {}
-            }
-            match options.linux_bits_unset {
-                Some(bits) => {
-                    conditions.push(Condition::ExtFlagsLinuxBitsUnset(bits));
-                }
-                None => {}
-            }
-            match options.osx_bits_set {
-                Some(bits) => {
-                    conditions.push(Condition::ExtFlagsOsxBitsSet(bits));
-                }
-                None => {}
-            }
-            match options.osx_bits_unset {
-                Some(bits) => {
-                    conditions.push(Condition::ExtFlagsOsxBitsUnset(bits));
-                }
-                None => {}
-            }
-
-            conditions
+    let mut conditions: Vec<Condition> = vec![];
+    if let Some(options) = proto {
+        if let Some(bits) = options.linux_bits_set {
+            conditions.push(Condition::ExtFlagsLinuxBitsSet(bits));
         }
-        None => vec![],
+        if let Some(bits) = options.linux_bits_unset {
+            conditions.push(Condition::ExtFlagsLinuxBitsUnset(bits));
+        }
+        if let Some(bits) = options.osx_bits_set {
+            conditions.push(Condition::ExtFlagsOsxBitsSet(bits));
+        }
+        if let Some(bits) = options.osx_bits_unset {
+            conditions.push(Condition::ExtFlagsOsxBitsUnset(bits));
+        }
     }
+    conditions
 }
 
 fn parse_regex(bytes: Vec<u8>) -> Result<Regex, ParseError> {
@@ -428,67 +379,63 @@ fn parse_regex(bytes: Vec<u8>) -> Result<Regex, ParseError> {
 fn get_contents_regex_match_condition(
     proto: Option<FileFinderContentsRegexMatchCondition>,
 ) -> Result<Vec<Condition>, ParseError> {
-    Ok(match proto {
-        Some(options) => {
-            let bytes_before = options.bytes_before();
-            let bytes_after = options.bytes_after();
-            let start_offset = options.start_offset();
-            let length = options.length();
-            let mode =
-                MatchMode::from(parse_enum::<RegexMatchMode>(options.mode)?);
+    if let Some(options) = proto {
+        let bytes_before = options.bytes_before();
+        let bytes_after = options.bytes_after();
+        let start_offset = options.start_offset();
+        let length = options.length();
+        let mode =
+            MatchMode::from(parse_enum::<RegexMatchMode>(options.mode)?);
 
-            if options.regex.is_none() {
-                return Ok(vec![]);
-            }
-            let regex = parse_regex(options.regex.unwrap())?;
+        let regex = match options.regex {
+            None => { return Ok(vec![]); }
+            Some(v) => parse_regex(v)?
+        };
 
-            let ret = ContentsRegexMatchConditionOptions {
-                regex,
-                mode,
-                bytes_before,
-                bytes_after,
-                start_offset,
-                length,
-            };
-            vec![Condition::ContentsRegexMatch(ret)]
-        }
-        None => vec![],
-    })
+        let ret = ContentsRegexMatchConditionOptions {
+            regex,
+            mode,
+            bytes_before,
+            bytes_after,
+            start_offset,
+            length,
+        };
+        return Ok(vec![Condition::ContentsRegexMatch(ret)]);
+    }
+    Ok(vec![])
 }
 
 fn get_contents_literal_match_condition(
     proto: Option<FileFinderContentsLiteralMatchCondition>,
 ) -> Result<Vec<Condition>, ParseError> {
-    Ok(match proto {
-        Some(options) => {
-            let bytes_before = options.bytes_before();
-            let bytes_after = options.bytes_after();
-            let start_offset = options.start_offset();
-            let length = options.length();
-            let xor_in_key = options.xor_in_key();
-            let xor_out_key = options.xor_out_key();
-            let mode =
-                MatchMode::from(parse_enum::<LiteralMatchMode>(options.mode)?);
+    if let Some(options) = proto {
+        let bytes_before = options.bytes_before();
+        let bytes_after = options.bytes_after();
+        let start_offset = options.start_offset();
+        let length = options.length();
+        let xor_in_key = options.xor_in_key();
+        let xor_out_key = options.xor_out_key();
+        let mode =
+            MatchMode::from(parse_enum::<LiteralMatchMode>(options.mode)?);
 
-            if options.literal.is_none() {
-                return Ok(vec![]);
-            }
-            let literal = options.literal.unwrap();
+        let literal = match options.literal {
+            None => { return Ok(vec![]); }
+            Some(v) => v
+        };
 
-            let ret = ContentsLiteralMatchConditionOptions {
-                literal,
-                mode,
-                bytes_before,
-                bytes_after,
-                start_offset,
-                length,
-                xor_in_key,
-                xor_out_key,
-            };
-            vec![Condition::ContentsLiteralMatch(ret)]
-        }
-        None => vec![],
-    })
+        let ret = ContentsLiteralMatchConditionOptions {
+            literal,
+            mode,
+            bytes_before,
+            bytes_after,
+            start_offset,
+            length,
+            xor_in_key,
+            xor_out_key,
+        };
+        return Ok(vec![Condition::ContentsLiteralMatch(ret)]);
+    }
+    Ok(vec![])
 }
 
 fn get_conditions(
