@@ -44,7 +44,7 @@ impl Decoder {
     }
 }
 
-/// Decodes an iterator of binary blobs in the gzchunked format.
+/// Decodes an iterator over gzchunked file parts into a stream of messages.
 ///
 /// This is a streaming decoder that performs the decoding in a lazy way and can
 /// be used to effectively process megabytes of data.

@@ -82,7 +82,7 @@ impl Encoder {
     }
 }
 
-/// Encodes the given iterator over binary entries into the gzchunked format.
+/// Encodes the given iterator over protobuf messages into the gzchunked format.
 ///
 /// This is a streaming encoder that lazily encodes the data and can be used to
 /// effectively process megabytes of data. The function returns an iterator that
@@ -119,7 +119,7 @@ where
     encode_with_opts(iter, EncodeOpts::default())
 }
 
-/// Encodes the given iterator over binary entries into the gzchunked format.
+/// Encodes the given iterator over protobuf messages into the gzchunked format.
 ///
 /// This is a variant of the [`encode`] function that allows customization of
 /// encoding parameters. Refer to its documentation for more details.
@@ -154,8 +154,8 @@ impl Default for EncodeOpts {
 
 /// Streaming encoder for the gzchunked format.
 ///
-/// It implements the `Iterator` trait, lazily polling the underlying entry
-/// iterator as more parts are needed.
+/// It implements the `Iterator` trait, lazily polling the underlying iterator
+/// over Protocol Buffers messages as more parts are needed.
 ///
 /// Instances of this type can be constructed using the [`encode_with_opts`] or
 /// [`encode`] function.

@@ -17,7 +17,7 @@ use std::io::Cursor;
 
 use byteorder::BigEndian;
 
-/// Encodes a given iterator over binary blobs into the chunked format.
+/// Encodes a given iterator over protobuf messages into the chunked format.
 ///
 /// This is a streaming encoder and performs the encoding in a lazy way. It
 /// should compose well with other streaming encoders (e.g. these offered by
@@ -51,7 +51,7 @@ where
     }
 }
 
-/// Decodes a buffer in the chunked format into binary blobs.
+/// Decodes a buffer in the chunked format into a stream of protobuf messages.
 ///
 /// This is a streaming decoder and performs the decoding in a lazy way. It
 /// should compose well with other streaming decoders (e.g. these offered by the
@@ -84,8 +84,8 @@ where
 
 /// Streaming encoder for the chunked format.
 ///
-/// It implements the `Read` trait, lazily polling the underlying chunk iterator
-/// as more bytes is needed.
+/// It implements the `Read` trait, lazily polling the underlying iterator over
+/// Protocol Buffers messages as needed.
 ///
 /// Instances of this type can be constructed using the [`encode`] function.
 ///
@@ -105,7 +105,7 @@ where
         self.cur.position() == self.cur.get_ref().len() as u64
     }
 
-    /// Pulls another blob of data from the underlying iterator.
+    /// Pulls another message from the underlying iterator.
     fn pull(&mut self) -> std::io::Result<()> {
         use byteorder::WriteBytesExt as _;
 
@@ -141,8 +141,8 @@ where
 
 /// Streaming decoder for the chunked format.
 ///
-/// It implements the `Iterator` trait yielding chunks of decoded blobs, lazily
-/// decoding data from the underlying buffer.
+/// It implements the `Iterator` trait yielding Protocol Buffers messages,
+/// lazily decoding data from the underlying buffer.
 ///
 /// Instances of this type can be constructed using the [`decode`] function.
 ///
