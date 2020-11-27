@@ -156,11 +156,18 @@ impl<R: std::io::Read, M> Decode<R, M> {
     fn read_len(&mut self) -> std::io::Result<Option<usize>> {
         use byteorder::ReadBytesExt as _;
 
+        // `read` might not always read all 8 bytes. On the other hand, we also
+        // cannot use just `read_exact` because the stream might have ended
+        // already. Hence, we combine the two. First we attempt to read some
+        // bytes with `read`: it should either return 0 (indicating end of the
+        // stream), 8 (indicating that we have filled the whole buffer fully)
+        // or something in between. In the last case, we use `read_exact to get
+        // the remaining bytes (which should be non-zero now).
         let mut buf = [0; 8];
         match self.reader.read(&mut buf[..])? {
             8 => (),
             0 => return Ok(None),
-            _ => return Err(SizeTagError.into()),
+            len => self.reader.read_exact(&mut buf[len..])?,
         }
 
         let len = (&buf[..]).read_u64::<BigEndian>()? as usize;
@@ -197,27 +204,6 @@ where
     }
 }
 
-/// An error type for errors encountered when reading the size tag.
-#[derive(Debug)]
-struct SizeTagError;
-
-impl std::fmt::Display for SizeTagError {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "incorrect length of the size tag")
-    }
-}
-
-impl std::error::Error for SizeTagError {
-}
-
-impl From<SizeTagError> for std::io::Error {
-
-    fn from(error: SizeTagError) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-    }
-}
-
 #[cfg(test)]
 pub mod tests {
 
@@ -249,7 +235,38 @@ pub mod tests {
         let mut iter = decode::<_, ()>(buf);
 
         let error = iter.next().unwrap().unwrap_err();
-        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(error.kind(), std::io::ErrorKind::UnexpectedEof);
+    }
+
+    #[test]
+    pub fn test_decode_zero_size_tag() {
+        let buf: &[u8] = b"\x00\x00\x00\x00\x00\x00\x00\x00";
+        let mut iter = decode::<_, ()>(buf);
+
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    pub fn test_decode_partial_size_tag() {
+
+        // A simple reader that yields a 0-valued size tag byte by byte.
+        struct Reader(u8);
+
+        impl std::io::Read for Reader {
+
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.0 > 8 {
+                    Ok(0)
+                } else {
+                    buf[0] = 0;
+                    self.0 += 1;
+                    Ok(1)
+                }
+            }
+        }
+
+        let mut iter = decode::<_, ()>(Reader(0));
+        assert!(iter.next().is_none());
     }
 
     #[test]
