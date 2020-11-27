@@ -36,10 +36,10 @@ use byteorder::BigEndian;
 /// let mut file = File::create("output.chunked").unwrap();
 /// std::io::copy(&mut stream, &mut file).unwrap();
 /// ```
-pub fn encode<I, M>(iter: I) -> Encode<I>
+pub fn encode<I>(iter: I) -> Encode<I>
 where
-    I: Iterator<Item = M>,
-    M: prost::Message,
+    I: Iterator,
+    I::Item: prost::Message,
 {
     Encode {
         iter: iter,

@@ -163,10 +163,10 @@ pub struct Encode<I> {
     opts: EncodeOpts,
 }
 
-impl<I, M> Encode<I>
+impl<I> Encode<I>
 where
-    I: Iterator<Item = M>,
-    M: prost::Message,
+    I: Iterator,
+    I::Item: prost::Message,
 {
     /// Creates a new encoder instance with the specified options.
     fn with_opts(iter: I, opts: EncodeOpts) -> Encode<I> {
@@ -196,10 +196,10 @@ where
     }
 }
 
-impl<I, M> Iterator for Encode<I>
+impl<I> Iterator for Encode<I>
 where
-    I: Iterator<Item = M>,
-    M: prost::Message,
+    I: Iterator,
+    I::Item: prost::Message,
 {
     type Item = std::io::Result<Vec<u8>>;
 
