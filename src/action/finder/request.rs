@@ -36,8 +36,7 @@ type PathType = rrg_proto::path_spec::PathType;
 
 #[derive(Debug)]
 pub struct Request {
-    pub paths: Vec<String>,
-    pub path_type: PathType,
+    pub path_queries: Vec<String>,
     pub action: Action,
     pub conditions: Vec<Condition>,
     pub process_non_regular_files: bool,
@@ -176,15 +175,6 @@ impl TryFrom<FileFinderDownloadActionOptions> for Action {
             use_external_stores: proto.use_external_stores(),
             chunk_size: proto.chunk_size(),
         }))
-    }
-}
-
-impl ProtoEnum<PathType> for PathType {
-    fn default() -> PathType {
-        FileFinderArgs::default().pathtype()
-    }
-    fn from_i32(val: i32) -> Option<PathType> {
-        PathType::from_i32(val)
     }
 }
 
@@ -473,11 +463,15 @@ impl super::super::Request for Request {
     type Proto = FileFinderArgs;
 
     fn from_proto(proto: FileFinderArgs) -> Result<Request, ParseError> {
+        if !matches!(proto.pathtype(), PathType::Os) {
+            return Err(ParseError::malformed(
+                "File Finder does not support path types other than `Os`.",
+            ));
+        }
+
         let follow_links = proto.follow_links();
         let process_non_regular_files = proto.process_non_regular_files();
         let xdev_mode = parse_enum(proto.xdev)?;
-        let path_type = parse_enum(proto.pathtype)?;
-
         let mut conditions = vec![];
         for proto_condition in proto.conditions {
             conditions.extend(get_conditions(proto_condition)?);
@@ -493,8 +487,7 @@ impl super::super::Request for Request {
         };
 
         Ok(Request {
-            paths: proto.paths,
-            path_type,
+            path_queries: proto.paths,
             action,
             conditions,
             follow_links,
@@ -520,9 +513,8 @@ mod tests {
         })
         .unwrap();
 
-        assert!(request.paths.is_empty());
+        assert!(request.path_queries.is_empty());
         assert!(request.conditions.is_empty());
-        assert_eq!(request.path_type, PathType::Os);
         assert_eq!(request.process_non_regular_files, false);
         assert_eq!(request.follow_links, false);
         assert_eq!(request.xdev_mode, XDevMode::Local);
@@ -532,7 +524,6 @@ mod tests {
     fn test_basic_root_parameters() {
         let request = Request::from_proto(FileFinderArgs {
             paths: vec!["abc".to_string(), "cba".to_string()],
-            pathtype: Some(PathType::Registry as i32),
             process_non_regular_files: Some(true),
             follow_links: Some(true),
             xdev: Some(rrg_proto::file_finder_args::XDev::Always as i32),
@@ -544,11 +535,34 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(request.paths, vec!["abc".to_string(), "cba".to_string()]);
-        assert_eq!(request.path_type, PathType::Registry);
+        assert_eq!(
+            request.path_queries,
+            vec!["abc".to_string(), "cba".to_string()]
+        );
         assert_eq!(request.process_non_regular_files, true);
         assert_eq!(request.follow_links, true);
         assert_eq!(request.xdev_mode, XDevMode::Always);
+    }
+
+    #[test]
+    fn test_fails_on_non_os_path_type() {
+        let err = Request::from_proto(FileFinderArgs {
+            paths: vec!["abc".to_string(), "cba".to_string()],
+            process_non_regular_files: Some(true),
+            follow_links: Some(true),
+            pathtype: Some(PathType::Registry as i32),
+            xdev: Some(rrg_proto::file_finder_args::XDev::Always as i32),
+            action: Some(FileFinderAction {
+                action_type: Some(ActionType::Stat as i32),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }).unwrap_err();
+
+        match err {
+            ParseError::Malformed(_) => {}
+            e @ _ => panic!("Unexpected error type: {:?}", e),
+        }
     }
 
     #[test]
