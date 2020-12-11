@@ -30,11 +30,32 @@ struct Response {
 
 /// A type representing unique identifier of a given chunk.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct ChunkId([u8; 32]);
+struct ChunkId {
+    /// A SHA-256 digest of the referenced chunk data.
+    sha256: [u8; 32],
+}
+
+impl ChunkId {
+
+    /// Creates a chunk identifier for the given chunk.
+    fn of(chunk: &Chunk) -> ChunkId {
+        ChunkId {
+            sha256: Sha256::digest(&chunk.data).into(),
+        }
+    }
+}
 
 /// A type representing a particular chunk of the returned timeline.
 struct Chunk {
     data: Vec<u8>,
+}
+
+impl Chunk {
+
+    /// Returns an identifier of the chunk.
+    fn id(&self) -> ChunkId {
+        ChunkId::of(&self)
+    }
 }
 
 /// An object for recursively traversing filesystem and gathering
@@ -164,9 +185,12 @@ impl RecurseState {
     where
         S: Session,
     {
-        let digest = ChunkId(Sha256::digest(block.as_slice()).into());
-        self.chunk_ids.push(digest);
-        session.send(session::Sink::TRANSFER_STORE, Chunk { data: block })?;
+        let chunk = Chunk {
+            data: block,
+        };
+
+        self.chunk_ids.push(chunk.id());
+        session.send(session::Sink::TRANSFER_STORE, chunk)?;
         session.heartbeat();
         Ok(())
     }
@@ -268,7 +292,7 @@ impl super::Response for Response {
 
     fn into_proto(self) -> TimelineResult {
         TimelineResult {
-            entry_batch_blob_ids: self.chunk_ids.iter().map(|id| id.0.to_vec()).collect()
+            entry_batch_blob_ids: self.chunk_ids.iter().map(|id| id.sha256.to_vec()).collect()
         }
     }
 }
@@ -298,18 +322,17 @@ mod tests {
         let mut expected_ids = session.reply::<Response>(0).chunk_ids.clone();
         let mut ids = Vec::new();
         assert_eq!(block_count, expected_ids.len());
-        expected_ids.sort_by(|a, b| a.0.cmp(&b.0));
+        expected_ids.sort_by(|a, b| a.sha256.cmp(&b.sha256));
 
         let mut decoder = gzchunked::Decoder::new();
         for block_number in 0..block_count {
-            let block = session.response::<Chunk>(session::Sink::TRANSFER_STORE, block_number);
-            let response_digest = ChunkId(Sha256::digest(&block.data).into());
-            ids.push(response_digest);
+            let chunk = session.response::<Chunk>(session::Sink::TRANSFER_STORE, block_number);
+            ids.push(chunk.id());
 
-            decoder.write(block.data.as_slice()).unwrap();
+            decoder.write(chunk.data.as_slice()).unwrap();
         }
 
-        ids.sort_by(|a, b| a.0.cmp(&b.0));
+        ids.sort_by(|a, b| a.sha256.cmp(&b.sha256));
         assert_eq!(ids, expected_ids);
 
         let mut ret = Vec::new();
