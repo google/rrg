@@ -355,60 +355,37 @@ impl From<std::time::SystemTimeError> for NanosError {
 
 /// An error type for failures of converting timestamps to microseconds.
 #[derive(Clone, Debug)]
-pub enum MicrosError {
-    /// Attempted to convert pre-epoch system time.
-    Epoch(std::time::SystemTimeError),
-    /// Attempted to convert a value outside of 64-bit unsigned integer range.
-    Overflow(std::num::TryFromIntError),
-}
-
-impl MicrosError {
-
-    /// Creates a microsecond conversion error from an integer overflow error.
-    pub fn overflow(error: std::num::TryFromIntError) -> MicrosError {
-        MicrosError::Overflow(error)
-    }
+pub struct MicrosError {
+    error: NanosError,
 }
 
 impl std::fmt::Display for MicrosError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use MicrosError::*;
+        self.error.fmt(fmt)
+    }
+}
 
-        match *self {
-            Epoch(ref error) => {
-                write!(fmt, "pre-epoch system time: {}", error)
-            }
-            Overflow(ref error) => {
-                write!(fmt, "system time value too big: {}", error)
-            }
+impl From<NanosError> for MicrosError {
+
+    fn from(error: NanosError) -> MicrosError {
+        MicrosError {
+            error: error,
         }
     }
 }
 
-impl std::error::Error for MicrosError {
+impl From<MicrosError> for NanosError {
 
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use MicrosError::*;
-
-        match *self {
-            Epoch(ref error) => Some(error),
-            Overflow(ref error) => Some(error),
-        }
-    }
-}
-
-impl From<std::time::SystemTimeError> for MicrosError {
-
-    fn from(error: std::time::SystemTimeError) -> MicrosError {
-        MicrosError::Epoch(error)
+    fn from(error: MicrosError) -> NanosError {
+        error.error
     }
 }
 
 /// An error type for failures of converting timestamps to seconds.
 #[derive(Clone, Debug)]
 pub struct SecsError {
-    error: MicrosError,
+    error: NanosError,
 }
 
 impl std::fmt::Display for SecsError {
@@ -418,18 +395,18 @@ impl std::fmt::Display for SecsError {
     }
 }
 
-impl From<MicrosError> for SecsError {
+impl From<NanosError> for SecsError {
 
-    fn from(error: MicrosError) -> SecsError {
+    fn from(error: NanosError) -> SecsError {
         SecsError {
             error: error,
         }
     }
 }
 
-impl From<SecsError> for MicrosError {
+impl From<SecsError> for NanosError {
 
-    fn from(error: SecsError) -> MicrosError {
+    fn from(error: SecsError) -> NanosError {
         error.error
     }
 }
@@ -466,10 +443,7 @@ pub fn nanos(time: std::time::SystemTime) -> Result<u64, NanosError> {
 /// assert_eq!(micros(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
 pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
-    let time_micros = time.duration_since(std::time::UNIX_EPOCH)?.as_micros();
-
-    use std::convert::TryInto as _;
-    time_micros.try_into().map_err(MicrosError::overflow)
+    Ok(nanos(time)? / 1_000)
 }
 
 /// Converts system time into epoch seconds.
@@ -485,5 +459,5 @@ pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
 /// assert_eq!(secs(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
 pub fn secs(time: std::time::SystemTime) -> Result<u64, SecsError> {
-    Ok(micros(time)? / 1_000_000)
+    Ok(nanos(time)? / 1_000_000_000)
 }
