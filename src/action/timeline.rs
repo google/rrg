@@ -23,17 +23,17 @@ pub struct Request {
     root: PathBuf,
 }
 
-/// A newtype wrapper for SHA-256 chunk digest.
-#[derive(Debug, PartialEq, Clone)]
-struct ChunkDigest([u8; 32]);
-
-/// A response type for the timeline action (actual response).
+/// A response type for the timeline action.
 struct Response {
-    ids: Vec<ChunkDigest>,
+    chunk_ids: Vec<ChunkId>,
 }
 
-/// A response type for the timeline action (transfer store chunks).
-struct ChunkResponse {
+/// A type representing unique identifier of a given chunk.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ChunkId([u8; 32]);
+
+/// A type representing a particular chunk of the returned timeline.
+struct Chunk {
     data: Vec<u8>,
 }
 
@@ -41,7 +41,7 @@ struct ChunkResponse {
 /// timeline info.
 struct RecurseState {
     device: u64,
-    ids: Vec<ChunkDigest>,
+    chunk_ids: Vec<ChunkId>,
     encoder: gzchunked::Encoder,
 }
 
@@ -154,7 +154,7 @@ impl RecurseState {
     fn new(device: u64) -> RecurseState {
         RecurseState {
             device,
-            ids: Vec::new(),
+            chunk_ids: Vec::new(),
             encoder: gzchunked::Encoder::new(gzchunked::Compression::default()),
         }
     }
@@ -164,9 +164,9 @@ impl RecurseState {
     where
         S: Session,
     {
-        let digest = ChunkDigest(Sha256::digest(block.as_slice()).into());
-        self.ids.push(digest);
-        session.send(session::Sink::TRANSFER_STORE, ChunkResponse { data: block })?;
+        let digest = ChunkId(Sha256::digest(block.as_slice()).into());
+        self.chunk_ids.push(digest);
+        session.send(session::Sink::TRANSFER_STORE, Chunk { data: block })?;
         session.heartbeat();
         Ok(())
     }
@@ -224,10 +224,10 @@ impl RecurseState {
     }
 
     /// Sends final pieces of data to the session.
-    fn finish<S: Session>(mut self, session: &mut S) -> session::Result<Vec<ChunkDigest>> {
+    fn finish<S: Session>(mut self, session: &mut S) -> session::Result<Vec<ChunkId>> {
         let final_block = self.encoder.next_chunk().map_err(Error::action)?;
         self.send_block(final_block, session)?;
-        Ok(self.ids)
+        Ok(self.chunk_ids)
     }
 }
 
@@ -239,7 +239,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
 
     state.recurse(&request.root, session)?;
     let action_response = Response {
-        ids: state.finish(session)?,
+        chunk_ids: state.finish(session)?,
     };
     session.reply(action_response)?;
 
@@ -268,12 +268,12 @@ impl super::Response for Response {
 
     fn into_proto(self) -> TimelineResult {
         TimelineResult {
-            entry_batch_blob_ids: self.ids.iter().map(|id| id.0.to_vec()).collect()
+            entry_batch_blob_ids: self.chunk_ids.iter().map(|id| id.0.to_vec()).collect()
         }
     }
 }
 
-impl super::Response for ChunkResponse {
+impl super::Response for Chunk {
 
     const RDF_NAME: Option<&'static str> = Some("DataBlob");
 
@@ -295,15 +295,15 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let block_count = session.response_count(session::Sink::TRANSFER_STORE);
 
-        let mut expected_ids = session.reply::<Response>(0).ids.clone();
+        let mut expected_ids = session.reply::<Response>(0).chunk_ids.clone();
         let mut ids = Vec::new();
         assert_eq!(block_count, expected_ids.len());
         expected_ids.sort_by(|a, b| a.0.cmp(&b.0));
 
         let mut decoder = gzchunked::Decoder::new();
         for block_number in 0..block_count {
-            let block = session.response::<ChunkResponse>(session::Sink::TRANSFER_STORE, block_number);
-            let response_digest = ChunkDigest(Sha256::digest(&block.data).into());
+            let block = session.response::<Chunk>(session::Sink::TRANSFER_STORE, block_number);
+            let response_digest = ChunkId(Sha256::digest(&block.data).into());
             ids.push(response_digest);
 
             decoder.write(block.data.as_slice()).unwrap();
