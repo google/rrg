@@ -301,27 +301,27 @@ impl From<PathBuf> for PathSpec {
     }
 }
 
-/// An error type for failures of converting timestamps to nanoseconds.
+/// An error type for failures that can occur when converting timestamps.
 #[derive(Clone, Debug)]
-pub enum NanosError {
+pub enum TimeConversionError {
     /// Attempted to convert pre-epoch system time.
     Epoch(std::time::SystemTimeError),
     /// Attempted to convert a value outside of 64-bit unsigned integer range.
     Overflow(std::num::TryFromIntError),
 }
 
-impl NanosError {
+impl TimeConversionError {
 
-    /// Creates a nanosecond conversion error from an integer overflow error.
-    pub fn overflow(error: std::num::TryFromIntError) -> NanosError {
-        NanosError::Overflow(error)
+    /// Creates a conversion error from an integer overflow error.
+    pub fn overflow(error: std::num::TryFromIntError) -> TimeConversionError {
+        TimeConversionError::Overflow(error)
     }
 }
 
-impl std::fmt::Display for NanosError {
+impl std::fmt::Display for TimeConversionError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use NanosError::*;
+        use TimeConversionError::*;
 
         match *self {
             Epoch(ref error) => {
@@ -334,10 +334,10 @@ impl std::fmt::Display for NanosError {
     }
 }
 
-impl std::error::Error for NanosError {
+impl std::error::Error for TimeConversionError {
 
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use NanosError::*;
+        use TimeConversionError::*;
 
         match *self {
             Epoch(ref error) => Some(error),
@@ -346,68 +346,10 @@ impl std::error::Error for NanosError {
     }
 }
 
-impl From<std::time::SystemTimeError> for NanosError {
+impl From<std::time::SystemTimeError> for TimeConversionError {
 
-    fn from(error: std::time::SystemTimeError) -> NanosError {
-        NanosError::Epoch(error)
-    }
-}
-
-/// An error type for failures of converting timestamps to microseconds.
-#[derive(Clone, Debug)]
-pub struct MicrosError {
-    error: NanosError,
-}
-
-impl std::fmt::Display for MicrosError {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.error.fmt(fmt)
-    }
-}
-
-impl From<NanosError> for MicrosError {
-
-    fn from(error: NanosError) -> MicrosError {
-        MicrosError {
-            error: error,
-        }
-    }
-}
-
-impl From<MicrosError> for NanosError {
-
-    fn from(error: MicrosError) -> NanosError {
-        error.error
-    }
-}
-
-/// An error type for failures of converting timestamps to seconds.
-#[derive(Clone, Debug)]
-pub struct SecsError {
-    error: NanosError,
-}
-
-impl std::fmt::Display for SecsError {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.error.fmt(fmt)
-    }
-}
-
-impl From<NanosError> for SecsError {
-
-    fn from(error: NanosError) -> SecsError {
-        SecsError {
-            error: error,
-        }
-    }
-}
-
-impl From<SecsError> for NanosError {
-
-    fn from(error: SecsError) -> NanosError {
-        error.error
+    fn from(error: std::time::SystemTimeError) -> TimeConversionError {
+        TimeConversionError::Epoch(error)
     }
 }
 
@@ -423,11 +365,11 @@ impl From<SecsError> for NanosError {
 ///
 /// assert_eq!(nanos(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
-pub fn nanos(time: std::time::SystemTime) -> Result<u64, NanosError> {
+pub fn nanos(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
     let time_nanos = time.duration_since(std::time::UNIX_EPOCH)?.as_nanos();
 
     use std::convert::TryInto as _;
-    time_nanos.try_into().map_err(NanosError::overflow)
+    time_nanos.try_into().map_err(TimeConversionError::overflow)
 }
 
 /// Converts system time into epoch microseconds.
@@ -442,7 +384,7 @@ pub fn nanos(time: std::time::SystemTime) -> Result<u64, NanosError> {
 ///
 /// assert_eq!(micros(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
-pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
+pub fn micros(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
     Ok(nanos(time)? / 1_000)
 }
 
@@ -458,6 +400,6 @@ pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
 ///
 /// assert_eq!(secs(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
-pub fn secs(time: std::time::SystemTime) -> Result<u64, SecsError> {
+pub fn secs(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
     Ok(nanos(time)? / 1_000_000_000)
 }
