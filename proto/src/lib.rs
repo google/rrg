@@ -366,10 +366,10 @@ impl From<std::time::SystemTimeError> for TimeConversionError {
 /// assert_eq!(nanos(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
 pub fn nanos(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
-    let time_nanos = time.duration_since(std::time::UNIX_EPOCH)?.as_nanos();
-
     use std::convert::TryInto as _;
-    time_nanos.try_into().map_err(TimeConversionError::overflow)
+
+    let duration = time.duration_since(std::time::UNIX_EPOCH)?;
+    duration.as_nanos().try_into().map_err(TimeConversionError::overflow)
 }
 
 /// Converts system time into epoch microseconds.
@@ -385,7 +385,10 @@ pub fn nanos(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
 /// assert_eq!(micros(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
 pub fn micros(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
-    Ok(nanos(time)? / 1_000)
+    use std::convert::TryInto as _;
+
+    let duration = std::time::Duration::from_nanos(nanos(time)?);
+    duration.as_micros().try_into().map_err(TimeConversionError::overflow)
 }
 
 /// Converts system time into epoch seconds.
@@ -401,5 +404,6 @@ pub fn micros(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
 /// assert_eq!(secs(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
 pub fn secs(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
-    Ok(nanos(time)? / 1_000_000_000)
+    let duration = std::time::Duration::from_nanos(nanos(time)?);
+    Ok(duration.as_secs())
 }
