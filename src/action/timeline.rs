@@ -13,6 +13,8 @@ use std::vec::Vec;
 
 use cfg_if::cfg_if;
 use sha2::{Digest, Sha256};
+use rrg_macro::ack;
+use rrg_proto::convert::FromLossy;
 use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
 
 use crate::gzchunked;
@@ -252,6 +254,55 @@ impl RecurseState {
         let final_block = self.encoder.next_chunk().map_err(Error::action)?;
         self.send_block(final_block, session)?;
         Ok(self.chunk_ids)
+    }
+}
+
+impl FromLossy<crate::fs::Entry> for rrg_proto::TimelineEntry {
+
+    fn from_lossy(entry: crate::fs::Entry) -> rrg_proto::TimelineEntry {
+        use std::convert::TryFrom as _;
+        #[cfg(target_family = "unix")]
+        use std::os::unix::fs::MetadataExt as _;
+
+        let atime_nanos = entry.metadata.accessed().ok().and_then(|atime| ack! {
+            rrg_proto::nanos(atime),
+            error: "failed to convert access time to seconds"
+        });
+
+        let mtime_nanos = entry.metadata.modified().ok().and_then(|mtime| ack! {
+            rrg_proto::nanos(mtime),
+            error: "failed to convert modification time to seconds"
+        });
+
+        let btime_nanos = entry.metadata.created().ok().and_then(|btime| ack! {
+            rrg_proto::nanos(btime),
+            error: "failed to convert creation time to seconds"
+        });
+
+        rrg_proto::TimelineEntry {
+            // TODO: This is just a quick workaround for handling paths. In
+            // reality, we should write platfrom-specific conversion from paths
+            // into raw bytes.
+            path: Some(entry.path.to_string_lossy().as_bytes().to_vec()),
+            #[cfg(target_family = "unix")]
+            mode: Some(i64::from(entry.metadata.mode())),
+            size: Some(entry.metadata.len()),
+            #[cfg(target_family = "unix")]
+            dev: i64::try_from(entry.metadata.dev()).ok(),
+            #[cfg(target_family = "unix")]
+            ino: Some(entry.metadata.ino()),
+            #[cfg(target_family = "unix")]
+            uid: i64::try_from(entry.metadata.uid()).ok(),
+            #[cfg(target_family = "unix")]
+            gid: i64::try_from(entry.metadata.gid()).ok(),
+            atime_ns: atime_nanos.and_then(|nanos| i64::try_from(nanos).ok()),
+            mtime_ns: mtime_nanos.and_then(|nanos| i64::try_from(nanos).ok()),
+            #[cfg(target_family = "unix")]
+            ctime_ns: Some(entry.metadata.ctime_nsec()),
+            btime_ns: btime_nanos.and_then(|nanos| i64::try_from(nanos).ok()),
+            // TODO: Export file attributes on Windows.
+            ..rrg_proto::TimelineEntry::default()
+        }
     }
 }
 
