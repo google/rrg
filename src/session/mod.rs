@@ -31,8 +31,9 @@ pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError,
                       UnsupportedValueError, UnknownEnumValueError};
 use self::response::{Response, Status};
-pub use self::sink::{Sink};
+pub use self::sink::Sink;
 pub use self::time::time_from_micros;
+pub use self::parse_enum::{ProtoEnum, parse_enum};
 
 /// A specialized `Result` type for sessions.
 pub type Result<T> = std::result::Result<T, Error>;

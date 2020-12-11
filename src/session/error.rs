@@ -271,6 +271,7 @@ impl From<RegexParseError> for ParseError {
 pub struct UnknownEnumValueError {
     /// A name of the enum field having unknown enum value.
     pub name: &'static str,
+
     /// An enum value, which definition is not known.
     pub value: i32,
 }
@@ -293,7 +294,6 @@ impl std::error::Error for UnknownEnumValueError {
 impl From<UnknownEnumValueError> for ParseError {
 
     fn from(error: UnknownEnumValueError) -> ParseError {
-
         ParseError::malformed(error)
     }
 }
