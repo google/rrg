@@ -36,40 +36,63 @@ type PathType = rrg_proto::path_spec::PathType;
 
 #[derive(Debug)]
 pub struct Request {
+    /// A list of paths to glob that supports `**` path recursion and
+    /// alternatives in form of `{a,b}`.
     pub path_queries: Vec<String>,
+    /// Action type to be performed.
     pub action: Action,
+    /// Conditions that must be met by found file for the action to
+    /// be performed on it.
     pub conditions: Vec<Condition>,
+    /// Work with all kinds of files - not only with regular ones.
     pub process_non_regular_files: bool,
+    /// Should symbolic links be followed by recursive search.
     pub follow_links: bool,
+    /// Behavior for crossing devices when searching the filesystem.
     pub xdev_mode: XDevMode,
 }
 
 #[derive(Debug)]
 pub enum Action {
+    /// Get the metadata of the file.
     Stat(StatActionOptions),
+    /// Get the hash of the file.
     Hash(HashActionOptions),
+    /// Download the file.
     Download(DownloadActionOptions),
 }
 
 #[derive(Debug)]
 pub struct StatActionOptions {
+    /// Should symbolic link be resolved if it is a target of the action.
     pub resolve_links: bool,
+    /// Should linux extended file attributes be collected.
     pub collect_ext_attrs: bool,
 }
 
 #[derive(Debug)]
 pub struct HashActionOptions {
+    /// Maximum file size in bytes acceptable by the action.
     pub max_size: u64,
+    /// Action to perform when requested file is bigger than `max_size`.
     pub oversized_file_policy: HashActionOversizedFilePolicy,
+    /// Should linux extended file attributes be collected.
     pub collect_ext_attrs: bool,
 }
 
 #[derive(Debug)]
 pub struct DownloadActionOptions {
+    /// Maximum file size in bytes acceptable by the action.
     pub max_size: u64,
+    /// Action to perform when requested file is bigger than `max_size`.
     pub oversized_file_policy: DownloadActionOversizedFilePolicy,
+    /// If true, look in any defined external file stores for files before
+    /// downloading them, and offer any new files to external stores. This
+    /// should be true unless the external checks are misbehaving.
     pub use_external_stores: bool,
+    /// Should linux extended file attributes be collected.
     pub collect_ext_attrs: bool,
+    /// Number of bytes per chunk that the downloaded file is divided into.
     pub chunk_size: u64,
 }
 
