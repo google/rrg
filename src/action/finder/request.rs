@@ -392,66 +392,68 @@ fn parse_regex(bytes: Vec<u8>) -> Result<Regex, ParseError> {
 fn get_contents_regex_match_condition(
     proto: Option<FileFinderContentsRegexMatchCondition>,
 ) -> Result<Vec<Condition>, ParseError> {
-    if let Some(options) = proto {
-        let bytes_before = options.bytes_before();
-        let bytes_after = options.bytes_after();
-        let start_offset = options.start_offset();
-        let length = options.length();
-        let mode = MatchMode::from(parse_enum::<RegexMatchMode>(options.mode)?);
+    let options = match proto {
+        Some(options) => options,
+        None => return Ok(vec![]),
+    };
 
-        let regex = match options.regex {
-            None => {
-                return Ok(vec![]);
-            }
-            Some(v) => parse_regex(v)?,
-        };
+    let bytes_before = options.bytes_before();
+    let bytes_after = options.bytes_after();
+    let start_offset = options.start_offset();
+    let length = options.length();
+    let mode = MatchMode::from(parse_enum::<RegexMatchMode>(options.mode)?);
 
-        let ret = ContentsRegexMatchConditionOptions {
-            regex,
-            mode,
-            bytes_before,
-            bytes_after,
-            start_offset,
-            length,
-        };
-        return Ok(vec![Condition::ContentsRegexMatch(ret)]);
-    }
-    Ok(vec![])
+    let regex = match options.regex {
+        None => return Ok(vec![]),
+        Some(v) => parse_regex(v)?,
+    };
+
+    let ret = ContentsRegexMatchConditionOptions {
+        regex,
+        mode,
+        bytes_before,
+        bytes_after,
+        start_offset,
+        length,
+    };
+
+    Ok(vec![Condition::ContentsRegexMatch(ret)])
 }
 
 fn get_contents_literal_match_condition(
     proto: Option<FileFinderContentsLiteralMatchCondition>,
 ) -> Result<Vec<Condition>, ParseError> {
-    if let Some(options) = proto {
-        let bytes_before = options.bytes_before();
-        let bytes_after = options.bytes_after();
-        let start_offset = options.start_offset();
-        let length = options.length();
-        let xor_in_key = options.xor_in_key();
-        let xor_out_key = options.xor_out_key();
-        let mode =
-            MatchMode::from(parse_enum::<LiteralMatchMode>(options.mode)?);
+    let options = match proto {
+        Some(options) => options,
+        None => return Ok(vec![]),
+    };
 
-        let literal = match options.literal {
-            None => {
-                return Ok(vec![]);
-            }
-            Some(v) => v,
-        };
+    let bytes_before = options.bytes_before();
+    let bytes_after = options.bytes_after();
+    let start_offset = options.start_offset();
+    let length = options.length();
+    let xor_in_key = options.xor_in_key();
+    let xor_out_key = options.xor_out_key();
+    let mode =
+        MatchMode::from(parse_enum::<LiteralMatchMode>(options.mode)?);
 
-        let ret = ContentsLiteralMatchConditionOptions {
-            literal,
-            mode,
-            bytes_before,
-            bytes_after,
-            start_offset,
-            length,
-            xor_in_key,
-            xor_out_key,
-        };
-        return Ok(vec![Condition::ContentsLiteralMatch(ret)]);
-    }
-    Ok(vec![])
+    let literal = match options.literal {
+        None => return Ok(vec![]),
+        Some(v) => v,
+    };
+
+    let ret = ContentsLiteralMatchConditionOptions {
+        literal,
+        mode,
+        bytes_before,
+        bytes_after,
+        start_offset,
+        length,
+        xor_in_key,
+        xor_out_key,
+    };
+
+    Ok(vec![Condition::ContentsLiteralMatch(ret)])
 }
 
 fn get_conditions(
@@ -502,11 +504,9 @@ impl super::super::Request for Request {
 
         let action = match proto.action {
             Some(action) => Action::try_from(action)?,
-            None => {
-                return Err(ParseError::malformed(
+            None => return Err(ParseError::malformed(
                     "File Finder request does not contain action definition.",
-                ));
-            }
+                )),
         };
 
         Ok(Request {
