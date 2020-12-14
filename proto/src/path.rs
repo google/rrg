@@ -29,6 +29,19 @@ pub fn from_bytes(bytes: Vec<u8>) -> PathBuf {
     from_bytes_impl(bytes)
 }
 
+/// Serializes given path to a byte sequence.
+///
+/// On Linux, the path is emitted as is since system paths can consist of
+/// arbitrary bytes.
+///
+/// On Windows, the behaviour is unspecified (for now).
+///
+/// ```
+/// use std::path::PathBuf;
+///
+/// let path = PathBuf::from("foo/bar/baz");
+/// assert_eq!(rrg_proto::path::to_bytes(path), b"foo/bar/baz");
+/// ```
 pub fn to_bytes(path: PathBuf) -> Vec<u8> {
     to_bytes_impl(path)
 }
