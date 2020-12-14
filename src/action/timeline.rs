@@ -98,6 +98,13 @@ struct Chunk {
 
 impl Chunk {
 
+    /// Constructs a chunk from the given blob of bytes.
+    fn from_bytes(data: Vec<u8>) -> Chunk {
+        Chunk {
+            data: data,
+        }
+    }
+
     /// Returns an identifier of the chunk.
     fn id(&self) -> ChunkId {
         ChunkId::of(&self)
@@ -362,7 +369,7 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
     for part in crate::gzchunked::encode(entries) {
         let part = part.map_err(Error::Encode)?;
 
-        let chunk = Chunk { data: part };
+        let chunk = Chunk::from_bytes(part);
         let chunk_id = chunk.id();
 
         session.send(session::Sink::TRANSFER_STORE, chunk)?;
