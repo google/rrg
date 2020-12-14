@@ -30,6 +30,50 @@ struct Response {
     chunk_ids: Vec<ChunkId>,
 }
 
+/// An error type for failures that can occur during the timeline action.
+#[derive(Debug)]
+enum Error {
+    /// A failure occurred during an attempt to start the recursive walk.
+    WalkDir(std::io::Error),
+    /// A failure occurred during encoding of the timeline entries.
+    Encode(std::io::Error),
+}
+
+impl std::error::Error for Error {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use Error::*;
+
+        match *self {
+            WalkDir(ref error) => Some(error),
+            Encode(ref error) => Some(error),
+        }
+    }
+}
+
+impl std::fmt::Display for Error {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use Error::*;
+
+        match *self {
+            WalkDir(ref error) => {
+                write!(fmt, "failed to start the recursive walk: {}", error)
+            },
+            Encode(ref error) => {
+                write!(fmt, "failed to encode timeline entries: {}", error)
+            },
+        }
+    }
+}
+
+impl From<Error> for session::Error {
+
+    fn from(error: Error) -> session::Error {
+        session::Error::action(error)
+    }
+}
+
 /// A type representing unique identifier of a given chunk.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ChunkId {
@@ -308,15 +352,24 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::TimelineEntry {
 
 /// Handles requests for the timeline action.
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let root_metadata = symlink_metadata(&request.root).map_err(session::Error::action)?;
-    let target_device = dev_from_metadata(&root_metadata);
-    let mut state = RecurseState::new(target_device);
+    let entries = crate::fs::walk_dir(&request.root).map_err(Error::WalkDir)?
+        .map(rrg_proto::TimelineEntry::from_lossy);
 
-    state.recurse(&request.root, session)?;
-    let action_response = Response {
-        chunk_ids: state.finish(session)?,
+    let mut response = Response {
+        chunk_ids: vec!(),
     };
-    session.reply(action_response)?;
+
+    for part in crate::gzchunked::encode(entries) {
+        let part = part.map_err(Error::Encode)?;
+
+        let chunk = Chunk { data: part };
+        let chunk_id = chunk.id();
+
+        session.send(session::Sink::TRANSFER_STORE, chunk)?;
+        response.chunk_ids.push(chunk_id);
+    }
+
+    session.reply(response)?;
 
     Ok(())
 }
