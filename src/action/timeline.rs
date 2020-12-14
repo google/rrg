@@ -12,7 +12,6 @@ use std::vec::Vec;
 use sha2::{Digest, Sha256};
 use rrg_macro::ack;
 use rrg_proto::convert::FromLossy;
-use rrg_proto::{TimelineArgs, TimelineResult, DataBlob};
 
 use crate::session::{self, Session, ParseError};
 
@@ -182,9 +181,9 @@ pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<
 
 impl super::Request for Request {
 
-    type Proto = TimelineArgs;
+    type Proto = rrg_proto::TimelineArgs;
 
-    fn from_proto(proto: TimelineArgs) -> Result<Request, ParseError> {
+    fn from_proto(proto: rrg_proto::TimelineArgs) -> Result<Request, ParseError> {
         let root_bytes = proto.root
             .ok_or(session::MissingFieldError::new("root"))?;
 
@@ -221,10 +220,10 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("TimelineResult");
 
-    type Proto = TimelineResult;
+    type Proto = rrg_proto::TimelineResult;
 
-    fn into_proto(self) -> TimelineResult {
-        TimelineResult {
+    fn into_proto(self) -> rrg_proto::TimelineResult {
+        rrg_proto::TimelineResult {
             entry_batch_blob_ids: self.chunk_ids.iter().map(|id| id.sha256.to_vec()).collect()
         }
     }
@@ -234,9 +233,9 @@ impl super::Response for Chunk {
 
     const RDF_NAME: Option<&'static str> = Some("DataBlob");
 
-    type Proto = DataBlob;
+    type Proto = rrg_proto::DataBlob;
 
-    fn into_proto(self) -> DataBlob {
+    fn into_proto(self) -> rrg_proto::DataBlob {
         self.data.into()
     }
 }
