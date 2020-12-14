@@ -5,20 +5,16 @@
 
 //! A handler and associated types for the timeline action.
 
-use std::ffi::{OsStr, OsString};
-use std::fs::{symlink_metadata, read_dir, Metadata};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::result::Result;
 use std::vec::Vec;
 
-use cfg_if::cfg_if;
 use sha2::{Digest, Sha256};
 use rrg_macro::ack;
 use rrg_proto::convert::FromLossy;
-use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
+use rrg_proto::{TimelineArgs, TimelineResult, DataBlob};
 
-use crate::gzchunked;
-use crate::session::{self, Session, ParseError, MissingFieldError};
+use crate::session::{self, Session, ParseError};
 
 /// A request type for the timeline action.
 pub struct Request {
@@ -108,203 +104,6 @@ impl Chunk {
     /// Returns an identifier of the chunk.
     fn id(&self) -> ChunkId {
         ChunkId::of(&self)
-    }
-}
-
-/// An object for recursively traversing filesystem and gathering
-/// timeline info.
-struct RecurseState {
-    device: u64,
-    chunk_ids: Vec<ChunkId>,
-    encoder: gzchunked::Encoder,
-}
-
-/// Retrieves device ID from metadata.
-#[allow(unused_variables)]
-fn dev_from_metadata(metadata: &Metadata) -> u64 {
-    cfg_if! {
-        if #[cfg(target_family = "unix")] {
-            use std::os::unix::fs::MetadataExt;
-            metadata.dev()
-        } else if #[cfg(target_family = "windows")] {
-            0
-        } else {
-            compile_error!("unsupported OS family");
-        }
-    }
-}
-
-/// Tries to convert OS-dependent string to raw bytes.
-fn bytes_from_os_str(s: &OsStr) -> std::io::Result<Vec<u8>> {
-    cfg_if! {
-        if #[cfg(target_family = "unix")] {
-            use std::os::unix::ffi::OsStrExt;
-            Ok(Vec::from(s.as_bytes()))
-        } else if #[cfg(target_family = "windows")] {
-            // Using UTF16LE because Windows *seems* to be using only little-endian version.
-            // If RRG starts supporting Windows for real in future, it would be better to
-            // review this piece to ensure that it uses the same path encoding as GRR server.
-
-            use std::os::windows::ffi::OsStrExt;
-            use byteorder::{LittleEndian, WriteBytesExt};
-            s.encode_wide().try_fold(Vec::new(), |mut stream, ch| {
-                stream.write_u16::<LittleEndian>(ch).map(|_| stream)
-            })
-        } else {
-            compile_error!("unsupported OS family");
-        }
-    }
-}
-
-/// Converts raw bytes to OS-dependent string.
-fn os_string_from_bytes(bytes: &[u8]) -> OsString {
-    cfg_if! {
-        if #[cfg(target_family = "unix")] {
-            use std::os::unix::ffi::OsStringExt;
-            OsString::from_vec(Vec::from(bytes))
-        } else if #[cfg(target_family = "windows")] {
-            // Using UTF16LE because Windows *seems* to be using only little-endian version.
-            // If RRG starts supporting Windows for real in future, it would be better to
-            // review this piece to ensure that it uses the same path encoding as GRR server.
-
-            use std::os::windows::ffi::OsStringExt;
-            use byteorder::{LittleEndian, ReadBytesExt};
-            let mut wchars = Vec::new();
-            let mut bytes_slice = bytes;
-            while let Ok(wchar) = bytes_slice.read_u16::<LittleEndian>() {
-                wchars.push(wchar);
-            }
-            OsString::from_wide(wchars.as_slice())
-        } else {
-            compile_error!("unsupported OS family");
-        }
-    }
-}
-
-/// Encodes filesystem metadata into timeline entry proto.
-fn entry_from_metadata(metadata: &Metadata, path: &Path) -> std::io::Result<TimelineEntry>
-{
-    cfg_if! {
-        if #[cfg(target_family = "unix")] {
-            use std::os::unix::fs::MetadataExt;
-            Ok(TimelineEntry {
-                path: Some(bytes_from_os_str(path.as_os_str())?),
-                mode: Some(i64::from(metadata.mode())),
-                size: Some(metadata.size()),
-                dev: Some(metadata.dev() as i64),
-                ino: Some(metadata.ino()),
-                uid: Some(metadata.uid() as i64),
-                gid: Some(metadata.gid() as i64),
-                atime_ns: Some(metadata.atime_nsec() as i64),
-                ctime_ns: Some(metadata.ctime_nsec() as i64),
-                mtime_ns: Some(metadata.mtime_nsec() as i64),
-                btime_ns: None,
-                attributes: None,
-            })
-        } else if #[cfg(target_family = "windows")] {
-            use std::os::windows::fs::MetadataExt;
-            Ok(TimelineEntry {
-                path: Some(bytes_from_os_str(path.as_os_str())?),
-                mode: None,
-                size: Some(metadata.len()),
-                dev: None,
-                ino: None,
-                uid: None,
-                gid: None,
-                atime_ns: Some(metadata.last_access_time() as i64),
-                ctime_ns: Some(metadata.creation_time() as i64),
-                mtime_ns: Some(metadata.last_write_time() as i64),
-                btime_ns: None,
-                attributes: None,
-            })
-        } else {
-            compile_error!("unsupported OS family");
-        }
-    }
-}
-
-impl RecurseState {
-    /// Constructs new state that would only traverse filesystems from `device`.
-    fn new(device: u64) -> RecurseState {
-        RecurseState {
-            device,
-            chunk_ids: Vec::new(),
-            encoder: gzchunked::Encoder::new(gzchunked::Compression::default()),
-        }
-    }
-
-    /// Sends block to transfer store and saves its digest.
-    fn send_block<S>(&mut self, block: Vec<u8>, session: &mut S) -> session::Result<()>
-    where
-        S: Session,
-    {
-        let chunk = Chunk {
-            data: block,
-        };
-
-        self.chunk_ids.push(chunk.id());
-        session.send(session::Sink::TRANSFER_STORE, chunk)?;
-        session.heartbeat();
-        Ok(())
-    }
-
-    /// Encodes the entry and sends next block to the session if needed.
-    fn process_entry<S>(&mut self, entry: TimelineEntry, session: &mut S) -> session::Result<()>
-    where
-        S: Session,
-    {
-        let mut entry_data: Vec<u8> = Vec::new();
-        prost::Message::encode(&entry, &mut entry_data)?;
-        self.encoder.write(entry_data.as_slice()).map_err(session::Error::action)?;
-        if let Some(data) = self.encoder.try_next_chunk().map_err(session::Error::action)? {
-            self.send_block(data, session)?;
-        }
-        Ok(())
-    }
-
-    /// Recursively traverses path specified as root, sends gzchunked stat data to session in
-    /// process.
-    fn recurse<S>(&mut self, root: &Path, session: &mut S) -> session::Result<()>
-    where
-        S: Session,
-    {
-        let mut path = PathBuf::from(root);
-        let mut dir_iter_stack = Vec::new();
-        loop {
-            let metadata = match symlink_metadata(&path) {
-                Ok(metadata) => metadata,
-                Err(_) => continue,
-            };
-            let entry = entry_from_metadata(&metadata, &path).map_err(session::Error::action)?;
-            self.process_entry(entry, session)?;
-            if metadata.is_dir() && dev_from_metadata(&metadata) == self.device {
-                if let Ok(dir_iter) = read_dir(&path) {
-                    dir_iter_stack.push(dir_iter);
-                }
-            }
-            let mut new_path = None;
-            while let Some(dir_iter) = dir_iter_stack.last_mut() {
-                if let Some(dir_entry) = dir_iter.next() {
-                    new_path = Some(dir_entry.map_err(session::Error::action)?.path());
-                    break;
-                } else {
-                    dir_iter_stack.pop();
-                }
-            }
-            if let Some(new_path) = new_path {
-                path = new_path;
-            } else {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    /// Sends final pieces of data to the session.
-    fn finish<S: Session>(mut self, session: &mut S) -> session::Result<Vec<ChunkId>> {
-        let final_block = self.encoder.next_chunk().map_err(session::Error::action)?;
-        self.send_block(final_block, session)?;
-        Ok(self.chunk_ids)
     }
 }
 
