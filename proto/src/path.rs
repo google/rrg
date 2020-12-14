@@ -12,6 +12,8 @@ use std::path::PathBuf;
 ///
 /// On Windows, the behaviour is unspecified (for now).
 ///
+/// # Examples
+///
 /// ```
 /// use std::ffi::OsStr;
 ///
@@ -35,6 +37,8 @@ pub fn from_bytes(bytes: Vec<u8>) -> PathBuf {
 /// arbitrary bytes.
 ///
 /// On Windows, the behaviour is unspecified (for now).
+///
+/// # Examples
 ///
 /// ```
 /// use std::path::PathBuf;
