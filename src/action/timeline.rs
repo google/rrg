@@ -70,7 +70,7 @@ impl From<Error> for session::Error {
 }
 
 /// A type representing unique identifier of a given chunk.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct ChunkId {
     /// A SHA-256 digest of the referenced chunk data.
     sha256: [u8; 32],
@@ -234,37 +234,7 @@ mod tests {
     use std::fs::{hard_link, create_dir, write};
     use tempfile::tempdir;
 
-    use rrg_proto::TimelineEntry;
-
-    use crate::gzchunked;
-
-    fn entries_from_session_response(session: &session::test::Fake) -> Vec<TimelineEntry> {
-        assert_eq!(session.reply_count(), 1);
-        let block_count = session.response_count(session::Sink::TRANSFER_STORE);
-
-        let mut expected_ids = session.reply::<Response>(0).chunk_ids.clone();
-        let mut ids = Vec::new();
-        assert_eq!(block_count, expected_ids.len());
-        expected_ids.sort_by(|a, b| a.sha256.cmp(&b.sha256));
-
-        let mut decoder = gzchunked::Decoder::new();
-        for block_number in 0..block_count {
-            let chunk = session.response::<Chunk>(session::Sink::TRANSFER_STORE, block_number);
-            ids.push(chunk.id());
-
-            decoder.write(chunk.data.as_slice()).unwrap();
-        }
-
-        ids.sort_by(|a, b| a.sha256.cmp(&b.sha256));
-        assert_eq!(ids, expected_ids);
-
-        let mut ret = Vec::new();
-        while let Some(entry_data) = decoder.try_next_data() {
-            let entry: TimelineEntry = prost::Message::decode(entry_data.as_slice()).unwrap();
-            ret.push(entry);
-        }
-        ret
-    }
+    use session::test::Fake as Session;
 
     #[test]
     fn test_nonexistent_path() {
@@ -282,7 +252,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
-        let mut entries = entries_from_session_response(&session);
+        let mut entries = entries(&session);
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].path, Some(rrg_proto::path::to_bytes(dir.path().to_path_buf())));
@@ -302,7 +272,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
-        let mut entries = entries_from_session_response(&session);
+        let mut entries = entries(&session);
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         assert_eq!(entries.len(), 3);
         assert_ne!(entries[0].ino, entries[1].ino);
@@ -325,7 +295,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
-        let mut entries = entries_from_session_response(&session);
+        let mut entries = entries(&session);
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         assert_eq!(entries.len(), 3);
         assert_ne!(entries[0].ino.unwrap(), entries[1].ino.unwrap());
@@ -354,7 +324,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
-        let mut entries = entries_from_session_response(&session);
+        let mut entries = entries(&session);
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         assert_eq!(entries.len(), 5);
         assert_eq!(entries[1].path, Some(rrg_proto::path::to_bytes(test1_path)));
@@ -379,7 +349,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
-        let mut entries = entries_from_session_response(&session);
+        let mut entries = entries(&session);
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         assert_eq!(entries.len(), 4);
         assert_eq!(entries[1].path, Some(rrg_proto::path::to_bytes(path1)));
@@ -410,7 +380,7 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
-        let entries = entries_from_session_response(&session);
+        let entries = entries(&session);
         assert_eq!(entries.len(), dir_count + 1);
     }
 
@@ -437,12 +407,34 @@ mod tests {
         let mut session = session::test::Fake::new();
         assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
 
-        let mut entries = entries_from_session_response(&session);
+        let mut entries = entries(&session);
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         assert_eq!(entries.len(), 4);
         assert_eq!(entries[2].mode, Some(0o040000));
         assert_eq!(entries[1].mode, Some(0o100444));
         // Drop mode bits because symlinks have actual modes on some unix systems.
         assert_eq!(entries[3].mode.unwrap() & 0o120000, 0o120000);
+    }
+
+    /// Retrieves timeline entries from the given session object.
+    fn entries(session: &Session) -> Vec<rrg_proto::TimelineEntry> {
+        use std::collections::HashMap;
+        use crate::session::Sink;
+
+        let chunk_count = session.response_count(Sink::TRANSFER_STORE);
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.reply::<Response>(0).chunk_ids.len(), chunk_count);
+
+        let chunks_by_id = session.responses::<Chunk>(Sink::TRANSFER_STORE)
+            .map(|chunk| (chunk.id(), chunk))
+            .collect::<HashMap<_, _>>();
+
+        let chunks = session.reply::<Response>(0).chunk_ids
+            .iter()
+            .map(|chunk_id| &chunks_by_id[chunk_id].data[..]);
+
+        crate::gzchunked::decode(chunks)
+            .map(Result::unwrap)
+            .collect()
     }
 }
