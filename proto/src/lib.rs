@@ -4,6 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 pub mod convert;
+pub mod path;
 
 use std::path::PathBuf;
 
