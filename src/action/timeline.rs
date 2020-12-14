@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use rrg_macro::ack;
 use rrg_proto::convert::FromLossy;
 
-use crate::session::{self, Session, ParseError};
+use crate::session::{self, Session};
 
 /// A request type for the timeline action.
 pub struct Request {
@@ -83,6 +83,11 @@ impl ChunkId {
         ChunkId {
             sha256: Sha256::digest(&chunk.data).into(),
         }
+    }
+
+    /// Converts the chunk identifier into raw bytes of SHA-256 hash.
+    fn to_sha256_bytes(self) -> Vec<u8> {
+        self.sha256.to_vec()
     }
 }
 
@@ -156,7 +161,10 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::TimelineEntry {
 }
 
 /// Handles requests for the timeline action.
-pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
+pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
+where
+    S: Session,
+{
     let entries = crate::fs::walk_dir(&request.root).map_err(Error::WalkDir)?
         .map(rrg_proto::TimelineEntry::from_lossy);
 
@@ -183,7 +191,7 @@ impl super::Request for Request {
 
     type Proto = rrg_proto::TimelineArgs;
 
-    fn from_proto(proto: rrg_proto::TimelineArgs) -> Result<Request, ParseError> {
+    fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
         let root_bytes = proto.root
             .ok_or(session::MissingFieldError::new("root"))?;
 
@@ -223,8 +231,13 @@ impl super::Response for Response {
     type Proto = rrg_proto::TimelineResult;
 
     fn into_proto(self) -> rrg_proto::TimelineResult {
+        let chunk_ids = self.chunk_ids
+            .into_iter()
+            .map(ChunkId::to_sha256_bytes)
+            .collect();
+
         rrg_proto::TimelineResult {
-            entry_batch_blob_ids: self.chunk_ids.iter().map(|id| id.sha256.to_vec()).collect()
+            entry_batch_blob_ids: chunk_ids,
         }
     }
 }
