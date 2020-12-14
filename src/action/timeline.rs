@@ -134,10 +134,7 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::TimelineEntry {
         });
 
         rrg_proto::TimelineEntry {
-            // TODO: This is just a quick workaround for handling paths. In
-            // reality, we should write platfrom-specific conversion from paths
-            // into raw bytes.
-            path: Some(entry.path.to_string_lossy().as_bytes().to_vec()),
+            path: Some(rrg_proto::path::to_bytes(entry.path)),
             #[cfg(target_family = "unix")]
             mode: Some(i64::from(entry.metadata.mode())),
             size: Some(entry.metadata.len()),

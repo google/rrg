@@ -29,6 +29,10 @@ pub fn from_bytes(bytes: Vec<u8>) -> PathBuf {
     from_bytes_impl(bytes)
 }
 
+pub fn to_bytes(path: PathBuf) -> Vec<u8> {
+    to_bytes_impl(path)
+}
+
 #[cfg(target_family = "unix")]
 fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
     use std::os::unix::ffi::OsStringExt as _;
@@ -44,4 +48,19 @@ fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
 
     use std::os::windows::ffi::OsStringExt as _;
     std::ffi::OsString::from_wide(&bytes_u16).into()
+}
+
+#[cfg(target_family = "unix")]
+fn to_bytes_impl(path: PathBuf) -> Vec<u8> {
+    use std::os::unix::ffi::OsStringExt as _;
+    std::ffi::OsString::from(path).into_vec()
+}
+
+#[cfg(target_family = "windows")]
+fn to_bytes_impl(path: PathBuf) -> Vec<u8> {
+    let string = std::ffi::OsString::from(path);
+
+    // TODO: See explanation in `from_bytes_impl` on Windows.
+    use std::os::windows::ffi::OsStrExt as _;
+    string.as_os_str().encode_wide().map(|byte| byte as u8).collect()
 }
