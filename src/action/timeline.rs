@@ -386,12 +386,35 @@ impl super::Request for Request {
     type Proto = TimelineArgs;
 
     fn from_proto(proto: TimelineArgs) -> Result<Request, ParseError> {
-        match proto.root {
-            Some(root) => Ok(Request {
-                root: PathBuf::from(os_string_from_bytes(root.as_slice())),
-            }),
-            None => Err(ParseError::malformed(MissingFieldError::new("root"))),
+        let root_bytes = proto.root
+            .ok_or(session::MissingFieldError::new("root"))?;
+
+        // TODO: Move this path parsing into the `rrg_proto` crate.
+        let root;
+
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::ffi::OsStringExt as _;
+            root = std::ffi::OsString::from_vec(root_bytes);
         }
+
+        #[cfg(target_family = "windows")]
+        {
+            // TODO: This is just a quick hack that treats UTF-8-encoded strings
+            // as UTF-16. This works for trivial cases but should be reworked
+            // once the GRR protocol for paths is defined.
+            let root_bytes = root_bytes
+                .iter()
+                .map(|byte| *byte as u16)
+                .collect::<Vec<_>>();
+
+            use std::os::windows::ffi::OsStringExt as _;
+            root = std::ffi::OsString::from_wide(&root_bytes);
+        }
+
+        Ok(Request {
+            root: PathBuf::from(root),
+        })
     }
 }
 
