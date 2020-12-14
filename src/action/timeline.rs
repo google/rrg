@@ -234,6 +234,10 @@ mod tests {
     use std::fs::{hard_link, create_dir, write};
     use tempfile::tempdir;
 
+    use rrg_proto::TimelineEntry;
+
+    use crate::gzchunked;
+
     fn entries_from_session_response(session: &session::test::Fake) -> Vec<TimelineEntry> {
         assert_eq!(session.reply_count(), 1);
         let block_count = session.response_count(session::Sink::TRANSFER_STORE);
@@ -281,7 +285,7 @@ mod tests {
         let mut entries = entries_from_session_response(&session);
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].path, Some(bytes_from_os_str(dir.path().as_os_str()).unwrap()));
+        assert_eq!(entries[0].path, Some(rrg_proto::path::to_bytes(dir.path().to_path_buf())));
     }
 
     #[cfg_attr(target_family = "windows", ignore)]
@@ -353,10 +357,10 @@ mod tests {
         let mut entries = entries_from_session_response(&session);
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         assert_eq!(entries.len(), 5);
-        assert_eq!(entries[1].path, Some(bytes_from_os_str(test1_path.as_os_str()).unwrap()));
-        assert_eq!(entries[2].path, Some(bytes_from_os_str(test2_path.as_os_str()).unwrap()));
-        assert_eq!(entries[3].path, Some(bytes_from_os_str(test3_path.as_os_str()).unwrap()));
-        assert_eq!(entries[4].path, Some(bytes_from_os_str(test4_path.as_os_str()).unwrap()));
+        assert_eq!(entries[1].path, Some(rrg_proto::path::to_bytes(test1_path)));
+        assert_eq!(entries[2].path, Some(rrg_proto::path::to_bytes(test2_path)));
+        assert_eq!(entries[3].path, Some(rrg_proto::path::to_bytes(test3_path)));
+        assert_eq!(entries[4].path, Some(rrg_proto::path::to_bytes(test4_path)));
     }
 
     #[test]
@@ -378,9 +382,9 @@ mod tests {
         let mut entries = entries_from_session_response(&session);
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         assert_eq!(entries.len(), 4);
-        assert_eq!(entries[1].path, Some(bytes_from_os_str(path1.as_os_str()).unwrap()));
-        assert_eq!(entries[2].path, Some(bytes_from_os_str(path2.as_os_str()).unwrap()));
-        assert_eq!(entries[3].path, Some(bytes_from_os_str(path3.as_os_str()).unwrap()));
+        assert_eq!(entries[1].path, Some(rrg_proto::path::to_bytes(path1)));
+        assert_eq!(entries[2].path, Some(rrg_proto::path::to_bytes(path2)));
+        assert_eq!(entries[3].path, Some(rrg_proto::path::to_bytes(path3)));
     }
 
     // TODO: Debug this test on MacOS.
