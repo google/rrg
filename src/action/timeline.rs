@@ -18,7 +18,7 @@ use rrg_proto::convert::FromLossy;
 use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
 
 use crate::gzchunked;
-use crate::session::{self, Session, Error, ParseError, MissingFieldError};
+use crate::session::{self, Session, ParseError, MissingFieldError};
 
 /// A request type for the timeline action.
 pub struct Request {
@@ -204,8 +204,8 @@ impl RecurseState {
     {
         let mut entry_data: Vec<u8> = Vec::new();
         prost::Message::encode(&entry, &mut entry_data)?;
-        self.encoder.write(entry_data.as_slice()).map_err(Error::action)?;
-        if let Some(data) = self.encoder.try_next_chunk().map_err(Error::action)? {
+        self.encoder.write(entry_data.as_slice()).map_err(session::Error::action)?;
+        if let Some(data) = self.encoder.try_next_chunk().map_err(session::Error::action)? {
             self.send_block(data, session)?;
         }
         Ok(())
@@ -224,7 +224,7 @@ impl RecurseState {
                 Ok(metadata) => metadata,
                 Err(_) => continue,
             };
-            let entry = entry_from_metadata(&metadata, &path).map_err(Error::action)?;
+            let entry = entry_from_metadata(&metadata, &path).map_err(session::Error::action)?;
             self.process_entry(entry, session)?;
             if metadata.is_dir() && dev_from_metadata(&metadata) == self.device {
                 if let Ok(dir_iter) = read_dir(&path) {
@@ -234,7 +234,7 @@ impl RecurseState {
             let mut new_path = None;
             while let Some(dir_iter) = dir_iter_stack.last_mut() {
                 if let Some(dir_entry) = dir_iter.next() {
-                    new_path = Some(dir_entry.map_err(Error::action)?.path());
+                    new_path = Some(dir_entry.map_err(session::Error::action)?.path());
                     break;
                 } else {
                     dir_iter_stack.pop();
@@ -251,7 +251,7 @@ impl RecurseState {
 
     /// Sends final pieces of data to the session.
     fn finish<S: Session>(mut self, session: &mut S) -> session::Result<Vec<ChunkId>> {
-        let final_block = self.encoder.next_chunk().map_err(Error::action)?;
+        let final_block = self.encoder.next_chunk().map_err(session::Error::action)?;
         self.send_block(final_block, session)?;
         Ok(self.chunk_ids)
     }
@@ -308,7 +308,7 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::TimelineEntry {
 
 /// Handles requests for the timeline action.
 pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let root_metadata = symlink_metadata(&request.root).map_err(Error::action)?;
+    let root_metadata = symlink_metadata(&request.root).map_err(session::Error::action)?;
     let target_device = dev_from_metadata(&root_metadata);
     let mut state = RecurseState::new(target_device);
 
