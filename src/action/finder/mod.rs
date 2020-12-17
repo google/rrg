@@ -8,3 +8,4 @@
 pub mod request;
 pub mod groups;
 pub mod glob;
+pub mod hash;
