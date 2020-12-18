@@ -213,7 +213,7 @@ pub mod tests {
     use super::*;
 
     #[test]
-    pub fn test_encode_empty_iter() {
+    fn test_encode_empty_iter() {
         use std::io::Read as _;
 
         let mut stream = encode(std::iter::empty::<()>());
@@ -225,7 +225,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_decode_empty_buf() {
+    fn test_decode_empty_buf() {
         let buf: &[u8] = b"";
         let mut iter = decode::<_, ()>(buf);
 
@@ -233,7 +233,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_decode_incorrect_size_tag() {
+    fn test_decode_incorrect_size_tag() {
         let buf: &[u8] = b"\x12\x34\x56";
         let mut iter = decode::<_, ()>(buf);
 
@@ -242,7 +242,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_decode_zero_size_tag() {
+    fn test_decode_zero_size_tag() {
         let buf: &[u8] = b"\x00\x00\x00\x00\x00\x00\x00\x00";
 
         let mut iter = decode(buf).map(Result::unwrap);
@@ -252,7 +252,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_decode_partial_size_tag() {
+    fn test_decode_partial_size_tag() {
 
         // A simple reader that yields a 0-valued size tag byte by byte.
         struct Reader(u8);
@@ -277,7 +277,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_decode_short_input() {
+    fn test_decode_short_input() {
         let buf: &[u8] = b"\x00\x00\x00\x00\x00\x00\x00\x42foo";
         let mut iter = decode::<_, ()>(buf);
 
@@ -286,7 +286,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_encode_and_decode_single_message() {
+    fn test_encode_and_decode_single_message() {
         let mut iter = decode(encode(std::iter::once(String::from("foo"))))
             .map(Result::unwrap);
 
@@ -295,7 +295,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_encode_and_decode_single_unit_message() {
+    fn test_encode_and_decode_single_unit_message() {
         let mut iter = decode(encode(std::iter::once(())))
             .map(Result::unwrap);
 
@@ -304,7 +304,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_encode_and_decode_multiple_messages() {
+    fn test_encode_and_decode_multiple_messages() {
         let msgs = vec! {
             b"foo".to_vec(),
             b"bar".to_vec(),
@@ -321,7 +321,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_encode_and_decode_multiple_unit_messages() {
+    fn test_encode_and_decode_multiple_unit_messages() {
         let msgs = vec!((), (), ());
 
         let mut iter = decode(encode(msgs.into_iter()))
