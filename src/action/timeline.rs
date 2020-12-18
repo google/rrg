@@ -231,189 +231,205 @@ impl super::Response for Chunk {
 mod tests {
 
     use super::*;
-    use std::fs::{hard_link, create_dir, write};
-    use tempfile::tempdir;
 
     use session::test::Fake as Session;
 
     #[test]
-    fn test_nonexistent_path() {
-        let dir = tempdir().unwrap();
-        let dir_path = dir.path().join("nonexistent_subdir");
+    fn test_non_existent_path() {
+        let tempdir = tempfile::tempdir().unwrap();
 
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: dir_path }).is_err());
+        let request = Request {
+            root: tempdir.path().join("foo")
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_err());
     }
 
     #[test]
-    fn test_one_empty_dir() {
-        let dir = tempdir().unwrap();
+    fn test_empty_dir() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir_path = tempdir.path().to_path_buf();
 
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
+        let request = Request {
+            root: tempdir_path.clone(),
+        };
 
-        let mut entries = entries(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].path, Some(rrg_proto::path::to_bytes(dir.path().to_path_buf())));
-    }
-
-    #[cfg_attr(target_family = "windows", ignore)]
-    #[test]
-    fn test_file_hardlink() {
-        let dir = tempdir().unwrap();
-
-        let test1_path = dir.path().join("test1.txt");
-        write(&test1_path, "foo").unwrap();
-
-        let test2_path = dir.path().join("test2.txt");
-        hard_link(&test1_path, &test2_path).unwrap();
-
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
-
-        let mut entries = entries(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
-        assert_eq!(entries.len(), 3);
-        assert_ne!(entries[0].ino, entries[1].ino);
-        assert_eq!(entries[1].ino, entries[2].ino);
-    }
-
-    #[cfg(target_family = "unix")]
-    #[test]
-    fn test_file_symlink() {
-        use std::os::unix::fs::symlink;
-
-        let dir = tempdir().unwrap();
-
-        let test1_path = dir.path().join("test1.txt");
-        write(&test1_path, "foo").unwrap();
-
-        let test2_path = dir.path().join("test2.txt");
-        symlink(&test1_path, &test2_path).unwrap();
-
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
-
-        let mut entries = entries(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
-        assert_eq!(entries.len(), 3);
-        assert_ne!(entries[0].ino.unwrap(), entries[1].ino.unwrap());
-        assert_ne!(entries[1].ino.unwrap(), entries[2].ino.unwrap());
-        assert_eq!(entries[1].size, Some(3));
-        // Drop mode bits because symlinks have actual modes on some unix systems.
-        assert_eq!(entries[2].mode.unwrap() & 0o120000, 0o120000);
-    }
-
-    #[cfg(target_family = "unix")]
-    #[test]
-    fn test_symlink_loops() {
-        use std::os::unix::fs::symlink;
-
-        let dir = tempdir().unwrap();
-
-        let test1_path = dir.path().join("test1");
-        let test2_path = dir.path().join("test2");
-        let test3_path = dir.path().join("test3");
-        let test4_path = test3_path.join("test4");
-        symlink(&test2_path, &test1_path).unwrap();
-        symlink(&test1_path, &test2_path).unwrap();
-        create_dir(&test3_path).unwrap();
-        symlink("../test3", &test4_path).unwrap();
-
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
-
-        let mut entries = entries(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
-        assert_eq!(entries.len(), 5);
-        assert_eq!(entries[1].path, Some(rrg_proto::path::to_bytes(test1_path)));
-        assert_eq!(entries[2].path, Some(rrg_proto::path::to_bytes(test2_path)));
-        assert_eq!(entries[3].path, Some(rrg_proto::path::to_bytes(test3_path)));
-        assert_eq!(entries[4].path, Some(rrg_proto::path::to_bytes(test4_path)));
-    }
-
-    #[test]
-    fn test_weird_unicode_names() {
-        let dir = tempdir().unwrap();
-
-        let path1 = dir.path().join("1with spaces");
-        write(&path1, "foo").unwrap();
-
-        let path2 = dir.path().join("2'quotes'");
-        write(&path2, "foo").unwrap();
-
-        let path3 = dir.path().join("3кириллица");
-        write(&path3, "foo").unwrap();
-
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
-
-        let mut entries = entries(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
-        assert_eq!(entries.len(), 4);
-        assert_eq!(entries[1].path, Some(rrg_proto::path::to_bytes(path1)));
-        assert_eq!(entries[2].path, Some(rrg_proto::path::to_bytes(path2)));
-        assert_eq!(entries[3].path, Some(rrg_proto::path::to_bytes(path3)));
-    }
-
-    // TODO: Debug this test on MacOS.
-    #[cfg_attr(target_os = "macos", ignore)]
-    #[test]
-    fn test_deep_dirs() {
-        const MAX_DIR_COUNT: usize = 512;
-        let mut dir_count = 0;
-
-        let dir = tempdir().unwrap();
-
-        let mut path = PathBuf::from(dir.path());
-        while dir_count < MAX_DIR_COUNT {
-            path.push("d");
-            if let Err(_) = create_dir(&path) {
-                break;
-            }
-            dir_count += 1;
-        }
-        // Let's suppose we can create at least this much.
-        assert!(dir_count >= 64);
-
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
 
         let entries = entries(&session);
-        assert_eq!(entries.len(), dir_count + 1);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(path(&entries[0]), Some(tempdir_path.clone()));
     }
 
-    #[cfg(target_family = "unix")]
     #[test]
-    fn test_mode_and_permissions() {
-        use std::os::unix::fs::{symlink, PermissionsExt};
-        use std::fs::{set_permissions, Permissions};
+    fn test_dir_with_files() {
+        let tempdir = tempfile::tempdir().unwrap();
+        std::fs::File::create(tempdir.path().join("a")).unwrap();
+        std::fs::File::create(tempdir.path().join("b")).unwrap();
+        std::fs::File::create(tempdir.path().join("c")).unwrap();
 
-        let dir = tempdir().unwrap();
+        let request = Request {
+            root: tempdir.path().to_path_buf(),
+        };
 
-        let unavailable_dir_path = dir.path().join("unavailable");
-        let unavailable_file_path = unavailable_dir_path.join("file");
-        let readonly_path = dir.path().join("readonly.txt");
-        let symlink_path = dir.path().join("writeonly.txt");
-        create_dir(&unavailable_dir_path).unwrap();
-        write(&unavailable_file_path, "foo").unwrap();
-        write(&readonly_path, "foo").unwrap();
-        symlink(&readonly_path, &symlink_path).unwrap();
-
-        set_permissions(&unavailable_dir_path, Permissions::from_mode(0o000)).unwrap();
-        set_permissions(&readonly_path, Permissions::from_mode(0o444)).unwrap();
-
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        entries.sort_by_key(|entry| entry.path.clone());
+
         assert_eq!(entries.len(), 4);
-        assert_eq!(entries[2].mode, Some(0o040000));
-        assert_eq!(entries[1].mode, Some(0o100444));
-        // Drop mode bits because symlinks have actual modes on some unix systems.
-        assert_eq!(entries[3].mode.unwrap() & 0o120000, 0o120000);
+        assert_eq!(path(&entries[0]), Some(tempdir.path().to_path_buf()));
+        assert_eq!(path(&entries[1]), Some(tempdir.path().join("a")));
+        assert_eq!(path(&entries[2]), Some(tempdir.path().join("b")));
+        assert_eq!(path(&entries[3]), Some(tempdir.path().join("c")));
+    }
+
+    #[test]
+    fn test_dir_with_nested_dirs() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir_path = tempdir.path().to_path_buf();
+
+        std::fs::create_dir_all(tempdir_path.join("a").join("b")).unwrap();
+
+        let request = Request {
+            root: tempdir_path.clone(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(entries.len(), 3);
+        assert_eq!(path(&entries[0]), Some(tempdir_path.clone()));
+        assert_eq!(path(&entries[1]), Some(tempdir_path.join("a")));
+        assert_eq!(path(&entries[2]), Some(tempdir_path.join("a").join("b")));
+    }
+
+    // Symlinking is supported only on Unix-like systems.
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_dir_with_circular_symlinks() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let root_path = tempdir.path().to_path_buf();
+        let dir_path = root_path.join("dir");
+        let symlink_path = dir_path.join("symlink");
+
+        std::fs::create_dir(&dir_path).unwrap();
+        std::os::unix::fs::symlink(&dir_path, &symlink_path).unwrap();
+
+        let request = Request {
+            root: root_path.clone(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(entries.len(), 3);
+        assert_eq!(path(&entries[0]), Some(root_path));
+        assert_eq!(path(&entries[1]), Some(dir_path));
+        assert_eq!(path(&entries[2]), Some(symlink_path));
+    }
+
+    #[test]
+    fn test_dir_with_unicode_files() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let root_path = tempdir.path().to_path_buf();
+        let file_path_1 = root_path.join("zażółć gęślą jaźń");
+        let file_path_2 = root_path.join("што й па мору");
+
+        std::fs::File::create(&file_path_1).unwrap();
+        std::fs::File::create(&file_path_2).unwrap();
+
+        let request = Request {
+            root: root_path.clone(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(entries.len(), 3);
+
+        // macOS mangles Unicode-specific characters in filenames.
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert_eq!(path(&entries[0]), Some(root_path));
+            assert_eq!(path(&entries[1]), Some(file_path_1));
+            assert_eq!(path(&entries[2]), Some(file_path_2));
+        }
+    }
+
+    #[test]
+    fn test_file_metadata() {
+        let tempdir = tempfile::tempdir().unwrap();
+        std::fs::write(tempdir.path().join("foo"), b"123456789").unwrap();
+
+        let request = Request {
+            root: tempdir.path().to_path_buf(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(path(&entries[1]), Some(tempdir.path().join("foo")));
+        assert_eq!(entries[1].size, Some(9));
+
+        // Information about the file mode, user and group identifiers is
+        // available only on UNIX systems.
+        #[cfg(target_family = "unix")]
+        {
+            let mode = entries[1].mode.unwrap() as libc::mode_t;
+            assert_eq!(mode & libc::S_IFMT, libc::S_IFREG);
+
+            assert_eq!(entries[1].uid, Some(users::get_current_uid() as i64));
+            assert_eq!(entries[1].gid, Some(users::get_current_gid() as i64));
+        }
+    }
+
+    #[test]
+    fn test_hardlink_metadata() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let root_path = tempdir.path().to_path_buf();
+        let file_path = root_path.join("file");
+        let hardlink_path = root_path.join("hardlink");
+
+        std::fs::File::create(&file_path).unwrap();
+        std::fs::hard_link(&file_path, &hardlink_path).unwrap();
+
+        let request = Request {
+            root: root_path.clone(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(entries.len(), 3);
+        assert_eq!(path(&entries[1]), Some(file_path));
+        assert_eq!(path(&entries[2]), Some(hardlink_path));
+
+        // Information about inode is not available on Windows.
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(entries[1].ino, entries[2].ino);
     }
 
     /// Retrieves timeline entries from the given session object.
@@ -436,5 +452,10 @@ mod tests {
         crate::gzchunked::decode(chunks)
             .map(Result::unwrap)
             .collect()
+    }
+
+    /// Constructs a path for the given timeline entry.
+    fn path(entry: &rrg_proto::TimelineEntry) -> Option<PathBuf> {
+        entry.path.clone().map(rrg_proto::path::from_bytes)
     }
 }
