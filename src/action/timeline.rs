@@ -5,258 +5,196 @@
 
 //! A handler and associated types for the timeline action.
 
-use std::ffi::{OsStr, OsString};
-use std::fs::{symlink_metadata, read_dir, Metadata};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::result::Result;
 use std::vec::Vec;
 
-use cfg_if::cfg_if;
 use sha2::{Digest, Sha256};
-use rrg_proto::{TimelineArgs, TimelineEntry, TimelineResult, DataBlob};
+use rrg_macro::ack;
+use rrg_proto::convert::FromLossy;
 
-use crate::gzchunked;
-use crate::session::{self, Session, Error, ParseError, MissingFieldError};
+use crate::session::{self, Session};
 
 /// A request type for the timeline action.
 pub struct Request {
     root: PathBuf,
 }
 
-/// A newtype wrapper for SHA-256 chunk digest.
-#[derive(Debug, PartialEq, Clone)]
-struct ChunkDigest([u8; 32]);
-
-/// A response type for the timeline action (actual response).
+/// A response type for the timeline action.
 struct Response {
-    ids: Vec<ChunkDigest>,
+    chunk_ids: Vec<ChunkId>,
 }
 
-/// A response type for the timeline action (transfer store chunks).
-struct ChunkResponse {
+/// An error type for failures that can occur during the timeline action.
+#[derive(Debug)]
+enum Error {
+    /// A failure occurred during an attempt to start the recursive walk.
+    WalkDir(std::io::Error),
+    /// A failure occurred during encoding of the timeline entries.
+    Encode(std::io::Error),
+}
+
+impl std::error::Error for Error {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use Error::*;
+
+        match *self {
+            WalkDir(ref error) => Some(error),
+            Encode(ref error) => Some(error),
+        }
+    }
+}
+
+impl std::fmt::Display for Error {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use Error::*;
+
+        match *self {
+            WalkDir(ref error) => {
+                write!(fmt, "failed to start the recursive walk: {}", error)
+            },
+            Encode(ref error) => {
+                write!(fmt, "failed to encode timeline entries: {}", error)
+            },
+        }
+    }
+}
+
+impl From<Error> for session::Error {
+
+    fn from(error: Error) -> session::Error {
+        session::Error::action(error)
+    }
+}
+
+/// A type representing unique identifier of a given chunk.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ChunkId {
+    /// A SHA-256 digest of the referenced chunk data.
+    sha256: [u8; 32],
+}
+
+impl ChunkId {
+
+    /// Creates a chunk identifier for the given chunk.
+    fn of(chunk: &Chunk) -> ChunkId {
+        ChunkId {
+            sha256: Sha256::digest(&chunk.data).into(),
+        }
+    }
+
+    /// Converts the chunk identifier into raw bytes of SHA-256 hash.
+    fn to_sha256_bytes(self) -> Vec<u8> {
+        self.sha256.to_vec()
+    }
+}
+
+/// A type representing a particular chunk of the returned timeline.
+struct Chunk {
     data: Vec<u8>,
 }
 
-/// An object for recursively traversing filesystem and gathering
-/// timeline info.
-struct RecurseState {
-    device: u64,
-    ids: Vec<ChunkDigest>,
-    encoder: gzchunked::Encoder,
-}
+impl Chunk {
 
-/// Retrieves device ID from metadata.
-#[allow(unused_variables)]
-fn dev_from_metadata(metadata: &Metadata) -> u64 {
-    cfg_if! {
-        if #[cfg(target_family = "unix")] {
-            use std::os::unix::fs::MetadataExt;
-            metadata.dev()
-        } else if #[cfg(target_family = "windows")] {
-            0
-        } else {
-            compile_error!("unsupported OS family");
+    /// Constructs a chunk from the given blob of bytes.
+    fn from_bytes(data: Vec<u8>) -> Chunk {
+        Chunk {
+            data: data,
         }
+    }
+
+    /// Returns an identifier of the chunk.
+    fn id(&self) -> ChunkId {
+        ChunkId::of(&self)
     }
 }
 
-/// Tries to convert OS-dependent string to raw bytes.
-fn bytes_from_os_str(s: &OsStr) -> std::io::Result<Vec<u8>> {
-    cfg_if! {
-        if #[cfg(target_family = "unix")] {
-            use std::os::unix::ffi::OsStrExt;
-            Ok(Vec::from(s.as_bytes()))
-        } else if #[cfg(target_family = "windows")] {
-            // Using UTF16LE because Windows *seems* to be using only little-endian version.
-            // If RRG starts supporting Windows for real in future, it would be better to
-            // review this piece to ensure that it uses the same path encoding as GRR server.
+impl FromLossy<crate::fs::Entry> for rrg_proto::TimelineEntry {
 
-            use std::os::windows::ffi::OsStrExt;
-            use byteorder::{LittleEndian, WriteBytesExt};
-            s.encode_wide().try_fold(Vec::new(), |mut stream, ch| {
-                stream.write_u16::<LittleEndian>(ch).map(|_| stream)
-            })
-        } else {
-            compile_error!("unsupported OS family");
+    fn from_lossy(entry: crate::fs::Entry) -> rrg_proto::TimelineEntry {
+        use std::convert::TryFrom as _;
+        #[cfg(target_family = "unix")]
+        use std::os::unix::fs::MetadataExt as _;
+
+        let atime_nanos = entry.metadata.accessed().ok().and_then(|atime| ack! {
+            rrg_proto::nanos(atime),
+            error: "failed to convert access time to seconds"
+        });
+
+        let mtime_nanos = entry.metadata.modified().ok().and_then(|mtime| ack! {
+            rrg_proto::nanos(mtime),
+            error: "failed to convert modification time to seconds"
+        });
+
+        let btime_nanos = entry.metadata.created().ok().and_then(|btime| ack! {
+            rrg_proto::nanos(btime),
+            error: "failed to convert creation time to seconds"
+        });
+
+        rrg_proto::TimelineEntry {
+            path: Some(rrg_proto::path::to_bytes(entry.path)),
+            #[cfg(target_family = "unix")]
+            mode: Some(i64::from(entry.metadata.mode())),
+            size: Some(entry.metadata.len()),
+            #[cfg(target_family = "unix")]
+            dev: i64::try_from(entry.metadata.dev()).ok(),
+            #[cfg(target_family = "unix")]
+            ino: Some(entry.metadata.ino()),
+            #[cfg(target_family = "unix")]
+            uid: i64::try_from(entry.metadata.uid()).ok(),
+            #[cfg(target_family = "unix")]
+            gid: i64::try_from(entry.metadata.gid()).ok(),
+            atime_ns: atime_nanos.and_then(|nanos| i64::try_from(nanos).ok()),
+            mtime_ns: mtime_nanos.and_then(|nanos| i64::try_from(nanos).ok()),
+            #[cfg(target_family = "unix")]
+            ctime_ns: Some(entry.metadata.ctime_nsec()),
+            btime_ns: btime_nanos.and_then(|nanos| i64::try_from(nanos).ok()),
+            // TODO: Export file attributes on Windows.
+            ..rrg_proto::TimelineEntry::default()
         }
-    }
-}
-
-/// Converts raw bytes to OS-dependent string.
-fn os_string_from_bytes(bytes: &[u8]) -> OsString {
-    cfg_if! {
-        if #[cfg(target_family = "unix")] {
-            use std::os::unix::ffi::OsStringExt;
-            OsString::from_vec(Vec::from(bytes))
-        } else if #[cfg(target_family = "windows")] {
-            // Using UTF16LE because Windows *seems* to be using only little-endian version.
-            // If RRG starts supporting Windows for real in future, it would be better to
-            // review this piece to ensure that it uses the same path encoding as GRR server.
-
-            use std::os::windows::ffi::OsStringExt;
-            use byteorder::{LittleEndian, ReadBytesExt};
-            let mut wchars = Vec::new();
-            let mut bytes_slice = bytes;
-            while let Ok(wchar) = bytes_slice.read_u16::<LittleEndian>() {
-                wchars.push(wchar);
-            }
-            OsString::from_wide(wchars.as_slice())
-        } else {
-            compile_error!("unsupported OS family");
-        }
-    }
-}
-
-/// Encodes filesystem metadata into timeline entry proto.
-fn entry_from_metadata(metadata: &Metadata, path: &Path) -> std::io::Result<TimelineEntry>
-{
-    cfg_if! {
-        if #[cfg(target_family = "unix")] {
-            use std::os::unix::fs::MetadataExt;
-            Ok(TimelineEntry {
-                path: Some(bytes_from_os_str(path.as_os_str())?),
-                mode: Some(i64::from(metadata.mode())),
-                size: Some(metadata.size()),
-                dev: Some(metadata.dev() as i64),
-                ino: Some(metadata.ino()),
-                uid: Some(metadata.uid() as i64),
-                gid: Some(metadata.gid() as i64),
-                atime_ns: Some(metadata.atime_nsec() as i64),
-                ctime_ns: Some(metadata.ctime_nsec() as i64),
-                mtime_ns: Some(metadata.mtime_nsec() as i64),
-                btime_ns: None,
-                attributes: None,
-            })
-        } else if #[cfg(target_family = "windows")] {
-            use std::os::windows::fs::MetadataExt;
-            Ok(TimelineEntry {
-                path: Some(bytes_from_os_str(path.as_os_str())?),
-                mode: None,
-                size: Some(metadata.len()),
-                dev: None,
-                ino: None,
-                uid: None,
-                gid: None,
-                atime_ns: Some(metadata.last_access_time() as i64),
-                ctime_ns: Some(metadata.creation_time() as i64),
-                mtime_ns: Some(metadata.last_write_time() as i64),
-                btime_ns: None,
-                attributes: None,
-            })
-        } else {
-            compile_error!("unsupported OS family");
-        }
-    }
-}
-
-impl RecurseState {
-    /// Constructs new state that would only traverse filesystems from `device`.
-    fn new(device: u64) -> RecurseState {
-        RecurseState {
-            device,
-            ids: Vec::new(),
-            encoder: gzchunked::Encoder::new(gzchunked::Compression::default()),
-        }
-    }
-
-    /// Sends block to transfer store and saves its digest.
-    fn send_block<S>(&mut self, block: Vec<u8>, session: &mut S) -> session::Result<()>
-    where
-        S: Session,
-    {
-        let digest = ChunkDigest(Sha256::digest(block.as_slice()).into());
-        self.ids.push(digest);
-        session.send(session::Sink::TRANSFER_STORE, ChunkResponse { data: block })?;
-        session.heartbeat();
-        Ok(())
-    }
-
-    /// Encodes the entry and sends next block to the session if needed.
-    fn process_entry<S>(&mut self, entry: TimelineEntry, session: &mut S) -> session::Result<()>
-    where
-        S: Session,
-    {
-        let mut entry_data: Vec<u8> = Vec::new();
-        prost::Message::encode(&entry, &mut entry_data)?;
-        self.encoder.write(entry_data.as_slice()).map_err(Error::action)?;
-        if let Some(data) = self.encoder.try_next_chunk().map_err(Error::action)? {
-            self.send_block(data, session)?;
-        }
-        Ok(())
-    }
-
-    /// Recursively traverses path specified as root, sends gzchunked stat data to session in
-    /// process.
-    fn recurse<S>(&mut self, root: &Path, session: &mut S) -> session::Result<()>
-    where
-        S: Session,
-    {
-        let mut path = PathBuf::from(root);
-        let mut dir_iter_stack = Vec::new();
-        loop {
-            let metadata = match symlink_metadata(&path) {
-                Ok(metadata) => metadata,
-                Err(_) => continue,
-            };
-            let entry = entry_from_metadata(&metadata, &path).map_err(Error::action)?;
-            self.process_entry(entry, session)?;
-            if metadata.is_dir() && dev_from_metadata(&metadata) == self.device {
-                if let Ok(dir_iter) = read_dir(&path) {
-                    dir_iter_stack.push(dir_iter);
-                }
-            }
-            let mut new_path = None;
-            while let Some(dir_iter) = dir_iter_stack.last_mut() {
-                if let Some(dir_entry) = dir_iter.next() {
-                    new_path = Some(dir_entry.map_err(Error::action)?.path());
-                    break;
-                } else {
-                    dir_iter_stack.pop();
-                }
-            }
-            if let Some(new_path) = new_path {
-                path = new_path;
-            } else {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    /// Sends final pieces of data to the session.
-    fn finish<S: Session>(mut self, session: &mut S) -> session::Result<Vec<ChunkDigest>> {
-        let final_block = self.encoder.next_chunk().map_err(Error::action)?;
-        self.send_block(final_block, session)?;
-        Ok(self.ids)
     }
 }
 
 /// Handles requests for the timeline action.
-pub fn handle<S: Session>(session: &mut S, request: Request) -> session::Result<()> {
-    let root_metadata = symlink_metadata(&request.root).map_err(Error::action)?;
-    let target_device = dev_from_metadata(&root_metadata);
-    let mut state = RecurseState::new(target_device);
+pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
+where
+    S: Session,
+{
+    let entries = crate::fs::walk_dir(&request.root).map_err(Error::WalkDir)?
+        .map(rrg_proto::TimelineEntry::from_lossy);
 
-    state.recurse(&request.root, session)?;
-    let action_response = Response {
-        ids: state.finish(session)?,
+    let mut response = Response {
+        chunk_ids: vec!(),
     };
-    session.reply(action_response)?;
+
+    for part in crate::gzchunked::encode(entries) {
+        let part = part.map_err(Error::Encode)?;
+
+        let chunk = Chunk::from_bytes(part);
+        let chunk_id = chunk.id();
+
+        session.send(session::Sink::TRANSFER_STORE, chunk)?;
+        response.chunk_ids.push(chunk_id);
+    }
+
+    session.reply(response)?;
 
     Ok(())
 }
 
 impl super::Request for Request {
 
-    type Proto = TimelineArgs;
+    type Proto = rrg_proto::TimelineArgs;
 
-    fn from_proto(proto: TimelineArgs) -> Result<Request, ParseError> {
-        match proto.root {
-            Some(root) => Ok(Request {
-                root: PathBuf::from(os_string_from_bytes(root.as_slice())),
-            }),
-            None => Err(ParseError::malformed(MissingFieldError::new("root"))),
-        }
+    fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
+        let root_bytes = proto.root
+            .ok_or(session::MissingFieldError::new("root"))?;
+
+        Ok(Request {
+            root: rrg_proto::path::from_bytes(root_bytes),
+        })
     }
 }
 
@@ -264,22 +202,27 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("TimelineResult");
 
-    type Proto = TimelineResult;
+    type Proto = rrg_proto::TimelineResult;
 
-    fn into_proto(self) -> TimelineResult {
-        TimelineResult {
-            entry_batch_blob_ids: self.ids.iter().map(|id| id.0.to_vec()).collect()
+    fn into_proto(self) -> rrg_proto::TimelineResult {
+        let chunk_ids = self.chunk_ids
+            .into_iter()
+            .map(ChunkId::to_sha256_bytes)
+            .collect();
+
+        rrg_proto::TimelineResult {
+            entry_batch_blob_ids: chunk_ids,
         }
     }
 }
 
-impl super::Response for ChunkResponse {
+impl super::Response for Chunk {
 
     const RDF_NAME: Option<&'static str> = Some("DataBlob");
 
-    type Proto = DataBlob;
+    type Proto = rrg_proto::DataBlob;
 
-    fn into_proto(self) -> DataBlob {
+    fn into_proto(self) -> rrg_proto::DataBlob {
         self.data.into()
     }
 }
@@ -288,215 +231,231 @@ impl super::Response for ChunkResponse {
 mod tests {
 
     use super::*;
-    use std::fs::{hard_link, create_dir, write};
-    use tempfile::tempdir;
 
-    fn entries_from_session_response(session: &session::test::Fake) -> Vec<TimelineEntry> {
-        assert_eq!(session.reply_count(), 1);
-        let block_count = session.response_count(session::Sink::TRANSFER_STORE);
+    use session::test::Fake as Session;
 
-        let mut expected_ids = session.reply::<Response>(0).ids.clone();
-        let mut ids = Vec::new();
-        assert_eq!(block_count, expected_ids.len());
-        expected_ids.sort_by(|a, b| a.0.cmp(&b.0));
+    #[test]
+    fn test_non_existent_path() {
+        let tempdir = tempfile::tempdir().unwrap();
 
-        let mut decoder = gzchunked::Decoder::new();
-        for block_number in 0..block_count {
-            let block = session.response::<ChunkResponse>(session::Sink::TRANSFER_STORE, block_number);
-            let response_digest = ChunkDigest(Sha256::digest(&block.data).into());
-            ids.push(response_digest);
+        let request = Request {
+            root: tempdir.path().join("foo")
+        };
 
-            decoder.write(block.data.as_slice()).unwrap();
-        }
-
-        ids.sort_by(|a, b| a.0.cmp(&b.0));
-        assert_eq!(ids, expected_ids);
-
-        let mut ret = Vec::new();
-        while let Some(entry_data) = decoder.try_next_data() {
-            let entry: TimelineEntry = prost::Message::decode(entry_data.as_slice()).unwrap();
-            ret.push(entry);
-        }
-        ret
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_err());
     }
 
     #[test]
-    fn test_nonexistent_path() {
-        let dir = tempdir().unwrap();
-        let dir_path = dir.path().join("nonexistent_subdir");
+    fn test_empty_dir() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir_path = tempdir.path().to_path_buf();
 
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: dir_path }).is_err());
-    }
+        let request = Request {
+            root: tempdir_path.clone(),
+        };
 
-    #[test]
-    fn test_one_empty_dir() {
-        let dir = tempdir().unwrap();
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
 
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
-
-        let mut entries = entries_from_session_response(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        let entries = entries(&session);
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].path, Some(bytes_from_os_str(dir.path().as_os_str()).unwrap()));
+        assert_eq!(path(&entries[0]), Some(tempdir_path.clone()));
     }
 
-    #[cfg_attr(target_family = "windows", ignore)]
     #[test]
-    fn test_file_hardlink() {
-        let dir = tempdir().unwrap();
+    fn test_dir_with_files() {
+        let tempdir = tempfile::tempdir().unwrap();
+        std::fs::File::create(tempdir.path().join("a")).unwrap();
+        std::fs::File::create(tempdir.path().join("b")).unwrap();
+        std::fs::File::create(tempdir.path().join("c")).unwrap();
 
-        let test1_path = dir.path().join("test1.txt");
-        write(&test1_path, "foo").unwrap();
+        let request = Request {
+            root: tempdir.path().to_path_buf(),
+        };
 
-        let test2_path = dir.path().join("test2.txt");
-        hard_link(&test1_path, &test2_path).unwrap();
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
 
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
 
-        let mut entries = entries_from_session_response(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        assert_eq!(entries.len(), 4);
+        assert_eq!(path(&entries[0]), Some(tempdir.path().to_path_buf()));
+        assert_eq!(path(&entries[1]), Some(tempdir.path().join("a")));
+        assert_eq!(path(&entries[2]), Some(tempdir.path().join("b")));
+        assert_eq!(path(&entries[3]), Some(tempdir.path().join("c")));
+    }
+
+    #[test]
+    fn test_dir_with_nested_dirs() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir_path = tempdir.path().to_path_buf();
+
+        std::fs::create_dir_all(tempdir_path.join("a").join("b")).unwrap();
+
+        let request = Request {
+            root: tempdir_path.clone(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
+
         assert_eq!(entries.len(), 3);
-        assert_ne!(entries[0].ino, entries[1].ino);
+        assert_eq!(path(&entries[0]), Some(tempdir_path.clone()));
+        assert_eq!(path(&entries[1]), Some(tempdir_path.join("a")));
+        assert_eq!(path(&entries[2]), Some(tempdir_path.join("a").join("b")));
+    }
+
+    // Symlinking is supported only on Unix-like systems.
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn test_dir_with_circular_symlinks() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let root_path = tempdir.path().to_path_buf();
+        let dir_path = root_path.join("dir");
+        let symlink_path = dir_path.join("symlink");
+
+        std::fs::create_dir(&dir_path).unwrap();
+        std::os::unix::fs::symlink(&dir_path, &symlink_path).unwrap();
+
+        let request = Request {
+            root: root_path.clone(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(entries.len(), 3);
+        assert_eq!(path(&entries[0]), Some(root_path));
+        assert_eq!(path(&entries[1]), Some(dir_path));
+        assert_eq!(path(&entries[2]), Some(symlink_path));
+    }
+
+    #[test]
+    fn test_dir_with_unicode_files() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let root_path = tempdir.path().to_path_buf();
+        let file_path_1 = root_path.join("zażółć gęślą jaźń");
+        let file_path_2 = root_path.join("што й па мору");
+
+        std::fs::File::create(&file_path_1).unwrap();
+        std::fs::File::create(&file_path_2).unwrap();
+
+        let request = Request {
+            root: root_path.clone(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(entries.len(), 3);
+
+        // macOS mangles Unicode-specific characters in filenames.
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert_eq!(path(&entries[0]), Some(root_path));
+            assert_eq!(path(&entries[1]), Some(file_path_1));
+            assert_eq!(path(&entries[2]), Some(file_path_2));
+        }
+    }
+
+    #[test]
+    fn test_file_metadata() {
+        let tempdir = tempfile::tempdir().unwrap();
+        std::fs::write(tempdir.path().join("foo"), b"123456789").unwrap();
+
+        let request = Request {
+            root: tempdir.path().to_path_buf(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(path(&entries[1]), Some(tempdir.path().join("foo")));
+        assert_eq!(entries[1].size, Some(9));
+
+        // Information about the file mode, user and group identifiers is
+        // available only on UNIX systems.
+        #[cfg(target_family = "unix")]
+        {
+            let mode = entries[1].mode.unwrap() as libc::mode_t;
+            assert_eq!(mode & libc::S_IFMT, libc::S_IFREG);
+
+            assert_eq!(entries[1].uid, Some(users::get_current_uid() as i64));
+            assert_eq!(entries[1].gid, Some(users::get_current_gid() as i64));
+        }
+    }
+
+    #[test]
+    fn test_hardlink_metadata() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let root_path = tempdir.path().to_path_buf();
+        let file_path = root_path.join("file");
+        let hardlink_path = root_path.join("hardlink");
+
+        std::fs::File::create(&file_path).unwrap();
+        std::fs::hard_link(&file_path, &hardlink_path).unwrap();
+
+        let request = Request {
+            root: root_path.clone(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(entries.len(), 3);
+        assert_eq!(path(&entries[1]), Some(file_path));
+        assert_eq!(path(&entries[2]), Some(hardlink_path));
+
+        // Information about inode is not available on Windows.
+        #[cfg(not(target_os = "windows"))]
         assert_eq!(entries[1].ino, entries[2].ino);
     }
 
-    #[cfg(target_family = "unix")]
-    #[test]
-    fn test_file_symlink() {
-        use std::os::unix::fs::symlink;
+    /// Retrieves timeline entries from the given session object.
+    fn entries(session: &Session) -> Vec<rrg_proto::TimelineEntry> {
+        use std::collections::HashMap;
+        use crate::session::Sink;
 
-        let dir = tempdir().unwrap();
+        let chunk_count = session.response_count(Sink::TRANSFER_STORE);
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.reply::<Response>(0).chunk_ids.len(), chunk_count);
 
-        let test1_path = dir.path().join("test1.txt");
-        write(&test1_path, "foo").unwrap();
+        let chunks_by_id = session.responses::<Chunk>(Sink::TRANSFER_STORE)
+            .map(|chunk| (chunk.id(), chunk))
+            .collect::<HashMap<_, _>>();
 
-        let test2_path = dir.path().join("test2.txt");
-        symlink(&test1_path, &test2_path).unwrap();
+        let chunks = session.reply::<Response>(0).chunk_ids
+            .iter()
+            .map(|chunk_id| &chunks_by_id[chunk_id].data[..]);
 
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
-
-        let mut entries = entries_from_session_response(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
-        assert_eq!(entries.len(), 3);
-        assert_ne!(entries[0].ino.unwrap(), entries[1].ino.unwrap());
-        assert_ne!(entries[1].ino.unwrap(), entries[2].ino.unwrap());
-        assert_eq!(entries[1].size, Some(3));
-        // Drop mode bits because symlinks have actual modes on some unix systems.
-        assert_eq!(entries[2].mode.unwrap() & 0o120000, 0o120000);
+        crate::gzchunked::decode(chunks)
+            .map(Result::unwrap)
+            .collect()
     }
 
-    #[cfg(target_family = "unix")]
-    #[test]
-    fn test_symlink_loops() {
-        use std::os::unix::fs::symlink;
-
-        let dir = tempdir().unwrap();
-
-        let test1_path = dir.path().join("test1");
-        let test2_path = dir.path().join("test2");
-        let test3_path = dir.path().join("test3");
-        let test4_path = test3_path.join("test4");
-        symlink(&test2_path, &test1_path).unwrap();
-        symlink(&test1_path, &test2_path).unwrap();
-        create_dir(&test3_path).unwrap();
-        symlink("../test3", &test4_path).unwrap();
-
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
-
-        let mut entries = entries_from_session_response(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
-        assert_eq!(entries.len(), 5);
-        assert_eq!(entries[1].path, Some(bytes_from_os_str(test1_path.as_os_str()).unwrap()));
-        assert_eq!(entries[2].path, Some(bytes_from_os_str(test2_path.as_os_str()).unwrap()));
-        assert_eq!(entries[3].path, Some(bytes_from_os_str(test3_path.as_os_str()).unwrap()));
-        assert_eq!(entries[4].path, Some(bytes_from_os_str(test4_path.as_os_str()).unwrap()));
-    }
-
-    #[test]
-    fn test_weird_unicode_names() {
-        let dir = tempdir().unwrap();
-
-        let path1 = dir.path().join("1with spaces");
-        write(&path1, "foo").unwrap();
-
-        let path2 = dir.path().join("2'quotes'");
-        write(&path2, "foo").unwrap();
-
-        let path3 = dir.path().join("3кириллица");
-        write(&path3, "foo").unwrap();
-
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
-
-        let mut entries = entries_from_session_response(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
-        assert_eq!(entries.len(), 4);
-        assert_eq!(entries[1].path, Some(bytes_from_os_str(path1.as_os_str()).unwrap()));
-        assert_eq!(entries[2].path, Some(bytes_from_os_str(path2.as_os_str()).unwrap()));
-        assert_eq!(entries[3].path, Some(bytes_from_os_str(path3.as_os_str()).unwrap()));
-    }
-
-    // TODO: Debug this test on MacOS.
-    #[cfg_attr(target_os = "macos", ignore)]
-    #[test]
-    fn test_deep_dirs() {
-        const MAX_DIR_COUNT: usize = 512;
-        let mut dir_count = 0;
-
-        let dir = tempdir().unwrap();
-
-        let mut path = PathBuf::from(dir.path());
-        while dir_count < MAX_DIR_COUNT {
-            path.push("d");
-            if let Err(_) = create_dir(&path) {
-                break;
-            }
-            dir_count += 1;
-        }
-        // Let's suppose we can create at least this much.
-        assert!(dir_count >= 64);
-
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
-
-        let entries = entries_from_session_response(&session);
-        assert_eq!(entries.len(), dir_count + 1);
-    }
-
-    #[cfg(target_family = "unix")]
-    #[test]
-    fn test_mode_and_permissions() {
-        use std::os::unix::fs::{symlink, PermissionsExt};
-        use std::fs::{set_permissions, Permissions};
-
-        let dir = tempdir().unwrap();
-
-        let unavailable_dir_path = dir.path().join("unavailable");
-        let unavailable_file_path = unavailable_dir_path.join("file");
-        let readonly_path = dir.path().join("readonly.txt");
-        let symlink_path = dir.path().join("writeonly.txt");
-        create_dir(&unavailable_dir_path).unwrap();
-        write(&unavailable_file_path, "foo").unwrap();
-        write(&readonly_path, "foo").unwrap();
-        symlink(&readonly_path, &symlink_path).unwrap();
-
-        set_permissions(&unavailable_dir_path, Permissions::from_mode(0o000)).unwrap();
-        set_permissions(&readonly_path, Permissions::from_mode(0o444)).unwrap();
-
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, Request { root: PathBuf::from(dir.path()) }).is_ok());
-
-        let mut entries = entries_from_session_response(&session);
-        entries.sort_by(|a, b| a.path.cmp(&b.path));
-        assert_eq!(entries.len(), 4);
-        assert_eq!(entries[2].mode, Some(0o040000));
-        assert_eq!(entries[1].mode, Some(0o100444));
-        // Drop mode bits because symlinks have actual modes on some unix systems.
-        assert_eq!(entries[3].mode.unwrap() & 0o120000, 0o120000);
+    /// Constructs a path for the given timeline entry.
+    fn path(entry: &rrg_proto::TimelineEntry) -> Option<PathBuf> {
+        entry.path.clone().map(rrg_proto::path::from_bytes)
     }
 }
