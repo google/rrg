@@ -10,14 +10,20 @@ pub struct Compression(flate2::Compression);
 /// A type for defining gzip compression level for gzchunked.
 impl Compression {
 
+    /// Creates a new compression descriptor at the specified level.
+    ///
+    /// The lower the number the worse the compression (with 0 meaning no
+    /// compression at all).
     pub fn new(level: u32) -> Compression {
         Compression(flate2::Compression::new(level))
     }
 
+    /// Creates a new compression descriptor with disabled compression.
     pub fn none() -> Compression {
         Compression(flate2::Compression::none())
     }
 
+    /// Creates a new compression descriptor with highest compression.
     pub fn best() -> Compression {
         Compression(flate2::Compression::best())
     }
