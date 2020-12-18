@@ -34,10 +34,10 @@
 ///     file.write_all(chunk.unwrap().as_slice());
 /// }
 /// ```
-pub fn encode<I, M>(iter: I) -> Encode<I>
+pub fn encode<I>(iter: I) -> Encode<I>
 where
-    I: Iterator<Item=M>,
-    M: prost::Message,
+    I: Iterator,
+    I::Item: prost::Message,
 {
     encode_with_opts(iter, EncodeOpts::default())
 }
@@ -48,10 +48,10 @@ where
 /// encoding parameters. Refer to its documentation for more details.
 ///
 /// [`encode`]: fn.encode.html
-pub fn encode_with_opts<I, M>(iter: I, opts: EncodeOpts) -> Encode<I>
+pub fn encode_with_opts<I>(iter: I, opts: EncodeOpts) -> Encode<I>
 where
-    I: Iterator<Item=M>,
-    M: prost::Message,
+    I: Iterator,
+    I::Item: prost::Message,
 {
     Encode::with_opts(iter, opts)
 }
@@ -74,10 +74,10 @@ where
 ///     println!("item #{}: {:?}", idx, msg);
 /// }
 /// ```
-pub fn decode<I, R, M>(iter: I) -> impl Iterator<Item=std::io::Result<M>>
+pub fn decode<I, M>(iter: I) -> impl Iterator<Item=std::io::Result<M>>
 where
-    I: Iterator<Item=R>,
-    R: std::io::Read,
+    I: Iterator,
+    I::Item: std::io::Read,
     M: prost::Message + Default,
 {
     let parts = iter.map(flate2::read::GzDecoder::new);
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_decode_with_empty_iter() {
-        let mut iter = decode::<_, _, ()>(std::iter::empty::<&[u8]>())
+        let mut iter = decode::<_, ()>(std::iter::empty::<&[u8]>())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), None);
@@ -282,7 +282,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, _, Vec<u8>>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, Vec<u8>>(chunks.iter().map(Vec::as_slice))
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
@@ -302,7 +302,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, _, Vec<u8>>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, Vec<u8>>(chunks.iter().map(Vec::as_slice))
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
@@ -322,7 +322,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, _, Vec<u8>>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, Vec<u8>>(chunks.iter().map(Vec::as_slice))
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
