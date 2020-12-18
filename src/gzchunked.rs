@@ -3,7 +3,28 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-//! Utils for forming gzchunked streams.
+//! Utilities for working with streams in the gzchunked format.
+//!
+//! gzchunked is a simple file format used for storing large sequences of
+//! Protocol Buffers messages. A gzchunked file consists of multiple parts where
+//! each part is a gzipped fragment of a stream encoded in the [chunked] format.
+//!
+//! A high-level pseudocode for encoding and decoding procedures of the
+//! gzchunked format can be described using the following formulae:
+//!
+//!   * _encode(protos) = map(gzip, partition(chunk(protos)))_
+//!   * _decode(parts) = unchunk(join(map(ungzip, parts)))_
+//!
+//! This pseudocode uses the following subroutines:
+//!
+//!   * _chunk_ encodes a sequence of proto messages into the chunked format.
+//!   * _unchunk_ decodes a chunked stream into a sequence of messages.
+//!   * _partition_ divides a stream of bytes into multiple parts.
+//!   * _join_ sequentially combines multiple byte streams into one.
+//!   * _gzip_ encodes a byte stream into the gzip format.
+//!   * _ungzip_ decodes a byte stream from the gzip format.
+//!
+//! [chunked]: crate::chunked
 
 /// Encodes the given iterator over protobuf messages into the gzchunked format.
 ///
@@ -84,11 +105,10 @@ where
     crate::chunked::decode(crate::io::IterReader::new(parts))
 }
 
-/// A wrapper type for gzip compression level.
+/// A type describing compression level of a gzchunked output stream.
 #[derive(Clone, Copy, Debug)]
 pub struct Compression(flate2::Compression);
 
-/// A type for defining gzip compression level for gzchunked.
 impl Compression {
 
     /// Creates a new compression descriptor at the specified level.
