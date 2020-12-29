@@ -6,8 +6,8 @@
 //!
 //! This example is a tiny wrapper around this action that allows to execute it
 //! as a standalone binary without all the RRG setup required. A primary reason
-//! for creating it is to compare the efficiency Rust implementation against the
-//! existing Python one.
+//! for its existence is to compare the efficiency Rust implementation against
+//! the existing Python one.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -61,8 +61,14 @@ impl rrg::session::Session for Session {
     where
         R: rrg::action::Response + 'static,
     {
-        // We don't care about the chunk ids.
+        // For now we are not interested in doing anything useful with chunk ids
+        // since everything is dumped into one file and there is no need to
+        // refer to a particular chunk.
+        //
+        // In the future they might be useful for printing some statistics about
+        // the collected files.
         drop(response);
+
         Ok(())
     }
 
@@ -73,6 +79,8 @@ impl rrg::session::Session for Session {
         use std::io::Write as _;
         use byteorder::{BigEndian, WriteBytesExt as _};
 
+        // Just a sanity check in case the implementation of the timeline action
+        // starts sending data to other sinks.
         assert_eq!(sink, Sink::TRANSFER_STORE);
 
         let response = (&response as &dyn std::any::Any)
