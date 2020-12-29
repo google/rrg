@@ -12,6 +12,7 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use rrg::action::timeline;
 use rrg::session::Sink;
 use structopt::StructOpt;
 
@@ -75,7 +76,7 @@ impl rrg::session::Session for Session {
         assert_eq!(sink, Sink::TRANSFER_STORE);
 
         let response = (&response as &dyn std::any::Any)
-            .downcast_ref::<rrg::action::timeline::Chunk>()
+            .downcast_ref::<timeline::Chunk>()
             .expect("unexpected response type");
 
         self.output.write_u64::<BigEndian>(response.data.len() as u64)
@@ -90,12 +91,7 @@ impl rrg::session::Session for Session {
 fn main() {
     let opts = Opts::from_args();
 
-    let mut session = Session::open(opts.output);
-
-    let request = rrg::action::timeline::Request {
+    timeline::handle(&mut Session::open(opts.output), timeline::Request {
         root: opts.root,
-    };
-
-    rrg::action::timeline::handle(&mut session, request)
-        .expect("failed to execute the action");
+    }).expect("failed to execute the action");
 }
