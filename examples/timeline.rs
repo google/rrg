@@ -22,12 +22,12 @@ use structopt::StructOpt;
 struct Opts {
     /// A path to the root directory to timeline.
     #[structopt(long="root", name="FILE", default_value="/",
-                help="A path to the root directory to timeline.")]
+                help="Root directory to timeline")]
     root: PathBuf,
 
     /// A path to a file to dump the results into.
-    #[structopt(long="output", about="FILE",
-                help="A path to a file to dump the results into.")]
+    #[structopt(long="output", name="DIRECTORY",
+                help="File to dump the results into")]
     output: PathBuf,
 }
 
