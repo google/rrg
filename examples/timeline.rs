@@ -21,13 +21,13 @@ use structopt::StructOpt;
 #[structopt(name = "timeline", about = "A binary for the timeline action.")]
 struct Opts {
     /// A path to the root directory to timeline.
-    #[structopt(long="root", name="FILE", default_value="/",
-                help="Root directory to timeline")]
+    #[structopt(long = "root", name = "FILE", default_value = "/",
+                help = "Root directory to timeline")]
     root: PathBuf,
 
     /// A path to a file to dump the results into.
-    #[structopt(long="output", name="DIRECTORY",
-                help="File to dump the results into")]
+    #[structopt(long = "output", name = "DIRECTORY",
+                help = "File to dump the results into")]
     output: PathBuf,
 }
 
