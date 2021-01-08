@@ -4,6 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 pub mod convert;
+pub mod path;
 
 use std::path::PathBuf;
 
@@ -301,27 +302,27 @@ impl From<PathBuf> for PathSpec {
     }
 }
 
-/// An error type for failures of converting timestamps to microseconds.
+/// An error type for failures that can occur when converting timestamps.
 #[derive(Clone, Debug)]
-pub enum MicrosError {
+pub enum TimeConversionError {
     /// Attempted to convert pre-epoch system time.
     Epoch(std::time::SystemTimeError),
     /// Attempted to convert a value outside of 64-bit unsigned integer range.
     Overflow(std::num::TryFromIntError),
 }
 
-impl MicrosError {
+impl TimeConversionError {
 
-    /// Creates a microsecond conversion error from an integer overflow error.
-    pub fn overflow(error: std::num::TryFromIntError) -> MicrosError {
-        MicrosError::Overflow(error)
+    /// Creates a conversion error from an integer overflow error.
+    pub fn overflow(error: std::num::TryFromIntError) -> TimeConversionError {
+        TimeConversionError::Overflow(error)
     }
 }
 
-impl std::fmt::Display for MicrosError {
+impl std::fmt::Display for TimeConversionError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use MicrosError::*;
+        use TimeConversionError::*;
 
         match *self {
             Epoch(ref error) => {
@@ -334,10 +335,10 @@ impl std::fmt::Display for MicrosError {
     }
 }
 
-impl std::error::Error for MicrosError {
+impl std::error::Error for TimeConversionError {
 
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use MicrosError::*;
+        use TimeConversionError::*;
 
         match *self {
             Epoch(ref error) => Some(error),
@@ -346,40 +347,30 @@ impl std::error::Error for MicrosError {
     }
 }
 
-impl From<std::time::SystemTimeError> for MicrosError {
+impl From<std::time::SystemTimeError> for TimeConversionError {
 
-    fn from(error: std::time::SystemTimeError) -> MicrosError {
-        MicrosError::Epoch(error)
+    fn from(error: std::time::SystemTimeError) -> TimeConversionError {
+        TimeConversionError::Epoch(error)
     }
 }
 
-/// An error type for failures of converting timestamps to seconds.
-#[derive(Clone, Debug)]
-pub struct SecsError {
-    error: MicrosError,
-}
+/// Converts system time into epoch nanoseconds.
+///
+/// Some GRR messages use epoch nanoseconds for representing timestamps. In such
+/// cases this function can be useful to convert from more idiomatic types.
+///
+/// # Examples
+///
+/// ```
+/// use rrg_proto::nanos;
+///
+/// assert_eq!(nanos(std::time::UNIX_EPOCH).unwrap(), 0);
+/// ```
+pub fn nanos(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
+    use std::convert::TryInto as _;
 
-impl std::fmt::Display for SecsError {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.error.fmt(fmt)
-    }
-}
-
-impl From<MicrosError> for SecsError {
-
-    fn from(error: MicrosError) -> SecsError {
-        SecsError {
-            error: error,
-        }
-    }
-}
-
-impl From<SecsError> for MicrosError {
-
-    fn from(error: SecsError) -> MicrosError {
-        error.error
-    }
+    let duration = time.duration_since(std::time::UNIX_EPOCH)?;
+    duration.as_nanos().try_into().map_err(TimeConversionError::overflow)
 }
 
 /// Converts system time into epoch microseconds.
@@ -394,11 +385,11 @@ impl From<SecsError> for MicrosError {
 ///
 /// assert_eq!(micros(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
-pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
-    let time_micros = time.duration_since(std::time::UNIX_EPOCH)?.as_micros();
-
+pub fn micros(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
     use std::convert::TryInto as _;
-    time_micros.try_into().map_err(MicrosError::overflow)
+
+    let duration = std::time::Duration::from_nanos(nanos(time)?);
+    duration.as_micros().try_into().map_err(TimeConversionError::overflow)
 }
 
 /// Converts system time into epoch seconds.
@@ -413,6 +404,7 @@ pub fn micros(time: std::time::SystemTime) -> Result<u64, MicrosError> {
 ///
 /// assert_eq!(secs(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
-pub fn secs(time: std::time::SystemTime) -> Result<u64, SecsError> {
-    Ok(micros(time)? / 1_000_000)
+pub fn secs(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
+    let duration = std::time::Duration::from_nanos(nanos(time)?);
+    Ok(duration.as_secs())
 }
