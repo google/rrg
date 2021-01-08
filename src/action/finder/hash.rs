@@ -42,7 +42,7 @@ impl std::io::Write for Hasher {
 }
 
 pub fn hash(path: &Path, config: &HashActionOptions) -> Option<HashEntry> {
-    let metadata = match path.symlink_metadata() {
+    let metadata = match path.metadata() {
         Ok(metadata) => metadata,
         Err(err) => {
             warn!("failed to stat '{}': {}", path.display(), err);
