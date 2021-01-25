@@ -10,7 +10,6 @@
 use crate::session::{
     parse_enum, time_from_micros, ParseError, ProtoEnum, RegexParseError,
 };
-use log::info;
 use regex::Regex;
 use rrg_proto::{
     FileFinderAccessTimeCondition, FileFinderAction, FileFinderArgs,
@@ -474,7 +473,6 @@ impl super::super::Request for Request {
     type Proto = FileFinderArgs;
 
     fn from_proto(proto: FileFinderArgs) -> Result<Request, ParseError> {
-        info!("File Finder: proto request: {:#?}", &proto);
         if !matches!(proto.pathtype(), PathType::Os) {
             return Err(ParseError::malformed(
                 "File Finder does not support path types other than `Os`.",
