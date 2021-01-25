@@ -1,11 +1,12 @@
 use crate::action::finder::request::HashActionOptions;
+use crate::fs::Entry;
 use crypto::digest::Digest;
 use log::warn;
 use rrg_proto::file_finder_hash_action_options::OversizedFilePolicy;
 use rrg_proto::Hash as HashEntry;
 use std::cmp::min;
+use std::fs::File;
 use std::io::Read;
-use std::path::Path;
 
 /// Hashes data writen to it using SHA-1, SHA-256 and MD5 algorithms.
 struct Hasher {
@@ -41,40 +42,36 @@ impl std::io::Write for Hasher {
     }
 }
 
-pub fn hash(path: &Path, config: &HashActionOptions) -> Option<HashEntry> {
-    let metadata = match path.metadata() {
-        Ok(metadata) => metadata,
-        Err(err) => {
-            warn!("failed to stat '{}': {}", path.display(), err);
-            return None;
-        }
-    };
-
+pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<HashEntry> {
     match config.oversized_file_policy {
         OversizedFilePolicy::Skip => {
-            if metadata.len() > config.max_size {
+            if entry.metadata.len() > config.max_size {
                 return None;
             }
         }
         OversizedFilePolicy::HashTruncated => {}
     };
 
-    let mut f = match std::fs::File::open(&path) {
-        Ok(f) => f.take(config.max_size),
+    let mut file = match File::open(&entry.path) {
+        Ok(file) => file.take(config.max_size),
         Err(err) => {
-            warn!("failed to open file: {}, error: {}", path.display(), err);
+            warn!(
+                "failed to open file: {}, error: {}",
+                entry.path.display(),
+                err
+            );
             return None;
         }
     };
 
     let mut hasher = Hasher::new();
-    match std::io::copy(&mut f, &mut hasher) {
+    match std::io::copy(&mut file, &mut hasher) {
         Ok(read_bytes) => {
-            let expected_bytes = min(metadata.len(), config.max_size);
+            let expected_bytes = min(entry.metadata.len(), config.max_size);
             if read_bytes != expected_bytes {
                 warn!(
                     "failed to read all data from: {}, {} bytes were read, but {} were expected",
-                    path.display(),
+                    entry.path.display(),
                     &read_bytes,
                     expected_bytes
                 );
@@ -84,7 +81,7 @@ pub fn hash(path: &Path, config: &HashActionOptions) -> Option<HashEntry> {
         Err(err) => {
             warn!(
                 "failed to copy data from: {}. Error: {}",
-                path.display(),
+                entry.path.display(),
                 &err
             );
         }
@@ -112,15 +109,18 @@ mod tests {
     fn test_hash_values() {
         let test_string = "some_test_data";
         let tempdir = tempfile::tempdir().unwrap();
-        let file = tempdir.path().join("f");
-        std::fs::write(&file, &test_string).unwrap();
+        let path = tempdir.path().join("f");
+        std::fs::write(&path, &test_string).unwrap();
+        let entry = Entry {
+            metadata: path.metadata().unwrap(),
+            path: path,
+        };
 
         let result = hash(
-            &file,
+            &entry,
             &HashActionOptions {
                 max_size: 14,
                 oversized_file_policy: OversizedFilePolicy::Skip,
-                collect_ext_attrs: false,
             },
         )
         .unwrap();
@@ -148,36 +148,43 @@ mod tests {
     fn test_trim_file_over_max_size() {
         let test_string = "some_test_data";
         let tempdir = tempfile::tempdir().unwrap();
-        let file = tempdir.path().join("f");
-        std::fs::write(&file, &test_string).unwrap();
+        let path = tempdir.path().join("f");
+        std::fs::write(&path, &test_string).unwrap();
+        let entry = Entry {
+            metadata: path.metadata().unwrap(),
+            path,
+        };
 
         let result = hash(
-            &file,
+            &entry,
             &HashActionOptions {
                 max_size: 10,
                 oversized_file_policy: OversizedFilePolicy::HashTruncated,
-                collect_ext_attrs: false,
             },
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(result.num_bytes.unwrap(), 10);
     }
-
 
     #[test]
     fn test_skip_file_over_max_size() {
         let test_string = "some_test_data";
         let tempdir = tempfile::tempdir().unwrap();
-        let file = tempdir.path().join("f");
-        std::fs::write(&file, &test_string).unwrap();
+        let path = tempdir.path().join("f");
+        std::fs::write(&path, &test_string).unwrap();
+        let entry = Entry {
+            metadata: path.metadata().unwrap(),
+            path,
+        };
 
         assert!(hash(
-            &file,
+            &entry,
             &HashActionOptions {
                 max_size: 10,
-                oversized_file_policy: OversizedFilePolicy::Skip,
-                collect_ext_attrs: false,
+                oversized_file_policy: OversizedFilePolicy::Skip
             },
-        ).is_none());
+        )
+        .is_none());
     }
 }
