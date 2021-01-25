@@ -65,8 +65,10 @@ pub fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
 
     match Regex::new(&res) {
         Ok(v) => Ok(v),
-        Err(e) =>
-            Err(RegexParseError{raw_data: res.bytes().collect(), error: e})
+        Err(e) => Err(RegexParseError {
+            raw_data: res.bytes().collect(),
+            error: e,
+        }),
     }
 }
 

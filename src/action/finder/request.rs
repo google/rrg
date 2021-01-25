@@ -10,6 +10,7 @@
 use crate::session::{
     parse_enum, time_from_micros, ParseError, ProtoEnum, RegexParseError,
 };
+use log::info;
 use regex::Regex;
 use rrg_proto::{
     FileFinderAccessTimeCondition, FileFinderAction, FileFinderArgs,
@@ -39,8 +40,10 @@ pub struct Request {
     /// A list of paths to glob that supports `**` path recursion and
     /// alternatives in form of `{a,b}`.
     pub path_queries: Vec<String>,
-    /// Action type to be performed.
-    pub action: Action,
+    /// Stat options. Stat has to be executed on any kind of request.
+    pub stat_options: StatActionOptions,
+    /// Additional action to be performed. Stat action is always performed.
+    pub action: Option<Action>,
     /// Conditions that must be met by found file for the action to
     /// be performed on it.
     pub conditions: Vec<Condition>,
@@ -54,8 +57,6 @@ pub struct Request {
 
 #[derive(Debug)]
 pub enum Action {
-    /// Get the metadata of the file.
-    Stat(StatActionOptions),
     /// Get the hash of the file.
     Hash(HashActionOptions),
     /// Download the file.
@@ -65,7 +66,7 @@ pub enum Action {
 #[derive(Debug)]
 pub struct StatActionOptions {
     /// Should symbolic link be resolved if it is a target of the action.
-    pub resolve_links: bool,
+    pub follow_symlink: bool,
     /// Should linux extended file attributes be collected.
     pub collect_ext_attrs: bool,
 }
@@ -76,8 +77,6 @@ pub struct HashActionOptions {
     pub max_size: u64,
     /// Action to perform when requested file is bigger than `max_size`.
     pub oversized_file_policy: HashActionOversizedFilePolicy,
-    /// Should linux extended file attributes be collected.
-    pub collect_ext_attrs: bool,
 }
 
 #[derive(Debug)]
@@ -90,8 +89,6 @@ pub struct DownloadActionOptions {
     /// downloading them, and offer any new files to external stores. This
     /// should be true unless the external checks are misbehaving.
     pub use_external_stores: bool,
-    /// Should linux extended file attributes be collected.
-    pub collect_ext_attrs: bool,
     /// Number of bytes per chunk that the downloaded file is divided into.
     pub chunk_size: u64,
 }
@@ -142,33 +139,25 @@ pub struct ContentsLiteralMatchConditionOptions {
     pub xor_out_key: u32,
 }
 
-impl TryFrom<rrg_proto::FileFinderAction> for Action {
-    type Error = ParseError;
-
-    fn try_from(
-        proto: rrg_proto::FileFinderAction,
-    ) -> Result<Self, Self::Error> {
-        // `FileFinderAction::action_type` defines which action will be performed.
-        // Only options from selected action are read.
-        Ok(match parse_enum(proto.action_type)? {
-            ActionType::Stat => Action::from(proto.stat.unwrap_or_default()),
-            ActionType::Hash => {
-                Action::try_from(proto.hash.unwrap_or_default())?
-            }
-            ActionType::Download => {
-                Action::try_from(proto.download.unwrap_or_default())?
-            }
-        })
+impl From<FileFinderStatActionOptions> for StatActionOptions {
+    fn from(proto: FileFinderStatActionOptions) -> StatActionOptions {
+        StatActionOptions {
+            follow_symlink: proto.resolve_links(),
+            collect_ext_attrs: proto.collect_ext_attrs(),
+        }
     }
 }
 
-impl From<FileFinderStatActionOptions> for Action {
-    fn from(proto: FileFinderStatActionOptions) -> Action {
-        Action::Stat(StatActionOptions {
-            resolve_links: proto.resolve_links(),
-            collect_ext_attrs: proto.collect_ext_attrs(),
-        })
-    }
+fn into_action(proto: FileFinderAction) -> Result<Option<Action>, ParseError> {
+    // `FileFinderAction::action_type` defines which action will be performed.
+    // Only options from the selected action are read.
+    Ok(Some(match parse_enum(proto.action_type)? {
+        ActionType::Stat => return Ok(None),
+        ActionType::Hash => Action::try_from(proto.hash.unwrap_or_default())?,
+        ActionType::Download => {
+            Action::try_from(proto.download.unwrap_or_default())?
+        }
+    }))
 }
 
 impl TryFrom<FileFinderHashActionOptions> for Action {
@@ -179,7 +168,6 @@ impl TryFrom<FileFinderHashActionOptions> for Action {
     ) -> Result<Self, Self::Error> {
         Ok(Action::Hash(HashActionOptions {
             oversized_file_policy: parse_enum(proto.oversized_file_policy)?,
-            collect_ext_attrs: proto.collect_ext_attrs(),
             max_size: proto.max_size(),
         }))
     }
@@ -194,7 +182,6 @@ impl TryFrom<FileFinderDownloadActionOptions> for Action {
         Ok(Action::Download(DownloadActionOptions {
             oversized_file_policy: parse_enum(proto.oversized_file_policy)?,
             max_size: proto.max_size(),
-            collect_ext_attrs: proto.collect_ext_attrs(),
             use_external_stores: proto.use_external_stores(),
             chunk_size: proto.chunk_size(),
         }))
@@ -434,8 +421,7 @@ fn get_contents_literal_match_condition(
     let length = options.length();
     let xor_in_key = options.xor_in_key();
     let xor_out_key = options.xor_out_key();
-    let mode =
-        MatchMode::from(parse_enum::<LiteralMatchMode>(options.mode)?);
+    let mode = MatchMode::from(parse_enum::<LiteralMatchMode>(options.mode)?);
 
     let literal = match options.literal {
         None => return Ok(vec![]),
@@ -488,6 +474,7 @@ impl super::super::Request for Request {
     type Proto = FileFinderArgs;
 
     fn from_proto(proto: FileFinderArgs) -> Result<Request, ParseError> {
+        info!("File Finder: proto request: {:#?}", &proto);
         if !matches!(proto.pathtype(), PathType::Os) {
             return Err(ParseError::malformed(
                 "File Finder does not support path types other than `Os`.",
@@ -502,15 +489,20 @@ impl super::super::Request for Request {
             conditions.extend(get_conditions(proto_condition)?);
         }
 
-        let action = match proto.action {
-            Some(action) => Action::try_from(action)?,
-            None => return Err(ParseError::malformed(
+        let (action, stat_options) =
+            match proto.action {
+                Some(action) => (
+                    into_action(action.clone())?,
+                    StatActionOptions::from(action.stat.unwrap_or_default()),
+                ),
+                None => return Err(ParseError::malformed(
                     "File Finder request does not contain action definition.",
                 )),
-        };
+            };
 
         Ok(Request {
             path_queries: proto.paths,
+            stat_options,
             action,
             conditions,
             follow_links,
@@ -580,7 +572,8 @@ mod tests {
                 ..Default::default()
             }),
             ..Default::default()
-        }).unwrap_err();
+        })
+        .unwrap_err();
 
         match err {
             ParseError::Malformed(_) => {}
@@ -599,13 +592,8 @@ mod tests {
         })
         .unwrap();
 
-        match request.action {
-            Action::Stat(options) => {
-                assert_eq!(options.collect_ext_attrs, false);
-                assert_eq!(options.resolve_links, false);
-            }
-            v @ _ => panic!("Unexpected action type: {:?}", v),
-        }
+        assert_eq!(request.stat_options.follow_symlink, false);
+        assert_eq!(request.stat_options.collect_ext_attrs, false);
     }
 
     #[test]
@@ -623,13 +611,8 @@ mod tests {
         })
         .unwrap();
 
-        match request.action {
-            Action::Stat(options) => {
-                assert_eq!(options.collect_ext_attrs, true);
-                assert_eq!(options.resolve_links, true);
-            }
-            v @ _ => panic!("Unexpected action type: {:?}", v),
-        }
+        assert_eq!(request.stat_options.follow_symlink, true);
+        assert_eq!(request.stat_options.collect_ext_attrs, true);
     }
 
     #[test]
@@ -643,9 +626,8 @@ mod tests {
         })
         .unwrap();
 
-        match request.action {
+        match request.action.unwrap() {
             Action::Hash(options) => {
-                assert_eq!(options.collect_ext_attrs, false);
                 assert_eq!(
                     options.oversized_file_policy,
                     HashActionOversizedFilePolicy::Skip
@@ -654,6 +636,8 @@ mod tests {
             }
             v @ _ => panic!("Unexpected action type: {:?}", v),
         }
+        assert_eq!(request.stat_options.collect_ext_attrs, false);
+        assert_eq!(request.stat_options.follow_symlink, false);
     }
 
     #[test]
@@ -668,15 +652,18 @@ mod tests {
                     ),
                     max_size: Some(123456),
                 }),
+                stat: Some(FileFinderStatActionOptions {
+                    collect_ext_attrs: Some(true),
+                    resolve_links: Some(true),
+                }),
                 ..Default::default()
             }),
             ..Default::default()
         })
         .unwrap();
 
-        match request.action {
+        match request.action.unwrap() {
             Action::Hash(options) => {
-                assert_eq!(options.collect_ext_attrs, true);
                 assert_eq!(
                     options.oversized_file_policy,
                     HashActionOversizedFilePolicy::HashTruncated
@@ -685,6 +672,8 @@ mod tests {
             }
             v @ _ => panic!("Unexpected action type: {:?}", v),
         }
+        assert_eq!(request.stat_options.collect_ext_attrs, true);
+        assert_eq!(request.stat_options.follow_symlink, true);
     }
 
     #[test]
@@ -698,7 +687,7 @@ mod tests {
         })
         .unwrap();
 
-        match request.action {
+        match request.action.unwrap() {
             Action::Download(options) => {
                 assert_eq!(options.max_size, 500000000);
                 assert_eq!(
@@ -706,11 +695,12 @@ mod tests {
                     DownloadActionOversizedFilePolicy::Skip
                 );
                 assert_eq!(options.use_external_stores, true);
-                assert_eq!(options.collect_ext_attrs, false);
                 assert_eq!(options.chunk_size, 524288);
             }
             v @ _ => panic!("Unexpected action type: {:?}", v),
         }
+        assert_eq!(request.stat_options.collect_ext_attrs, false);
+        assert_eq!(request.stat_options.follow_symlink, false);
     }
 
     #[test]
@@ -728,13 +718,17 @@ mod tests {
                     use_external_stores: Some(false),
                     chunk_size: Some(5432),
                 }),
+                stat: Some(FileFinderStatActionOptions {
+                    collect_ext_attrs: Some(true),
+                    resolve_links: Some(true),
+                }),
                 ..Default::default()
             }),
             ..Default::default()
         })
         .unwrap();
 
-        match request.action {
+        match request.action.unwrap() {
             Action::Download(options) => {
                 assert_eq!(options.max_size, 12345);
                 assert_eq!(
@@ -742,11 +736,12 @@ mod tests {
                     DownloadActionOversizedFilePolicy::DownloadTruncated
                 );
                 assert_eq!(options.use_external_stores, false);
-                assert_eq!(options.collect_ext_attrs, true);
                 assert_eq!(options.chunk_size, 5432);
             }
             v @ _ => panic!("Unexpected action type: {:?}", v),
         }
+        assert_eq!(request.stat_options.collect_ext_attrs, true);
+        assert_eq!(request.stat_options.follow_symlink, true);
     }
 
     #[test]

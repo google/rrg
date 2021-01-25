@@ -239,7 +239,7 @@ mod tests {
             &DownloadActionOptions {
                 max_size: 5,
                 oversized_file_policy:
-                DownloadOversizedFilePolicy::DownloadTruncated,
+                    DownloadOversizedFilePolicy::DownloadTruncated,
                 use_external_stores: false,
                 chunk_size: 3,
             },

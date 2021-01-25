@@ -139,9 +139,6 @@ mod tests {
 
     #[test]
     fn test_join_chunks_on_input_without_groups() {
-        assert_eq!(
-            join_chunks(vec![vec!["/home"]]),
-            vec!["/home"]
-        );
+        assert_eq!(join_chunks(vec![vec!["/home"]]), vec!["/home"]);
     }
 }
