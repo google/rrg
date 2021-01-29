@@ -6,16 +6,16 @@ use log::warn;
 use rrg_proto::file_finder_download_action_options::OversizedFilePolicy as DownloadOversizedFilePolicy;
 use rrg_proto::file_finder_hash_action_options::OversizedFilePolicy as HashOversizedFilePolicy;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Take};
 
 #[derive(Debug)]
-pub enum Response<R> {
+pub enum Response {
     /// Download action is not performed and no further action is required.
     Skip(),
     /// File was not downloaded, but hash action must be executed.
     HashRequest(HashActionOptions),
     /// Chunks of data to be downloaded.
-    DownloadData(Chunks<R>),
+    DownloadData(Chunks<BufReader<Take<File>>>),
 }
 
 /// Performs `download` action logic and returns file contents to be uploaded
@@ -23,13 +23,13 @@ pub enum Response<R> {
 pub fn download(
     entry: &Entry,
     config: &DownloadActionOptions,
-) -> Response<impl std::io::Read> {
+) -> Response {
     if entry.metadata.len() > config.max_size {
         match config.oversized_file_policy {
             DownloadOversizedFilePolicy::Skip => {
                 return Response::Skip();
             }
-            DownloadOversizedFilePolicy::DownloadTruncated => {}
+            DownloadOversizedFilePolicy::DownloadTruncated => (),
             DownloadOversizedFilePolicy::HashTruncated => {
                 let hash_config = HashActionOptions {
                     max_size: config.max_size,
@@ -57,17 +57,14 @@ pub fn download(
     Response::DownloadData(chunks(reader, config.chunk_size))
 }
 
-fn chunks<R: std::io::Read>(reader: R, chunk_size: u64) -> Chunks<R> {
-    Chunks {
-        bytes: reader.bytes(),
-        chunk_size,
-    }
-}
-
+/// Implements `Iterator` trait splitting underlying `bytes` into chunks.
 #[derive(Debug)]
 pub struct Chunks<R> {
-    bytes: std::io::Bytes<R>,
-    chunk_size: u64,
+    /// Data source for the chunks.
+    data: std::io::Bytes<R>,
+    /// Desired number of bytes in chunks. Only the last chunk can be smaller
+    /// than the `bytes_per_chunk`
+    bytes_per_chunk: u64,
 }
 
 impl<R: std::io::Read> std::iter::Iterator for Chunks<R> {
@@ -75,14 +72,14 @@ impl<R: std::io::Read> std::iter::Iterator for Chunks<R> {
 
     fn next(&mut self) -> Option<std::io::Result<Vec<u8>>> {
         let mut ret = vec![];
-        for byte in &mut self.bytes {
+        for byte in &mut self.data {
             let byte = match byte {
                 Ok(byte) => byte,
                 Err(err) => return Some(Err(err)),
             };
             ret.push(byte);
 
-            if ret.len() == self.chunk_size as usize {
+            if ret.len() == self.bytes_per_chunk as usize {
                 return Some(Ok(ret));
             }
         }
@@ -91,6 +88,14 @@ impl<R: std::io::Read> std::iter::Iterator for Chunks<R> {
         }
 
         return None;
+    }
+}
+
+/// Returns an iterator over `reader` returning chunks of bytes.
+fn chunks<R: std::io::Read>(reader: R, bytes_per_chunk: u64) -> Chunks<R> {
+    Chunks {
+        data: reader.bytes(),
+        bytes_per_chunk,
     }
 }
 
