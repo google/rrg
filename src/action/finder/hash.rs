@@ -2,6 +2,7 @@ use crate::action::finder::request::HashActionOptions;
 use crate::fs::Entry;
 use crypto::digest::Digest;
 use log::warn;
+use rrg_macro::ack;
 use rrg_proto::file_finder_hash_action_options::OversizedFilePolicy;
 use rrg_proto::Hash as HashEntry;
 use std::cmp::min;
@@ -52,17 +53,11 @@ pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<HashEntry> {
         OversizedFilePolicy::HashTruncated => {}
     };
 
-    let mut file = match File::open(&entry.path) {
-        Ok(file) => file.take(config.max_size),
-        Err(err) => {
-            warn!(
-                "failed to open file: {}, error: {}",
-                entry.path.display(),
-                err
-            );
-            return None;
-        }
-    };
+    let file = ack! {
+    File::open(&entry.path), error: "failed to open file: {}, error: {}",
+        entry.path.display(),
+        err}?;
+    let mut file = file.take(config.max_size);
 
     let mut hasher = Hasher::new();
     match std::io::copy(&mut file, &mut hasher) {
