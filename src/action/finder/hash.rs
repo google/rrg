@@ -12,10 +12,14 @@ use std::iter::repeat;
 
 /// Hashes data writen to it using SHA-1, SHA-256 and MD5 algorithms.
 struct Hasher {
+    /// Digest with SHA-1 hash.
     sha1: crypto::sha1::Sha1,
+    /// Digest with SHA-256 hash.
     sha256: crypto::sha2::Sha256,
+    /// Digest with MD5 hash.
     md5: crypto::md5::Md5,
-    num_bytes: usize,
+    /// Stores total number of bytes inserted into hasher.
+    total_byte_count: u64,
 }
 
 impl Hasher {
@@ -24,7 +28,7 @@ impl Hasher {
             sha1: crypto::sha1::Sha1::new(),
             sha256: crypto::sha2::Sha256::new(),
             md5: crypto::md5::Md5::new(),
-            num_bytes: 0,
+            total_byte_count: 0,
         }
     }
 }
@@ -34,7 +38,7 @@ impl std::io::Write for Hasher {
         self.sha1.input(buf);
         self.sha256.input(buf);
         self.md5.input(buf);
-        self.num_bytes = self.num_bytes + buf.len();
+        self.total_byte_count += buf.len() as u64;
 
         Ok(buf.len())
     }
@@ -44,6 +48,7 @@ impl std::io::Write for Hasher {
     }
 }
 
+/// Performs `hash` action on the file in `entry` and returns the result to be reported in case of success.
 pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<HashEntry> {
     match config.oversized_file_policy {
         OversizedFilePolicy::Skip => {
@@ -85,7 +90,7 @@ pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<HashEntry> {
         pecoff_md5: None,
         pecoff_sha256: None,
         signed_data: vec![],
-        num_bytes: Some(hasher.num_bytes as u64),
+        num_bytes: Some(hasher.total_byte_count),
         source_offset: None,
     })
 }
