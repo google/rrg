@@ -5,6 +5,11 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+          - nightly
     steps:
       - run: sudo apt install libfuse-dev
       - uses: actions/checkout@v2
@@ -12,7 +17,7 @@ jobs:
           submodules: true
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ matrix.toolchain }}
       - uses: actions-rs/cargo@v1
         with:
           command: test
