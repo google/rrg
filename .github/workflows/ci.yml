@@ -2,7 +2,6 @@ name: 'Integrate'
 on:
   - push
   - pull_request
-
 jobs:
   ci:
     name: 'CI'
@@ -33,4 +32,8 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --package rrg-macro --package rrg-proto --package rrg --features 'test-chattr test-setfattr'
+          args: >
+            --package rrg-macro
+            --package rrg-proto
+            --package rrg
+            --features 'test-chattr test-setfattr'
