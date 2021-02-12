@@ -28,7 +28,11 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.toolchain }}
-      - name: 'Run tests'
+      - name: 'Build RRG executable'
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+      - name: 'Run RRG tests'
         uses: actions-rs/cargo@v1
         with:
           command: test
@@ -37,3 +41,8 @@ jobs:
             --package rrg-proto
             --package rrg
             --features 'test-chattr test-setfattr'
+      - name: 'Print RRG version'
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: -- --version
