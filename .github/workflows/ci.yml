@@ -17,7 +17,7 @@ jobs:
           - nightly
     steps:
       - if: ${{ runner.os == 'Linux' }}
-        run: sudo apt install libfuse-dev
+        run: sudo apt install attr e2fsprogs libfuse-dev
       - uses: actions/checkout@v2
         with:
           submodules: true
@@ -27,4 +27,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --package rrg-macro --package rrg-proto --package rrg
+          args: --package rrg-macro --package rrg-proto --package rrg --features 'test-chattr test-setfattr'
