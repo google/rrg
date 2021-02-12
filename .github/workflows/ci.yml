@@ -4,14 +4,20 @@ on:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
         toolchain:
           - stable
           - nightly
     steps:
-      - run: sudo apt install libfuse-dev
+      - if: ${{ runner.os == 'Linux' }}
+        run: sudo apt install libfuse-dev
       - uses: actions/checkout@v2
         with:
           submodules: true
