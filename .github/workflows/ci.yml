@@ -1,0 +1,19 @@
+on:
+  - push
+  - pull_request
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sudo apt install libfuse-dev
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --package rrg-macro --package rrg-proto --package rrg
