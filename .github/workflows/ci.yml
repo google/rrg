@@ -1,9 +1,11 @@
+name: 'Integrate'
 on:
   - push
   - pull_request
 
 jobs:
   ci:
+    name: 'CI'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -16,15 +18,19 @@ jobs:
           - stable
           - nightly
     steps:
-      - if: ${{ runner.os == 'Linux' }}
+      - name: 'Install Linux dependencies'
+        if: ${{ runner.os == 'Linux' }}
         run: sudo apt install attr e2fsprogs libfuse-dev
-      - uses: actions/checkout@v2
+      - name: 'Checkout the repository'
+        uses: actions/checkout@v2
         with:
           submodules: true
-      - uses: actions-rs/toolchain@v1
+      - name: 'Install the Rust toolchain'
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.toolchain }}
-      - uses: actions-rs/cargo@v1
+      - name: 'Run tests'
+        uses: actions-rs/cargo@v1
         with:
           command: test
           args: --package rrg-macro --package rrg-proto --package rrg --features 'test-chattr test-setfattr'
