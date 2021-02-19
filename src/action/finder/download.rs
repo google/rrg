@@ -105,10 +105,9 @@ mod tests {
 
     #[test]
     fn test_chunked_download() {
-        let test_string = "some_data";
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
-        std::fs::write(&path, &test_string).unwrap();
+        std::fs::write(&path, "some_data").unwrap();
         let entry = Entry {
             metadata: path.metadata().unwrap(),
             path,
@@ -142,10 +141,9 @@ mod tests {
 
     #[test]
     fn test_no_empty_chunk_download() {
-        let test_string = "some_";
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
-        std::fs::write(&path, &test_string).unwrap();
+        std::fs::write(&path, "some_").unwrap();
         let entry = Entry {
             metadata: path.metadata().unwrap(),
             path,
@@ -175,10 +173,9 @@ mod tests {
 
     #[test]
     fn test_skip_above_max_size() {
-        let test_string = "some_1";
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
-        std::fs::write(&path, &test_string).unwrap();
+        std::fs::write(&path, "some_1").unwrap();
         let entry = Entry {
             metadata: path.metadata().unwrap(),
             path,
@@ -199,10 +196,9 @@ mod tests {
 
     #[test]
     fn test_hash_above_max_size() {
-        let test_string = "some_1";
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
-        std::fs::write(&path, &test_string).unwrap();
+        std::fs::write(&path, "some_1").unwrap();
         let entry = Entry {
             metadata: path.metadata().unwrap(),
             path,
@@ -230,10 +226,9 @@ mod tests {
 
     #[test]
     fn test_download_truncated_above_max_size() {
-        let test_string = "some_1";
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
-        std::fs::write(&path, &test_string).unwrap();
+        std::fs::write(&path, "some_1").unwrap();
         let entry = Entry {
             metadata: path.metadata().unwrap(),
             path,
