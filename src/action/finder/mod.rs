@@ -9,3 +9,4 @@ pub mod download;
 pub mod glob;
 pub mod groups;
 pub mod request;
+pub mod chunks;
