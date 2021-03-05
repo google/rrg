@@ -1,14 +1,13 @@
-use crate::action::finder::chunks::{chunks, Chunks, ChunksConfig};
+use crate::action::finder::chunks::{get_file_chunks, GetFileChunksConfig, Chunks};
 use crate::action::finder::request::{
     DownloadActionOptions, HashActionOptions,
 };
 use crate::fs::Entry;
-use log::warn;
 use rrg_proto::file_finder_download_action_options::OversizedFilePolicy as DownloadOversizedFilePolicy;
 use rrg_proto::file_finder_hash_action_options::OversizedFilePolicy as HashOversizedFilePolicy;
 use sha2::{Digest, Sha256};
 use std::fs::File;
-use std::io::{BufReader, Read, Take};
+use std::io::{BufReader, Take};
 
 #[derive(Debug)]
 pub enum Response {
@@ -40,26 +39,17 @@ pub fn download(entry: &Entry, config: &DownloadActionOptions) -> Response {
         };
     }
 
-    let file = match File::open(&entry.path) {
-        Ok(f) => f.take(config.max_size),
-        Err(err) => {
-            warn!(
-                "failed to open file: {}, error: {}",
-                entry.path.display(),
-                err
-            );
-            return Response::Skip();
-        }
-    };
+    let chunks = get_file_chunks(&entry.path, &GetFileChunksConfig{
+        max_read_bytes: config.max_size,
+        bytes_per_chunk: config.chunk_size,
+        start_offset: 0,
+        overlap_bytes: 0
+    });
 
-    let reader = BufReader::new(file);
-    Response::DownloadData(chunks(
-        reader,
-        ChunksConfig {
-            bytes_per_chunk: config.chunk_size,
-            overlap_bytes: 0,
-        },
-    ))
+    match chunks {
+        Some(chunks) => Response::DownloadData(chunks),
+        None => Response::Skip(),
+    }
 }
 
 /// A type representing unique identifier of a given chunk.
