@@ -1,3 +1,8 @@
+use log::warn;
+use std::fs::File;
+use std::io::{BufReader, Read, Seek, SeekFrom, Take};
+use std::path::Path;
+
 /// Implements `Iterator` trait splitting underlying `bytes` into chunks.
 #[derive(Debug)]
 pub struct Chunks<R> {
@@ -9,8 +14,59 @@ pub struct Chunks<R> {
     overlap_data: Vec<u8>,
 }
 
+pub struct GetFileChunksConfig {
+    /// Number of bytes skipped from the beginning of the file.
+    pub start_offset: u64,
+    /// Maximum number of bytes read from the file.
+    pub max_read_bytes: u64,
+    /// Desired number of bytes in chunks. Only the last chunk can be smaller
+    /// than the `bytes_per_chunk`
+    pub bytes_per_chunk: u64,
+    /// A number of bytes that the next chunk will share with the previous one.
+    pub overlap_bytes: u64,
+}
+
+pub fn get_file_chunks(
+    path: &Path,
+    config: &GetFileChunksConfig,
+) -> Option<Chunks<BufReader<Take<File>>>> {
+    let file = open_file(&path, config.start_offset, config.max_read_bytes)?;
+
+    Some(chunks(
+        BufReader::new(file),
+        ChunksConfig {
+            bytes_per_chunk: config.bytes_per_chunk,
+            overlap_bytes: config.overlap_bytes,
+        },
+    ))
+}
+
+fn open_file(
+    path: &Path,
+    offset: u64,
+    max_size: u64,
+) -> Option<Take<File>> {
+    match File::open(path) {
+        Ok(mut f) => {
+            if let Err(err) = f.seek(SeekFrom::Start(offset)) {
+                warn!(
+                    "failed to seek in file: {}, error: {}",
+                    path.display(),
+                    err
+                );
+                return None;
+            }
+            Some(f.take(max_size))
+        }
+        Err(err) => {
+            warn!("failed to open file: {}, error: {}", path.display(), err);
+            None
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct ChunksConfig {
+struct ChunksConfig {
     /// Desired number of bytes in chunks. Only the last chunk can be smaller
     /// than the `bytes_per_chunk`
     pub bytes_per_chunk: u64,
@@ -48,7 +104,7 @@ impl<R: std::io::Read> std::iter::Iterator for Chunks<R> {
 }
 
 /// Returns an iterator over `reader` returning chunks of bytes.
-pub fn chunks<R: std::io::Read>(reader: R, config: ChunksConfig) -> Chunks<R> {
+fn chunks<R: std::io::Read>(reader: R, config: ChunksConfig) -> Chunks<R> {
     assert!(config.bytes_per_chunk > 0);
     assert!(config.bytes_per_chunk > config.overlap_bytes);
     Chunks {
@@ -90,6 +146,25 @@ mod tests {
         );
         assert_eq!(chunks.next().unwrap().unwrap(), vec![1, 2, 3]);
         assert_eq!(chunks.next().unwrap().unwrap(), vec![3, 4, 5]);
+        assert!(chunks.next().is_none());
+    }
+
+    #[test]
+    fn test_get_file_chunks_basic_use_case() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("f");
+        std::fs::write(&path, [1,2,3,4,5,6]).unwrap();
+
+        let mut chunks = get_file_chunks(&path, &GetFileChunksConfig{
+            start_offset: 1,
+            max_read_bytes: 4,
+            bytes_per_chunk: 2,
+            overlap_bytes: 1,
+        }).unwrap();
+
+        assert_eq!(chunks.next().unwrap().unwrap(), vec![2, 3]);
+        assert_eq!(chunks.next().unwrap().unwrap(), vec![3, 4]);
+        assert_eq!(chunks.next().unwrap().unwrap(), vec![4, 5]);
         assert!(chunks.next().is_none());
     }
 }
