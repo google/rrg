@@ -15,8 +15,8 @@ pub enum Response {
     Skip(),
     /// File was not downloaded, but hash action must be executed.
     HashRequest(HashActionOptions),
-    /// Chunks of data to be downloaded.
-    DownloadData(Chunks<BufReader<Take<File>>>),
+    /// Chunks of data to be uploaded.
+    CollectData(Chunks<BufReader<Take<File>>>),
 }
 
 /// Performs `download` action logic and returns file contents to be uploaded
@@ -47,7 +47,7 @@ pub fn download(entry: &Entry, config: &DownloadActionOptions) -> Response {
     });
 
     match chunks {
-        Some(chunks) => Response::DownloadData(chunks),
+        Some(chunks) => Response::CollectData(chunks),
         None => Response::Skip(),
     }
 }
@@ -135,7 +135,7 @@ mod tests {
         );
 
         let mut chunks = match result {
-            Response::DownloadData(chunks) => chunks,
+            Response::CollectData(chunks) => chunks,
             _ => panic!("Unexpected result type."),
         };
 
@@ -171,7 +171,7 @@ mod tests {
         );
 
         let mut chunks = match result {
-            Response::DownloadData(chunks) => chunks,
+            Response::CollectData(chunks) => chunks,
             _ => panic!("Unexpected result type."),
         };
 
@@ -257,7 +257,7 @@ mod tests {
         );
 
         let mut chunks = match result {
-            Response::DownloadData(chunks) => chunks,
+            Response::CollectData(chunks) => chunks,
             _ => panic!("Unexpected result type."),
         };
 

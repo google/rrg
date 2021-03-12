@@ -46,23 +46,24 @@ fn open_file(
     offset: u64,
     max_size: u64,
 ) -> Option<Take<File>> {
-    match File::open(path) {
-        Ok(mut f) => {
-            if let Err(err) = f.seek(SeekFrom::Start(offset)) {
-                warn!(
-                    "failed to seek in file: {}, error: {}",
-                    path.display(),
-                    err
-                );
-                return None;
-            }
-            Some(f.take(max_size))
-        }
+    let mut file = match File::open(path) {
+        Ok(file) => file,
         Err(err) => {
             warn!("failed to open file: {}, error: {}", path.display(), err);
-            None
+            return None;
         }
+    };
+
+    if let Err(err) = file.seek(SeekFrom::Start(offset)) {
+        warn!(
+            "failed to seek in file: {}, error: {}",
+            path.display(),
+            err
+        );
+        return None;
     }
+
+    Some(file.take(max_size))
 }
 
 #[derive(Debug)]
@@ -153,18 +154,18 @@ mod tests {
     fn test_get_file_chunks_basic_use_case() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
-        std::fs::write(&path, [1,2,3,4,5,6]).unwrap();
+        std::fs::write(&path, b"abcdef").unwrap();
 
-        let mut chunks = get_file_chunks(&path, &GetFileChunksConfig{
+        let mut chunks = get_file_chunks(&path, &GetFileChunksConfig {
             start_offset: 1,
             max_read_bytes: 4,
             bytes_per_chunk: 2,
             overlap_bytes: 1,
         }).unwrap();
 
-        assert_eq!(chunks.next().unwrap().unwrap(), vec![2, 3]);
-        assert_eq!(chunks.next().unwrap().unwrap(), vec![3, 4]);
-        assert_eq!(chunks.next().unwrap().unwrap(), vec![4, 5]);
+        assert_eq!(chunks.next().unwrap().unwrap(), b"bc");
+        assert_eq!(chunks.next().unwrap().unwrap(), b"cd");
+        assert_eq!(chunks.next().unwrap().unwrap(), b"de");
         assert!(chunks.next().is_none());
     }
 }
