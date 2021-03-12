@@ -8,7 +8,6 @@ use rrg_proto::Hash as HashEntry;
 use std::cmp::min;
 use std::fs::File;
 use std::io::Read;
-use std::iter::repeat;
 
 /// Hashes data writen to it using SHA-1, SHA-256 and MD5 algorithms.
 struct Hasher {
@@ -49,7 +48,7 @@ impl std::io::Write for Hasher {
 }
 
 /// Performs `hash` action on the file in `entry` and returns the result to be reported in case of success.
-pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<HashEntry> {
+pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<FileHash> {
     match config.oversized_file_policy {
         OversizedFilePolicy::Skip => {
             if entry.metadata.len() > config.max_size {
@@ -82,17 +81,36 @@ pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<HashEntry> {
         return None;
     }
 
-    Some(HashEntry {
-        sha1: Some(result_vec(&mut hasher.sha1)),
-        sha256: Some(result_vec(&mut hasher.sha256)),
-        md5: Some(result_vec(&mut hasher.md5)),
-        pecoff_sha1: None,
-        pecoff_md5: None,
-        pecoff_sha256: None,
-        signed_data: vec![],
-        num_bytes: Some(hasher.total_byte_count),
-        source_offset: None,
+    Some(FileHash {
+        sha1: result_vec(&mut hasher.sha1),
+        sha256: result_vec(&mut hasher.sha256),
+        md5: result_vec(&mut hasher.md5),
+        num_bytes: hasher.total_byte_count,
     })
+}
+
+#[derive(Debug)]
+pub struct FileHash {
+    pub sha256: std::vec::Vec<u8>,
+    pub sha1: std::vec::Vec<u8>,
+    pub md5: std::vec::Vec<u8>,
+    pub num_bytes: u64,
+}
+
+impl From<FileHash> for HashEntry {
+    fn from(hash: FileHash) -> Self {
+        HashEntry {
+            sha256: Some(hash.sha256),
+            sha1: Some(hash.sha1),
+            md5: Some(hash.md5),
+            num_bytes: Some(hash.num_bytes),
+            pecoff_sha1: None,
+            pecoff_md5: None,
+            pecoff_sha256: None,
+            signed_data: vec![],
+            source_offset: None
+        }
+    }
 }
 
 fn result_vec<T: Digest>(digest: &mut T) -> Vec<u8> {
@@ -127,7 +145,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            result.sha1.unwrap(),
+            result.sha1,
             vec![
                 0xa6, 0x2a, 0x6d, 0x59, 0x91, 0x23, 0x8a, 0xe7, 0x2d, 0x81,
                 0xfe, 0x6e, 0x47, 0x69, 0xb3, 0x04, 0x3d, 0x9f, 0xe6, 0x70
@@ -135,7 +153,7 @@ mod tests {
             .to_vec()
         );
         assert_eq!(
-            result.sha256.unwrap(),
+            result.sha256,
             vec![
                 0xd7, 0x6d, 0x85, 0xad, 0xca, 0x8a, 0xfa, 0xd2, 0x05, 0xed,
                 0xeb, 0xc1, 0x1f, 0x9b, 0x50, 0x86, 0xbc, 0xa7, 0x5a, 0xcb,
@@ -145,14 +163,14 @@ mod tests {
             .to_vec()
         );
         assert_eq!(
-            result.md5.unwrap(),
+            result.md5,
             vec![
                 0xe0, 0x91, 0xb6, 0xf1, 0xa2, 0x33, 0x04, 0x9d, 0x22, 0xd2,
                 0x80, 0x7f, 0xa8, 0x08, 0x6f, 0x3f
             ]
             .to_vec()
         );
-        assert_eq!(result.num_bytes.unwrap(), 14);
+        assert_eq!(result.num_bytes, 14);
     }
 
     #[test]
@@ -175,7 +193,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result.num_bytes.unwrap(), 10);
+        assert_eq!(result.num_bytes, 10);
     }
 
     #[test]
