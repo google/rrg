@@ -96,7 +96,7 @@ pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<HashEntry> {
 }
 
 fn result_vec<T: Digest>(digest: &mut T) -> Vec<u8> {
-    let mut vec = repeat(0).take(digest.output_bytes()).collect::<Vec<u8>>();
+    let mut vec = vec![0; digest.output_bytes()];
     digest.result(&mut vec);
     vec
 }
