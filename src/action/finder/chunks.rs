@@ -41,11 +41,7 @@ pub fn get_file_chunks(
     ))
 }
 
-fn open_file(
-    path: &Path,
-    offset: u64,
-    max_size: u64,
-) -> Option<Take<File>> {
+fn open_file(path: &Path, offset: u64, max_size: u64) -> Option<Take<File>> {
     let mut file = match File::open(path) {
         Ok(file) => file,
         Err(err) => {
@@ -55,11 +51,7 @@ fn open_file(
     };
 
     if let Err(err) = file.seek(SeekFrom::Start(offset)) {
-        warn!(
-            "failed to seek in file: {}, error: {}",
-            path.display(),
-            err
-        );
+        warn!("failed to seek in file: {}, error: {}", path.display(), err);
         return None;
     }
 
@@ -156,12 +148,16 @@ mod tests {
         let path = tempdir.path().join("f");
         std::fs::write(&path, b"abcdef").unwrap();
 
-        let mut chunks = get_file_chunks(&path, &GetFileChunksConfig {
-            start_offset: 1,
-            max_read_bytes: 4,
-            bytes_per_chunk: 2,
-            overlap_bytes: 1,
-        }).unwrap();
+        let mut chunks = get_file_chunks(
+            &path,
+            &GetFileChunksConfig {
+                start_offset: 1,
+                max_read_bytes: 4,
+                bytes_per_chunk: 2,
+                overlap_bytes: 1,
+            },
+        )
+        .unwrap();
 
         assert_eq!(chunks.next().unwrap().unwrap(), b"bc");
         assert_eq!(chunks.next().unwrap().unwrap(), b"cd");
