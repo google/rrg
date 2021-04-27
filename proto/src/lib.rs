@@ -5,6 +5,7 @@
 
 pub mod convert;
 pub mod path;
+mod wtf8;
 
 use std::path::PathBuf;
 
