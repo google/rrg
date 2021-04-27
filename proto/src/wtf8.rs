@@ -8,11 +8,11 @@
 //!
 //! [wtf8]: https://simonsapin.github.io/wtf-8
 
-/// Decodes the given potentially ill-formed UTF-16 into a WTF-8 byte sequence.
+/// Converts the given potentially ill-formed UTF-16 into a WTF-8 byte sequence.
 ///
 /// If the given byte sequence is a well-formed UTF-16 string, then the result
 /// is guaranteed to be a valid UTF-8string.
-pub fn decode_ill_formed_utf16(units: impl Iterator<Item=u16>) -> Vec<u8> {
+pub fn from_ill_formed_utf16(units: impl Iterator<Item=u16>) -> Vec<u8> {
     let mut res = Vec::new();
 
     let mut iter = units.peekable();
@@ -61,11 +61,11 @@ pub fn decode_ill_formed_utf16(units: impl Iterator<Item=u16>) -> Vec<u8> {
     }
 }
 
-/// Encodes the given WTF-8 byte sequence into potentially ill-formed UTF-16.
+/// Converts the given WTF-8 byte sequence into potentially ill-formed UTF-16.
 ///
 /// If the given byte sequence is a valid UTF-8 string, then the result is
 /// guaranteed to be a well-formed UTF-16 string.
-pub fn encode_ill_formed_utf16(units: impl Iterator<Item=u8>) -> Vec<u16> {
+pub fn into_ill_formed_utf16(units: impl Iterator<Item=u8>) -> Vec<u16> {
     let mut res = Vec::new();
 
     let mut iter = units.peekable();
@@ -145,64 +145,64 @@ mod tests {
     use crate::wtf8;
 
     #[test]
-    fn decode_empty() {
-        assert_eq!(wtf8::decode_ill_formed_utf16(std::iter::empty()), b"");
+    fn from_empty() {
+        assert_eq!(wtf8::from_ill_formed_utf16(std::iter::empty()), b"");
     }
 
     #[test]
-    fn decode_small_bytes() {
+    fn from_small_bytes() {
         let bytes_utf16 = vec![0x04, 0x08, 0x16, 0x23, 0x42];
-        let bytes_wtf8 = wtf8::decode_ill_formed_utf16(bytes_utf16.into_iter());
+        let bytes_wtf8 = wtf8::from_ill_formed_utf16(bytes_utf16.into_iter());
         assert_eq!(bytes_wtf8, b"\x04\x08\x16\x23\x42");
     }
 
     #[test]
-    fn decode_bmp_bytes() {
+    fn from_bmp_bytes() {
         let bytes_utf16 = vec![0xABCD, 0xBEEF, 0xFFFF];
-        let bytes_wtf8 = wtf8::decode_ill_formed_utf16(bytes_utf16.into_iter());
+        let bytes_wtf8 = wtf8::from_ill_formed_utf16(bytes_utf16.into_iter());
         assert_eq!(bytes_wtf8, b"\xEA\xAF\x8D\xEB\xBB\xAF\xEF\xBF\xBF");
     }
 
     #[test]
-    fn decode_sup_bytes() {
+    fn from_sup_bytes() {
         let bytes_utf16 = vec![0xD800, 0xDC00, 0xDBFF, 0xDFFF];
-        let bytes_wtf8 = wtf8::decode_ill_formed_utf16(bytes_utf16.into_iter());
+        let bytes_wtf8 = wtf8::from_ill_formed_utf16(bytes_utf16.into_iter());
         assert_eq!(bytes_wtf8, b"\xF0\x90\x80\x80\xF4\x8F\xBF\xBF");
     }
 
     #[test]
-    fn decode_ascii_string() {
+    fn from_ascii_string() {
         let string = "foo bar baz";
-        let string_wtf8 = wtf8::decode_ill_formed_utf16(string.encode_utf16());
+        let string_wtf8 = wtf8::from_ill_formed_utf16(string.encode_utf16());
         let string_utf8 = string.as_bytes();
         assert_eq!(string_wtf8, string_utf8);
     }
 
     #[test]
-    fn decode_unicode_string() {
+    fn from_unicode_string() {
         let string = "zażółć gęślą jaźń";
-        let string_wtf8 = wtf8::decode_ill_formed_utf16(string.encode_utf16());
+        let string_wtf8 = wtf8::from_ill_formed_utf16(string.encode_utf16());
         let string_utf8 = string.as_bytes();
         assert_eq!(string_wtf8, string_utf8);
     }
 
     #[test]
-    fn encode_empty() {
-        assert_eq!(wtf8::encode_ill_formed_utf16(std::iter::empty()), vec![]);
+    fn into_empty() {
+        assert_eq!(wtf8::into_ill_formed_utf16(std::iter::empty()), vec![]);
     }
 
     #[test]
-    fn encode_ascii_string() {
+    fn into_ascii_string() {
         let string = "foo bar baz";
-        let string_wtf8 = wtf8::encode_ill_formed_utf16(string.bytes());
+        let string_wtf8 = wtf8::into_ill_formed_utf16(string.bytes());
         let string_utf16 = string.encode_utf16().collect::<Vec<_>>();
         assert_eq!(string_wtf8, string_utf16);
     }
 
     #[test]
-    fn encode_unicode_string() {
+    fn into_unicode_string() {
         let string = "zażółć gęślą jaźń";
-        let string_wtf8 = wtf8::encode_ill_formed_utf16(string.bytes());
+        let string_wtf8 = wtf8::into_ill_formed_utf16(string.bytes());
         let string_utf16 = string.encode_utf16().collect::<Vec<_>>();
         assert_eq!(string_wtf8, string_utf16);
     }
