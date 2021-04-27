@@ -138,3 +138,51 @@ fn is_trail_surrogate(unit: &u16) -> bool {
 fn is_supplementary(point: &u32) -> bool {
     matches!(point, 0x10000..=0x10FFFF)
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::wtf8;
+
+    #[test]
+    fn decode_empty() {
+        assert_eq!(wtf8::decode_ill_formed_utf16(std::iter::empty()), b"");
+    }
+
+    #[test]
+    fn decode_small_bytes() {
+        let bytes_utf16 = vec![0x04, 0x08, 0x16, 0x23, 0x42];
+        let bytes_wtf8 = wtf8::decode_ill_formed_utf16(bytes_utf16.into_iter());
+        assert_eq!(bytes_wtf8, b"\x04\x08\x16\x23\x42");
+    }
+
+    #[test]
+    fn decode_bmp_bytes() {
+        let bytes_utf16 = vec![0xABCD, 0xBEEF, 0xFFFF];
+        let bytes_wtf8 = wtf8::decode_ill_formed_utf16(bytes_utf16.into_iter());
+        assert_eq!(bytes_wtf8, b"\xEA\xAF\x8D\xEB\xBB\xAF\xEF\xBF\xBF");
+    }
+
+    #[test]
+    fn decode_sup_bytes() {
+        let bytes_utf16 = vec![0xD800, 0xDC00, 0xDBFF, 0xDFFF];
+        let bytes_wtf8 = wtf8::decode_ill_formed_utf16(bytes_utf16.into_iter());
+        assert_eq!(bytes_wtf8, b"\xF0\x90\x80\x80\xF4\x8F\xBF\xBF");
+    }
+
+    #[test]
+    fn decode_ascii_string() {
+        let string = "foo bar baz";
+        let string_wtf8 = wtf8::decode_ill_formed_utf16(string.encode_utf16());
+        let string_utf8 = string.as_bytes();
+        assert_eq!(string_wtf8, string_utf8);
+    }
+
+    #[test]
+    fn decode_unicode_string() {
+        let string = "zażółć gęślą jaźń";
+        let string_wtf8 = wtf8::decode_ill_formed_utf16(string.encode_utf16());
+        let string_utf8 = string.as_bytes();
+        assert_eq!(string_wtf8, string_utf8);
+    }
+}
