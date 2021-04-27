@@ -12,10 +12,10 @@
 ///
 /// If the given byte sequence is a well-formed UTF-16 string, then the result
 /// is guaranteed to be a valid UTF-8string.
-pub fn decode_ill_formed_utf16(units: &[u16]) -> Vec<u8> {
+pub fn decode_ill_formed_utf16(units: impl Iterator<Item=u16>) -> Vec<u8> {
     let mut res = Vec::new();
 
-    let mut iter = units.iter().map(|unit| *unit).peekable();
+    let mut iter = units.peekable();
     loop {
         let unit = match iter.next() {
             Some(unit) => unit,
@@ -65,10 +65,10 @@ pub fn decode_ill_formed_utf16(units: &[u16]) -> Vec<u8> {
 ///
 /// If the given byte sequence is a valid UTF-8 string, then the result is
 /// guaranteed to be a well-formed UTF-16 string.
-pub fn encode_ill_formed_utf16(units: &[u8]) -> Vec<u16> {
+pub fn encode_ill_formed_utf16(units: impl Iterator<Item=u8>) -> Vec<u16> {
     let mut res = Vec::new();
 
-    let mut iter = units.iter().map(|unit| *unit).peekable();
+    let mut iter = units.peekable();
     loop {
         let byte1 = match iter.next() {
             Some(byte1) => byte1,
