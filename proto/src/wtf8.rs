@@ -1,3 +1,17 @@
+//! Utilities for working with the WTF-8 encoding.
+//!
+//! WTF-8 is a hack that allows to represent potentially ill-formed UTF-16 byte
+//! strings in a way somewhat compatible with UTF-8. Such bugs UTF-16 strings
+//! can be found for example in Windows paths for legacy reasons.
+//!
+//! See the official [WTF-8][wtf8] specification for more information.
+//!
+//! [wtf8]: https://simonsapin.github.io/wtf-8
+
+/// Decodes the given potentially ill-formed UTF-16 into a WTF-8 byte sequence.
+///
+/// If the given byte sequence is a well-formed UTF-16 string, then the result
+/// is guaranteed to be a valid UTF-8string.
 pub fn decode_ill_formed_utf16(units: &[u16]) -> Vec<u8> {
     let mut res = Vec::new();
 
@@ -47,6 +61,10 @@ pub fn decode_ill_formed_utf16(units: &[u16]) -> Vec<u8> {
     }
 }
 
+/// Encodes the given WTF-8 byte sequence into potentially ill-formed UTF-16.
+///
+/// If the given byte sequence is a valid UTF-8 string, then the result is
+/// guaranteed to be a well-formed UTF-16 string.
 pub fn encode_ill_formed_utf16(units: &[u8]) -> Vec<u16> {
     let mut res = Vec::new();
 
@@ -103,16 +121,19 @@ pub fn encode_ill_formed_utf16(units: &[u8]) -> Vec<u16> {
     }
 }
 
+/// Determines whether the given UTF-16 code unit is a lead surrogate.
 #[inline]
 fn is_lead_surrogate(unit: &u16) -> bool {
     matches!(unit, 0xD800..=0xDBFF)
 }
 
+/// Determines whether the given UTF-16 code unit is a trail surrogate.
 #[inline]
 fn is_trail_surrogate(unit: &u16) -> bool {
     matches!(unit, 0xDC00..=0xDFFF)
 }
 
+/// Determines whether the given code point is in the supplementary.
 #[inline]
 fn is_supplementary(point: &u32) -> bool {
     matches!(point, 0x10000..=0x10FFFF)
