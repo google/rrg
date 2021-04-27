@@ -185,4 +185,25 @@ mod tests {
         let string_utf8 = string.as_bytes();
         assert_eq!(string_wtf8, string_utf8);
     }
+
+    #[test]
+    fn encode_empty() {
+        assert_eq!(wtf8::encode_ill_formed_utf16(std::iter::empty()), vec![]);
+    }
+
+    #[test]
+    fn encode_ascii_string() {
+        let string = "foo bar baz";
+        let string_wtf8 = wtf8::encode_ill_formed_utf16(string.bytes());
+        let string_utf16 = string.encode_utf16().collect::<Vec<_>>();
+        assert_eq!(string_wtf8, string_utf16);
+    }
+
+    #[test]
+    fn encode_unicode_string() {
+        let string = "zażółć gęślą jaźń";
+        let string_wtf8 = wtf8::encode_ill_formed_utf16(string.bytes());
+        let string_utf16 = string.encode_utf16().collect::<Vec<_>>();
+        assert_eq!(string_wtf8, string_utf16);
+    }
 }
