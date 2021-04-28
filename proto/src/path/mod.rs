@@ -3,6 +3,8 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+mod wtf8;
+
 use std::path::PathBuf;
 
 /// Interprets given bytes as an operating system path.
@@ -48,7 +50,7 @@ pub fn from_bytes(bytes: Vec<u8>) -> PathBuf {
 /// use std::path::PathBuf;
 ///
 /// let path = PathBuf::from("foo/bar/baz");
-/// assert_eq!(rrg_proto::path::to_bytes(path), b"foo/bar/baz");
+/// assert_eq!(rrg_proto::path::into_bytes(path), b"foo/bar/baz");
 /// ```
 pub fn into_bytes(path: PathBuf) -> Vec<u8> {
     into_bytes_impl(path)
@@ -62,7 +64,7 @@ fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
 
 #[cfg(target_family = "windows")]
 fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
-    let bytes_u16 = crate::wtf8::into_ill_formed_utf16(bytes.into_iter());
+    let bytes_u16 = wtf8::into_ill_formed_utf16(bytes.into_iter());
 
     use std::os::windows::ffi::OsStringExt as _;
     std::ffi::OsString::from_wide(&bytes_u16).into()
@@ -79,5 +81,5 @@ fn into_bytes_impl(path: PathBuf) -> Vec<u8> {
     let string = std::ffi::OsString::from(path);
 
     use std::os::windows::ffi::OsStrExt as _;
-    crate::wtf8::from_ill_formed_utf16(string.as_os_str().encode_wide())
+    wtf8::from_ill_formed_utf16(string.as_os_str().encode_wide())
 }
