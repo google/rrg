@@ -10,7 +10,9 @@ use std::path::PathBuf;
 /// On Linux, the path is constructed from bytes as is since system paths can
 /// be made of arbitrary sequence of bytes.
 ///
-/// On Windows, the behaviour is unspecified (for now).
+/// On Windows, the [WTF-8][wtf8] encoding is used.
+///
+/// [wtf8]: https://simonsapin.github.io/wtf-8
 ///
 /// # Examples
 ///
@@ -36,7 +38,9 @@ pub fn from_bytes(bytes: Vec<u8>) -> PathBuf {
 /// On Linux, the path is emitted as is since system paths can consist of
 /// arbitrary bytes.
 ///
-/// On Windows, the behaviour is unspecified (for now).
+/// On Windows, the [WTF-8][wtf8] encoding is used.
+///
+/// [wtf8]: https://simonsapin.github.io/wtf-8
 ///
 /// # Examples
 ///
@@ -58,10 +62,7 @@ fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
 
 #[cfg(target_family = "windows")]
 fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
-    // TODO: This is just a quick hack that treats UTF-8-encoded strings as
-    // UTF-16. This works for trivial cases but should be reworked once the GRR
-    // protocol for paths is defined.
-    let bytes_u16 = bytes.iter().map(|byte| *byte as u16).collect::<Vec<_>>();
+    let bytes_u16 = crate::wtf8::into_ill_formed_utf16(bytes.into_iter());
 
     use std::os::windows::ffi::OsStringExt as _;
     std::ffi::OsString::from_wide(&bytes_u16).into()
@@ -77,7 +78,6 @@ fn to_bytes_impl(path: PathBuf) -> Vec<u8> {
 fn to_bytes_impl(path: PathBuf) -> Vec<u8> {
     let string = std::ffi::OsString::from(path);
 
-    // TODO: See explanation in `from_bytes_impl` on Windows.
     use std::os::windows::ffi::OsStrExt as _;
-    string.as_os_str().encode_wide().map(|byte| byte as u8).collect()
+    crate::wtf8::from_ill_formed_utf16(string.as_os_str().encode_wide())
 }
