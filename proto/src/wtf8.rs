@@ -142,6 +142,8 @@ fn is_supplementary(point: &u32) -> bool {
 #[cfg(test)]
 mod tests {
 
+    use quickcheck_macros::quickcheck;
+
     use crate::wtf8;
 
     #[test]
@@ -205,5 +207,32 @@ mod tests {
         let string_wtf8 = wtf8::into_ill_formed_utf16(string.bytes());
         let string_utf16 = string.encode_utf16().collect::<Vec<_>>();
         assert_eq!(string_wtf8, string_utf16);
+    }
+
+    #[quickcheck]
+    fn from_any_string(input: String) {
+        let units = input.encode_utf16();
+
+        let string_wtf8 = wtf8::from_ill_formed_utf16(units);
+        let string_utf8 = input.as_bytes();
+        assert_eq!(string_wtf8, string_utf8);
+    }
+
+    #[quickcheck]
+    fn into_from_any_string(input: String) {
+        let units = input.bytes();
+
+        let string_utf16 = wtf8::into_ill_formed_utf16(units);
+        let string_wtf8 = wtf8::from_ill_formed_utf16(string_utf16.into_iter());
+        assert_eq!(String::from_utf8(string_wtf8).unwrap(), input);
+    }
+
+    #[quickcheck]
+    fn from_into_any_units(input: Vec<u16>) {
+        let units = input.iter().map(|unit| *unit);
+
+        let string_wtf8 = wtf8::from_ill_formed_utf16(units);
+        let string_utf16 = wtf8::into_ill_formed_utf16(string_wtf8.into_iter());
+        assert_eq!(string_utf16, input);
     }
 }
