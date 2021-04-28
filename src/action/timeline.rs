@@ -134,7 +134,7 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::TimelineEntry {
         });
 
         rrg_proto::TimelineEntry {
-            path: Some(rrg_proto::path::to_bytes(entry.path)),
+            path: Some(rrg_proto::path::into_bytes(entry.path)),
             #[cfg(target_family = "unix")]
             mode: Some(i64::from(entry.metadata.mode())),
             size: Some(entry.metadata.len()),
