@@ -50,8 +50,8 @@ pub fn from_bytes(bytes: Vec<u8>) -> PathBuf {
 /// let path = PathBuf::from("foo/bar/baz");
 /// assert_eq!(rrg_proto::path::to_bytes(path), b"foo/bar/baz");
 /// ```
-pub fn to_bytes(path: PathBuf) -> Vec<u8> {
-    to_bytes_impl(path)
+pub fn into_bytes(path: PathBuf) -> Vec<u8> {
+    into_bytes_impl(path)
 }
 
 #[cfg(target_family = "unix")]
@@ -69,13 +69,13 @@ fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
 }
 
 #[cfg(target_family = "unix")]
-fn to_bytes_impl(path: PathBuf) -> Vec<u8> {
+fn into_bytes_impl(path: PathBuf) -> Vec<u8> {
     use std::os::unix::ffi::OsStringExt as _;
     std::ffi::OsString::from(path).into_vec()
 }
 
 #[cfg(target_family = "windows")]
-fn to_bytes_impl(path: PathBuf) -> Vec<u8> {
+fn into_bytes_impl(path: PathBuf) -> Vec<u8> {
     let string = std::ffi::OsString::from(path);
 
     use std::os::windows::ffi::OsStrExt as _;
