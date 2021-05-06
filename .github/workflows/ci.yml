@@ -37,9 +37,7 @@ jobs:
         with:
           command: test
           args: >
-            --package rrg-macro
-            --package rrg-proto
-            --package rrg
+            --workspace
             --features 'test-chattr test-setfattr'
       - name: 'Print RRG version'
         uses: actions-rs/cargo@v1
