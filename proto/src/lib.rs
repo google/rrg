@@ -164,6 +164,7 @@ where
 impl FromLossy<std::fs::Metadata> for StatEntry {
 
     fn from_lossy(metadata: std::fs::Metadata) -> StatEntry {
+        #[cfg(target_family = "unix")]
         use std::convert::{TryFrom, TryInto};
         #[cfg(target_family = "unix")]
         use std::os::unix::fs::MetadataExt;
@@ -171,6 +172,7 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
         // TODO: Fix definition of `StatEntry`.
         // `StatEntry` defines insufficient integer width for some fields. For
         // now we just ignore errors, but the definition should be improved.
+        #[cfg(target_family = "unix")]
         let some = |value: u64| Some(value.try_into().unwrap_or(0));
 
         let atime_secs = ack! {

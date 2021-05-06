@@ -16,7 +16,6 @@
 use std::fs::Metadata;
 use std::path::PathBuf;
 
-use log::warn;
 use rrg_macro::ack;
 
 use crate::session::{self, Session};
@@ -45,6 +44,7 @@ impl Request {
     /// This method will return an error if the path needs to be expanded but
     /// the expansion fails for some reason (e.g. the requested path does not
     /// exist).
+    #[cfg(target_family = "unix")]
     fn target(&self) -> std::io::Result<std::borrow::Cow<PathBuf>> {
         use std::borrow::Cow::*;
 
@@ -214,7 +214,7 @@ fn ext_attrs(request: &Request) -> Vec<crate::fs::unix::ExtAttr> {
     let path = match request.target() {
         Ok(path) => path,
         Err(error) => {
-            warn! {
+            rrg_macro::warn! {
                 "failed to expand '{path}': {cause}",
                 path = request.path.display(),
                 cause = error
