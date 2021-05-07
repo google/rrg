@@ -46,16 +46,24 @@ fn open_file<P: AsRef<Path>>(
     offset: u64,
     max_size: u64,
 ) -> Option<Take<File>> {
-    let mut file = match File::open(path) {
+    let mut file = match File::open(path.as_ref()) {
         Ok(file) => file,
         Err(err) => {
-            warn!("failed to open file: {}, error: {}", path.display(), err);
+            warn!(
+                "failed to open file: {}, error: {}",
+                path.as_ref().display(),
+                err
+            );
             return None;
         }
     };
 
     if let Err(err) = file.seek(SeekFrom::Start(offset)) {
-        warn!("failed to seek in file: {}, error: {}", path.display(), err);
+        warn!(
+            "failed to seek in file: {}, error: {}",
+            path.as_ref().display(),
+            err
+        );
         return None;
     }
 
