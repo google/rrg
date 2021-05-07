@@ -74,7 +74,7 @@ impl std::str::FromStr for Verbosity {
 
     type Err = ParseVerbosityError;
 
-    fn from_str(string: &str) -> std::result::Result<Verbosity, ParseVerbosityError> {
+    fn from_str(string: &str) -> Result<Verbosity, ParseVerbosityError> {
         use log::LevelFilter::*;
 
         let level = match string {
@@ -111,7 +111,7 @@ impl std::str::FromStr for Stream {
 
     type Err = ParseStreamError;
 
-    fn from_str(string: &str) -> std::result::Result<Stream, ParseStreamError> {
+    fn from_str(string: &str) -> Result<Stream, ParseStreamError> {
         use simplelog::TerminalMode::*;
 
         let mode = match string {
