@@ -1,7 +1,7 @@
 RRG
 ===
 
-[![Travis CI build status][travis-badge]][travis]
+[![CI status][ci-badge]][ci]
 
 RRG is a *[Rust][rust] rewrite of [GRR][grr]* (a remote live forensics
 framework).
@@ -21,5 +21,5 @@ than an experiment.
 [grr]: https://github.com/google/grr
 [fleetspeak]: https://github.com/google/fleetspeak
 
-[travis]: https://travis-ci.org/google/rrg
-[travis-badge]: https://travis-ci.org/google/rrg.svg?branch=master
+[ci]: https://github.com/google/rrg/actions?query=workflow%3AIntegrate
+[ci-badge]: https://github.com/google/rrg/workflows/Integrate/badge.svg

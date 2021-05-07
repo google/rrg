@@ -17,12 +17,12 @@ use crate::session::{self, Session};
 
 /// A request type for the timeline action.
 pub struct Request {
-    root: PathBuf,
+    pub root: PathBuf,
 }
 
 /// A response type for the timeline action.
-struct Response {
-    chunk_ids: Vec<ChunkId>,
+pub struct Response {
+    pub chunk_ids: Vec<ChunkId>,
 }
 
 /// An error type for failures that can occur during the timeline action.
@@ -71,9 +71,9 @@ impl From<Error> for session::Error {
 
 /// A type representing unique identifier of a given chunk.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct ChunkId {
+pub struct ChunkId {
     /// A SHA-256 digest of the referenced chunk data.
-    sha256: [u8; 32],
+    pub sha256: [u8; 32],
 }
 
 impl ChunkId {
@@ -92,8 +92,8 @@ impl ChunkId {
 }
 
 /// A type representing a particular chunk of the returned timeline.
-struct Chunk {
-    data: Vec<u8>,
+pub struct Chunk {
+    pub data: Vec<u8>,
 }
 
 impl Chunk {
@@ -134,7 +134,7 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::TimelineEntry {
         });
 
         rrg_proto::TimelineEntry {
-            path: Some(rrg_proto::path::to_bytes(entry.path)),
+            path: Some(rrg_proto::path::into_bytes(entry.path)),
             #[cfg(target_family = "unix")]
             mode: Some(i64::from(entry.metadata.mode())),
             size: Some(entry.metadata.len()),
