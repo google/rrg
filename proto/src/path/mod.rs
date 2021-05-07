@@ -3,6 +3,9 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+#[cfg(any(target_os = "windows", test))]
+mod wtf8;
+
 use std::path::PathBuf;
 
 /// Interprets given bytes as an operating system path.
@@ -10,7 +13,9 @@ use std::path::PathBuf;
 /// On Linux, the path is constructed from bytes as is since system paths can
 /// be made of arbitrary sequence of bytes.
 ///
-/// On Windows, the behaviour is unspecified (for now).
+/// On Windows, the [WTF-8][wtf8] encoding is used.
+///
+/// [wtf8]: https://simonsapin.github.io/wtf-8
 ///
 /// # Examples
 ///
@@ -36,7 +41,9 @@ pub fn from_bytes(bytes: Vec<u8>) -> PathBuf {
 /// On Linux, the path is emitted as is since system paths can consist of
 /// arbitrary bytes.
 ///
-/// On Windows, the behaviour is unspecified (for now).
+/// On Windows, the [WTF-8][wtf8] encoding is used.
+///
+/// [wtf8]: https://simonsapin.github.io/wtf-8
 ///
 /// # Examples
 ///
@@ -44,10 +51,10 @@ pub fn from_bytes(bytes: Vec<u8>) -> PathBuf {
 /// use std::path::PathBuf;
 ///
 /// let path = PathBuf::from("foo/bar/baz");
-/// assert_eq!(rrg_proto::path::to_bytes(path), b"foo/bar/baz");
+/// assert_eq!(rrg_proto::path::into_bytes(path), b"foo/bar/baz");
 /// ```
-pub fn to_bytes(path: PathBuf) -> Vec<u8> {
-    to_bytes_impl(path)
+pub fn into_bytes(path: PathBuf) -> Vec<u8> {
+    into_bytes_impl(path)
 }
 
 #[cfg(target_family = "unix")]
@@ -58,26 +65,22 @@ fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
 
 #[cfg(target_family = "windows")]
 fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
-    // TODO: This is just a quick hack that treats UTF-8-encoded strings as
-    // UTF-16. This works for trivial cases but should be reworked once the GRR
-    // protocol for paths is defined.
-    let bytes_u16 = bytes.iter().map(|byte| *byte as u16).collect::<Vec<_>>();
+    let bytes_u16 = wtf8::into_ill_formed_utf16(bytes.into_iter());
 
     use std::os::windows::ffi::OsStringExt as _;
     std::ffi::OsString::from_wide(&bytes_u16).into()
 }
 
 #[cfg(target_family = "unix")]
-fn to_bytes_impl(path: PathBuf) -> Vec<u8> {
+fn into_bytes_impl(path: PathBuf) -> Vec<u8> {
     use std::os::unix::ffi::OsStringExt as _;
     std::ffi::OsString::from(path).into_vec()
 }
 
 #[cfg(target_family = "windows")]
-fn to_bytes_impl(path: PathBuf) -> Vec<u8> {
+fn into_bytes_impl(path: PathBuf) -> Vec<u8> {
     let string = std::ffi::OsString::from(path);
 
-    // TODO: See explanation in `from_bytes_impl` on Windows.
     use std::os::windows::ffi::OsStrExt as _;
-    string.as_os_str().encode_wide().map(|byte| byte as u8).collect()
+    wtf8::from_ill_formed_utf16(string.as_os_str().encode_wide())
 }
