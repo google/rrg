@@ -41,7 +41,11 @@ pub fn get_file_chunks(
     ))
 }
 
-fn open_file(path: &Path, offset: u64, max_size: u64) -> Option<Take<File>> {
+fn open_file<P: AsRef<Path>>(
+    path: P,
+    offset: u64,
+    max_size: u64,
+) -> Option<Take<File>> {
     let mut file = match File::open(path) {
         Ok(file) => file,
         Err(err) => {
@@ -61,7 +65,7 @@ fn open_file(path: &Path, offset: u64, max_size: u64) -> Option<Take<File>> {
 #[derive(Debug)]
 struct ChunksConfig {
     /// Desired number of bytes in chunks. Only the last chunk can be smaller
-    /// than the `bytes_per_chunk`
+    /// than the `bytes_per_chunk`.
     pub bytes_per_chunk: u64,
     /// A number of bytes that the next chunk will share with the previous one.
     pub overlap_bytes: u64,
