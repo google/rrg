@@ -26,11 +26,12 @@ pub struct GetFileChunksConfig {
     pub overlap_bytes: u64,
 }
 
-pub fn get_file_chunks(
-    path: &Path,
+/// Opens the file and returns its content in chunks.
+pub fn get_file_chunks<P: AsRef<Path>>(
+    path: P,
     config: &GetFileChunksConfig,
 ) -> Option<Chunks<BufReader<Take<File>>>> {
-    let file = open_file(&path, config.start_offset, config.max_read_bytes)?;
+    let file = open_file(path, config.start_offset, config.max_read_bytes)?;
 
     Some(chunks(
         BufReader::new(file),
