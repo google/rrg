@@ -139,7 +139,6 @@ mod tests {
             &HashActionOptions {
                 max_size: 14,
                 oversized_file_policy: OversizedFilePolicy::Skip,
-                collect_ext_attrs: false,
             },
         )
         .unwrap();
@@ -188,7 +187,6 @@ mod tests {
             &HashActionOptions {
                 max_size: 10,
                 oversized_file_policy: OversizedFilePolicy::HashTruncated,
-                collect_ext_attrs: false,
             },
         )
         .unwrap();
@@ -211,7 +209,6 @@ mod tests {
             &HashActionOptions {
                 max_size: 10,
                 oversized_file_policy: OversizedFilePolicy::Skip,
-                collect_ext_attrs: false,
             },
         )
         .is_none());
