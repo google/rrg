@@ -2,6 +2,7 @@ use log::warn;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Take};
 use std::path::Path;
+use rrg_macro::ack;
 
 /// Implements `Iterator` trait splitting underlying `bytes` into chunks.
 #[derive(Debug)]
@@ -47,17 +48,10 @@ fn open_file<P: AsRef<Path>>(
     offset: u64,
     max_size: u64,
 ) -> Option<Take<File>> {
-    let mut file = match File::open(path.as_ref()) {
-        Ok(file) => file,
-        Err(err) => {
-            warn!(
-                "failed to open file: {}, error: {}",
-                path.as_ref().display(),
-                err
-            );
-            return None;
-        }
-    };
+    let mut file = ack! {
+        File::open(path.as_ref()),
+        error: "failed to open file: {}", path.as_ref().display()
+    }?;
 
     if let Err(err) = file.seek(SeekFrom::Start(offset)) {
         warn!(
