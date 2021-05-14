@@ -2,7 +2,6 @@ use crate::action::finder::chunks::{get_file_chunks, GetFileChunksConfig};
 use crate::action::finder::request::{
     Condition, ContentsMatchCondition, MatchMode,
 };
-use crate::fs::linux::flags;
 use crate::fs::Entry;
 use log::warn;
 use rrg_macro::ack;
@@ -11,6 +10,8 @@ use std::cmp::{max, min};
 use std::fs::Metadata;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
+#[cfg(target_os = "linux")]
+use crate::fs::linux::flags;
 
 /// Returns true if all conditions were met.
 /// If the data required for checking the condition cannot be obtained then
@@ -91,7 +92,7 @@ fn check_condition(condition: &Condition, entry: &Entry) -> bool {
             // TODO(spawek): support osx bits
             let mut ok = true;
 
-            #[cfg(target_family = "unix")]
+            #[cfg(target_os = "linux")]
             if let Ok(flags) = flags(&entry.path) {
                 if let Some(linux_bits_set) = linux_bits_set {
                     ok &= flags & linux_bits_set == flags;
