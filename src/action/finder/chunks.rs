@@ -1,4 +1,3 @@
-use log::warn;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Take};
 use std::path::Path;
@@ -53,14 +52,10 @@ fn open_file<P: AsRef<Path>>(
         error: "failed to open file: {}", path.as_ref().display()
     }?;
 
-    if let Err(err) = file.seek(SeekFrom::Start(offset)) {
-        warn!(
-            "failed to seek in file: {}, error: {}",
-            path.as_ref().display(),
-            err
-        );
-        return None;
-    }
+    ack!(
+        file.seek(SeekFrom::Start(offset)),
+        error: "failed to seek in file: {}", path.as_ref().display()
+    )?;
 
     Some(file.take(max_size))
 }

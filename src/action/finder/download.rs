@@ -68,9 +68,9 @@ pub struct ChunkId {
 
 impl ChunkId {
     /// Creates a chunk identifier for the given chunk.
-    pub fn make(chunk: &Vec<u8>, offset: u64) -> ChunkId {
+    pub fn make(chunk: &[u8], offset: u64) -> ChunkId {
         ChunkId {
-            sha256: Sha256::digest(&chunk).into(),
+            sha256: Sha256::digest(chunk).into(),
             length: chunk.len() as u64,
             offset,
         }
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn test_chunk_id() {
-        let chunk = ChunkId::make(&"some_test_data".as_bytes().to_vec(), 5);
+        let chunk = ChunkId::make(b"some_test_data", 5);
         assert_eq!(&chunk.length, &14);
         assert_eq!(&chunk.offset, &5);
         assert_eq!(
