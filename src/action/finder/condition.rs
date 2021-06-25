@@ -376,6 +376,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_family = "unix")]
     fn test_access_time_condition() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
