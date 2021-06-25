@@ -10,6 +10,8 @@ use std::cmp::{max, min};
 use std::fs::Metadata;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
+#[cfg(target_family = "windows")]
+use std::os::windows::fs::MetadataExt;
 #[cfg(target_os = "linux")]
 use crate::fs::linux::flags;
 
@@ -67,6 +69,7 @@ fn check_condition(condition: &Condition, entry: &Entry) -> bool {
             }
         }
 
+        #[cfg(target_family = "unix")]
         Condition::InodeChangeTime { min, max } => {
             match read_ctime(&entry.metadata) {
                 Some(actual) => is_in_range(&actual, (min, max)),
@@ -80,10 +83,15 @@ fn check_condition(condition: &Condition, entry: &Entry) -> bool {
             }
         }
 
+        // TODO(spawek): windows implementation
+        #[cfg(not(target_family = "unix"))]
+        Condition::InodeChangeTime { .. } => true,
+
         Condition::Size { min, max } => {
             is_in_range(&entry.metadata.len(), (min, max))
         }
 
+        #[cfg(target_os = "linux")]
         Condition::ExtFlags {
             linux_bits_set,
             linux_bits_unset,
@@ -92,7 +100,6 @@ fn check_condition(condition: &Condition, entry: &Entry) -> bool {
             // TODO(spawek): support osx bits
             let mut ok = true;
 
-            #[cfg(target_os = "linux")]
             if let Ok(flags) = flags(&entry.path) {
                 if let Some(linux_bits_set) = linux_bits_set {
                     ok &= flags & linux_bits_set == flags;
@@ -109,6 +116,9 @@ fn check_condition(condition: &Condition, entry: &Entry) -> bool {
 
             ok
         }
+
+        #[cfg(not(target_os = "linux"))]
+        Condition::ExtFlags {..} => true,
     }
 }
 
@@ -191,6 +201,7 @@ fn matches(
 }
 
 /// Reads inode change time from metadata.
+#[cfg(target_family = "unix")]
 fn read_ctime(metadata: &Metadata) -> Option<std::time::SystemTime> {
     let time = std::time::UNIX_EPOCH
         .checked_add(std::time::Duration::from_secs(metadata.ctime() as u64))?;
@@ -217,6 +228,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_family = "unix")]
     fn test_read_ctime() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
@@ -269,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_family = "unix")]
+    #[cfg(target_os = "linux")]
     fn test_extflags_condition() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
@@ -414,6 +426,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_family = "unix")]
     fn test_change_time_condition() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
