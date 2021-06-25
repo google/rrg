@@ -7,11 +7,10 @@ use log::warn;
 use rrg_macro::ack;
 use rrg_proto::BufferReference;
 use std::cmp::{max, min};
+#[cfg(target_family = "unix")]
 use std::fs::Metadata;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
-#[cfg(target_family = "windows")]
-use std::os::windows::fs::MetadataExt;
 #[cfg(target_os = "linux")]
 use crate::fs::linux::flags;
 
@@ -333,6 +332,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_family = "unix")]
     fn test_modification_time_condition() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
