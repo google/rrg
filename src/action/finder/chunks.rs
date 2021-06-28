@@ -20,7 +20,7 @@ pub struct GetFileChunksConfig {
     /// Maximum number of bytes read from the file.
     pub max_read_bytes: u64,
     /// Desired number of bytes in chunks. Only the last chunk can be smaller
-    /// than the `bytes_per_chunk`
+    /// than the `bytes_per_chunk`.
     pub bytes_per_chunk: u64,
     /// A number of bytes that the next chunk will share with the previous one.
     pub overlap_bytes: u64,
