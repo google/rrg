@@ -5,7 +5,9 @@
 
 //! Handler for `client side file finder` action.
 
-pub mod request;
-pub mod groups;
+pub mod download;
 pub mod glob;
+pub mod groups;
+pub mod request;
+pub mod chunks;
 pub mod hash;
