@@ -148,6 +148,7 @@ mod tests {
     fn test_get_file_chunks_basic_use_case() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
+
         std::fs::write(&path, b"abcdef").unwrap();
 
         let mut chunks = get_file_chunks(
