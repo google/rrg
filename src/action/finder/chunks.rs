@@ -1,7 +1,7 @@
-use log::warn;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Take};
 use std::path::Path;
+use rrg_macro::ack;
 
 /// Implements `Iterator` trait splitting underlying `bytes` into chunks.
 #[derive(Debug)]
@@ -20,17 +20,18 @@ pub struct GetFileChunksConfig {
     /// Maximum number of bytes read from the file.
     pub max_read_bytes: u64,
     /// Desired number of bytes in chunks. Only the last chunk can be smaller
-    /// than the `bytes_per_chunk`
+    /// than the `bytes_per_chunk`.
     pub bytes_per_chunk: u64,
     /// A number of bytes that the next chunk will share with the previous one.
     pub overlap_bytes: u64,
 }
 
-pub fn get_file_chunks(
-    path: &Path,
+/// Opens the file and returns its content in chunks.
+pub fn get_file_chunks<P: AsRef<Path>>(
+    path: P,
     config: &GetFileChunksConfig,
 ) -> Option<Chunks<BufReader<Take<File>>>> {
-    let file = open_file(&path, config.start_offset, config.max_read_bytes)?;
+    let file = open_file(path, config.start_offset, config.max_read_bytes)?;
 
     Some(chunks(
         BufReader::new(file),
@@ -41,34 +42,28 @@ pub fn get_file_chunks(
     ))
 }
 
-fn open_file(
-    path: &Path,
+fn open_file<P: AsRef<Path>>(
+    path: P,
     offset: u64,
     max_size: u64,
 ) -> Option<Take<File>> {
-    match File::open(path) {
-        Ok(mut f) => {
-            if let Err(err) = f.seek(SeekFrom::Start(offset)) {
-                warn!(
-                    "failed to seek in file: {}, error: {}",
-                    path.display(),
-                    err
-                );
-                return None;
-            }
-            Some(f.take(max_size))
-        }
-        Err(err) => {
-            warn!("failed to open file: {}, error: {}", path.display(), err);
-            None
-        }
-    }
+    let mut file = ack! {
+        File::open(path.as_ref()),
+        error: "failed to open file: {}", path.as_ref().display()
+    }?;
+
+    ack!(
+        file.seek(SeekFrom::Start(offset)),
+        error: "failed to seek in file: {}", path.as_ref().display()
+    )?;
+
+    Some(file.take(max_size))
 }
 
 #[derive(Debug)]
 struct ChunksConfig {
     /// Desired number of bytes in chunks. Only the last chunk can be smaller
-    /// than the `bytes_per_chunk`
+    /// than the `bytes_per_chunk`.
     pub bytes_per_chunk: u64,
     /// A number of bytes that the next chunk will share with the previous one.
     pub overlap_bytes: u64,
@@ -153,18 +148,23 @@ mod tests {
     fn test_get_file_chunks_basic_use_case() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("f");
-        std::fs::write(&path, [1,2,3,4,5,6]).unwrap();
 
-        let mut chunks = get_file_chunks(&path, &GetFileChunksConfig{
-            start_offset: 1,
-            max_read_bytes: 4,
-            bytes_per_chunk: 2,
-            overlap_bytes: 1,
-        }).unwrap();
+        std::fs::write(&path, b"abcdef").unwrap();
 
-        assert_eq!(chunks.next().unwrap().unwrap(), vec![2, 3]);
-        assert_eq!(chunks.next().unwrap().unwrap(), vec![3, 4]);
-        assert_eq!(chunks.next().unwrap().unwrap(), vec![4, 5]);
+        let mut chunks = get_file_chunks(
+            &path,
+            &GetFileChunksConfig {
+                start_offset: 1,
+                max_read_bytes: 4,
+                bytes_per_chunk: 2,
+                overlap_bytes: 1,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(chunks.next().unwrap().unwrap(), b"bc");
+        assert_eq!(chunks.next().unwrap().unwrap(), b"cd");
+        assert_eq!(chunks.next().unwrap().unwrap(), b"de");
         assert!(chunks.next().is_none());
     }
 }

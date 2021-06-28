@@ -447,8 +447,7 @@ fn get_contents_literal_match_condition(
     let bytes_after = options.bytes_after() as u64;
     let start_offset = options.start_offset();
     let length = options.length();
-    let mode =
-        MatchMode::from(parse_enum::<LiteralMatchMode>(options.mode)?);
+    let mode = MatchMode::from(parse_enum::<LiteralMatchMode>(options.mode)?);
 
     if options.xor_in_key.is_some() || options.xor_out_key.is_some() {
         return Err(ParseError::malformed(
@@ -561,7 +560,7 @@ impl super::super::Request for Request {
                 None => return Err(ParseError::malformed(
                     "File Finder request does not contain action definition.",
                 )),
-        };
+            };
 
         Ok(Request {
             path_queries: proto.paths,
@@ -636,7 +635,8 @@ mod tests {
                 ..Default::default()
             }),
             ..Default::default()
-        }).unwrap_err();
+        })
+        .unwrap_err();
 
         match err {
             ParseError::Malformed(_) => {}
