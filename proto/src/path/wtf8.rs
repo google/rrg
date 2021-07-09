@@ -244,7 +244,21 @@ mod tests {
         assert_eq!(string_wtf8, Ok(string_utf16));
     }
 
-    // TODO: Write `into` tests that cover failure scanarios.
+    #[test]
+    fn into_unexpected_end() {
+        let units = vec![0xC4];
+
+        use ParseError::*;
+        assert_eq!(into_ill_formed_utf16(units), Err(UnexpectedEnd));
+    }
+
+    #[test]
+    fn into_illegal_byte() {
+        let units = vec![0x00, 0xFF, 0x00];
+
+        use ParseError::*;
+        assert_eq!(into_ill_formed_utf16(units), Err(IllegalByte(0xff)));
+    }
 
     #[quickcheck]
     fn from_any_string(input: String) {
