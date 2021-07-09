@@ -192,8 +192,11 @@ impl super::Request for Request {
         let root_bytes = proto.root
             .ok_or(session::MissingFieldError::new("root"))?;
 
+        let root = rrg_proto::path::from_bytes(root_bytes)
+            .map_err(session::ParseError::malformed)?;
+
         Ok(Request {
-            root: rrg_proto::path::from_bytes(root_bytes),
+            root: root,
         })
     }
 }
@@ -456,6 +459,9 @@ mod tests {
 
     /// Constructs a path for the given timeline entry.
     fn path(entry: &rrg_proto::TimelineEntry) -> Option<PathBuf> {
-        entry.path.clone().map(rrg_proto::path::from_bytes)
+        entry.path.clone()
+            .map(rrg_proto::path::from_bytes)
+            .map(Result::ok)
+            .flatten()
     }
 }
