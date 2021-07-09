@@ -85,8 +85,10 @@ fn into_bytes_impl(path: PathBuf) -> Vec<u8> {
     wtf8::from_ill_formed_utf16(string.as_os_str().encode_wide())
 }
 
+/// A type representing errors that can occur when parsing paths.
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParseError {
+    /// Detailed information about the error.
     kind: ParseErrorKind,
 }
 
@@ -123,9 +125,11 @@ impl From<wtf8::ParseError> for ParseError {
     }
 }
 
+/// A type enumerating all possible error kinds of path parsing errors.
 #[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 enum ParseErrorKind {
+    /// Parsing failed because of issues with decoding a WTF-8 string.
     #[cfg(target_family = "windows")]
     Wtf8(wtf8::ParseError),
 }
