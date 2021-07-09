@@ -68,6 +68,8 @@ where
 ///
 /// If the given byte sequence is a valid UTF-8 string, then the result is
 /// guaranteed to be a well-formed UTF-16 string.
+///
+/// If the input is not a valid WTF-8 byte sequence, an error is returned.
 pub fn into_ill_formed_utf16<I>(units: I) -> Result<Vec<u16>, ParseError>
 where
     I: Iterator<Item = u8>
@@ -145,9 +147,12 @@ fn is_supplementary(point: &u32) -> bool {
     matches!(point, 0x10000..=0x10FFFF)
 }
 
+/// An error type for failures related to WTF-8 parsing.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseError {
+    /// The input ended but more bytes were expected.
     UnexpectedEnd,
+    /// There was an illegal byte in the input.
     IllegalByte(u8),
 }
 
