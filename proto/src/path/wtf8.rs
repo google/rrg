@@ -56,7 +56,7 @@ pub fn from_ill_formed_utf16(units: impl Iterator<Item=u16>) -> Vec<u8> {
                 res.push(0x80 | ((point >> 6) as u8 & 0x3F));
                 res.push(0x80 | (point & 0x3F) as u8);
             }
-            _ => panic!(), // Not possible by construction.
+            _ => unreachable!(), // Not possible by construction.
         }
     }
 }
