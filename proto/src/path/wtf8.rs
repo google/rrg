@@ -83,8 +83,6 @@ where
             None => return Ok(res),
         };
 
-        // TODO: Add support for proper error handling.
-
         // WTF-8 to a code point decoding procedure based on [1].
         //
         // [1]: https://simonsapin.github.io/wtf-8/#decoding-wtf-8
