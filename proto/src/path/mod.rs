@@ -65,7 +65,7 @@ fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
 
 #[cfg(target_family = "windows")]
 fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
-    let bytes_u16 = wtf8::into_ill_formed_utf16(bytes.into_iter())
+    let bytes_u16 = wtf8::into_ill_formed_utf16(bytes)
         .unwrap(); // TODO: Add proper error handling.
 
     use std::os::windows::ffi::OsStringExt as _;
