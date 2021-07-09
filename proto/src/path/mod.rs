@@ -22,7 +22,7 @@ use std::path::PathBuf;
 /// ```
 /// use std::ffi::OsStr;
 ///
-/// let path = rrg_proto::path::from_bytes(b"foo/bar/baz".to_vec());
+/// let path = rrg_proto::path::from_bytes(b"foo/bar/baz".to_vec()).unwrap();
 ///
 /// let mut components = path.components()
 ///     .map(|component| component.as_os_str());
@@ -32,7 +32,7 @@ use std::path::PathBuf;
 /// assert_eq!(components.next(), Some(OsStr::new("baz")));
 /// assert_eq!(components.next(), None);
 /// ```
-pub fn from_bytes(bytes: Vec<u8>) -> PathBuf {
+pub fn from_bytes(bytes: Vec<u8>) -> Result<PathBuf, ParseError> {
     from_bytes_impl(bytes)
 }
 
@@ -58,17 +58,17 @@ pub fn into_bytes(path: PathBuf) -> Vec<u8> {
 }
 
 #[cfg(target_family = "unix")]
-fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
+fn from_bytes_impl(bytes: Vec<u8>) -> Result<PathBuf, ParseError> {
     use std::os::unix::ffi::OsStringExt as _;
-    std::ffi::OsString::from_vec(bytes).into()
+    Ok(std::ffi::OsString::from_vec(bytes).into())
 }
 
 #[cfg(target_family = "windows")]
-fn from_bytes_impl(bytes: Vec<u8>) -> PathBuf {
-    let bytes_u16 = wtf8::into_ill_formed_utf16(bytes.into_iter());
+fn from_bytes_impl(bytes: Vec<u8>) -> Result<PathBuf, ParseError> {
+    let bytes_u16 = wtf8::into_ill_formed_utf16(bytes)?;
 
     use std::os::windows::ffi::OsStringExt as _;
-    std::ffi::OsString::from_wide(&bytes_u16).into()
+    Ok(std::ffi::OsString::from_wide(&bytes_u16).into())
 }
 
 #[cfg(target_family = "unix")]
@@ -83,4 +83,53 @@ fn into_bytes_impl(path: PathBuf) -> Vec<u8> {
 
     use std::os::windows::ffi::OsStrExt as _;
     wtf8::from_ill_formed_utf16(string.as_os_str().encode_wide())
+}
+
+/// A type representing errors that can occur when parsing paths.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseError {
+    /// Detailed information about the error.
+    kind: ParseErrorKind,
+}
+
+impl std::fmt::Display for ParseError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        #[cfg(target_family = "unix")]
+        let _ = fmt; // Unused.
+
+        match self.kind {
+            #[cfg(target_family = "windows")]
+            ParseErrorKind::Wtf8(ref error) => write!(fmt, "{}", error),
+        }
+    }
+}
+
+impl std::error::Error for ParseError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self.kind {
+            #[cfg(target_family = "windows")]
+            ParseErrorKind::Wtf8(ref error) => Some(error),
+        }
+    }
+}
+
+#[cfg(target_family = "windows")]
+impl From<wtf8::ParseError> for ParseError {
+
+    fn from(error: wtf8::ParseError) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::Wtf8(error),
+        }
+    }
+}
+
+/// A type enumerating all possible error kinds of path parsing errors.
+#[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
+enum ParseErrorKind {
+    /// Parsing failed because of issues with decoding a WTF-8 string.
+    #[cfg(target_family = "windows")]
+    Wtf8(wtf8::ParseError),
 }

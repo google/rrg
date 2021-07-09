@@ -12,10 +12,13 @@
 ///
 /// If the given byte sequence is a well-formed UTF-16 string, then the result
 /// is guaranteed to be a valid UTF-8string.
-pub fn from_ill_formed_utf16(units: impl Iterator<Item=u16>) -> Vec<u8> {
+pub fn from_ill_formed_utf16<I>(units: I) -> Vec<u8>
+where
+    I: IntoIterator<Item = u16>,
+{
     let mut res = Vec::new();
 
-    let mut iter = units.peekable();
+    let mut iter = units.into_iter().peekable();
     loop {
         let unit = match iter.next() {
             Some(unit) => unit,
@@ -56,7 +59,7 @@ pub fn from_ill_formed_utf16(units: impl Iterator<Item=u16>) -> Vec<u8> {
                 res.push(0x80 | ((point >> 6) as u8 & 0x3F));
                 res.push(0x80 | (point & 0x3F) as u8);
             }
-            _ => panic!(), // Not possible by construction.
+            _ => unreachable!(), // Not possible by construction.
         }
     }
 }
@@ -65,17 +68,20 @@ pub fn from_ill_formed_utf16(units: impl Iterator<Item=u16>) -> Vec<u8> {
 ///
 /// If the given byte sequence is a valid UTF-8 string, then the result is
 /// guaranteed to be a well-formed UTF-16 string.
-pub fn into_ill_formed_utf16(units: impl Iterator<Item=u8>) -> Vec<u16> {
+///
+/// If the input is not a valid WTF-8 byte sequence, an error is returned.
+pub fn into_ill_formed_utf16<I>(units: I) -> Result<Vec<u16>, ParseError>
+where
+    I: IntoIterator<Item = u8>
+{
     let mut res = Vec::new();
 
-    let mut iter = units.peekable();
+    let mut iter = units.into_iter().peekable();
     loop {
         let byte1 = match iter.next() {
             Some(byte1) => byte1,
-            None => return res,
+            None => return Ok(res),
         };
-
-        // TODO: Add support for proper error handling.
 
         // WTF-8 to a code point decoding procedure based on [1].
         //
@@ -86,27 +92,27 @@ pub fn into_ill_formed_utf16(units: impl Iterator<Item=u8>) -> Vec<u16> {
                 point += byte1 as u32;
             }
             0xC2..=0xDF => {
-                let byte2 = iter.next().unwrap_or_else(|| todo!());
+                let byte2 = iter.next().ok_or(ParseError::UnexpectedEnd)?;
                 point += ((byte1 & 0x1F) as u32) << 6;
                 point += ((byte2 & 0x3F) as u32) << 0;
             }
             0xE0..=0xEF => {
-                let byte2 = iter.next().unwrap_or_else(|| todo!());
-                let byte3 = iter.next().unwrap_or_else(|| todo!());
+                let byte2 = iter.next().ok_or(ParseError::UnexpectedEnd)?;
+                let byte3 = iter.next().ok_or(ParseError::UnexpectedEnd)?;
                 point += ((byte1 & 0x0F) as u32) << 12;
                 point += ((byte2 & 0x3F) as u32) << 6;
                 point += ((byte3 & 0x3F) as u32) << 0;
             }
             0xF0..=0xF4 => {
-                let byte2 = iter.next().unwrap_or_else(|| todo!());
-                let byte3 = iter.next().unwrap_or_else(|| todo!());
-                let byte4 = iter.next().unwrap_or_else(|| todo!());
+                let byte2 = iter.next().ok_or(ParseError::UnexpectedEnd)?;
+                let byte3 = iter.next().ok_or(ParseError::UnexpectedEnd)?;
+                let byte4 = iter.next().ok_or(ParseError::UnexpectedEnd)?;
                 point += ((byte1 & 0x07) as u32) << 18;
                 point += ((byte2 & 0x3F) as u32) << 12;
                 point += ((byte3 & 0x3F) as u32) << 6;
                 point += ((byte4 & 0x3F) as u32) << 0;
             }
-            _ => todo!(),
+            _ => return Err(ParseError::IllegalByte(byte1)),
         }
 
         // Code point to potentially ill-formed UTF-16 coversion based on [1].
@@ -137,6 +143,35 @@ fn is_trail_surrogate(unit: &u16) -> bool {
 #[inline]
 fn is_supplementary(point: &u32) -> bool {
     matches!(point, 0x10000..=0x10FFFF)
+}
+
+/// An error type for failures related to WTF-8 parsing.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ParseError {
+    /// The input ended but more bytes were expected.
+    UnexpectedEnd,
+    /// There was an illegal byte in the input.
+    IllegalByte(u8),
+}
+
+impl std::fmt::Display for ParseError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "invalid wtf-8: ")?;
+
+        use ParseError::*;
+        match self {
+            UnexpectedEnd => write!(fmt, "unexpected end"),
+            IllegalByte(byte) => write!(fmt, "illegal byte: {:#02x}", byte),
+        }
+    }
+}
+
+impl std::error::Error for ParseError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -190,7 +225,7 @@ mod tests {
 
     #[test]
     fn into_empty() {
-        assert_eq!(into_ill_formed_utf16(std::iter::empty()), vec![]);
+        assert_eq!(into_ill_formed_utf16(std::iter::empty()), Ok(vec![]));
     }
 
     #[test]
@@ -198,7 +233,7 @@ mod tests {
         let string = "foo bar baz";
         let string_wtf8 = into_ill_formed_utf16(string.bytes());
         let string_utf16 = string.encode_utf16().collect::<Vec<_>>();
-        assert_eq!(string_wtf8, string_utf16);
+        assert_eq!(string_wtf8, Ok(string_utf16));
     }
 
     #[test]
@@ -206,7 +241,23 @@ mod tests {
         let string = "zażółć gęślą jaźń";
         let string_wtf8 = into_ill_formed_utf16(string.bytes());
         let string_utf16 = string.encode_utf16().collect::<Vec<_>>();
-        assert_eq!(string_wtf8, string_utf16);
+        assert_eq!(string_wtf8, Ok(string_utf16));
+    }
+
+    #[test]
+    fn into_unexpected_end() {
+        let units = vec![0xC4];
+
+        use ParseError::*;
+        assert_eq!(into_ill_formed_utf16(units), Err(UnexpectedEnd));
+    }
+
+    #[test]
+    fn into_illegal_byte() {
+        let units = vec![0x00, 0xFF, 0x00];
+
+        use ParseError::*;
+        assert_eq!(into_ill_formed_utf16(units), Err(IllegalByte(0xff)));
     }
 
     #[quickcheck]
@@ -222,8 +273,8 @@ mod tests {
     fn into_from_any_string(input: String) {
         let units = input.bytes();
 
-        let string_utf16 = into_ill_formed_utf16(units);
-        let string_wtf8 = from_ill_formed_utf16(string_utf16.into_iter());
+        let string_utf16 = into_ill_formed_utf16(units).unwrap();
+        let string_wtf8 = from_ill_formed_utf16(string_utf16);
         assert_eq!(String::from_utf8(string_wtf8).unwrap(), input);
     }
 
@@ -232,7 +283,7 @@ mod tests {
         let units = input.iter().map(|unit| *unit);
 
         let string_wtf8 = from_ill_formed_utf16(units);
-        let string_utf16 = into_ill_formed_utf16(string_wtf8.into_iter());
+        let string_utf16 = into_ill_formed_utf16(string_wtf8).unwrap();
         assert_eq!(string_utf16, input);
     }
 }
