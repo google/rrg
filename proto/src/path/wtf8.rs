@@ -259,7 +259,7 @@ mod tests {
     fn into_from_any_string(input: String) {
         let units = input.bytes();
 
-        let string_utf16 = into_ill_formed_utf16(units);
+        let string_utf16 = into_ill_formed_utf16(units).unwrap();
         let string_wtf8 = from_ill_formed_utf16(string_utf16.into_iter());
         assert_eq!(String::from_utf8(string_wtf8).unwrap(), input);
     }
@@ -269,7 +269,7 @@ mod tests {
         let units = input.iter().map(|unit| *unit);
 
         let string_wtf8 = from_ill_formed_utf16(units);
-        let string_utf16 = into_ill_formed_utf16(string_wtf8.into_iter());
+        let string_utf16 = into_ill_formed_utf16(string_wtf8.into_iter()).unwrap();
         assert_eq!(string_utf16, input);
     }
 }
