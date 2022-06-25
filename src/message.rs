@@ -3,19 +3,25 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use fleetspeak::Packet;
 use log::{error, warn};
 
 use crate::opts::Opts;
 
 pub fn send(message: rrg_proto::GrrMessage) {
-        let packet = Packet {
+        let mut data = Vec::new();
+        prost::Message::encode(&message, &mut data)
+            // Encoding can fail only if the buffer is insufficiently large. But
+            // since we use growable vector this should never happen (provided
+            // that we have enough memory).
+            .expect("message encoding failure");
+
+        let message = fleetspeak::Message {
             service: String::from("GRR"),
             kind: Some(String::from("GrrMessage")),
-            data: message,
+            data,
         };
 
-        if let Err(error) = fleetspeak::send(packet) {
+        if let Err(error) = fleetspeak::send(message) {
             // If we failed to deliver the message through Fleetspeak, it means
             // that our communication is broken (e.g. the pipe was closed) and
             // the agent should be killed.
@@ -26,8 +32,8 @@ pub fn send(message: rrg_proto::GrrMessage) {
 pub fn collect(opts: &Opts) -> Option<rrg_proto::GrrMessage> {
     use fleetspeak::ReadError::*;
 
-    let packet = match fleetspeak::collect(opts.heartbeat_rate) {
-        Ok(packet) => packet,
+    let message = match fleetspeak::receive_with_heartbeat(opts.heartbeat_rate) {
+        Ok(message) => message,
         Err(Malformed(error)) => {
             error!("received a malformed message: {}", error);
             return None;
@@ -44,11 +50,11 @@ pub fn collect(opts: &Opts) -> Option<rrg_proto::GrrMessage> {
         }
     };
 
-    if packet.service != "GRR" {
-        warn!("message send by '{}' service (instead of GRR)", packet.service);
+    if message.service != "GRR" {
+        warn!("message send by '{}' service (instead of GRR)", message.service);
     }
 
-    match packet.kind {
+    match message.kind {
         Some(ref kind) if kind != "GrrMessage" => {
             warn!("message with unrecognized type '{}'", kind);
         }
@@ -58,5 +64,11 @@ pub fn collect(opts: &Opts) -> Option<rrg_proto::GrrMessage> {
         }
     }
 
-    Some(packet.data)
+    match prost::Message::decode(&message.data[..]) {
+        Ok(message) => Some(message),
+        Err(error) => {
+            error!("failed to decode the data: {}", error);
+            None
+        }
+    }
 }
