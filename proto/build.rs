@@ -25,6 +25,7 @@ const INCLUDES: &'static [&'static str] = &[
 ];
 
 fn main() {
+    // `prost` generated code.
     prost_build::compile_protos(&PROTOS, &INCLUDES)
         .expect("failed to compile proto files");
 
@@ -44,4 +45,26 @@ fn main() {
 
     std::fs::write(&target, grr)
         .expect("failed to write updated output file");
+
+    // `protobuf` generated code.
+    let proto_out_dir = outdir.join("proto");
+    std::fs::create_dir_all(&proto_out_dir).unwrap();
+
+    protobuf_codegen_pure::run(protobuf_codegen_pure::Args {
+        out_dir: &proto_out_dir.to_string_lossy(),
+        includes: &[
+            "vendor/grr/grr/proto",
+            "vendor/protobuf/src"
+        ],
+        input: PROTOS,
+        ..Default::default()
+    }).unwrap();
+
+    std::fs::write(proto_out_dir.join("mod.rs"), b"
+        pub mod jobs;
+        pub mod sysinfo;
+        pub mod timeline;
+        pub mod user;
+        pub mod knowledge_base;
+    ").unwrap();
 }

@@ -14,6 +14,10 @@ use rrg_macro::ack;
 
 include!(concat!(env!("OUT_DIR"), "/grr.rs"));
 
+pub mod protobuf {
+    include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));
+}
+
 impl From<bool> for DataBlob {
 
     fn from(value: bool) -> DataBlob {
