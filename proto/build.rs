@@ -6,22 +6,22 @@
 use std::path::PathBuf;
 
 const PROTOS: &'static [&'static str] = &[
-    "grr/grr/proto/grr_response_proto/semantic.proto",
-    "grr/grr/proto/grr_response_proto/sysinfo.proto",
-    "grr/grr/proto/grr_response_proto/knowledge_base.proto",
-    "grr/grr/proto/grr_response_proto/jobs.proto",
-    "grr/grr/proto/grr_response_proto/timeline.proto",
-    "grr/grr/proto/grr_response_proto/anomaly.proto",
-    "grr/grr/proto/grr_response_proto/export.proto",
-    "grr/grr/proto/grr_response_proto/objects.proto",
-    "grr/grr/proto/grr_response_proto/output_plugin.proto",
-    "grr/grr/proto/grr_response_proto/flows.proto",
-    "grr/grr/proto/grr_response_proto/sysinfo.proto",
-    "grr/grr/proto/grr_response_proto/user.proto",
+    "vendor/grr/grr/proto/grr_response_proto/semantic.proto",
+    "vendor/grr/grr/proto/grr_response_proto/sysinfo.proto",
+    "vendor/grr/grr/proto/grr_response_proto/knowledge_base.proto",
+    "vendor/grr/grr/proto/grr_response_proto/jobs.proto",
+    "vendor/grr/grr/proto/grr_response_proto/timeline.proto",
+    "vendor/grr/grr/proto/grr_response_proto/anomaly.proto",
+    "vendor/grr/grr/proto/grr_response_proto/export.proto",
+    "vendor/grr/grr/proto/grr_response_proto/objects.proto",
+    "vendor/grr/grr/proto/grr_response_proto/output_plugin.proto",
+    "vendor/grr/grr/proto/grr_response_proto/flows.proto",
+    "vendor/grr/grr/proto/grr_response_proto/sysinfo.proto",
+    "vendor/grr/grr/proto/grr_response_proto/user.proto",
 ];
 
 const INCLUDES: &'static [&'static str] = &[
-    "grr/grr/proto",
+    "vendor/grr/grr/proto",
 ];
 
 fn main() {
