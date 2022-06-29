@@ -14,6 +14,10 @@ pub enum Error {
     Dispatch(String),
     /// An error occurred when encoding bytes of a proto message.
     Encode(prost::EncodeError),
+    /// An error occurred when encoding bytes of a proto message.
+    // TODO: Rename to just `Encode`.
+    // TODO: Determine whether we need this error type or we should just panic.
+    EncodeProtobuf(protobuf::ProtobufError),
     /// An error occurred when parsing a proto message.
     Parse(ParseError),
 }
@@ -50,6 +54,9 @@ impl Display for Error {
             Encode(ref error) => {
                 write!(fmt, "failure during encoding proto message: {}", error)
             }
+            EncodeProtobuf(ref error) => {
+                write!(fmt, "failure during encoding proto message: {}", error)
+            }
             Parse(ref error) => {
                 write!(fmt, "malformed proto message: {}", error)
             }
@@ -66,6 +73,7 @@ impl std::error::Error for Error {
             Action(ref error) => Some(error.as_ref()),
             Dispatch(_) => None,
             Encode(ref error) => Some(error),
+            EncodeProtobuf(ref error) => Some(error),
             Parse(ref error) => Some(error),
         }
     }
@@ -75,6 +83,13 @@ impl From<prost::EncodeError> for Error {
 
     fn from(error: prost::EncodeError) -> Error {
         Error::Encode(error)
+    }
+}
+
+impl From<protobuf::ProtobufError> for Error {
+
+    fn from(error: protobuf::ProtobufError) -> Error {
+        Error::EncodeProtobuf(error)
     }
 }
 
