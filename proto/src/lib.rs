@@ -66,6 +66,85 @@ pub mod protobuf {
             result
         }
     }
+
+    impl jobs::KeyValue {
+
+        /// Creates a key-value pair.
+        ///
+        /// Both the key and the value are going to be equal to the given values.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// use rrg_proto::protobuf::jobs::KeyValue;
+        ///
+        /// let entry = KeyValue::pair(String::from("foo"), 42i64);
+        /// assert_eq!(entry.get_k().get_string(), Some(String::from("foo")));
+        /// assert_eq!(entry.get_v().get_integer(), Some(42));
+        /// ```
+        pub fn pair<K, V>(key: K, value: V) -> jobs::KeyValue
+        where
+            K: Into<jobs::DataBlob>,
+            V: Into<jobs::DataBlob>,
+        {
+            let mut result = jobs::KeyValue::new();
+            result.set_k(key.into());
+            result.set_v(value.into());
+
+            result
+        }
+
+        /// Creates a key-only key-value.
+        ///
+        /// The key is going to be equal to the given value and the key will be
+        /// `None`.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// use rrg_proto::protobuf::jobs::KeyValue;
+        ///
+        /// let entry = KeyValue::key(String::from("quux"));
+        /// assert_eq!(entry.get_k().get_string(), Some(String::from("quux")));
+        /// assert_eq!(entry.has_v(), None);
+        /// ```
+        pub fn key<K>(key: K) -> jobs::KeyValue
+        where
+            K: Into<jobs::DataBlob>,
+        {
+            let mut result = jobs::KeyValue::new();
+            result.set_k(key.into());
+
+            result
+        }
+    }
+
+    impl std::iter::FromIterator<jobs::KeyValue> for jobs::AttributedDict {
+
+        fn from_iter<I>(iter: I) -> jobs::AttributedDict
+        where
+            I: IntoIterator<Item = jobs::KeyValue>,
+        {
+            let mut result = jobs::AttributedDict::new();
+            result.set_dat(iter.into_iter().collect());
+
+            result
+        }
+    }
+
+    impl<K, V> std::iter::FromIterator<(K, V)> for jobs::AttributedDict
+    where
+        K: Into<jobs::DataBlob>,
+        V: Into<jobs::DataBlob>,
+    {
+        fn from_iter<I>(iter: I) -> jobs::AttributedDict
+        where
+            I: IntoIterator<Item = (K, V)>,
+        {
+            let pair = |(key, value)| jobs::KeyValue::pair(key, value);
+            iter.into_iter().map(pair).collect()
+        }
+    }
 }
 
 impl From<bool> for DataBlob {
