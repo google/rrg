@@ -145,6 +145,75 @@ pub mod protobuf {
             iter.into_iter().map(pair).collect()
         }
     }
+
+    impl crate::convert::FromLossy<std::fs::Metadata> for jobs::StatEntry {
+
+        fn from_lossy(metadata: std::fs::Metadata) -> jobs::StatEntry {
+            use rrg_macro::ack;
+
+            let mut result = jobs::StatEntry::new();
+            result.set_st_size(metadata.len());
+
+            let atime_secs = ack! {
+                metadata.accessed(),
+                error: "failed to obtain file access time"
+            }.and_then(|atime| ack! {
+                super::secs(atime),
+                error: "failed to convert access time to seconds"
+            });
+            if let Some(atime_secs) = atime_secs {
+                result.set_st_atime(atime_secs);
+            }
+
+            let mtime_secs = ack! {
+                metadata.modified(),
+                error: "failed to obtain file modification time"
+            }.and_then(|mtime| ack! {
+                super::secs(mtime),
+                error: "failed to convert modification time to seconds"
+            });
+            if let Some(mtime_secs) = mtime_secs {
+                result.set_st_mtime(mtime_secs);
+            }
+
+            let btime_secs = ack! {
+                metadata.created(),
+                error: "failed to obtain file creation time"
+            }.and_then(|btime| ack! {
+                super::secs(btime),
+                error: "failed to convert creation time to seconds"
+            });
+            if let Some(btime_secs) = btime_secs {
+                result.set_st_btime(btime_secs);
+            }
+
+            #[cfg(target_family = "unix")]
+            {
+                use std::convert::TryFrom as _;
+                use std::os::unix::fs::MetadataExt as _;
+
+                let ctime_secs = ack! {
+                    u64::try_from(metadata.ctime()),
+                    error: "negative inode change time"
+                };
+                if let Some(ctime_secs) = ctime_secs {
+                    result.set_st_ctime(ctime_secs);
+                }
+
+                result.set_st_mode(metadata.mode().into());
+                result.set_st_ino(metadata.ino());
+                result.set_st_dev(metadata.dev());
+                result.set_st_rdev(metadata.rdev());
+                result.set_st_nlink(metadata.nlink());
+                result.set_st_uid(metadata.uid());
+                result.set_st_gid(metadata.gid());
+                result.set_st_blocks(metadata.blocks());
+                result.set_st_blksize(metadata.blksize());
+            }
+
+            result
+        }
+    }
 }
 
 impl From<bool> for DataBlob {
