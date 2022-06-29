@@ -107,6 +107,9 @@ pub enum ParseError {
     Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
     Decode(prost::DecodeError),
+    // TODO: Rename to just `Decode`.
+    /// An error occurred when decoding bytes of a proto message.
+    DecodeProtobuf(protobuf::ProtobufError),
 }
 
 impl ParseError {
@@ -135,6 +138,9 @@ impl Display for ParseError {
             Decode(ref error) => {
                 write!(fmt, "failed to decode proto message: {}", error)
             }
+            DecodeProtobuf(ref error) => {
+                write!(fmt, "failed to decode proto message: {}", error)
+            }
         }
     }
 }
@@ -147,6 +153,7 @@ impl std::error::Error for ParseError {
         match *self {
             Malformed(ref error) => Some(error.as_ref()),
             Decode(ref error) => Some(error),
+            DecodeProtobuf(ref error) => Some(error),
         }
     }
 }
@@ -155,6 +162,13 @@ impl From<prost::DecodeError> for ParseError {
 
     fn from(error: prost::DecodeError) -> ParseError {
         ParseError::Decode(error)
+    }
+}
+
+impl From<protobuf::ProtobufError> for ParseError {
+
+    fn from(error: protobuf::ProtobufError) -> ParseError {
+        ParseError::DecodeProtobuf(error)
     }
 }
 
