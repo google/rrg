@@ -16,6 +16,56 @@ include!(concat!(env!("OUT_DIR"), "/grr.rs"));
 
 pub mod protobuf {
     include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));
+
+    impl From<bool> for jobs::DataBlob {
+
+        fn from(value: bool) -> jobs::DataBlob {
+            let mut result = jobs::DataBlob::new();
+            result.set_boolean(value);
+
+            result
+        }
+    }
+
+    impl From<i64> for jobs::DataBlob {
+
+        fn from(value: i64) -> jobs::DataBlob {
+            let mut result = jobs::DataBlob::new();
+            result.set_integer(value);
+
+            result
+        }
+    }
+
+    impl From<f32> for jobs::DataBlob {
+
+        fn from(value: f32) -> jobs::DataBlob {
+            let mut result = jobs::DataBlob::new();
+            result.set_float(value);
+
+            result
+        }
+    }
+
+    impl From<Vec<u8>> for jobs::DataBlob {
+
+        fn from(value: Vec<u8>) -> jobs::DataBlob {
+            let mut result = jobs::DataBlob::new();
+            result.set_data(value);
+
+            result
+        }
+    }
+
+    impl From<String> for jobs::DataBlob {
+
+        fn from(value: String) -> jobs::DataBlob {
+            let mut result = jobs::DataBlob::new();
+            result.set_string(value);
+
+            result
+        }
+    }
 }
 
 impl From<bool> for DataBlob {
