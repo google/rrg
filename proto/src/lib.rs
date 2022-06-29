@@ -214,6 +214,37 @@ pub mod protobuf {
             result
         }
     }
+
+    impl std::convert::TryFrom<jobs::PathSpec> for std::path::PathBuf {
+
+        type Error = super::ParsePathSpecError;
+
+        fn try_from(mut spec: jobs::PathSpec) -> Result<std::path::PathBuf, super::ParsePathSpecError> {
+            if spec.get_pathtype() != jobs::PathSpec_PathType::OS {
+                // TODO: Refactor `InvalidType` not to require providing any
+                // specific type.
+                return Err(super::ParsePathSpecError::UnknownType(0));
+            }
+
+            let path = spec.take_path();
+            if path.is_empty() {
+                return Err(super::ParsePathSpecError::Empty);
+            }
+
+            Ok(std::path::PathBuf::from(path))
+        }
+    }
+
+    impl From<std::path::PathBuf> for jobs::PathSpec {
+
+        fn from(path: std::path::PathBuf) -> jobs::PathSpec {
+            let mut result = jobs::PathSpec::new();
+            result.set_path(path.to_string_lossy().into_owned());
+            result.set_pathtype(jobs::PathSpec_PathType::OS);
+
+            result
+        }
+    }
 }
 
 impl From<bool> for DataBlob {
