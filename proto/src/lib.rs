@@ -221,14 +221,16 @@ pub mod protobuf {
 
         fn try_from(mut spec: jobs::PathSpec) -> Result<std::path::PathBuf, super::ParsePathSpecError> {
             if spec.get_pathtype() != jobs::PathSpec_PathType::OS {
-                // TODO: Refactor `InvalidType` not to require providing any
-                // specific type.
-                return Err(super::ParsePathSpecError::UnknownType(0));
+                return Err(super::ParsePathSpecError {
+                    kind: super::ParsePathSpecErrorKind::InvalidType,
+                });
             }
 
             let path = spec.take_path();
             if path.is_empty() {
-                return Err(super::ParsePathSpecError::Empty);
+                return Err(super::ParsePathSpecError {
+                    kind: super::ParsePathSpecErrorKind::Empty,
+                });
             }
 
             Ok(std::path::PathBuf::from(path))
@@ -468,32 +470,37 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
     }
 }
 
-/// An error type for situations where parsing path specification failed.
-#[derive(Clone, Debug)]
-pub enum ParsePathSpecError {
+/// An enum listing possible issues when parsing path specification.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum ParsePathSpecErrorKind {
     /// Attempted to parse an empty path.
     Empty,
-    /// Attempted to parse a path of unknown type.
-    UnknownType(i32),
     /// Attempted to parse a path of invalid type.
-    InvalidType(path_spec::PathType),
+    InvalidType,
+}
+
+/// An error type for situations where parsing path specification failed.
+#[derive(Clone, Debug)]
+pub struct ParsePathSpecError {
+    kind: ParsePathSpecErrorKind,
+}
+
+impl ParsePathSpecError {
+
+    /// Describes the exact cause of the parsing failure.
+    pub fn kind(&self) -> ParsePathSpecErrorKind {
+        self.kind
+    }
 }
 
 impl std::fmt::Display for ParsePathSpecError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use ParsePathSpecError::*;
+        use ParsePathSpecErrorKind::*;
 
-        match *self {
-            Empty => {
-                write!(fmt, "empty path")
-            }
-            UnknownType(value) => {
-                write!(fmt, "unknown path type value: {}", value)
-            }
-            InvalidType(value) => {
-                write!(fmt, "invalid path type: {:?}", value)
-            }
+        match self.kind {
+            Empty => write!(fmt, "empty path"),
+            InvalidType => write!(fmt, "invalid path type"),
         }
     }
 }
@@ -510,18 +517,19 @@ impl std::convert::TryFrom<PathSpec> for PathBuf {
     type Error = ParsePathSpecError;
 
     fn try_from(spec: PathSpec) -> Result<PathBuf, ParsePathSpecError> {
-        use ParsePathSpecError::*;
-
         let path_type = spec.pathtype.unwrap_or_default();
         match path_spec::PathType::from_i32(path_type) {
             Some(path_spec::PathType::Os) => (),
-            Some(path_type) => return Err(InvalidType(path_type)),
-            None => return Err(UnknownType(path_type)),
+            Some(_) | None => return Err(ParsePathSpecError {
+                kind: ParsePathSpecErrorKind::InvalidType,
+            }),
         };
 
         match spec.path {
             Some(path) if path.len() > 0 => Ok(PathBuf::from(path)),
-            _ => Err(ParsePathSpecError::Empty),
+            _ => Err(ParsePathSpecError {
+                kind: ParsePathSpecErrorKind::Empty,
+            }),
         }
     }
 }
