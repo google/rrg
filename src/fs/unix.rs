@@ -230,3 +230,19 @@ impl Into<rrg_proto::stat_entry::ExtAttr> for ExtAttr {
         }
     }
 }
+
+impl Into<rrg_proto::protobuf::jobs::StatEntry_ExtAttr> for ExtAttr {
+
+    fn into(self) -> rrg_proto::protobuf::jobs::StatEntry_ExtAttr {
+        use std::os::unix::ffi::OsStringExt as _;
+
+        let mut proto = rrg_proto::protobuf::jobs::StatEntry_ExtAttr::new();
+        proto.set_name(self.name.into_vec());
+
+        if let Some(value) = self.value {
+            proto.set_value(value);
+        }
+
+        proto
+    }
+}
