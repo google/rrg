@@ -61,7 +61,12 @@ fn main() {
     }).unwrap();
 
     std::fs::write(proto_out_dir.join("mod.rs"), b"
+        pub mod anomaly;
         pub mod jobs;
+        pub mod export;
+        pub mod flows;
+        pub mod objects;
+        pub mod output_plugin;
         pub mod sysinfo;
         pub mod timeline;
         pub mod user;
