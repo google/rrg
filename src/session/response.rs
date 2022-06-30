@@ -115,37 +115,3 @@ impl TryInto<rrg_proto::protobuf::jobs::GrrMessage> for Status {
         Ok(message)
     }
 }
-
-impl TryInto<rrg_proto::GrrMessage> for Status {
-
-    type Error = prost::EncodeError;
-
-    fn try_into(self) -> Result<rrg_proto::GrrMessage, prost::EncodeError> {
-        use rrg_proto::grr_status::ReturnedStatus;
-
-        let status = match self.result {
-            Ok(()) => rrg_proto::GrrStatus {
-                status: Some(ReturnedStatus::Ok.into()),
-                ..Default::default()
-            },
-            Err(error) => rrg_proto::GrrStatus {
-                status: Some(ReturnedStatus::GenericError.into()),
-                error_message: Some(error.to_string()),
-                ..Default::default()
-            },
-        };
-
-        let mut data = Vec::new();
-        prost::Message::encode(&status, &mut data)?;
-
-        Ok(rrg_proto::GrrMessage {
-            session_id: Some(self.session_id),
-            request_id: Some(self.request_id),
-            response_id: Some(self.response_id),
-            r#type: Some(rrg_proto::grr_message::Type::Status.into()),
-            args_rdf_name: Some(String::from("GrrStatus")),
-            args: Some(data),
-            ..Default::default()
-        })
-    }
-}

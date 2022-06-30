@@ -13,8 +13,6 @@ pub enum Error {
     /// Attempted to call an unknown or not implemented action.
     Dispatch(String),
     /// An error occurred when encoding bytes of a proto message.
-    Encode(prost::EncodeError),
-    /// An error occurred when encoding bytes of a proto message.
     // TODO: Rename to just `Encode`.
     // TODO: Determine whether we need this error type or we should just panic.
     EncodeProtobuf(protobuf::ProtobufError),
@@ -51,9 +49,6 @@ impl Display for Error {
             Dispatch(ref name) => {
                 write!(fmt, "unknown action: {}", name)
             }
-            Encode(ref error) => {
-                write!(fmt, "failure during encoding proto message: {}", error)
-            }
             EncodeProtobuf(ref error) => {
                 write!(fmt, "failure during encoding proto message: {}", error)
             }
@@ -72,17 +67,9 @@ impl std::error::Error for Error {
         match *self {
             Action(ref error) => Some(error.as_ref()),
             Dispatch(_) => None,
-            Encode(ref error) => Some(error),
             EncodeProtobuf(ref error) => Some(error),
             Parse(ref error) => Some(error),
         }
-    }
-}
-
-impl From<prost::EncodeError> for Error {
-
-    fn from(error: prost::EncodeError) -> Error {
-        Error::Encode(error)
     }
 }
 
@@ -105,8 +92,6 @@ impl From<ParseError> for Error {
 pub enum ParseError {
     /// An error occurred because the decoded proto message was malformed.
     Malformed(Box<dyn std::error::Error + Send + Sync>),
-    /// An error occurred when decoding bytes of a proto message.
-    Decode(prost::DecodeError),
     // TODO: Rename to just `Decode`.
     /// An error occurred when decoding bytes of a proto message.
     DecodeProtobuf(protobuf::ProtobufError),
@@ -135,9 +120,6 @@ impl Display for ParseError {
             Malformed(ref error) => {
                 write!(fmt, "invalid proto message: {}", error)
             }
-            Decode(ref error) => {
-                write!(fmt, "failed to decode proto message: {}", error)
-            }
             DecodeProtobuf(ref error) => {
                 write!(fmt, "failed to decode proto message: {}", error)
             }
@@ -152,16 +134,8 @@ impl std::error::Error for ParseError {
 
         match *self {
             Malformed(ref error) => Some(error.as_ref()),
-            Decode(ref error) => Some(error),
             DecodeProtobuf(ref error) => Some(error),
         }
-    }
-}
-
-impl From<prost::DecodeError> for ParseError {
-
-    fn from(error: prost::DecodeError) -> ParseError {
-        ParseError::Decode(error)
     }
 }
 
