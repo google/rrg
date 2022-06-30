@@ -7,30 +7,15 @@
 //! a function converting proto format of the request
 //! `rrg_proto::FileFinderArgs` to the internal format.
 
-use crate::session::{
-    time_from_micros, ParseError, ProtoEnum, RegexParseError,
-};
+use crate::session::{time_from_micros, ParseError, RegexParseError};
 use log::info;
-use rrg_proto::{
-    FileFinderAction, FileFinderArgs,
-    FileFinderCondition, FileFinderContentsLiteralMatchCondition,
-    FileFinderContentsRegexMatchCondition, FileFinderDownloadActionOptions,
-    FileFinderHashActionOptions,
-};
 use std::convert::TryFrom;
 use std::fmt::Write;
 
-type HashActionOversizedFilePolicy =
-    rrg_proto::file_finder_hash_action_options::OversizedFilePolicy;
-type DownloadActionOversizedFilePolicy =
-    rrg_proto::file_finder_download_action_options::OversizedFilePolicy;
 type RegexMatchMode =
     rrg_proto::file_finder_contents_regex_match_condition::Mode;
 type LiteralMatchMode =
     rrg_proto::file_finder_contents_literal_match_condition::Mode;
-type ActionType = rrg_proto::file_finder_action::Action;
-type ConditionType = rrg_proto::file_finder_condition::Type;
-type XDevMode = rrg_proto::file_finder_args::XDev;
 
 #[derive(Debug)]
 pub struct Request {
@@ -183,79 +168,12 @@ impl TryFrom<rrg_proto::protobuf::flows::FileFinderDownloadActionOptions> for Ac
     }
 }
 
-impl ProtoEnum<ActionType> for ActionType {
-    fn default() -> Self {
-        FileFinderAction::default().action_type()
-    }
-    fn from_i32(val: i32) -> Option<Self> {
-        ActionType::from_i32(val)
-    }
-}
-
-impl ProtoEnum<HashActionOversizedFilePolicy>
-    for HashActionOversizedFilePolicy
-{
-    fn default() -> Self {
-        FileFinderHashActionOptions::default().oversized_file_policy()
-    }
-    fn from_i32(val: i32) -> Option<Self> {
-        HashActionOversizedFilePolicy::from_i32(val)
-    }
-}
-
-impl ProtoEnum<DownloadActionOversizedFilePolicy>
-    for DownloadActionOversizedFilePolicy
-{
-    fn default() -> Self {
-        FileFinderDownloadActionOptions::default().oversized_file_policy()
-    }
-    fn from_i32(val: i32) -> Option<Self> {
-        DownloadActionOversizedFilePolicy::from_i32(val)
-    }
-}
-
-impl ProtoEnum<XDevMode> for XDevMode {
-    fn default() -> Self {
-        FileFinderArgs::default().xdev()
-    }
-    fn from_i32(val: i32) -> Option<Self> {
-        XDevMode::from_i32(val)
-    }
-}
-
-impl ProtoEnum<ConditionType> for ConditionType {
-    fn default() -> Self {
-        FileFinderCondition::default().condition_type()
-    }
-    fn from_i32(val: i32) -> Option<Self> {
-        ConditionType::from_i32(val)
-    }
-}
-
-impl ProtoEnum<RegexMatchMode> for RegexMatchMode {
-    fn default() -> Self {
-        FileFinderContentsRegexMatchCondition::default().mode()
-    }
-    fn from_i32(val: i32) -> Option<Self> {
-        RegexMatchMode::from_i32(val)
-    }
-}
-
 impl From<RegexMatchMode> for MatchMode {
     fn from(proto: RegexMatchMode) -> Self {
         match proto {
             RegexMatchMode::FirstHit => MatchMode::FirstHit,
             RegexMatchMode::AllHits => MatchMode::AllHits,
         }
-    }
-}
-
-impl ProtoEnum<LiteralMatchMode> for LiteralMatchMode {
-    fn default() -> Self {
-        FileFinderContentsLiteralMatchCondition::default().mode()
-    }
-    fn from_i32(val: i32) -> Option<Self> {
-        LiteralMatchMode::from_i32(val)
     }
 }
 
