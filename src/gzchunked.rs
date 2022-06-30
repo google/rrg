@@ -43,10 +43,20 @@
 /// use std::fs::File;
 /// use std::io::Write as _;
 ///
+/// fn string<S>(value: S) -> protobuf::well_known_types::StringValue
+/// where
+///     S: Into<String>,
+/// {
+///     let mut proto = protobuf::well_known_types::StringValue::new();
+///     proto.set_value(value.into());
+///
+///     proto
+/// }
+///
 /// let items = vec! {
-///     String::from("foo"),
-///     String::from("bar"),
-///     String::from("baz"),
+///     string("foo"),
+///     string("bar"),
+///     string("baz"),
 /// };
 ///
 /// let chunks = rrg::gzchunked::encode(items.into_iter());
@@ -58,7 +68,7 @@
 pub fn encode<I>(iter: I) -> Encode<I>
 where
     I: Iterator,
-    I::Item: prost::Message,
+    I::Item: protobuf::Message,
 {
     encode_with_opts(iter, EncodeOpts::default())
 }
@@ -72,7 +82,7 @@ where
 pub fn encode_with_opts<I>(iter: I, opts: EncodeOpts) -> Encode<I>
 where
     I: Iterator,
-    I::Item: prost::Message,
+    I::Item: protobuf::Message,
 {
     Encode::with_opts(iter, opts)
 }
@@ -91,15 +101,15 @@ where
 /// let files = paths.iter().map(|path| File::open(path).unwrap());
 ///
 /// for (idx, msg) in rrg::gzchunked::decode(files).enumerate() {
-///     let msg: String = msg.unwrap();
-///     println!("item #{}: {:?}", idx, msg);
+///     let msg: protobuf::well_known_types::StringValue = msg.unwrap();
+///     println!("item #{}: {:?}", idx, msg.get_value());
 /// }
 /// ```
 pub fn decode<I, M>(iter: I) -> impl Iterator<Item=std::io::Result<M>>
 where
     I: Iterator,
     I::Item: std::io::Read,
-    M: prost::Message + Default,
+    M: protobuf::Message + Default,
 {
     let parts = iter.map(flate2::read::GzDecoder::new);
     crate::chunked::decode(crate::io::IterReader::new(parts))
@@ -174,7 +184,7 @@ pub struct Encode<I> {
 impl<I> Encode<I>
 where
     I: Iterator,
-    I::Item: prost::Message,
+    I::Item: protobuf::Message,
 {
     /// Creates a new encoder instance with the specified options.
     fn with_opts(iter: I, opts: EncodeOpts) -> Encode<I> {
@@ -207,7 +217,7 @@ where
 impl<I> Iterator for Encode<I>
 where
     I: Iterator,
-    I::Item: prost::Message,
+    I::Item: protobuf::Message,
 {
     type Item = std::io::Result<Vec<u8>>;
 
@@ -221,9 +231,25 @@ mod tests {
 
     use super::*;
 
+    use protobuf::well_known_types::{Empty, BytesValue, StringValue};
+
+    fn string<S: Into<String>>(value: S) -> StringValue {
+        let mut proto = StringValue::new();
+        proto.set_value(value.into());
+
+        proto
+    }
+
+    fn bytes<B: Into<Vec<u8>>>(value: B) -> BytesValue {
+        let mut proto = BytesValue::new();
+        proto.set_value(value.into());
+
+        proto
+    }
+
     #[test]
     fn test_encode_with_empty_iter() {
-        let mut iter = encode(std::iter::empty::<()>())
+        let mut iter = encode(std::iter::empty::<Empty>())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), None);
@@ -231,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_decode_with_empty_iter() {
-        let mut iter = decode::<_, ()>(std::iter::empty::<&[u8]>())
+        let mut iter = decode::<_, Empty>(std::iter::empty::<&[u8]>())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), None);
@@ -239,23 +265,23 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_with_single_item_iter() {
-        let chunks = encode(std::iter::once(String::from("foo")))
+        let chunks = encode(std::iter::once(string("foo")))
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
         let mut iter = decode(chunks.iter().map(Vec::as_slice))
             .map(Result::unwrap);
 
-        assert_eq!(iter.next(), Some(String::from("foo")));
+        assert_eq!(iter.next(), Some(string("foo")));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     fn test_encode_and_decode_with_multiple_items_iter() {
         let data = vec! {
-            String::from("foo"),
-            String::from("bar"),
-            String::from("baz"),
+            string("foo"),
+            string("bar"),
+            string("baz"),
         };
 
         let chunks = encode(data.into_iter())
@@ -265,15 +291,15 @@ mod tests {
         let mut iter = decode(chunks.iter().map(Vec::as_slice))
             .map(Result::unwrap);
 
-        assert_eq!(iter.next(), Some(String::from("foo")));
-        assert_eq!(iter.next(), Some(String::from("bar")));
-        assert_eq!(iter.next(), Some(String::from("baz")));
+        assert_eq!(iter.next(), Some(string("foo")));
+        assert_eq!(iter.next(), Some(string("bar")));
+        assert_eq!(iter.next(), Some(string("baz")));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     fn test_encode_and_decode_with_empty_items_iter() {
-        let data = vec!((), (), ());
+        let data = vec!(Empty::new(), Empty::new(), Empty::new());
 
         let chunks = encode(data.into_iter())
             .map(Result::unwrap)
@@ -282,15 +308,15 @@ mod tests {
         let mut iter = decode(chunks.iter().map(Vec::as_slice))
             .map(Result::unwrap);
 
-        assert_eq!(iter.next(), Some(b"".to_vec()));
-        assert_eq!(iter.next(), Some(b"".to_vec()));
-        assert_eq!(iter.next(), Some(b"".to_vec()));
+        assert_eq!(iter.next(), Some(Empty::new()));
+        assert_eq!(iter.next(), Some(Empty::new()));
+        assert_eq!(iter.next(), Some(Empty::new()));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     fn test_encode_and_decode_with_many_items_iter() {
-        let sample = rand::random::<[u8; 32]>().to_vec();
+        let sample = bytes(rand::random::<[u8; 32]>());
         let items = std::iter::repeat(sample.clone()).take(32 * 1024);
 
         let opts = EncodeOpts {
@@ -302,7 +328,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, Vec<u8>>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, BytesValue>(chunks.iter().map(Vec::as_slice))
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
@@ -310,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_with_no_compression() {
-        let sample = rand::random::<[u8; 32]>().to_vec();
+        let sample = bytes(rand::random::<[u8; 32]>());
         let items = std::iter::repeat(sample.clone()).take(32 * 1024);
 
         let opts = EncodeOpts {
@@ -322,7 +348,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, Vec<u8>>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, BytesValue>(chunks.iter().map(Vec::as_slice))
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
@@ -330,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_with_best_compression() {
-        let sample = rand::random::<[u8; 32]>().to_vec();
+        let sample = bytes(rand::random::<[u8; 32]>());
         let items = std::iter::repeat(sample.clone()).take(32 * 1024);
 
         let opts = EncodeOpts {
@@ -342,7 +368,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, Vec<u8>>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, BytesValue>(chunks.iter().map(Vec::as_slice))
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));

@@ -28,10 +28,20 @@ use byteorder::BigEndian;
 /// ```no_run
 /// use std::fs::File;
 ///
+/// fn string<S>(value: S) -> protobuf::well_known_types::StringValue
+/// where
+///     S: Into<String>,
+/// {
+///     let mut proto = protobuf::well_known_types::StringValue::new();
+///     proto.set_value(value.into());
+///
+///     proto
+/// }
+///
 /// let data = vec! {
-///     String::from("foo"),
-///     String::from("bar"),
-///     String::from("baz")
+///     string("foo"),
+///     string("bar"),
+///     string("baz"),
 /// };
 ///
 /// let mut stream = rrg::chunked::encode(data.into_iter());
@@ -41,7 +51,7 @@ use byteorder::BigEndian;
 pub fn encode<I>(iter: I) -> Encode<I>
 where
     I: Iterator,
-    I::Item: prost::Message,
+    I::Item: protobuf::Message,
 {
     Encode {
         iter: iter,
@@ -64,14 +74,14 @@ where
 ///
 /// let file = File::open("input.chunked").unwrap();
 /// for (idx, msg) in rrg::chunked::decode(file).enumerate() {
-///     let msg: String = msg.unwrap();
-///     println!("message #{}: {:?}", idx, msg);
+///     let msg: protobuf::well_known_types::StringValue = msg.unwrap();
+///     println!("message #{}: {:?}", idx, msg.get_value());
 /// }
 /// ```
 pub fn decode<R, M>(buf: R) -> Decode<R, M>
 where
     R: std::io::Read,
-    M: prost::Message,
+    M: protobuf::Message,
 {
     Decode {
         reader: buf,
@@ -96,7 +106,7 @@ pub struct Encode<I> {
 impl<I, M> Encode<I>
 where
     I: Iterator<Item = M>,
-    M: prost::Message,
+    M: protobuf::Message,
 {
     /// Checks whether all the data from the underlying cursor has been read.
     fn is_empty(&self) -> bool {
@@ -115,8 +125,8 @@ where
         self.cur.get_mut().clear();
         self.cur.set_position(0);
 
-        self.cur.write_u64::<BigEndian>(msg.encoded_len() as u64)?;
-        msg.encode(&mut self.cur.get_mut())?;
+        self.cur.write_u64::<BigEndian>(msg.compute_size() as u64)?;
+        msg.write_to_writer(&mut self.cur.get_mut())?;
         self.cur.set_position(0);
 
         Ok(())
@@ -126,7 +136,7 @@ where
 impl<I, M> std::io::Read for Encode<I>
 where
     I: Iterator<Item = M>,
-    M: prost::Message,
+    M: protobuf::Message,
 {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self.is_empty() {
@@ -181,7 +191,7 @@ impl<R: std::io::Read, M> Decode<R, M> {
 impl<R, M> Iterator for Decode<R, M>
 where
     R: std::io::Read,
-    M: prost::Message + Default,
+    M: protobuf::Message + Default,
 {
     type Item = std::io::Result<M>;
 
@@ -198,7 +208,7 @@ where
             Err(error) => return Some(Err(error)),
         }
 
-        let msg = match M::decode(&self.buf[..]) {
+        let msg = match protobuf::parse_from_bytes(&self.buf[..]) {
             Ok(msg) => msg,
             Err(error) => return Some(Err(error.into())),
         };
@@ -212,11 +222,20 @@ pub mod tests {
 
     use super::*;
 
+    use protobuf::well_known_types::{Empty, StringValue};
+
+    fn string<S: Into<String>>(value: S) -> StringValue {
+        let mut proto = StringValue::new();
+        proto.set_value(value.into());
+
+        proto
+    }
+
     #[test]
     fn test_encode_empty_iter() {
         use std::io::Read as _;
 
-        let mut stream = encode(std::iter::empty::<()>());
+        let mut stream = encode(std::iter::empty::<Empty>());
 
         let mut output = vec!();
         stream.read_to_end(&mut output).unwrap();
@@ -227,7 +246,7 @@ pub mod tests {
     #[test]
     fn test_decode_empty_buf() {
         let buf: &[u8] = b"";
-        let mut iter = decode::<_, ()>(buf);
+        let mut iter = decode::<_, Empty>(buf);
 
         assert!(iter.next().is_none());
     }
@@ -235,7 +254,7 @@ pub mod tests {
     #[test]
     fn test_decode_incorrect_size_tag() {
         let buf: &[u8] = b"\x12\x34\x56";
-        let mut iter = decode::<_, ()>(buf);
+        let mut iter = decode::<_, Empty>(buf);
 
         let error = iter.next().unwrap().unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::UnexpectedEof);
@@ -247,7 +266,7 @@ pub mod tests {
 
         let mut iter = decode(buf).map(Result::unwrap);
 
-        assert_eq!(iter.next(), Some(()));
+        assert_eq!(iter.next(), Some(Empty::new()));
         assert_eq!(iter.next(), None);
     }
 
@@ -272,14 +291,14 @@ pub mod tests {
 
         let mut iter = decode(Reader(0)).map(Result::unwrap);
 
-        assert_eq!(iter.next(), Some(()));
+        assert_eq!(iter.next(), Some(Empty::new()));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     fn test_decode_short_input() {
         let buf: &[u8] = b"\x00\x00\x00\x00\x00\x00\x00\x42foo";
-        let mut iter = decode::<_, ()>(buf);
+        let mut iter = decode::<_, Empty>(buf);
 
         let error = iter.next().unwrap().unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::UnexpectedEof);
@@ -287,49 +306,49 @@ pub mod tests {
 
     #[test]
     fn test_encode_and_decode_single_message() {
-        let mut iter = decode(encode(std::iter::once(String::from("foo"))))
+        let mut iter = decode(encode(std::iter::once(string("foo"))))
             .map(Result::unwrap);
 
-        assert_eq!(iter.next(), Some(String::from("foo")));
+        assert_eq!(iter.next(), Some(string("foo")));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     fn test_encode_and_decode_single_unit_message() {
-        let mut iter = decode(encode(std::iter::once(())))
+        let mut iter = decode(encode(std::iter::once(Empty::new())))
             .map(Result::unwrap);
 
-        assert_eq!(iter.next(), Some(()));
+        assert_eq!(iter.next(), Some(Empty::new()));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     fn test_encode_and_decode_multiple_messages() {
         let msgs = vec! {
-            b"foo".to_vec(),
-            b"bar".to_vec(),
-            b"baz".to_vec(),
+            string("foo"),
+            string("bar"),
+            string("baz"),
         };
 
         let mut iter = decode(encode(msgs.into_iter()))
             .map(Result::unwrap);
 
-        assert_eq!(iter.next(), Some(b"foo".to_vec()));
-        assert_eq!(iter.next(), Some(b"bar".to_vec()));
-        assert_eq!(iter.next(), Some(b"baz".to_vec()));
+        assert_eq!(iter.next(), Some(string("foo")));
+        assert_eq!(iter.next(), Some(string("bar")));
+        assert_eq!(iter.next(), Some(string("baz")));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     fn test_encode_and_decode_multiple_unit_messages() {
-        let msgs = vec!((), (), ());
+        let msgs = vec!(Empty::new(), Empty::new(), Empty::new());
 
         let mut iter = decode(encode(msgs.into_iter()))
             .map(Result::unwrap);
 
-        assert_eq!(iter.next(), Some(()));
-        assert_eq!(iter.next(), Some(()));
-        assert_eq!(iter.next(), Some(()));
+        assert_eq!(iter.next(), Some(Empty::new()));
+        assert_eq!(iter.next(), Some(Empty::new()));
+        assert_eq!(iter.next(), Some(Empty::new()));
         assert_eq!(iter.next(), None);
     }
 }

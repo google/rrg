@@ -111,49 +111,59 @@ impl Chunk {
     }
 }
 
-impl FromLossy<crate::fs::Entry> for rrg_proto::TimelineEntry {
+impl FromLossy<crate::fs::Entry> for rrg_proto::protobuf::timeline::TimelineEntry {
 
-    fn from_lossy(entry: crate::fs::Entry) -> rrg_proto::TimelineEntry {
+    fn from_lossy(entry: crate::fs::Entry) -> rrg_proto::protobuf::timeline::TimelineEntry {
         use std::convert::TryFrom as _;
-        #[cfg(target_family = "unix")]
-        use std::os::unix::fs::MetadataExt as _;
+
+        let mut proto = rrg_proto::protobuf::timeline::TimelineEntry::new();
+        proto.set_path(rrg_proto::path::into_bytes(entry.path));
+        proto.set_size(entry.metadata.len());
 
         let atime_nanos = entry.metadata.accessed().ok().and_then(|atime| ack! {
             rrg_proto::nanos(atime),
             error: "failed to convert access time to seconds"
-        });
+        }).and_then(|nanos| i64::try_from(nanos).ok());
+        if let Some(atime_nanos) = atime_nanos {
+            proto.set_atime_ns(atime_nanos);
+        }
 
         let mtime_nanos = entry.metadata.modified().ok().and_then(|mtime| ack! {
             rrg_proto::nanos(mtime),
             error: "failed to convert modification time to seconds"
-        });
+        }).and_then(|nanos| i64::try_from(nanos).ok());
+        if let Some(mtime_nanos) = mtime_nanos {
+            proto.set_mtime_ns(mtime_nanos);
+        }
 
         let btime_nanos = entry.metadata.created().ok().and_then(|btime| ack! {
             rrg_proto::nanos(btime),
             error: "failed to convert creation time to seconds"
-        });
-
-        rrg_proto::TimelineEntry {
-            path: Some(rrg_proto::path::into_bytes(entry.path)),
-            #[cfg(target_family = "unix")]
-            mode: Some(i64::from(entry.metadata.mode())),
-            size: Some(entry.metadata.len()),
-            #[cfg(target_family = "unix")]
-            dev: i64::try_from(entry.metadata.dev()).ok(),
-            #[cfg(target_family = "unix")]
-            ino: Some(entry.metadata.ino()),
-            #[cfg(target_family = "unix")]
-            uid: i64::try_from(entry.metadata.uid()).ok(),
-            #[cfg(target_family = "unix")]
-            gid: i64::try_from(entry.metadata.gid()).ok(),
-            atime_ns: atime_nanos.and_then(|nanos| i64::try_from(nanos).ok()),
-            mtime_ns: mtime_nanos.and_then(|nanos| i64::try_from(nanos).ok()),
-            #[cfg(target_family = "unix")]
-            ctime_ns: Some(entry.metadata.ctime_nsec()),
-            btime_ns: btime_nanos.and_then(|nanos| i64::try_from(nanos).ok()),
-            // TODO: Export file attributes on Windows.
-            ..rrg_proto::TimelineEntry::default()
+        }).and_then(|nanos| i64::try_from(nanos).ok());
+        if let Some(btime_nanos) = btime_nanos {
+            proto.set_btime_ns(btime_nanos);
         }
+
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+
+            proto.set_mode(i64::from(entry.metadata.mode()));
+            proto.set_ino(entry.metadata.ino());
+            if let Some(dev) = i64::try_from(entry.metadata.dev()).ok() {
+                proto.set_dev(dev);
+            }
+            if let Some(uid) = i64::try_from(entry.metadata.uid()).ok() {
+                proto.set_uid(uid);
+            }
+            if let Some(gid) = i64::try_from(entry.metadata.gid()).ok() {
+                proto.set_gid(gid);
+            }
+            proto.set_ctime_ns(entry.metadata.ctime_nsec());
+        }
+
+        // TODO: Export file attributes on Windows.
+        proto
     }
 }
 
@@ -163,7 +173,7 @@ where
     S: Session,
 {
     let entries = crate::fs::walk_dir(&request.root).map_err(Error::WalkDir)?
-        .map(rrg_proto::TimelineEntry::from_lossy);
+        .map(rrg_proto::protobuf::timeline::TimelineEntry::from_lossy);
 
     let mut response = Response {
         chunk_ids: vec!(),
@@ -279,7 +289,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.path.clone());
+        entries.sort_by_key(|entry| entry.get_path().to_owned());
 
         assert_eq!(entries.len(), 4);
         assert_eq!(path(&entries[0]), Some(tempdir.path().to_path_buf()));
@@ -303,7 +313,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.path.clone());
+        entries.sort_by_key(|entry| entry.get_path().to_owned());
 
         assert_eq!(entries.len(), 3);
         assert_eq!(path(&entries[0]), Some(tempdir_path.clone()));
@@ -332,7 +342,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.path.clone());
+        entries.sort_by_key(|entry| entry.get_path().to_owned());
 
         assert_eq!(entries.len(), 3);
         assert_eq!(path(&entries[0]), Some(root_path));
@@ -359,7 +369,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.path.clone());
+        entries.sort_by_key(|entry| entry.get_path().to_owned());
 
         assert_eq!(entries.len(), 3);
 
@@ -385,21 +395,21 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.path.clone());
+        entries.sort_by_key(|entry| entry.get_path().to_owned());
 
         assert_eq!(entries.len(), 2);
         assert_eq!(path(&entries[1]), Some(tempdir.path().join("foo")));
-        assert_eq!(entries[1].size, Some(9));
+        assert_eq!(entries[1].get_size(), 9);
 
         // Information about the file mode, user and group identifiers is
         // available only on UNIX systems.
         #[cfg(target_family = "unix")]
         {
-            let mode = entries[1].mode.unwrap() as libc::mode_t;
+            let mode = entries[1].get_mode() as libc::mode_t;
             assert_eq!(mode & libc::S_IFMT, libc::S_IFREG);
 
-            assert_eq!(entries[1].uid, Some(users::get_current_uid() as i64));
-            assert_eq!(entries[1].gid, Some(users::get_current_gid() as i64));
+            assert_eq!(entries[1].get_uid(), users::get_current_uid() as i64);
+            assert_eq!(entries[1].get_gid(), users::get_current_gid() as i64);
         }
     }
 
@@ -422,7 +432,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.path.clone());
+        entries.sort_by_key(|entry| entry.get_path().to_owned());
 
         assert_eq!(entries.len(), 3);
         assert_eq!(path(&entries[1]), Some(file_path));
@@ -430,11 +440,11 @@ mod tests {
 
         // Information about inode is not available on Windows.
         #[cfg(not(target_os = "windows"))]
-        assert_eq!(entries[1].ino, entries[2].ino);
+        assert_eq!(entries[1].get_ino(), entries[2].get_ino());
     }
 
     /// Retrieves timeline entries from the given session object.
-    fn entries(session: &Session) -> Vec<rrg_proto::TimelineEntry> {
+    fn entries(session: &Session) -> Vec<rrg_proto::protobuf::timeline::TimelineEntry> {
         use std::collections::HashMap;
         use crate::session::Sink;
 
@@ -456,10 +466,7 @@ mod tests {
     }
 
     /// Constructs a path for the given timeline entry.
-    fn path(entry: &rrg_proto::TimelineEntry) -> Option<PathBuf> {
-        entry.path.clone()
-            .map(rrg_proto::path::from_bytes)
-            .map(Result::ok)
-            .flatten()
+    fn path(entry: &rrg_proto::protobuf::timeline::TimelineEntry) -> Option<PathBuf> {
+        rrg_proto::path::from_bytes(entry.get_path().to_owned()).ok()
     }
 }
