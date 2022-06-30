@@ -107,9 +107,9 @@ pub struct Chunk {
 impl super::super::Response for Chunk {
     const RDF_NAME: Option<&'static str> = Some("DataBlob");
 
-    type Proto = rrg_proto::DataBlob;
+    type Proto = rrg_proto::protobuf::jobs::DataBlob;
 
-    fn into_proto(self) -> rrg_proto::DataBlob {
+    fn into_proto(self) -> rrg_proto::protobuf::jobs::DataBlob {
         self.data.into()
     }
 }

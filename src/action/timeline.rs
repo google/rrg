@@ -202,17 +202,18 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("TimelineResult");
 
-    type Proto = rrg_proto::TimelineResult;
+    type Proto = rrg_proto::protobuf::timeline::TimelineResult;
 
-    fn into_proto(self) -> rrg_proto::TimelineResult {
+    fn into_proto(self) -> rrg_proto::protobuf::timeline::TimelineResult {
         let chunk_ids = self.chunk_ids
             .into_iter()
             .map(ChunkId::to_sha256_bytes)
             .collect();
 
-        rrg_proto::TimelineResult {
-            entry_batch_blob_ids: chunk_ids,
-        }
+        let mut proto = rrg_proto::protobuf::timeline::TimelineResult::new();
+        proto.set_entry_batch_blob_ids(chunk_ids);
+
+        proto
     }
 }
 
@@ -220,9 +221,9 @@ impl super::Response for Chunk {
 
     const RDF_NAME: Option<&'static str> = Some("DataBlob");
 
-    type Proto = rrg_proto::DataBlob;
+    type Proto = rrg_proto::protobuf::jobs::DataBlob;
 
-    fn into_proto(self) -> rrg_proto::DataBlob {
+    fn into_proto(self) -> rrg_proto::protobuf::jobs::DataBlob {
         self.data.into()
     }
 }

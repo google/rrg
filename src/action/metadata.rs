@@ -30,9 +30,9 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("ClientInformation");
 
-    type Proto = rrg_proto::ClientInformation;
+    type Proto = rrg_proto::protobuf::jobs::ClientInformation;
 
-    fn into_proto(self) -> rrg_proto::ClientInformation {
+    fn into_proto(self) -> rrg_proto::protobuf::jobs::ClientInformation {
         self.metadata.into()
     }
 }

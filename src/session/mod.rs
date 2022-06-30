@@ -594,10 +594,13 @@ mod tests {
 
         const RDF_NAME: Option<&'static str> = Some("RDFString");
 
-        type Proto = String;
+        type Proto = protobuf::well_known_types::StringValue;
 
-        fn into_proto(self) -> String {
-            self.0
+        fn into_proto(self) -> protobuf::well_known_types::StringValue {
+            let mut proto = protobuf::well_known_types::StringValue::new();
+            proto.set_value(self.0);
+
+            proto
         }
     }
 }

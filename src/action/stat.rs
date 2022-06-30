@@ -189,19 +189,23 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("StatEntry");
 
-    type Proto = rrg_proto::StatEntry;
+    type Proto = rrg_proto::protobuf::jobs::StatEntry;
 
     fn into_proto(self) -> Self::Proto {
-        use rrg_proto::convert::IntoLossy as _;
+        use rrg_proto::convert::FromLossy as _;
 
-        rrg_proto::StatEntry {
-            pathspec: Some(self.path.into()),
-            #[cfg(target_family = "unix")]
-            ext_attrs: self.ext_attrs.into_iter().map(Into::into).collect(),
-            #[cfg(target_os = "linux")]
-            st_flags_linux: self.flags_linux,
-            ..self.metadata.into_lossy()
+        let mut proto = rrg_proto::protobuf::jobs::StatEntry::from_lossy(self.metadata);
+        proto.set_pathspec(self.path.into());
+
+        #[cfg(target_family = "unix")]
+        proto.set_ext_attrs(self.ext_attrs.into_iter().map(Into::into).collect());
+
+        #[cfg(target_os = "linux")]
+        if let Some(flags_linux) = self.flags_linux {
+            proto.set_st_flags_linux(flags_linux);
         }
+
+        proto
     }
 }
 

@@ -15,7 +15,6 @@ use pnet::{
     ipnetwork::IpNetwork,
     util::MacAddr,
 };
-use rrg_proto::{Interface, NetworkAddress};
 
 use crate::session::{self, Session};
 
@@ -49,29 +48,30 @@ fn mac_to_vec(mac: MacAddr) -> Vec<u8> {
 /// corresponding to an IP address.
 ///
 /// [ip_network]: ../../../ipnetwork/enum.IpNetwork.html
-fn ip_to_proto(ip_network: IpNetwork) -> NetworkAddress {
-    use rrg_proto::network_address::Family;
+fn ip_to_proto(ip_network: IpNetwork) -> rrg_proto::protobuf::jobs::NetworkAddress {
     use std::net::IpAddr::{V4, V6};
+    use rrg_proto::protobuf::jobs::NetworkAddress_Family::*;
 
+    let mut proto = rrg_proto::protobuf::jobs::NetworkAddress::new();
     match ip_network.ip() {
-        V4(ipv4) => NetworkAddress {
-            address_type: Some(Family::Inet.into()),
-            packed_bytes: Some(ipv4.octets().to_vec()),
-            ..Default::default()
+        V4(ipv4) => {
+            proto.set_address_type(INET);
+            proto.set_packed_bytes(ipv4.octets().to_vec());
         },
-        V6(ipv6) => NetworkAddress {
-            address_type: Some(Family::Inet6.into()),
-            packed_bytes: Some(ipv6.octets().to_vec()),
-            ..Default::default()
+        V6(ipv6) => {
+            proto.set_address_type(INET6);
+            proto.set_packed_bytes(ipv6.octets().to_vec());
         },
     }
+
+    proto
 }
 
 /// Maps a vector of [`IpNetwork`][ip_network]s to a vector
 /// of protobuf structs corresponding to an IP address.
 ///
 /// [ip_network]: ../../../ipnetwork/enum.IpNetwork.html
-fn ips_to_protos(ips: Vec<IpNetwork>) -> Vec<NetworkAddress> {
+fn ips_to_protos(ips: Vec<IpNetwork>) -> Vec<rrg_proto::protobuf::jobs::NetworkAddress> {
     ips.into_iter().map(ip_to_proto).collect()
 }
 
@@ -79,26 +79,30 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("Interface");
 
-    type Proto = Interface;
+    type Proto = rrg_proto::protobuf::jobs::Interface;
 
-    fn into_proto(self) -> Interface {
-        let mac = match self.interface.mac {
-            Some(mac) => Some(mac_to_vec(mac)),
+    fn into_proto(self) -> rrg_proto::protobuf::jobs::Interface {
+        let mut proto = rrg_proto::protobuf::jobs::Interface::new();
+
+        match self.interface.mac {
+            Some(mac) => {
+                proto.set_mac_address(mac_to_vec(mac));
+            }
             None => {
                 error!(
                     "unable to get MAC address for {} interface",
                     self.interface.name,
                 );
-                None
             },
         };
 
-        Interface {
-            mac_address: mac,
-            ifname: Some(self.interface.name),
-            addresses: ips_to_protos(self.interface.ips),
-            ..Default::default()
+        proto.set_ifname(self.interface.name);
+
+        for address in ips_to_protos(self.interface.ips) {
+            proto.mut_addresses().push(address);
         }
+
+        proto
     }
 }
 

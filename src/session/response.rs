@@ -43,9 +43,9 @@ impl<R> TryInto<rrg_proto::protobuf::jobs::GrrMessage> for Response<R>
 where
     R: action::Response,
 {
-    type Error = prost::EncodeError;
+    type Error = protobuf::ProtobufError;
 
-    fn try_into(self) -> Result<rrg_proto::protobuf::jobs::GrrMessage, prost::EncodeError> {
+    fn try_into(self) -> Result<rrg_proto::protobuf::jobs::GrrMessage, protobuf::ProtobufError> {
         let mut message = rrg_proto::protobuf::jobs::GrrMessage::new();
         message.set_session_id(self.session_id);
         // TODO: Is is really possible for us not to have the `request_id` or
@@ -62,7 +62,7 @@ where
         if let Some(rdf_name) = R::RDF_NAME {
             message.set_args_rdf_name(String::from(rdf_name));
         }
-        prost::Message::encode(&self.data.into_proto(), message.mut_args())?;
+        message.set_args(protobuf::Message::write_to_bytes(&self.data.into_proto())?);
 
         Ok(message)
     }
@@ -70,11 +70,10 @@ where
 
 impl<R: action::Response> TryInto<rrg_proto::GrrMessage> for Response<R> {
 
-    type Error = prost::EncodeError;
+    type Error = protobuf::ProtobufError;
 
-    fn try_into(self) -> Result<rrg_proto::GrrMessage, prost::EncodeError> {
-        let mut data = Vec::new();
-        prost::Message::encode(&self.data.into_proto(), &mut data)?;
+    fn try_into(self) -> Result<rrg_proto::GrrMessage, protobuf::ProtobufError> {
+        let data = protobuf::Message::write_to_bytes(&self.data.into_proto())?;
 
         Ok(rrg_proto::GrrMessage {
             session_id: Some(self.session_id),

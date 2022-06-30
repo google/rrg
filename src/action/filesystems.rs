@@ -9,7 +9,6 @@
 //! collecting device name, mount point, filesystem type and its options.
 //! Current implementation works only in Linux systems.
 
-use rrg_proto::{Filesystem, KeyValue};
 use crate::session::{self, Session};
 
 use log::error;
@@ -93,14 +92,14 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 
 /// Converts filesystem mount option in `String` representation to
 /// GRR's `KeyValue` protobuf struct representation.
-fn option_to_key_value(option: String) -> KeyValue {
+fn option_to_key_value(option: String) -> rrg_proto::protobuf::jobs::KeyValue {
     match &option.split('=').collect::<Vec<&str>>()[..] {
-        &[key] => KeyValue::key(String::from(key)),
-        &[key, value] => KeyValue::pair(String::from(key), String::from(value)),
+        &[key] => rrg_proto::protobuf::jobs::KeyValue::key(String::from(key)),
+        &[key, value] => rrg_proto::protobuf::jobs::KeyValue::pair(String::from(key), String::from(value)),
         _ => {
             error!("invalid mount option syntax: {}", option);
             // TODO: It's better not to send any key-value in this case.
-            KeyValue::empty()
+            rrg_proto::protobuf::jobs::KeyValue::new()
         },
     }
 }
@@ -109,25 +108,23 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("Filesystem");
 
-    type Proto = rrg_proto::Filesystem;
+    type Proto = rrg_proto::protobuf::sysinfo::Filesystem;
 
-    fn into_proto(self) -> Filesystem {
-        let options = self.mount_info.options.into_iter()
+    fn into_proto(self) -> rrg_proto::protobuf::sysinfo::Filesystem {
+        let options: rrg_proto::protobuf::jobs::AttributedDict = self.mount_info.options.into_iter()
             .map(option_to_key_value)
             .collect();
 
         // TODO: Remove lossy conversion of `PathBuf` to `String`
         // when `mount_point` and `device` fields of `Filesystem` message
         // will have `bytes` type instead of `string`.
-        Filesystem {
-            device: Some(self.mount_info.source.to_string_lossy()
-                .into_owned()),
-            mount_point: Some(self.mount_info.dest.to_string_lossy()
-                .into_owned()),
-            r#type: Some(self.mount_info.fstype),
-            label: None,
-            options: Some(options),
-        }
+        let mut proto = rrg_proto::protobuf::sysinfo::Filesystem::new();
+        proto.set_device(self.mount_info.source.to_string_lossy().into_owned());
+        proto.set_mount_point(self.mount_info.dest.to_string_lossy().into_owned());
+        proto.set_field_type(self.mount_info.fstype);
+        proto.set_options(options);
+
+        proto
     }
 }
 
