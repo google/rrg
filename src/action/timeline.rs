@@ -186,13 +186,10 @@ where
 
 impl super::Request for Request {
 
-    type Proto = rrg_proto::TimelineArgs;
+    type Proto = rrg_proto::protobuf::timeline::TimelineArgs;
 
-    fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
-        let root_bytes = proto.root
-            .ok_or(session::MissingFieldError::new("root"))?;
-
-        let root = rrg_proto::path::from_bytes(root_bytes)
+    fn from_proto(mut proto: Self::Proto) -> Result<Request, session::ParseError> {
+        let root = rrg_proto::path::from_bytes(proto.take_root())
             .map_err(session::ParseError::malformed)?;
 
         Ok(Request {

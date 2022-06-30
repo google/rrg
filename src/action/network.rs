@@ -16,7 +16,6 @@ use log::error;
 use sysinfo::{System, SystemExt, Process, ProcessExt};
 use netstat2::{self, ProtocolSocketInfo, TcpState};
 use rrg_proto::{
-    ListNetworkConnectionsArgs,
     NetworkConnection,
     NetworkEndpoint,
     network_connection::{Family, Type, State},
@@ -159,11 +158,11 @@ fn make_connection_from_socket_info(
 
 impl super::Request for Request {
 
-    type Proto = ListNetworkConnectionsArgs;
+    type Proto = rrg_proto::protobuf::flows::ListNetworkConnectionsArgs;
 
     fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
         Ok(Request {
-            listening_only: proto.listening_only.unwrap_or(false),
+            listening_only: proto.get_listening_only(),
         })
     }
 }

@@ -3,7 +3,6 @@ use crate::fs::Entry;
 use crypto::digest::Digest;
 use log::warn;
 use rrg_macro::ack;
-use rrg_proto::file_finder_hash_action_options::OversizedFilePolicy;
 use rrg_proto::Hash as HashEntry;
 use std::cmp::min;
 use std::fs::File;
@@ -49,13 +48,14 @@ impl std::io::Write for Hasher {
 
 /// Performs `hash` action on the file in `entry` and returns the result to be reported in case of success.
 pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<FileHash> {
+    use rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::*;
     match config.oversized_file_policy {
-        OversizedFilePolicy::Skip => {
+        SKIP => {
             if entry.metadata.len() > config.max_size {
                 return None;
             }
         }
-        OversizedFilePolicy::HashTruncated => {}
+        HASH_TRUNCATED => {}
     };
 
     let file = ack! {
@@ -122,7 +122,6 @@ fn result_vec<T: Digest>(digest: &mut T) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rrg_proto::file_finder_hash_action_options::OversizedFilePolicy;
 
     #[test]
     fn test_hash_values() {
@@ -138,7 +137,7 @@ mod tests {
             &entry,
             &HashActionOptions {
                 max_size: 14,
-                oversized_file_policy: OversizedFilePolicy::Skip,
+                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::SKIP,
             },
         )
         .unwrap();
@@ -186,7 +185,7 @@ mod tests {
             &entry,
             &HashActionOptions {
                 max_size: 10,
-                oversized_file_policy: OversizedFilePolicy::HashTruncated,
+                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED,
             },
         )
         .unwrap();
@@ -208,7 +207,7 @@ mod tests {
             &entry,
             &HashActionOptions {
                 max_size: 10,
-                oversized_file_policy: OversizedFilePolicy::Skip,
+                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::SKIP,
             },
         )
         .is_none());

@@ -5,8 +5,6 @@ use crate::action::finder::request::{
     DownloadActionOptions, HashActionOptions,
 };
 use crate::fs::Entry;
-use rrg_proto::file_finder_download_action_options::OversizedFilePolicy as DownloadOversizedFilePolicy;
-use rrg_proto::file_finder_hash_action_options::OversizedFilePolicy as HashOversizedFilePolicy;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{BufReader, Take};
@@ -25,16 +23,17 @@ pub enum Response {
 /// or another action to be executed.
 pub fn download(entry: &Entry, config: &DownloadActionOptions) -> Response {
     if entry.metadata.len() > config.max_size {
+        use rrg_proto::protobuf::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::*;
         match config.oversized_file_policy {
-            DownloadOversizedFilePolicy::Skip => {
+            SKIP => {
                 return Response::Skip();
             }
-            DownloadOversizedFilePolicy::DownloadTruncated => (),
-            DownloadOversizedFilePolicy::HashTruncated => {
+            DOWNLOAD_TRUNCATED => (),
+            HASH_TRUNCATED => {
                 let hash_config = HashActionOptions {
                     max_size: config.max_size,
                     oversized_file_policy:
-                        HashOversizedFilePolicy::HashTruncated,
+                        rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED,
                 };
                 return Response::HashRequest(hash_config);
             }
@@ -133,7 +132,7 @@ mod tests {
             &entry,
             &DownloadActionOptions {
                 max_size: 100,
-                oversized_file_policy: DownloadOversizedFilePolicy::Skip,
+                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::SKIP,
                 use_external_stores: false,
                 chunk_size: 5,
             },
@@ -169,7 +168,7 @@ mod tests {
             &entry,
             &DownloadActionOptions {
                 max_size: 100,
-                oversized_file_policy: DownloadOversizedFilePolicy::Skip,
+                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::SKIP,
                 use_external_stores: false,
                 chunk_size: 5,
             },
@@ -201,7 +200,7 @@ mod tests {
             &entry,
             &DownloadActionOptions {
                 max_size: 5,
-                oversized_file_policy: DownloadOversizedFilePolicy::Skip,
+                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::SKIP,
                 use_external_stores: false,
                 chunk_size: 5,
             },
@@ -224,8 +223,7 @@ mod tests {
             &entry,
             &DownloadActionOptions {
                 max_size: 5,
-                oversized_file_policy:
-                    DownloadOversizedFilePolicy::HashTruncated,
+                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::HASH_TRUNCATED,
                 use_external_stores: false,
                 chunk_size: 5,
             },
@@ -235,7 +233,7 @@ mod tests {
             result,
             Response::HashRequest(HashActionOptions {
                 max_size: 5,
-                oversized_file_policy: HashOversizedFilePolicy::HashTruncated,
+                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED,
             })
         ));
     }
@@ -254,8 +252,7 @@ mod tests {
             &entry,
             &DownloadActionOptions {
                 max_size: 5,
-                oversized_file_policy:
-                    DownloadOversizedFilePolicy::DownloadTruncated,
+                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::DOWNLOAD_TRUNCATED,
                 use_external_stores: false,
                 chunk_size: 3,
             },

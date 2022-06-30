@@ -91,14 +91,13 @@ where
 
 impl super::Request for Request {
 
-    type Proto = rrg_proto::ListDirRequest;
+    type Proto = rrg_proto::protobuf::jobs::ListDirRequest;
 
-    fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
+    fn from_proto(mut proto: Self::Proto) -> Result<Request, session::ParseError> {
         use std::convert::TryInto as _;
 
-        let path = proto.pathspec
-            .ok_or(session::MissingFieldError::new("path spec"))?
-            .try_into().map_err(session::ParseError::malformed)?;
+        let path = proto.take_pathspec().try_into()
+            .map_err(session::ParseError::malformed)?;
 
         Ok(Request {
             path: path,
