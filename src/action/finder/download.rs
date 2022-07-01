@@ -99,6 +99,34 @@ impl From<DownloadEntry> for rrg_proto::BlobImageDescriptor {
     }
 }
 
+impl From<DownloadEntry> for rrg_proto::protobuf::jobs::BlobImageDescriptor {
+
+    fn from(entry: DownloadEntry) -> rrg_proto::protobuf::jobs::BlobImageDescriptor {
+        let chunks = entry.chunk_ids
+            .into_iter()
+            .map(|chunk_id| chunk_id.into())
+            .collect();
+
+        let mut proto = rrg_proto::protobuf::jobs::BlobImageDescriptor::new();
+        proto.set_chunk_size(entry.chunk_size);
+        proto.set_chunks(chunks);
+
+        proto
+    }
+}
+
+impl From<ChunkId> for rrg_proto::protobuf::jobs::BlobImageChunkDescriptor {
+
+    fn from(chunk_id: ChunkId) -> rrg_proto::protobuf::jobs::BlobImageChunkDescriptor {
+        let mut proto = rrg_proto::protobuf::jobs::BlobImageChunkDescriptor::new();
+        proto.set_offset(chunk_id.offset);
+        proto.set_length(chunk_id.length);
+        proto.set_digest(chunk_id.sha256.to_vec());
+
+        proto
+    }
+}
+
 /// A type representing a particular chunk of the returned timeline.
 pub struct Chunk {
     pub data: Vec<u8>,
