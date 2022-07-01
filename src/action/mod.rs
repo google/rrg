@@ -24,8 +24,6 @@ pub mod interfaces;
 #[cfg(feature = "action-metadata")]
 pub mod metadata;
 
-pub mod startup;
-
 #[cfg(feature = "action-listdir")]
 pub mod listdir;
 
@@ -38,6 +36,10 @@ pub mod stat;
 pub mod insttime;
 pub mod memsize;
 pub mod finder;
+
+// TODO: `startup` should not be an action but just a message sent when the
+// agent boots up.
+pub mod startup;
 
 use crate::session::{self, Session, Task};
 
