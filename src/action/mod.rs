@@ -32,6 +32,7 @@ pub mod listdir;
 #[cfg(feature = "action-timeline")]
 pub mod timeline;
 
+#[cfg(feature = "action-network")]
 pub mod network;
 
 #[cfg(feature = "action-stat")]
@@ -135,6 +136,7 @@ where
         #[cfg(feature = "action-timeline")]
         "Timeline" => task.execute(self::timeline::handle),
 
+        #[cfg(feature = "action-network")]
         "ListNetworkConnections" => task.execute(self::network::handle),
 
         #[cfg(feature = "action-stat")]
