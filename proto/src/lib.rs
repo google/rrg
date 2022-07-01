@@ -6,8 +6,6 @@
 pub mod convert;
 pub mod path;
 
-include!(concat!(env!("OUT_DIR"), "/grr.rs"));
-
 pub mod protobuf {
     include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));
 
