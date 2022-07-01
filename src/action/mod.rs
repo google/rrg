@@ -21,7 +21,9 @@ pub mod filesystems;
 #[cfg(target_family = "unix")]
 pub mod interfaces;
 
+#[cfg(feature = "action-metadata")]
 pub mod metadata;
+
 pub mod startup;
 
 #[cfg(feature = "action-listdir")]
@@ -112,6 +114,8 @@ where
 {
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
+
+        #[cfg(feature = "action-metadata")]
         "GetClientInfo" => task.execute(self::metadata::handle),
 
         #[cfg(feature = "action-listdir")]

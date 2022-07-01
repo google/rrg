@@ -54,10 +54,12 @@ users = { version = "0.10.0" }
 [features]
 default = [
     "action-listdir",
+    "action-metadata",
     "action-stat",
 ]
 
 action-listdir = []
+action-metadata = []
 action-stat = []
 
 test-chattr = []
