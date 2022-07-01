@@ -3,7 +3,6 @@ use crate::fs::Entry;
 use crypto::digest::Digest;
 use log::warn;
 use rrg_macro::ack;
-use rrg_proto::Hash as HashEntry;
 use std::cmp::min;
 use std::fs::File;
 use std::io::Read;
@@ -95,22 +94,6 @@ pub struct FileHash {
     pub sha1: std::vec::Vec<u8>,
     pub md5: std::vec::Vec<u8>,
     pub num_bytes: u64,
-}
-
-impl From<FileHash> for HashEntry {
-    fn from(hash: FileHash) -> Self {
-        HashEntry {
-            sha256: Some(hash.sha256),
-            sha1: Some(hash.sha1),
-            md5: Some(hash.md5),
-            num_bytes: Some(hash.num_bytes),
-            pecoff_sha1: None,
-            pecoff_md5: None,
-            pecoff_sha256: None,
-            signed_data: vec![],
-            source_offset: None
-        }
-    }
 }
 
 fn result_vec<T: Digest>(digest: &mut T) -> Vec<u8> {

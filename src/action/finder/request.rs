@@ -12,11 +12,6 @@ use log::info;
 use std::convert::TryFrom;
 use std::fmt::Write;
 
-type RegexMatchMode =
-    rrg_proto::file_finder_contents_regex_match_condition::Mode;
-type LiteralMatchMode =
-    rrg_proto::file_finder_contents_literal_match_condition::Mode;
-
 #[derive(Debug)]
 pub struct Request {
     /// A list of paths to glob that supports `**` path recursion and
@@ -165,24 +160,6 @@ impl TryFrom<rrg_proto::protobuf::flows::FileFinderDownloadActionOptions> for Ac
             use_external_stores: proto.get_use_external_stores(),
             chunk_size: proto.get_chunk_size(),
         }))
-    }
-}
-
-impl From<RegexMatchMode> for MatchMode {
-    fn from(proto: RegexMatchMode) -> Self {
-        match proto {
-            RegexMatchMode::FirstHit => MatchMode::FirstHit,
-            RegexMatchMode::AllHits => MatchMode::AllHits,
-        }
-    }
-}
-
-impl From<LiteralMatchMode> for MatchMode {
-    fn from(proto: LiteralMatchMode) -> Self {
-        match proto {
-            LiteralMatchMode::FirstHit => MatchMode::FirstHit,
-            LiteralMatchMode::AllHits => MatchMode::AllHits,
-        }
     }
 }
 

@@ -87,19 +87,6 @@ impl Version {
     }
 }
 
-impl Into<rrg_proto::ClientInformation> for Metadata {
-
-    fn into(self) -> rrg_proto::ClientInformation {
-        // TODO: Add support for labels.
-        rrg_proto::ClientInformation {
-            client_name: Some(self.name),
-            client_version: Some(self.version.as_numeric()),
-            client_description: Some(self.description),
-            ..Default::default()
-        }
-    }
-}
-
 impl Into<rrg_proto::protobuf::jobs::ClientInformation> for Metadata {
 
     fn into(self) -> rrg_proto::protobuf::jobs::ClientInformation {

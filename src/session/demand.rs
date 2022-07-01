@@ -64,28 +64,6 @@ impl Payload {
     }
 }
 
-impl TryFrom<rrg_proto::GrrMessage> for Demand {
-
-    type Error = session::ParseError;
-
-    fn try_from(message: rrg_proto::GrrMessage) -> Result<Demand, Self::Error> {
-        let missing = session::MissingFieldError::new;
-
-        let header = Header {
-            session_id: message.session_id.ok_or(missing("session id"))?,
-            request_id: message.request_id.ok_or(missing("request id"))?,
-        };
-
-        Ok(Demand {
-            action: message.name.ok_or(missing("action name"))?,
-            header: header,
-            payload: Payload {
-                data: message.args,
-            },
-        })
-    }
-}
-
 impl TryFrom<rrg_proto::protobuf::jobs::GrrMessage> for Demand {
 
     type Error = session::ParseError;

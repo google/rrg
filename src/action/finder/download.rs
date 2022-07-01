@@ -82,23 +82,6 @@ pub struct DownloadEntry {
     pub chunk_size: u64,
 }
 
-impl From<DownloadEntry> for rrg_proto::BlobImageDescriptor {
-    fn from(entry: DownloadEntry) -> rrg_proto::BlobImageDescriptor {
-        rrg_proto::BlobImageDescriptor {
-            chunks: entry
-                .chunk_ids
-                .into_iter()
-                .map(|x| rrg_proto::BlobImageChunkDescriptor {
-                    offset: Some(x.offset),
-                    length: Some(x.length),
-                    digest: Some(x.sha256.to_vec()),
-                })
-                .collect::<Vec<_>>(),
-            chunk_size: Some(entry.chunk_size),
-        }
-    }
-}
-
 impl From<DownloadEntry> for rrg_proto::protobuf::jobs::BlobImageDescriptor {
 
     fn from(entry: DownloadEntry) -> rrg_proto::protobuf::jobs::BlobImageDescriptor {

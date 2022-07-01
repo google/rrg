@@ -68,25 +68,6 @@ where
     }
 }
 
-impl<R: action::Response> TryInto<rrg_proto::GrrMessage> for Response<R> {
-
-    type Error = protobuf::ProtobufError;
-
-    fn try_into(self) -> Result<rrg_proto::GrrMessage, protobuf::ProtobufError> {
-        let data = protobuf::Message::write_to_bytes(&self.data.into_proto())?;
-
-        Ok(rrg_proto::GrrMessage {
-            session_id: Some(self.session_id),
-            response_id: self.response_id,
-            request_id: self.request_id,
-            r#type: Some(rrg_proto::grr_message::Type::Message.into()),
-            args_rdf_name: R::RDF_NAME.map(String::from),
-            args: Some(data),
-            ..Default::default()
-        })
-    }
-}
-
 impl TryInto<rrg_proto::protobuf::jobs::GrrMessage> for Status {
 
     type Error = protobuf::ProtobufError;
