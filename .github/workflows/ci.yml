@@ -32,6 +32,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
+      # TODO: Add a step that runs tests with all action features disabled.
       - name: 'Run RRG tests'
         uses: actions-rs/cargo@v1
         with:
