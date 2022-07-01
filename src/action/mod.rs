@@ -107,7 +107,7 @@ where
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
-        "ListDirectory" => task.execute(self::listdir::handle), 
+        "ListDirectory" => task.execute(self::listdir::handle),
         "Timeline" => task.execute(self::timeline::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
         "GetFileStat" => task.execute(self::stat::handle),
@@ -118,7 +118,6 @@ where
 
         #[cfg(target_os = "linux")]
         "EnumerateFilesystems" => task.execute(self::filesystems::handle),
-
 
         "GetMemorySize" => task.execute(self::memsize::handle),
         action => return Err(session::Error::Dispatch(String::from(action))),
