@@ -61,6 +61,7 @@ default = [
     "action-memsize",
     "action-metadata",
     "action-stat",
+    "action-timeline",
 ]
 
 action-insttime = []
@@ -71,6 +72,7 @@ action-listdir = []
 action-memsize = []
 action-metadata = []
 action-stat = []
+action-timeline = []
 
 test-chattr = []
 test-setfattr = []

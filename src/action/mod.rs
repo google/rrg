@@ -29,7 +29,9 @@ pub mod metadata;
 #[cfg(feature = "action-listdir")]
 pub mod listdir;
 
+#[cfg(feature = "action-timeline")]
 pub mod timeline;
+
 pub mod network;
 
 #[cfg(feature = "action-stat")]
@@ -130,7 +132,9 @@ where
         #[cfg(feature = "action-listdir")]
         "ListDirectory" => task.execute(self::listdir::handle),
 
+        #[cfg(feature = "action-timeline")]
         "Timeline" => task.execute(self::timeline::handle),
+
         "ListNetworkConnections" => task.execute(self::network::handle),
 
         #[cfg(feature = "action-stat")]
