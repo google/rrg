@@ -54,6 +54,7 @@ users = { version = "0.10.0" }
 [features]
 default = [
     "action-insttime",
+    "action-finder",
     "action-listdir",
     "action-memsize",
     "action-metadata",
@@ -61,6 +62,7 @@ default = [
 ]
 
 action-insttime = []
+action-finder = []
 action-listdir = []
 action-memsize = []
 action-metadata = []

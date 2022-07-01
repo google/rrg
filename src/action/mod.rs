@@ -39,6 +39,7 @@ pub mod insttime;
 #[cfg(feature = "action-memsize")]
 pub mod memsize;
 
+#[cfg(feature = "action-finder")]
 pub mod finder;
 
 // TODO: `startup` should not be an action but just a message sent when the
