@@ -5,7 +5,6 @@ use crate::action::finder::request::{
 use crate::fs::Entry;
 use log::warn;
 use rrg_macro::ack;
-use rrg_proto::BufferReference;
 use std::cmp::{max, min};
 #[cfg(target_family = "unix")]
 use std::fs::Metadata;
@@ -28,7 +27,7 @@ pub fn check_conditions(conditions: &Vec<Condition>, entry: &Entry) -> bool {
 pub fn find_matches(
     match_conditions: &Vec<ContentsMatchCondition>,
     entry: &Entry,
-) -> Vec<BufferReference> {
+) -> Vec<rrg_proto::protobuf::jobs::BufferReference> {
     let mut ret = vec![];
     for match_condition in match_conditions {
         let mut matches = matches(match_condition, &entry);
@@ -141,7 +140,7 @@ fn is_in_range<T: Ord>(value: &T, range: (&Option<T>, &Option<T>)) -> bool {
 fn matches(
     condition: &ContentsMatchCondition,
     entry: &Entry,
-) -> Vec<BufferReference> {
+) -> Vec<rrg_proto::protobuf::jobs::BufferReference> {
     const BYTES_PER_CHUNK: u64 = 10 * 1024 * 1024;
     const OVERLAP_BYTES: u64 = 1024 * 1024;
 
@@ -180,13 +179,13 @@ fn matches(
                 min(m.end() as u64 + condition.bytes_after, chunk.len() as u64);
             let data = chunk[(start as usize)..(end as usize)].to_vec();
 
-            matches.push(BufferReference {
-                offset: Some(offset + start),
-                length: Some(end - start),
-                callback: None,
-                data: Some(data),
-                pathspec: Some(entry.path.clone().into()),
-            });
+            let mut buf_ref = rrg_proto::protobuf::jobs::BufferReference::new();
+            buf_ref.set_offset(offset + start);
+            buf_ref.set_length(end - start);
+            buf_ref.set_data(data);
+            buf_ref.set_pathspec(entry.path.clone().into());
+
+            matches.push(buf_ref);
 
             match condition.mode {
                 MatchMode::FirstHit => return matches,
@@ -555,13 +554,10 @@ mod tests {
         assert_eq!(matches.len(), 1);
 
         let m = matches.first().unwrap();
-        assert_eq!(m.data.as_ref().unwrap(), &"3te123st12".as_bytes().to_vec());
-        assert_eq!(m.length.unwrap(), 10);
-        assert_eq!(m.offset.unwrap(), 2);
-        assert_eq!(
-            m.pathspec.as_ref().unwrap().path.as_ref().unwrap(),
-            path.to_str().unwrap()
-        );
+        assert_eq!(m.get_data(), &"3te123st12".as_bytes().to_vec());
+        assert_eq!(m.get_length(), 10);
+        assert_eq!(m.get_offset(), 2);
+        assert_eq!(m.get_pathspec().get_path(), path.to_str().unwrap());
     }
 
     #[test]
@@ -588,13 +584,10 @@ mod tests {
         assert_eq!(matches.len(), 1);
 
         let m = matches.first().unwrap();
-        assert_eq!(m.data.as_ref().unwrap(), &"test".as_bytes().to_vec());
-        assert_eq!(m.length.unwrap(), 4);
-        assert_eq!(m.offset.unwrap(), 10);
-        assert_eq!(
-            m.pathspec.as_ref().unwrap().path.as_ref().unwrap(),
-            path.to_str().unwrap()
-        );
+        assert_eq!(m.get_data(), &"test".as_bytes().to_vec());
+        assert_eq!(m.get_length(), 4);
+        assert_eq!(m.get_offset(), 10);
+        assert_eq!(m.get_pathspec().get_path(), path.to_str().unwrap());
     }
 
     #[test]
@@ -621,13 +614,10 @@ mod tests {
         assert_eq!(matches.len(), 1);
 
         let m = matches.first().unwrap();
-        assert_eq!(m.data.as_ref().unwrap(), &"test".as_bytes().to_vec());
-        assert_eq!(m.length.unwrap(), 4);
-        assert_eq!(m.offset.unwrap(), 3);
-        assert_eq!(
-            m.pathspec.as_ref().unwrap().path.as_ref().unwrap(),
-            path.to_str().unwrap()
-        );
+        assert_eq!(m.get_data(), &"test".as_bytes().to_vec());
+        assert_eq!(m.get_length(), 4);
+        assert_eq!(m.get_offset(), 3);
+        assert_eq!(m.get_pathspec().get_path(), path.to_str().unwrap());
     }
 
     #[test]
@@ -655,24 +645,18 @@ mod tests {
 
         {
             let m = matches.get(0).unwrap();
-            assert_eq!(m.data.as_ref().unwrap(), &"test".as_bytes().to_vec());
-            assert_eq!(m.length.unwrap(), 4);
-            assert_eq!(m.offset.unwrap(), 3);
-            assert_eq!(
-                m.pathspec.as_ref().unwrap().path.as_ref().unwrap(),
-                path.to_str().unwrap()
-            );
+            assert_eq!(m.get_data(), &"test".as_bytes().to_vec());
+            assert_eq!(m.get_length(), 4);
+            assert_eq!(m.get_offset(), 3);
+            assert_eq!(m.get_pathspec().get_path(), path.to_str().unwrap());
         }
 
         {
             let m = matches.get(1).unwrap();
-            assert_eq!(m.data.as_ref().unwrap(), &"tttt".as_bytes().to_vec());
-            assert_eq!(m.length.unwrap(), 4);
-            assert_eq!(m.offset.unwrap(), 10);
-            assert_eq!(
-                m.pathspec.as_ref().unwrap().path.as_ref().unwrap(),
-                path.to_str().unwrap()
-            );
+            assert_eq!(m.get_data(), &"tttt".as_bytes().to_vec());
+            assert_eq!(m.get_length(), 4);
+            assert_eq!(m.get_offset(), 10);
+            assert_eq!(m.get_pathspec().get_path(), path.to_str().unwrap());
         }
     }
 
@@ -700,13 +684,10 @@ mod tests {
         assert_eq!(matches.len(), 1);
 
         let m = matches.first().unwrap();
-        assert_eq!(m.data.as_ref().unwrap(), &"test".as_bytes().to_vec());
-        assert_eq!(m.length.unwrap(), 4);
-        assert_eq!(m.offset.unwrap(), 3);
-        assert_eq!(
-            m.pathspec.as_ref().unwrap().path.as_ref().unwrap(),
-            path.to_str().unwrap()
-        );
+        assert_eq!(m.get_data(), &"test".as_bytes().to_vec());
+        assert_eq!(m.get_length(), 4);
+        assert_eq!(m.get_offset(), 3);
+        assert_eq!(m.get_pathspec().get_path(), path.to_str().unwrap());
     }
 
     #[test]
@@ -744,24 +725,18 @@ mod tests {
 
         {
             let m = matches.get(0).unwrap();
-            assert_eq!(m.data.as_ref().unwrap(), &"test".as_bytes().to_vec());
-            assert_eq!(m.length.unwrap(), 4);
-            assert_eq!(m.offset.unwrap(), 3);
-            assert_eq!(
-                m.pathspec.as_ref().unwrap().path.as_ref().unwrap(),
-                path.to_str().unwrap()
-            );
+            assert_eq!(m.get_data(), &"test".as_bytes().to_vec());
+            assert_eq!(m.get_length(), 4);
+            assert_eq!(m.get_offset(), 3);
+            assert_eq!(m.get_pathspec().get_path(), path.to_str().unwrap());
         }
 
         {
             let m = matches.get(1).unwrap();
-            assert_eq!(m.data.as_ref().unwrap(), &"tttt".as_bytes().to_vec());
-            assert_eq!(m.length.unwrap(), 4);
-            assert_eq!(m.offset.unwrap(), 10);
-            assert_eq!(
-                m.pathspec.as_ref().unwrap().path.as_ref().unwrap(),
-                path.to_str().unwrap()
-            );
+            assert_eq!(m.get_data(), &"tttt".as_bytes().to_vec());
+            assert_eq!(m.get_length(), 4);
+            assert_eq!(m.get_offset(), 10);
+            assert_eq!(m.get_pathspec().get_path(), path.to_str().unwrap());
         }
     }
 
