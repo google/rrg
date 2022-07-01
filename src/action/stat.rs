@@ -169,7 +169,7 @@ where
 
 impl super::Request for Request {
 
-    type Proto = rrg_proto::protobuf::jobs::GetFileStatRequest;
+    type Proto = rrg_proto::jobs::GetFileStatRequest;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Self, session::ParseError> {
         use std::convert::TryInto as _;
@@ -189,12 +189,12 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("StatEntry");
 
-    type Proto = rrg_proto::protobuf::jobs::StatEntry;
+    type Proto = rrg_proto::jobs::StatEntry;
 
     fn into_proto(self) -> Self::Proto {
         use rrg_proto::convert::FromLossy as _;
 
-        let mut proto = rrg_proto::protobuf::jobs::StatEntry::from_lossy(self.metadata);
+        let mut proto = rrg_proto::jobs::StatEntry::from_lossy(self.metadata);
         proto.set_pathspec(self.path.into());
 
         #[cfg(target_family = "unix")]

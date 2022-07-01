@@ -87,10 +87,10 @@ impl Version {
     }
 }
 
-impl Into<rrg_proto::protobuf::jobs::ClientInformation> for Metadata {
+impl Into<rrg_proto::jobs::ClientInformation> for Metadata {
 
-    fn into(self) -> rrg_proto::protobuf::jobs::ClientInformation {
-        let mut proto = rrg_proto::protobuf::jobs::ClientInformation::new();
+    fn into(self) -> rrg_proto::jobs::ClientInformation {
+        let mut proto = rrg_proto::jobs::ClientInformation::new();
         proto.set_client_name(self.name);
         proto.set_client_version(self.version.as_numeric());
         proto.set_client_description(self.description);

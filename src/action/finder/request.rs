@@ -32,7 +32,7 @@ pub struct Request {
     /// Should symbolic links be followed by recursive search.
     pub follow_links: bool,
     /// Behavior for crossing devices when searching the filesystem.
-    pub xdev_mode: rrg_proto::protobuf::flows::FileFinderArgs_XDev,
+    pub xdev_mode: rrg_proto::flows::FileFinderArgs_XDev,
 }
 
 #[derive(Debug)]
@@ -56,7 +56,7 @@ pub struct HashActionOptions {
     /// Maximum file size in bytes acceptable by the action.
     pub max_size: u64,
     /// Action to perform when requested file is bigger than `max_size`.
-    pub oversized_file_policy: rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy,
+    pub oversized_file_policy: rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy,
 }
 
 #[derive(Debug)]
@@ -64,7 +64,7 @@ pub struct DownloadActionOptions {
     /// Maximum file size in bytes acceptable by the action.
     pub max_size: u64,
     /// Action to perform when requested file is bigger than `max_size`.
-    pub oversized_file_policy: rrg_proto::protobuf::flows::FileFinderDownloadActionOptions_OversizedFilePolicy,
+    pub oversized_file_policy: rrg_proto::flows::FileFinderDownloadActionOptions_OversizedFilePolicy,
     /// If true, look in any defined external file stores for files before
     /// downloading them, and offer any new files to external stores. This
     /// should be true unless the external checks are misbehaving.
@@ -115,8 +115,8 @@ pub struct ContentsMatchCondition {
     pub length: u64,
 }
 
-impl From<rrg_proto::protobuf::flows::FileFinderStatActionOptions> for StatActionOptions {
-    fn from(proto: rrg_proto::protobuf::flows::FileFinderStatActionOptions) -> StatActionOptions {
+impl From<rrg_proto::flows::FileFinderStatActionOptions> for StatActionOptions {
+    fn from(proto: rrg_proto::flows::FileFinderStatActionOptions) -> StatActionOptions {
         StatActionOptions {
             follow_symlink: proto.get_resolve_links(),
             collect_ext_attrs: proto.get_collect_ext_attrs(),
@@ -124,10 +124,10 @@ impl From<rrg_proto::protobuf::flows::FileFinderStatActionOptions> for StatActio
     }
 }
 
-fn into_action(proto: rrg_proto::protobuf::flows::FileFinderAction) -> Result<Option<Action>, ParseError> {
+fn into_action(proto: rrg_proto::flows::FileFinderAction) -> Result<Option<Action>, ParseError> {
     // `FileFinderAction::action_type` defines which action will be performed.
     // Only options from the selected action are read.
-    use rrg_proto::protobuf::flows::FileFinderAction_Action::*;
+    use rrg_proto::flows::FileFinderAction_Action::*;
     Ok(Some(match proto.get_action_type() {
         STAT => return Ok(None),
         HASH => Action::try_from(proto.get_hash().to_owned())?,
@@ -135,11 +135,11 @@ fn into_action(proto: rrg_proto::protobuf::flows::FileFinderAction) -> Result<Op
     }))
 }
 
-impl TryFrom<rrg_proto::protobuf::flows::FileFinderHashActionOptions> for Action {
+impl TryFrom<rrg_proto::flows::FileFinderHashActionOptions> for Action {
     type Error = ParseError;
 
     fn try_from(
-        proto: rrg_proto::protobuf::flows::FileFinderHashActionOptions,
+        proto: rrg_proto::flows::FileFinderHashActionOptions,
     ) -> Result<Self, Self::Error> {
         Ok(Action::Hash(HashActionOptions {
             oversized_file_policy: proto.get_oversized_file_policy(),
@@ -148,11 +148,11 @@ impl TryFrom<rrg_proto::protobuf::flows::FileFinderHashActionOptions> for Action
     }
 }
 
-impl TryFrom<rrg_proto::protobuf::flows::FileFinderDownloadActionOptions> for Action {
+impl TryFrom<rrg_proto::flows::FileFinderDownloadActionOptions> for Action {
     type Error = ParseError;
 
     fn try_from(
-        proto: rrg_proto::protobuf::flows::FileFinderDownloadActionOptions,
+        proto: rrg_proto::flows::FileFinderDownloadActionOptions,
     ) -> Result<Self, Self::Error> {
         Ok(Action::Download(DownloadActionOptions {
             oversized_file_policy: proto.get_oversized_file_policy(),
@@ -164,7 +164,7 @@ impl TryFrom<rrg_proto::protobuf::flows::FileFinderDownloadActionOptions> for Ac
 }
 
 fn get_modification_time_condition(
-    proto: &rrg_proto::protobuf::flows::FileFinderModificationTimeCondition,
+    proto: &rrg_proto::flows::FileFinderModificationTimeCondition,
 ) -> Result<Option<Condition>, ParseError> {
     let min = if proto.has_min_last_modified_time() {
         Some(time_from_micros(proto.get_min_last_modified_time())?)
@@ -185,7 +185,7 @@ fn get_modification_time_condition(
 }
 
 fn get_access_time_condition(
-    proto: &rrg_proto::protobuf::flows::FileFinderAccessTimeCondition,
+    proto: &rrg_proto::flows::FileFinderAccessTimeCondition,
 ) -> Result<Option<Condition>, ParseError> {
     let min = if proto.has_min_last_access_time() {
         Some(time_from_micros(proto.get_min_last_access_time())?)
@@ -206,7 +206,7 @@ fn get_access_time_condition(
 }
 
 fn get_inode_change_time_condition(
-    proto: &rrg_proto::protobuf::flows::FileFinderInodeChangeTimeCondition,
+    proto: &rrg_proto::flows::FileFinderInodeChangeTimeCondition,
 ) -> Result<Option<Condition>, ParseError> {
     let min = if proto.has_min_last_inode_change_time() {
         Some(time_from_micros(proto.get_min_last_inode_change_time())?)
@@ -227,7 +227,7 @@ fn get_inode_change_time_condition(
 }
 
 fn get_size_condition(
-    proto: &rrg_proto::protobuf::flows::FileFinderSizeCondition,
+    proto: &rrg_proto::flows::FileFinderSizeCondition,
 ) -> Option<Condition> {
     let min = if proto.has_min_file_size() {
         Some(proto.get_min_file_size())
@@ -248,7 +248,7 @@ fn get_size_condition(
 }
 
 fn get_ext_flags_condition(
-    proto: &rrg_proto::protobuf::flows::FileFinderExtFlagsCondition,
+    proto: &rrg_proto::flows::FileFinderExtFlagsCondition,
 ) -> Option<Condition> {
     if proto.has_linux_bits_set() || proto.has_linux_bits_unset() ||
        proto.has_osx_bits_set() || proto.has_osx_bits_unset() {
@@ -297,14 +297,14 @@ fn constant_literal_to_regex(
 }
 
 fn get_contents_regex_match_condition(
-    proto: &rrg_proto::protobuf::flows::FileFinderContentsRegexMatchCondition,
+    proto: &rrg_proto::flows::FileFinderContentsRegexMatchCondition,
 ) -> Result<Option<ContentsMatchCondition>, ParseError> {
     let bytes_before = proto.get_bytes_before() as u64;
     let bytes_after = proto.get_bytes_after() as u64;
     let start_offset = proto.get_start_offset();
     let length = proto.get_length();
 
-    use rrg_proto::protobuf::flows::FileFinderContentsRegexMatchCondition_Mode::*;
+    use rrg_proto::flows::FileFinderContentsRegexMatchCondition_Mode::*;
     let mode = match proto.get_mode() {
         ALL_HITS => MatchMode::AllHits,
         FIRST_HIT => MatchMode::FirstHit,
@@ -329,14 +329,14 @@ fn get_contents_regex_match_condition(
 /// Literal match is performed by generating a regex condition as they have
 /// the same semantics.
 fn get_contents_literal_match_condition(
-    proto: &rrg_proto::protobuf::flows::FileFinderContentsLiteralMatchCondition,
+    proto: &rrg_proto::flows::FileFinderContentsLiteralMatchCondition,
 ) -> Result<Option<ContentsMatchCondition>, ParseError> {
     let bytes_before = proto.get_bytes_before() as u64;
     let bytes_after = proto.get_bytes_after() as u64;
     let start_offset = proto.get_start_offset();
     let length = proto.get_length();
 
-    use rrg_proto::protobuf::flows::FileFinderContentsLiteralMatchCondition_Mode::*;
+    use rrg_proto::flows::FileFinderContentsLiteralMatchCondition_Mode::*;
     let mode = match proto.get_mode() {
         ALL_HITS => MatchMode::AllHits,
         FIRST_HIT => MatchMode::FirstHit,
@@ -365,7 +365,7 @@ fn get_contents_literal_match_condition(
 }
 
 fn get_conditions(
-    proto: &[rrg_proto::protobuf::flows::FileFinderCondition],
+    proto: &[rrg_proto::flows::FileFinderCondition],
 ) -> Result<Vec<Condition>, ParseError> {
     let mut conditions = vec![];
     for proto_condition in proto {
@@ -375,9 +375,9 @@ fn get_conditions(
 }
 
 fn get_condition(
-    proto: &rrg_proto::protobuf::flows::FileFinderCondition,
+    proto: &rrg_proto::flows::FileFinderCondition,
 ) -> Result<Option<Condition>, ParseError> {
-    use rrg_proto::protobuf::flows::FileFinderCondition_Type::*;
+    use rrg_proto::flows::FileFinderCondition_Type::*;
     Ok(match proto.get_condition_type() {
         MODIFICATION_TIME => {
             get_modification_time_condition(proto.get_modification_time())?
@@ -396,7 +396,7 @@ fn get_condition(
 }
 
 fn get_contents_match_conditions(
-    proto: &[rrg_proto::protobuf::flows::FileFinderCondition],
+    proto: &[rrg_proto::flows::FileFinderCondition],
 ) -> Result<Vec<ContentsMatchCondition>, ParseError> {
     let mut conditions = vec![];
     for proto_condition in proto {
@@ -407,13 +407,13 @@ fn get_contents_match_conditions(
 
 // TODO: maybe it can return Option instead of Vec now
 fn get_contents_match_condition(
-    proto: &rrg_proto::protobuf::flows::FileFinderCondition,
+    proto: &rrg_proto::flows::FileFinderCondition,
 ) -> Result<Option<ContentsMatchCondition>, ParseError> {
     if !proto.has_condition_type() {
         return Ok(None);
     }
 
-    use rrg_proto::protobuf::flows::FileFinderCondition_Type::*;
+    use rrg_proto::flows::FileFinderCondition_Type::*;
     Ok(match proto.get_condition_type() {
         CONTENTS_REGEX_MATCH => {
             get_contents_regex_match_condition(proto.get_contents_regex_match())?
@@ -426,11 +426,11 @@ fn get_contents_match_condition(
 }
 
 impl super::super::Request for Request {
-    type Proto = rrg_proto::protobuf::flows::FileFinderArgs;
+    type Proto = rrg_proto::flows::FileFinderArgs;
 
-    fn from_proto(proto: rrg_proto::protobuf::flows::FileFinderArgs) -> Result<Request, ParseError> {
+    fn from_proto(proto: rrg_proto::flows::FileFinderArgs) -> Result<Request, ParseError> {
         info!("File Finder: proto request: {:#?}", &proto);
-        if proto.get_pathtype() != rrg_proto::protobuf::jobs::PathSpec_PathType::OS {
+        if proto.get_pathtype() != rrg_proto::jobs::PathSpec_PathType::OS {
             return Err(ParseError::malformed(
                 "File Finder does not support path types other than `Os`.",
             ));
@@ -466,8 +466,8 @@ mod tests {
 
     #[test]
     fn test_empty_request() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let request = Request::from_proto(proto).unwrap();
 
@@ -475,18 +475,18 @@ mod tests {
         assert!(request.conditions.is_empty());
         assert_eq!(request.process_non_regular_files, false);
         assert_eq!(request.follow_links, false);
-        assert_eq!(request.xdev_mode, rrg_proto::protobuf::flows::FileFinderArgs_XDev::LOCAL);
+        assert_eq!(request.xdev_mode, rrg_proto::flows::FileFinderArgs_XDev::LOCAL);
     }
 
     #[test]
     fn test_basic_root_parameters() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
         proto.mut_paths().push("abc".to_string());
         proto.mut_paths().push("cba".to_string());
         proto.set_process_non_regular_files(true);
         proto.set_follow_links(true);
-        proto.set_xdev(rrg_proto::protobuf::flows::FileFinderArgs_XDev::ALWAYS);
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        proto.set_xdev(rrg_proto::flows::FileFinderArgs_XDev::ALWAYS);
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let request = Request::from_proto(proto).unwrap();
 
@@ -496,19 +496,19 @@ mod tests {
         );
         assert_eq!(request.process_non_regular_files, true);
         assert_eq!(request.follow_links, true);
-        assert_eq!(request.xdev_mode, rrg_proto::protobuf::flows::FileFinderArgs_XDev::ALWAYS);
+        assert_eq!(request.xdev_mode, rrg_proto::flows::FileFinderArgs_XDev::ALWAYS);
     }
 
     #[test]
     fn test_fails_on_non_os_path_type() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
         proto.mut_paths().push("abc".to_string());
         proto.mut_paths().push("cba".to_string());
         proto.set_process_non_regular_files(true);
         proto.set_follow_links(true);
-        proto.set_pathtype(rrg_proto::protobuf::jobs::PathSpec_PathType::REGISTRY);
-        proto.set_xdev(rrg_proto::protobuf::flows::FileFinderArgs_XDev::ALWAYS);
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        proto.set_pathtype(rrg_proto::jobs::PathSpec_PathType::REGISTRY);
+        proto.set_xdev(rrg_proto::flows::FileFinderArgs_XDev::ALWAYS);
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let err = Request::from_proto(proto).unwrap_err();
 
@@ -520,8 +520,8 @@ mod tests {
 
     #[test]
     fn test_default_stats_action() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let request = Request::from_proto(proto).unwrap();
 
@@ -531,8 +531,8 @@ mod tests {
 
     #[test]
     fn test_stats_action() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
         proto.mut_action().mut_stat().set_resolve_links(true);
         proto.mut_action().mut_stat().set_collect_ext_attrs(true);
 
@@ -544,8 +544,8 @@ mod tests {
 
     #[test]
     fn test_default_hash_action() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::HASH);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::HASH);
 
         let request = Request::from_proto(proto).unwrap();
 
@@ -553,7 +553,7 @@ mod tests {
             Action::Hash(options) => {
                 assert_eq!(
                     options.oversized_file_policy,
-                    rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::SKIP
+                    rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::SKIP
                 );
                 assert_eq!(options.max_size, 500000000);
             }
@@ -565,10 +565,10 @@ mod tests {
 
     #[test]
     fn test_hash_action() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::HASH);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::HASH);
         proto.mut_action().mut_hash().set_collect_ext_attrs(true);
-        proto.mut_action().mut_hash().set_oversized_file_policy(rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED);
+        proto.mut_action().mut_hash().set_oversized_file_policy(rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED);
         proto.mut_action().mut_hash().set_max_size(123456);
         proto.mut_action().mut_stat().set_collect_ext_attrs(true);
         proto.mut_action().mut_stat().set_resolve_links(true);
@@ -579,7 +579,7 @@ mod tests {
             Action::Hash(options) => {
                 assert_eq!(
                     options.oversized_file_policy,
-                    rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED
+                    rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED
                 );
                 assert_eq!(options.max_size, 123456);
             }
@@ -591,8 +591,8 @@ mod tests {
 
     #[test]
     fn test_default_download_action() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::DOWNLOAD);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::DOWNLOAD);
 
         let request = Request::from_proto(proto).unwrap();
 
@@ -601,7 +601,7 @@ mod tests {
                 assert_eq!(options.max_size, 500000000);
                 assert_eq!(
                     options.oversized_file_policy,
-                    rrg_proto::protobuf::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::SKIP
+                    rrg_proto::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::SKIP
                 );
                 assert_eq!(options.use_external_stores, true);
                 assert_eq!(options.chunk_size, 524288);
@@ -614,11 +614,11 @@ mod tests {
 
     #[test]
     fn test_download_action() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::DOWNLOAD);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::DOWNLOAD);
         proto.mut_action().mut_download().set_max_size(12345);
         proto.mut_action().mut_download().set_collect_ext_attrs(true);
-        proto.mut_action().mut_download().set_oversized_file_policy(rrg_proto::protobuf::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::DOWNLOAD_TRUNCATED);
+        proto.mut_action().mut_download().set_oversized_file_policy(rrg_proto::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::DOWNLOAD_TRUNCATED);
         proto.mut_action().mut_download().set_use_external_stores(false);
         proto.mut_action().mut_download().set_chunk_size(5432);
         proto.mut_action().mut_stat().set_collect_ext_attrs(true);
@@ -631,7 +631,7 @@ mod tests {
                 assert_eq!(options.max_size, 12345);
                 assert_eq!(
                     options.oversized_file_policy,
-                    rrg_proto::protobuf::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::DOWNLOAD_TRUNCATED
+                    rrg_proto::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::DOWNLOAD_TRUNCATED
                 );
                 assert_eq!(options.use_external_stores, false);
                 assert_eq!(options.chunk_size, 5432);
@@ -645,11 +645,11 @@ mod tests {
 
     #[test]
     fn test_modification_time_condition() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let condition = proto.mut_conditions().push_default();
-        condition.set_condition_type(rrg_proto::protobuf::flows::FileFinderCondition_Type::MODIFICATION_TIME);
+        condition.set_condition_type(rrg_proto::flows::FileFinderCondition_Type::MODIFICATION_TIME);
         condition.mut_modification_time().set_min_last_modified_time(123);
         condition.mut_modification_time().set_max_last_modified_time(234);
 
@@ -667,11 +667,11 @@ mod tests {
 
     #[test]
     fn test_access_time_condition() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let condition = proto.mut_conditions().push_default();
-        condition.set_condition_type(rrg_proto::protobuf::flows::FileFinderCondition_Type::ACCESS_TIME);
+        condition.set_condition_type(rrg_proto::flows::FileFinderCondition_Type::ACCESS_TIME);
         condition.mut_access_time().set_min_last_access_time(123);
         condition.mut_access_time().set_max_last_access_time(234);
 
@@ -689,11 +689,11 @@ mod tests {
 
     #[test]
     fn test_inode_change_time_condition() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let condition = proto.mut_conditions().push_default();
-        condition.set_condition_type(rrg_proto::protobuf::flows::FileFinderCondition_Type::INODE_CHANGE_TIME);
+        condition.set_condition_type(rrg_proto::flows::FileFinderCondition_Type::INODE_CHANGE_TIME);
         condition.mut_inode_change_time().set_min_last_inode_change_time(123);
         condition.mut_inode_change_time().set_max_last_inode_change_time(234);
 
@@ -711,11 +711,11 @@ mod tests {
 
     #[test]
     fn test_size_condition() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let condition = proto.mut_conditions().push_default();
-        condition.set_condition_type(rrg_proto::protobuf::flows::FileFinderCondition_Type::SIZE);
+        condition.set_condition_type(rrg_proto::flows::FileFinderCondition_Type::SIZE);
         condition.mut_size().set_min_file_size(345);
         condition.mut_size().set_max_file_size(456);
 
@@ -733,11 +733,11 @@ mod tests {
 
     #[test]
     fn test_ext_flags_condition() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let condition = proto.mut_conditions().push_default();
-        condition.set_condition_type(rrg_proto::protobuf::flows::FileFinderCondition_Type::EXT_FLAGS);
+        condition.set_condition_type(rrg_proto::flows::FileFinderCondition_Type::EXT_FLAGS);
         condition.mut_ext_flags().set_linux_bits_set(111);
         condition.mut_ext_flags().set_linux_bits_unset(222);
         condition.mut_ext_flags().set_osx_bits_set(333);
@@ -764,13 +764,13 @@ mod tests {
 
     #[test]
     fn test_contents_regex_match_condition() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let condition = proto.mut_conditions().push_default();
-        condition.set_condition_type(rrg_proto::protobuf::flows::FileFinderCondition_Type::CONTENTS_REGEX_MATCH);
+        condition.set_condition_type(rrg_proto::flows::FileFinderCondition_Type::CONTENTS_REGEX_MATCH);
         condition.mut_contents_regex_match().set_regex(vec![97, 98, 99]);
-        condition.mut_contents_regex_match().set_mode(rrg_proto::protobuf::flows::FileFinderContentsRegexMatchCondition_Mode::ALL_HITS);
+        condition.mut_contents_regex_match().set_mode(rrg_proto::flows::FileFinderContentsRegexMatchCondition_Mode::ALL_HITS);
         condition.mut_contents_regex_match().set_bytes_before(4);
         condition.mut_contents_regex_match().set_bytes_after(7);
         condition.mut_contents_regex_match().set_start_offset(15);
@@ -791,13 +791,13 @@ mod tests {
 
     #[test]
     fn test_invalid_utf8_sequence_error() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let condition = proto.mut_conditions().push_default();
-        condition.set_condition_type(rrg_proto::protobuf::flows::FileFinderCondition_Type::CONTENTS_REGEX_MATCH);
+        condition.set_condition_type(rrg_proto::flows::FileFinderCondition_Type::CONTENTS_REGEX_MATCH);
         condition.mut_contents_regex_match().set_regex(vec![255, 255, 255]);
-        condition.mut_contents_regex_match().set_mode(rrg_proto::protobuf::flows::FileFinderContentsRegexMatchCondition_Mode::ALL_HITS);
+        condition.mut_contents_regex_match().set_mode(rrg_proto::flows::FileFinderContentsRegexMatchCondition_Mode::ALL_HITS);
         condition.mut_contents_regex_match().set_bytes_before(4);
         condition.mut_contents_regex_match().set_bytes_after(7);
         condition.mut_contents_regex_match().set_start_offset(15);
@@ -810,13 +810,13 @@ mod tests {
 
     #[test]
     fn test_contents_literal_match_condition() {
-        let mut proto = rrg_proto::protobuf::flows::FileFinderArgs::new();
-        proto.mut_action().set_action_type(rrg_proto::protobuf::flows::FileFinderAction_Action::STAT);
+        let mut proto = rrg_proto::flows::FileFinderArgs::new();
+        proto.mut_action().set_action_type(rrg_proto::flows::FileFinderAction_Action::STAT);
 
         let condition = proto.mut_conditions().push_default();
-        condition.set_condition_type(rrg_proto::protobuf::flows::FileFinderCondition_Type::CONTENTS_LITERAL_MATCH);
+        condition.set_condition_type(rrg_proto::flows::FileFinderCondition_Type::CONTENTS_LITERAL_MATCH);
         condition.mut_contents_literal_match().set_literal(vec![99, 98, 97]);
-        condition.mut_contents_literal_match().set_mode(rrg_proto::protobuf::flows::FileFinderContentsLiteralMatchCondition_Mode::ALL_HITS);
+        condition.mut_contents_literal_match().set_mode(rrg_proto::flows::FileFinderContentsLiteralMatchCondition_Mode::ALL_HITS);
         condition.mut_contents_literal_match().set_start_offset(6);
         condition.mut_contents_literal_match().set_length(8);
         condition.mut_contents_literal_match().set_bytes_before(15);

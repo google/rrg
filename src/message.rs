@@ -7,7 +7,7 @@ use log::{error, warn};
 
 use crate::opts::Opts;
 
-pub fn send(message: rrg_proto::protobuf::jobs::GrrMessage) {
+pub fn send(message: rrg_proto::jobs::GrrMessage) {
         let data = protobuf::Message::write_to_bytes(&message)
             // Encoding can fail only if the buffer is insufficiently large. But
             // since we use growable vector this should never happen (provided
@@ -29,7 +29,7 @@ pub fn send(message: rrg_proto::protobuf::jobs::GrrMessage) {
 }
 
 // TODO: Rename this method to `receive`.
-pub fn collect(opts: &Opts) -> Option<rrg_proto::protobuf::jobs::GrrMessage> {
+pub fn collect(opts: &Opts) -> Option<rrg_proto::jobs::GrrMessage> {
     use fleetspeak::ReadError::*;
 
     let message = match fleetspeak::receive_with_heartbeat(opts.heartbeat_rate) {

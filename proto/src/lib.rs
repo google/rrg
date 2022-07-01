@@ -6,7 +6,9 @@
 pub mod convert;
 pub mod path;
 
-pub mod protobuf {
+pub use crate::protobuf::*;
+
+mod protobuf {
     include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));
 
     impl From<bool> for jobs::DataBlob {

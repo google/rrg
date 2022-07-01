@@ -111,12 +111,12 @@ impl Chunk {
     }
 }
 
-impl FromLossy<crate::fs::Entry> for rrg_proto::protobuf::timeline::TimelineEntry {
+impl FromLossy<crate::fs::Entry> for rrg_proto::timeline::TimelineEntry {
 
-    fn from_lossy(entry: crate::fs::Entry) -> rrg_proto::protobuf::timeline::TimelineEntry {
+    fn from_lossy(entry: crate::fs::Entry) -> rrg_proto::timeline::TimelineEntry {
         use std::convert::TryFrom as _;
 
-        let mut proto = rrg_proto::protobuf::timeline::TimelineEntry::new();
+        let mut proto = rrg_proto::timeline::TimelineEntry::new();
         proto.set_path(rrg_proto::path::into_bytes(entry.path));
         proto.set_size(entry.metadata.len());
 
@@ -173,7 +173,7 @@ where
     S: Session,
 {
     let entries = crate::fs::walk_dir(&request.root).map_err(Error::WalkDir)?
-        .map(rrg_proto::protobuf::timeline::TimelineEntry::from_lossy);
+        .map(rrg_proto::timeline::TimelineEntry::from_lossy);
 
     let mut response = Response {
         chunk_ids: vec!(),
@@ -196,7 +196,7 @@ where
 
 impl super::Request for Request {
 
-    type Proto = rrg_proto::protobuf::timeline::TimelineArgs;
+    type Proto = rrg_proto::timeline::TimelineArgs;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Request, session::ParseError> {
         let root = rrg_proto::path::from_bytes(proto.take_root())
@@ -212,15 +212,15 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("TimelineResult");
 
-    type Proto = rrg_proto::protobuf::timeline::TimelineResult;
+    type Proto = rrg_proto::timeline::TimelineResult;
 
-    fn into_proto(self) -> rrg_proto::protobuf::timeline::TimelineResult {
+    fn into_proto(self) -> rrg_proto::timeline::TimelineResult {
         let chunk_ids = self.chunk_ids
             .into_iter()
             .map(ChunkId::to_sha256_bytes)
             .collect();
 
-        let mut proto = rrg_proto::protobuf::timeline::TimelineResult::new();
+        let mut proto = rrg_proto::timeline::TimelineResult::new();
         proto.set_entry_batch_blob_ids(chunk_ids);
 
         proto
@@ -231,9 +231,9 @@ impl super::Response for Chunk {
 
     const RDF_NAME: Option<&'static str> = Some("DataBlob");
 
-    type Proto = rrg_proto::protobuf::jobs::DataBlob;
+    type Proto = rrg_proto::jobs::DataBlob;
 
-    fn into_proto(self) -> rrg_proto::protobuf::jobs::DataBlob {
+    fn into_proto(self) -> rrg_proto::jobs::DataBlob {
         self.data.into()
     }
 }
@@ -444,7 +444,7 @@ mod tests {
     }
 
     /// Retrieves timeline entries from the given session object.
-    fn entries(session: &Session) -> Vec<rrg_proto::protobuf::timeline::TimelineEntry> {
+    fn entries(session: &Session) -> Vec<rrg_proto::timeline::TimelineEntry> {
         use std::collections::HashMap;
         use crate::session::Sink;
 
@@ -466,7 +466,7 @@ mod tests {
     }
 
     /// Constructs a path for the given timeline entry.
-    fn path(entry: &rrg_proto::protobuf::timeline::TimelineEntry) -> Option<PathBuf> {
+    fn path(entry: &rrg_proto::timeline::TimelineEntry) -> Option<PathBuf> {
         rrg_proto::path::from_bytes(entry.get_path().to_owned()).ok()
     }
 }

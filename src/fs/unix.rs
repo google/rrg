@@ -219,12 +219,12 @@ mod tests {
 
 // TODO: Move this into the `rrg-proto` crate once generic purpose utilities are
 // moved to a separate crate.
-impl Into<rrg_proto::protobuf::jobs::StatEntry_ExtAttr> for ExtAttr {
+impl Into<rrg_proto::jobs::StatEntry_ExtAttr> for ExtAttr {
 
-    fn into(self) -> rrg_proto::protobuf::jobs::StatEntry_ExtAttr {
+    fn into(self) -> rrg_proto::jobs::StatEntry_ExtAttr {
         use std::os::unix::ffi::OsStringExt as _;
 
-        let mut proto = rrg_proto::protobuf::jobs::StatEntry_ExtAttr::new();
+        let mut proto = rrg_proto::jobs::StatEntry_ExtAttr::new();
         proto.set_name(self.name.into_vec());
 
         if let Some(value) = self.value {

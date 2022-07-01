@@ -48,11 +48,11 @@ fn mac_to_vec(mac: MacAddr) -> Vec<u8> {
 /// corresponding to an IP address.
 ///
 /// [ip_network]: ../../../ipnetwork/enum.IpNetwork.html
-fn ip_to_proto(ip_network: IpNetwork) -> rrg_proto::protobuf::jobs::NetworkAddress {
+fn ip_to_proto(ip_network: IpNetwork) -> rrg_proto::jobs::NetworkAddress {
     use std::net::IpAddr::{V4, V6};
-    use rrg_proto::protobuf::jobs::NetworkAddress_Family::*;
+    use rrg_proto::jobs::NetworkAddress_Family::*;
 
-    let mut proto = rrg_proto::protobuf::jobs::NetworkAddress::new();
+    let mut proto = rrg_proto::jobs::NetworkAddress::new();
     match ip_network.ip() {
         V4(ipv4) => {
             proto.set_address_type(INET);
@@ -71,7 +71,7 @@ fn ip_to_proto(ip_network: IpNetwork) -> rrg_proto::protobuf::jobs::NetworkAddre
 /// of protobuf structs corresponding to an IP address.
 ///
 /// [ip_network]: ../../../ipnetwork/enum.IpNetwork.html
-fn ips_to_protos(ips: Vec<IpNetwork>) -> Vec<rrg_proto::protobuf::jobs::NetworkAddress> {
+fn ips_to_protos(ips: Vec<IpNetwork>) -> Vec<rrg_proto::jobs::NetworkAddress> {
     ips.into_iter().map(ip_to_proto).collect()
 }
 
@@ -79,10 +79,10 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("Interface");
 
-    type Proto = rrg_proto::protobuf::jobs::Interface;
+    type Proto = rrg_proto::jobs::Interface;
 
-    fn into_proto(self) -> rrg_proto::protobuf::jobs::Interface {
-        let mut proto = rrg_proto::protobuf::jobs::Interface::new();
+    fn into_proto(self) -> rrg_proto::jobs::Interface {
+        let mut proto = rrg_proto::jobs::Interface::new();
 
         match self.interface.mac {
             Some(mac) => {

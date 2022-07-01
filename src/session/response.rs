@@ -39,14 +39,14 @@ pub struct Status {
     pub result: session::Result<()>,
 }
 
-impl<R> TryInto<rrg_proto::protobuf::jobs::GrrMessage> for Response<R>
+impl<R> TryInto<rrg_proto::jobs::GrrMessage> for Response<R>
 where
     R: action::Response,
 {
     type Error = protobuf::ProtobufError;
 
-    fn try_into(self) -> Result<rrg_proto::protobuf::jobs::GrrMessage, protobuf::ProtobufError> {
-        let mut message = rrg_proto::protobuf::jobs::GrrMessage::new();
+    fn try_into(self) -> Result<rrg_proto::jobs::GrrMessage, protobuf::ProtobufError> {
+        let mut message = rrg_proto::jobs::GrrMessage::new();
         message.set_session_id(self.session_id);
         // TODO: Is is really possible for us not to have the `request_id` or
         // `response_id` fields? We should take a closer look at this and likely
@@ -57,7 +57,7 @@ where
         if let Some(response_id) = self.response_id {
             message.set_response_id(response_id);
         }
-        message.set_field_type(rrg_proto::protobuf::jobs::GrrMessage_Type::MESSAGE);
+        message.set_field_type(rrg_proto::jobs::GrrMessage_Type::MESSAGE);
 
         if let Some(rdf_name) = R::RDF_NAME {
             message.set_args_rdf_name(String::from(rdf_name));
@@ -68,27 +68,27 @@ where
     }
 }
 
-impl TryInto<rrg_proto::protobuf::jobs::GrrMessage> for Status {
+impl TryInto<rrg_proto::jobs::GrrMessage> for Status {
 
     type Error = protobuf::ProtobufError;
 
-    fn try_into(self) -> Result<rrg_proto::protobuf::jobs::GrrMessage, protobuf::ProtobufError> {
-        let mut status = rrg_proto::protobuf::jobs::GrrStatus::new();
+    fn try_into(self) -> Result<rrg_proto::jobs::GrrMessage, protobuf::ProtobufError> {
+        let mut status = rrg_proto::jobs::GrrStatus::new();
         match self.result {
             Ok(()) => {
-                status.set_status(rrg_proto::protobuf::jobs::GrrStatus_ReturnedStatus::OK);
+                status.set_status(rrg_proto::jobs::GrrStatus_ReturnedStatus::OK);
             },
             Err(error) => {
-                status.set_status(rrg_proto::protobuf::jobs::GrrStatus_ReturnedStatus::GENERIC_ERROR);
+                status.set_status(rrg_proto::jobs::GrrStatus_ReturnedStatus::GENERIC_ERROR);
                 status.set_error_message(error.to_string());
             },
         }
 
-        let mut message = rrg_proto::protobuf::jobs::GrrMessage::new();
+        let mut message = rrg_proto::jobs::GrrMessage::new();
         message.set_session_id(self.session_id);
         message.set_request_id(self.request_id);
         message.set_response_id(self.response_id);
-        message.set_field_type(rrg_proto::protobuf::jobs::GrrMessage_Type::STATUS);
+        message.set_field_type(rrg_proto::jobs::GrrMessage_Type::STATUS);
 
         message.set_args(protobuf::Message::write_to_bytes(&status)?);
         message.set_args_rdf_name(String::from("GrrStatus"));

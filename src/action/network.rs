@@ -75,8 +75,8 @@ pub struct Response {
 }
 
 /// Gets the IP address type from a given address.
-fn make_family(addr: &IpAddr) -> rrg_proto::protobuf::sysinfo::NetworkConnection_Family {
-    use rrg_proto::protobuf::sysinfo::NetworkConnection_Family::*;
+fn make_family(addr: &IpAddr) -> rrg_proto::sysinfo::NetworkConnection_Family {
+    use rrg_proto::sysinfo::NetworkConnection_Family::*;
     match addr {
         IpAddr::V4(_) => INET,
         IpAddr::V6(_) => INET6,
@@ -84,8 +84,8 @@ fn make_family(addr: &IpAddr) -> rrg_proto::protobuf::sysinfo::NetworkConnection
 }
 
 /// Contructs `NetworkEndpoint` from the specified address and port.
-fn make_network_endpoint(addr: &IpAddr, port: u16) -> rrg_proto::protobuf::sysinfo::NetworkEndpoint {
-    let mut proto = rrg_proto::protobuf::sysinfo::NetworkEndpoint::new();
+fn make_network_endpoint(addr: &IpAddr, port: u16) -> rrg_proto::sysinfo::NetworkEndpoint {
+    let mut proto = rrg_proto::sysinfo::NetworkEndpoint::new();
     proto.set_ip(addr.to_string());
     proto.set_port(port as i32);
 
@@ -96,8 +96,8 @@ fn make_network_endpoint(addr: &IpAddr, port: u16) -> rrg_proto::protobuf::sysin
 /// enum used in the protobuf
 ///
 /// [tcp_state]: ../../../netstat2/enum.TcpState.html
-fn make_state(state: &TcpState) -> rrg_proto::protobuf::sysinfo::NetworkConnection_State {
-    use rrg_proto::protobuf::sysinfo::NetworkConnection_State::*;
+fn make_state(state: &TcpState) -> rrg_proto::sysinfo::NetworkConnection_State {
+    use rrg_proto::sysinfo::NetworkConnection_State::*;
     match state {
         TcpState::Unknown => UNKNOWN,
         TcpState::Closed => CLOSED,
@@ -122,15 +122,15 @@ fn make_state(state: &TcpState) -> rrg_proto::protobuf::sysinfo::NetworkConnecti
 /// [protocol_socket_info]: ../../../netstat2/enum.ProtocolSocketInfo.html
 fn make_connection_from_socket_info(
     socket_info: &ProtocolSocketInfo
-) -> rrg_proto::protobuf::sysinfo::NetworkConnection {
+) -> rrg_proto::sysinfo::NetworkConnection {
     use ProtocolSocketInfo::{Tcp, Udp};
 
-    let mut proto = rrg_proto::protobuf::sysinfo::NetworkConnection::new();
+    let mut proto = rrg_proto::sysinfo::NetworkConnection::new();
 
     match socket_info {
         Tcp(tcp_info) => {
             proto.set_family(make_family(&tcp_info.local_addr));
-            proto.set_field_type(rrg_proto::protobuf::sysinfo::NetworkConnection_Type::SOCK_STREAM);
+            proto.set_field_type(rrg_proto::sysinfo::NetworkConnection_Type::SOCK_STREAM);
             proto.set_local_address(make_network_endpoint(
                 &tcp_info.local_addr,
                 tcp_info.local_port
@@ -143,7 +143,7 @@ fn make_connection_from_socket_info(
         },
         Udp(udp_info) => {
             proto.set_family(make_family(&udp_info.local_addr));
-            proto.set_field_type(rrg_proto::protobuf::sysinfo::NetworkConnection_Type::SOCK_DGRAM);
+            proto.set_field_type(rrg_proto::sysinfo::NetworkConnection_Type::SOCK_DGRAM);
             proto.set_local_address(make_network_endpoint(
                 &udp_info.local_addr,
                 udp_info.local_port
@@ -156,7 +156,7 @@ fn make_connection_from_socket_info(
 
 impl super::Request for Request {
 
-    type Proto = rrg_proto::protobuf::flows::ListNetworkConnectionsArgs;
+    type Proto = rrg_proto::flows::ListNetworkConnectionsArgs;
 
     fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
         Ok(Request {
@@ -169,7 +169,7 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("NetworkConnection");
 
-    type Proto = rrg_proto::protobuf::sysinfo::NetworkConnection;
+    type Proto = rrg_proto::sysinfo::NetworkConnection;
 
     fn into_proto(self) -> Self::Proto {
         let mut result = make_connection_from_socket_info(&self.socket_info);

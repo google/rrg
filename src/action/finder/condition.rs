@@ -27,7 +27,7 @@ pub fn check_conditions(conditions: &Vec<Condition>, entry: &Entry) -> bool {
 pub fn find_matches(
     match_conditions: &Vec<ContentsMatchCondition>,
     entry: &Entry,
-) -> Vec<rrg_proto::protobuf::jobs::BufferReference> {
+) -> Vec<rrg_proto::jobs::BufferReference> {
     let mut ret = vec![];
     for match_condition in match_conditions {
         let mut matches = matches(match_condition, &entry);
@@ -140,7 +140,7 @@ fn is_in_range<T: Ord>(value: &T, range: (&Option<T>, &Option<T>)) -> bool {
 fn matches(
     condition: &ContentsMatchCondition,
     entry: &Entry,
-) -> Vec<rrg_proto::protobuf::jobs::BufferReference> {
+) -> Vec<rrg_proto::jobs::BufferReference> {
     const BYTES_PER_CHUNK: u64 = 10 * 1024 * 1024;
     const OVERLAP_BYTES: u64 = 1024 * 1024;
 
@@ -179,7 +179,7 @@ fn matches(
                 min(m.end() as u64 + condition.bytes_after, chunk.len() as u64);
             let data = chunk[(start as usize)..(end as usize)].to_vec();
 
-            let mut buf_ref = rrg_proto::protobuf::jobs::BufferReference::new();
+            let mut buf_ref = rrg_proto::jobs::BufferReference::new();
             buf_ref.set_offset(offset + start);
             buf_ref.set_length(end - start);
             buf_ref.set_data(data);

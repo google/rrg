@@ -47,11 +47,11 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("StartupInfo");
 
-    type Proto = rrg_proto::protobuf::jobs::StartupInfo;
+    type Proto = rrg_proto::jobs::StartupInfo;
 
-    fn into_proto(self) -> rrg_proto::protobuf::jobs::StartupInfo {
+    fn into_proto(self) -> rrg_proto::jobs::StartupInfo {
 
-        let mut proto = rrg_proto::protobuf::jobs::StartupInfo::new();
+        let mut proto = rrg_proto::jobs::StartupInfo::new();
         proto.set_client_info(self.metadata.into());
 
         match rrg_proto::micros(self.boot_time) {

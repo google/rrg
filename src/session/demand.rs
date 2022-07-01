@@ -64,11 +64,11 @@ impl Payload {
     }
 }
 
-impl TryFrom<rrg_proto::protobuf::jobs::GrrMessage> for Demand {
+impl TryFrom<rrg_proto::jobs::GrrMessage> for Demand {
 
     type Error = session::ParseError;
 
-    fn try_from(mut message: rrg_proto::protobuf::jobs::GrrMessage) -> Result<Demand, Self::Error> {
+    fn try_from(mut message: rrg_proto::jobs::GrrMessage) -> Result<Demand, Self::Error> {
         let session_id = if message.has_session_id() {
             message.take_session_id()
         } else {

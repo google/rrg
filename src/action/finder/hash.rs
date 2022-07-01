@@ -47,7 +47,7 @@ impl std::io::Write for Hasher {
 
 /// Performs `hash` action on the file in `entry` and returns the result to be reported in case of success.
 pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<FileHash> {
-    use rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::*;
+    use rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::*;
     match config.oversized_file_policy {
         SKIP => {
             if entry.metadata.len() > config.max_size {
@@ -120,7 +120,7 @@ mod tests {
             &entry,
             &HashActionOptions {
                 max_size: 14,
-                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::SKIP,
+                oversized_file_policy: rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::SKIP,
             },
         )
         .unwrap();
@@ -168,7 +168,7 @@ mod tests {
             &entry,
             &HashActionOptions {
                 max_size: 10,
-                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED,
+                oversized_file_policy: rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED,
             },
         )
         .unwrap();
@@ -190,7 +190,7 @@ mod tests {
             &entry,
             &HashActionOptions {
                 max_size: 10,
-                oversized_file_policy: rrg_proto::protobuf::flows::FileFinderHashActionOptions_OversizedFilePolicy::SKIP,
+                oversized_file_policy: rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::SKIP,
             },
         )
         .is_none());
