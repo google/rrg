@@ -15,6 +15,7 @@
 //! instance of the corresponding request type and send some (zero or more)
 //! instances of the corresponding response type.
 
+#[cfg(feature = "action-filesystems")]
 #[cfg(target_os = "linux")]
 pub mod filesystems;
 
@@ -140,6 +141,7 @@ where
         #[cfg(target_family = "unix")]
         "EnumerateInterfaces" => task.execute(self::interfaces::handle),
 
+        #[cfg(feature = "action-filesystems")]
         #[cfg(target_os = "linux")]
         "EnumerateFilesystems" => task.execute(self::filesystems::handle),
 
