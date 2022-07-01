@@ -22,11 +22,13 @@ byteorder = { version = "1.3.4" }
 cfg-if = { version = "0.1.10" }
 regex = { version = "1.3.9" }
 lazy_static = { version = "1.4.0" }
-rust-crypto = { version = "0.2.36" }
 
 chrono = { version = "0.4.11", optional = true }
 flate2 = { version = "1.0.14", optional = true }
 netstat2 = { version = "0.8.1", optional = true }
+# Remove `rust-crypto` from project dependencies altogether. It is no longer
+# maintained and can be replaced by smaller and more specialized crates.
+rust-crypto = { version = "0.2.36", optional = true }
 sha2 = { version = "0.8.1", optional = true }
 sysinfo = { version = "0.14.1", optional = true }
 
@@ -69,7 +71,7 @@ default = [
 action-insttime = ["dep:chrono"]
 action-interfaces = []
 action-filesystems = []
-action-finder = ["dep:sha2"]
+action-finder = ["dep:rust-crypto", "dep:sha2"]
 action-listdir = []
 action-memsize = ["dep:sysinfo"]
 action-metadata = []
