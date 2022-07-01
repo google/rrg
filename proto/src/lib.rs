@@ -67,11 +67,11 @@ impl jobs::KeyValue {
     /// # Examples
     ///
     /// ```
-    /// use rrg_proto::protobuf::jobs::KeyValue;
+    /// use rrg_proto::jobs::KeyValue;
     ///
     /// let entry = KeyValue::pair(String::from("foo"), 42i64);
-    /// assert_eq!(entry.get_k().get_string(), Some(String::from("foo")));
-    /// assert_eq!(entry.get_v().get_integer(), Some(42));
+    /// assert_eq!(entry.get_k().get_string(), String::from("foo"));
+    /// assert_eq!(entry.get_v().get_integer(), 42);
     /// ```
     pub fn pair<K, V>(key: K, value: V) -> jobs::KeyValue
     where
@@ -93,11 +93,11 @@ impl jobs::KeyValue {
     /// # Examples
     ///
     /// ```
-    /// use rrg_proto::protobuf::jobs::KeyValue;
+    /// use rrg_proto::jobs::KeyValue;
     ///
     /// let entry = KeyValue::key(String::from("quux"));
-    /// assert_eq!(entry.get_k().get_string(), Some(String::from("quux")));
-    /// assert_eq!(entry.has_v(), None);
+    /// assert_eq!(entry.get_k().get_string(), String::from("quux"));
+    /// assert!(!entry.has_v());
     /// ```
     pub fn key<K>(key: K) -> jobs::KeyValue
     where
