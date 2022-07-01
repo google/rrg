@@ -56,7 +56,7 @@ impl Payload {
         R: action::Request,
     {
         let proto = match &self.data {
-            Some(ref bytes) => prost::Message::decode(&bytes[..])?,
+            Some(ref bytes) => protobuf::parse_from_bytes(bytes)?,
             None => Default::default(),
         };
 
@@ -64,25 +64,44 @@ impl Payload {
     }
 }
 
-impl TryFrom<rrg_proto::GrrMessage> for Demand {
+impl TryFrom<rrg_proto::jobs::GrrMessage> for Demand {
 
     type Error = session::ParseError;
 
-    fn try_from(message: rrg_proto::GrrMessage) -> Result<Demand, Self::Error> {
-        let missing = session::MissingFieldError::new;
+    fn try_from(mut message: rrg_proto::jobs::GrrMessage) -> Result<Demand, Self::Error> {
+        let session_id = if message.has_session_id() {
+            message.take_session_id()
+        } else {
+            return Err(session::MissingFieldError::new("session_id").into());
+        };
 
-        let header = Header {
-            session_id: message.session_id.ok_or(missing("session id"))?,
-            request_id: message.request_id.ok_or(missing("request id"))?,
+        let request_id = if message.has_request_id() {
+            message.get_request_id()
+        } else {
+            return Err(session::MissingFieldError::new("request_id").into());
+        };
+
+        let action = if message.has_name() {
+            message.take_name()
+        } else {
+            return Err(session::MissingFieldError::new("action name").into());
+        };
+
+        let data = if message.has_args() {
+            Some(message.take_args())
+        } else {
+            None
         };
 
         Ok(Demand {
-            action: message.name.ok_or(missing("action name"))?,
-            header: header,
+            action: action,
+            header: Header {
+                session_id,
+                request_id,
+            },
             payload: Payload {
-                data: message.args,
+                data,
             },
         })
     }
 }
-

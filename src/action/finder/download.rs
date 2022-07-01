@@ -5,8 +5,6 @@ use crate::action::finder::request::{
     DownloadActionOptions, HashActionOptions,
 };
 use crate::fs::Entry;
-use rrg_proto::file_finder_download_action_options::OversizedFilePolicy as DownloadOversizedFilePolicy;
-use rrg_proto::file_finder_hash_action_options::OversizedFilePolicy as HashOversizedFilePolicy;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{BufReader, Take};
@@ -25,16 +23,17 @@ pub enum Response {
 /// or another action to be executed.
 pub fn download(entry: &Entry, config: &DownloadActionOptions) -> Response {
     if entry.metadata.len() > config.max_size {
+        use rrg_proto::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::*;
         match config.oversized_file_policy {
-            DownloadOversizedFilePolicy::Skip => {
+            SKIP => {
                 return Response::Skip();
             }
-            DownloadOversizedFilePolicy::DownloadTruncated => (),
-            DownloadOversizedFilePolicy::HashTruncated => {
+            DOWNLOAD_TRUNCATED => (),
+            HASH_TRUNCATED => {
                 let hash_config = HashActionOptions {
                     max_size: config.max_size,
                     oversized_file_policy:
-                        HashOversizedFilePolicy::HashTruncated,
+                        rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED,
                 };
                 return Response::HashRequest(hash_config);
             }
@@ -83,20 +82,31 @@ pub struct DownloadEntry {
     pub chunk_size: u64,
 }
 
-impl From<DownloadEntry> for rrg_proto::BlobImageDescriptor {
-    fn from(entry: DownloadEntry) -> rrg_proto::BlobImageDescriptor {
-        rrg_proto::BlobImageDescriptor {
-            chunks: entry
-                .chunk_ids
-                .into_iter()
-                .map(|x| rrg_proto::BlobImageChunkDescriptor {
-                    offset: Some(x.offset),
-                    length: Some(x.length),
-                    digest: Some(x.sha256.to_vec()),
-                })
-                .collect::<Vec<_>>(),
-            chunk_size: Some(entry.chunk_size),
-        }
+impl From<DownloadEntry> for rrg_proto::jobs::BlobImageDescriptor {
+
+    fn from(entry: DownloadEntry) -> rrg_proto::jobs::BlobImageDescriptor {
+        let chunks = entry.chunk_ids
+            .into_iter()
+            .map(|chunk_id| chunk_id.into())
+            .collect();
+
+        let mut proto = rrg_proto::jobs::BlobImageDescriptor::new();
+        proto.set_chunk_size(entry.chunk_size);
+        proto.set_chunks(chunks);
+
+        proto
+    }
+}
+
+impl From<ChunkId> for rrg_proto::jobs::BlobImageChunkDescriptor {
+
+    fn from(chunk_id: ChunkId) -> rrg_proto::jobs::BlobImageChunkDescriptor {
+        let mut proto = rrg_proto::jobs::BlobImageChunkDescriptor::new();
+        proto.set_offset(chunk_id.offset);
+        proto.set_length(chunk_id.length);
+        proto.set_digest(chunk_id.sha256.to_vec());
+
+        proto
     }
 }
 
@@ -108,9 +118,9 @@ pub struct Chunk {
 impl super::super::Response for Chunk {
     const RDF_NAME: Option<&'static str> = Some("DataBlob");
 
-    type Proto = rrg_proto::DataBlob;
+    type Proto = rrg_proto::jobs::DataBlob;
 
-    fn into_proto(self) -> rrg_proto::DataBlob {
+    fn into_proto(self) -> rrg_proto::jobs::DataBlob {
         self.data.into()
     }
 }
@@ -133,7 +143,7 @@ mod tests {
             &entry,
             &DownloadActionOptions {
                 max_size: 100,
-                oversized_file_policy: DownloadOversizedFilePolicy::Skip,
+                oversized_file_policy: rrg_proto::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::SKIP,
                 use_external_stores: false,
                 chunk_size: 5,
             },
@@ -169,7 +179,7 @@ mod tests {
             &entry,
             &DownloadActionOptions {
                 max_size: 100,
-                oversized_file_policy: DownloadOversizedFilePolicy::Skip,
+                oversized_file_policy: rrg_proto::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::SKIP,
                 use_external_stores: false,
                 chunk_size: 5,
             },
@@ -201,7 +211,7 @@ mod tests {
             &entry,
             &DownloadActionOptions {
                 max_size: 5,
-                oversized_file_policy: DownloadOversizedFilePolicy::Skip,
+                oversized_file_policy: rrg_proto::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::SKIP,
                 use_external_stores: false,
                 chunk_size: 5,
             },
@@ -224,8 +234,7 @@ mod tests {
             &entry,
             &DownloadActionOptions {
                 max_size: 5,
-                oversized_file_policy:
-                    DownloadOversizedFilePolicy::HashTruncated,
+                oversized_file_policy: rrg_proto::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::HASH_TRUNCATED,
                 use_external_stores: false,
                 chunk_size: 5,
             },
@@ -235,7 +244,7 @@ mod tests {
             result,
             Response::HashRequest(HashActionOptions {
                 max_size: 5,
-                oversized_file_policy: HashOversizedFilePolicy::HashTruncated,
+                oversized_file_policy: rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED,
             })
         ));
     }
@@ -254,8 +263,7 @@ mod tests {
             &entry,
             &DownloadActionOptions {
                 max_size: 5,
-                oversized_file_policy:
-                    DownloadOversizedFilePolicy::DownloadTruncated,
+                oversized_file_policy: rrg_proto::flows::FileFinderDownloadActionOptions_OversizedFilePolicy::DOWNLOAD_TRUNCATED,
                 use_external_stores: false,
                 chunk_size: 3,
             },

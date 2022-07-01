@@ -31,6 +31,9 @@ impl Sink {
     /// A handle to the transfer store sink.
     pub const TRANSFER_STORE: Sink = Sink { id: "/flows/F:TransferStore" };
 
+    // TODO: Refactor sinks to use custom `Message` type rather than `Response`
+    // and make response always have `request_id` and `response_id` fields.
+
     /// Wraps an action response to a sink-specific session response.
     pub fn wrap<R>(&self, response: R) -> session::Response<R>
     where

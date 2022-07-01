@@ -42,7 +42,7 @@ use crate::session::{self, Session, Task};
 pub trait Request: Sized {
 
     /// A type of the corresponding raw proto message.
-    type Proto: prost::Message + Default;
+    type Proto: protobuf::Message + Default;
 
     /// A method for converting raw proto messages into structured requests.
     fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError>;
@@ -67,7 +67,7 @@ pub trait Response: Sized {
     const RDF_NAME: Option<&'static str>;
 
     /// A type of the corresponding raw proto message.
-    type Proto: prost::Message + Default;
+    type Proto: protobuf::Message + Default;
 
     /// A method for converting structured responses into raw proto messages.
     fn into_proto(self) -> Self::Proto;
@@ -75,10 +75,10 @@ pub trait Response: Sized {
 
 impl Request for () {
 
-    type Proto = ();
+    type Proto = protobuf::well_known_types::Empty;
 
-    fn from_proto(unit: ()) -> Result<(), session::ParseError> {
-        Ok(unit)
+    fn from_proto(_: protobuf::well_known_types::Empty) -> Result<(), session::ParseError> {
+        Ok(())
     }
 }
 
@@ -86,9 +86,10 @@ impl Response for () {
 
     const RDF_NAME: Option<&'static str> = None;
 
-    type Proto = ();
+    type Proto = protobuf::well_known_types::Empty;
 
-    fn into_proto(self) {
+    fn into_proto(self) -> protobuf::well_known_types::Empty {
+        protobuf::well_known_types::Empty::new()
     }
 }
 

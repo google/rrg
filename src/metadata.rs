@@ -3,6 +3,8 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+// TODO(panhania): Add support for binary paths in the `Metadata` object.
+
 /// A type that holds metadata about the RRG agent.
 pub struct Metadata {
     /// Name of the RRG agent.
@@ -85,15 +87,14 @@ impl Version {
     }
 }
 
-impl Into<rrg_proto::ClientInformation> for Metadata {
+impl Into<rrg_proto::jobs::ClientInformation> for Metadata {
 
-    fn into(self) -> rrg_proto::ClientInformation {
-        // TODO: Add support for labels.
-        rrg_proto::ClientInformation {
-            client_name: Some(self.name),
-            client_version: Some(self.version.as_numeric()),
-            client_description: Some(self.description),
-            ..Default::default()
-        }
+    fn into(self) -> rrg_proto::jobs::ClientInformation {
+        let mut proto = rrg_proto::jobs::ClientInformation::new();
+        proto.set_client_name(self.name);
+        proto.set_client_version(self.version.as_numeric());
+        proto.set_client_description(self.description);
+
+        proto
     }
 }

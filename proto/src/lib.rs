@@ -6,85 +6,59 @@
 pub mod convert;
 pub mod path;
 
-use std::path::PathBuf;
+include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));
 
-use convert::FromLossy;
+impl From<bool> for jobs::DataBlob {
 
-use rrg_macro::ack;
+    fn from(value: bool) -> jobs::DataBlob {
+        let mut result = jobs::DataBlob::new();
+        result.set_boolean(value);
 
-include!(concat!(env!("OUT_DIR"), "/grr.rs"));
-
-impl From<bool> for DataBlob {
-
-    fn from(value: bool) -> DataBlob {
-        DataBlob {
-            boolean: Some(value),
-            ..Default::default()
-        }
+        result
     }
 }
 
-impl From<i64> for DataBlob {
+impl From<i64> for jobs::DataBlob {
 
-    fn from(value: i64) -> DataBlob {
-        DataBlob {
-            integer: Some(value),
-            ..Default::default()
-        }
+    fn from(value: i64) -> jobs::DataBlob {
+        let mut result = jobs::DataBlob::new();
+        result.set_integer(value);
+
+        result
     }
 }
 
-impl From<f32> for DataBlob {
+impl From<f32> for jobs::DataBlob {
 
-    fn from(value: f32) -> DataBlob {
-        DataBlob {
-            float: Some(value),
-            ..Default::default()
-        }
+    fn from(value: f32) -> jobs::DataBlob {
+        let mut result = jobs::DataBlob::new();
+        result.set_float(value);
+
+        result
     }
 }
 
-impl From<Vec<u8>> for DataBlob {
+impl From<Vec<u8>> for jobs::DataBlob {
 
-    fn from(value: Vec<u8>) -> DataBlob {
-        DataBlob {
-            data: Some(value),
-            ..Default::default()
-        }
+    fn from(value: Vec<u8>) -> jobs::DataBlob {
+        let mut result = jobs::DataBlob::new();
+        result.set_data(value);
+
+        result
     }
 }
 
-impl From<String> for DataBlob {
+impl From<String> for jobs::DataBlob {
 
-    fn from(value: String) -> DataBlob  {
-        DataBlob {
-            string: Some(value),
-            ..Default::default()
-        }
+    fn from(value: String) -> jobs::DataBlob {
+        let mut result = jobs::DataBlob::new();
+        result.set_string(value);
+
+        result
     }
 }
 
-impl KeyValue {
-
-    /// Creates an empty key-value.
-    ///
-    /// Both the key and the value are going to be equal to `None`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use rrg_proto::KeyValue;
-    ///
-    /// let entry = KeyValue::empty();
-    /// assert_eq!(entry.k, None);
-    /// assert_eq!(entry.v, None);
-    /// ```
-    pub fn empty() -> KeyValue {
-        KeyValue {
-            k: None,
-            v: None,
-        }
-    }
+impl jobs::KeyValue {
 
     /// Creates a key-value pair.
     ///
@@ -93,21 +67,22 @@ impl KeyValue {
     /// # Examples
     ///
     /// ```
-    /// use rrg_proto::KeyValue;
+    /// use rrg_proto::protobuf::jobs::KeyValue;
     ///
     /// let entry = KeyValue::pair(String::from("foo"), 42i64);
-    /// assert_eq!(entry.k.unwrap().string, Some(String::from("foo")));
-    /// assert_eq!(entry.v.unwrap().integer, Some(42));
+    /// assert_eq!(entry.get_k().get_string(), Some(String::from("foo")));
+    /// assert_eq!(entry.get_v().get_integer(), Some(42));
     /// ```
-    pub fn pair<K, V>(key: K, value: V) -> KeyValue
+    pub fn pair<K, V>(key: K, value: V) -> jobs::KeyValue
     where
-        K: Into<DataBlob>,
-        V: Into<DataBlob>,
+        K: Into<jobs::DataBlob>,
+        V: Into<jobs::DataBlob>,
     {
-        KeyValue {
-            k: Some(key.into()),
-            v: Some(value.into()),
-        }
+        let mut result = jobs::KeyValue::new();
+        result.set_k(key.into());
+        result.set_v(value.into());
+
+        result
     }
 
     /// Creates a key-only key-value.
@@ -118,62 +93,57 @@ impl KeyValue {
     /// # Examples
     ///
     /// ```
-    /// use rrg_proto::KeyValue;
+    /// use rrg_proto::protobuf::jobs::KeyValue;
     ///
     /// let entry = KeyValue::key(String::from("quux"));
-    /// assert_eq!(entry.k.unwrap().string, Some(String::from("quux")));
-    /// assert_eq!(entry.v, None);
+    /// assert_eq!(entry.get_k().get_string(), Some(String::from("quux")));
+    /// assert_eq!(entry.has_v(), None);
     /// ```
-    pub fn key<K>(key: K) -> KeyValue
+    pub fn key<K>(key: K) -> jobs::KeyValue
     where
-        K: Into<DataBlob>,
+        K: Into<jobs::DataBlob>,
     {
-        KeyValue {
-            k: Some(key.into()),
-            v: None,
-        }
+        let mut result = jobs::KeyValue::new();
+        result.set_k(key.into());
+
+        result
     }
 }
 
-impl std::iter::FromIterator<KeyValue> for AttributedDict {
+impl std::iter::FromIterator<jobs::KeyValue> for jobs::AttributedDict {
 
-    fn from_iter<I>(iter: I) -> AttributedDict
+    fn from_iter<I>(iter: I) -> jobs::AttributedDict
     where
-        I: IntoIterator<Item = KeyValue>,
+        I: IntoIterator<Item = jobs::KeyValue>,
     {
-        AttributedDict {
-            dat: iter.into_iter().collect(),
-        }
+        let mut result = jobs::AttributedDict::new();
+        result.set_dat(iter.into_iter().collect());
+
+        result
     }
 }
 
-impl<K, V> std::iter::FromIterator<(K, V)> for AttributedDict
+impl<K, V> std::iter::FromIterator<(K, V)> for jobs::AttributedDict
 where
-    K: Into<DataBlob>,
-    V: Into<DataBlob>,
+    K: Into<jobs::DataBlob>,
+    V: Into<jobs::DataBlob>,
 {
-    fn from_iter<I>(iter: I) -> AttributedDict
+    fn from_iter<I>(iter: I) -> jobs::AttributedDict
     where
         I: IntoIterator<Item = (K, V)>,
     {
-        let pair = |(key, value)| KeyValue::pair(key, value);
+        let pair = |(key, value)| jobs::KeyValue::pair(key, value);
         iter.into_iter().map(pair).collect()
     }
 }
 
-impl FromLossy<std::fs::Metadata> for StatEntry {
+impl crate::convert::FromLossy<std::fs::Metadata> for jobs::StatEntry {
 
-    fn from_lossy(metadata: std::fs::Metadata) -> StatEntry {
-        #[cfg(target_family = "unix")]
-        use std::convert::{TryFrom, TryInto};
-        #[cfg(target_family = "unix")]
-        use std::os::unix::fs::MetadataExt;
+    fn from_lossy(metadata: std::fs::Metadata) -> jobs::StatEntry {
+        use rrg_macro::ack;
 
-        // TODO: Fix definition of `StatEntry`.
-        // `StatEntry` defines insufficient integer width for some fields. For
-        // now we just ignore errors, but the definition should be improved.
-        #[cfg(target_family = "unix")]
-        let some = |value: u64| Some(value.try_into().unwrap_or(0));
+        let mut result = jobs::StatEntry::new();
+        result.set_st_size(metadata.len());
 
         let atime_secs = ack! {
             metadata.accessed(),
@@ -182,6 +152,9 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             secs(atime),
             error: "failed to convert access time to seconds"
         });
+        if let Some(atime_secs) = atime_secs {
+            result.set_st_atime(atime_secs);
+        }
 
         let mtime_secs = ack! {
             metadata.modified(),
@@ -190,6 +163,9 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             secs(mtime),
             error: "failed to convert modification time to seconds"
         });
+        if let Some(mtime_secs) = mtime_secs {
+            result.set_st_mtime(mtime_secs);
+        }
 
         let btime_secs = ack! {
             metadata.created(),
@@ -198,69 +174,102 @@ impl FromLossy<std::fs::Metadata> for StatEntry {
             secs(btime),
             error: "failed to convert creation time to seconds"
         });
+        if let Some(btime_secs) = btime_secs {
+            result.set_st_btime(btime_secs);
+        }
 
         #[cfg(target_family = "unix")]
-        let ctime_secs = ack! {
-            u64::try_from(metadata.ctime()),
-            error: "negative inode change time"
-        };
+        {
+            use std::convert::TryFrom as _;
+            use std::os::unix::fs::MetadataExt as _;
 
-        StatEntry {
-            #[cfg(target_family = "unix")]
-            st_mode: Some(metadata.mode().into()),
-            #[cfg(target_family = "unix")]
-            st_ino: some(metadata.ino()),
-            #[cfg(target_family = "unix")]
-            st_dev: some(metadata.dev()),
-            #[cfg(target_family = "unix")]
-            st_rdev: some(metadata.rdev()),
-            #[cfg(target_family = "unix")]
-            st_nlink: some(metadata.nlink()),
-            #[cfg(target_family = "unix")]
-            st_uid: Some(metadata.uid()),
-            #[cfg(target_family = "unix")]
-            st_gid: Some(metadata.gid()),
-            st_size: Some(metadata.len()),
-            st_atime: atime_secs,
-            st_mtime: mtime_secs,
-            #[cfg(target_family = "unix")]
-            st_ctime: ctime_secs,
-            st_btime: btime_secs,
-            #[cfg(target_family = "unix")]
-            st_blocks: some(metadata.blocks()),
-            #[cfg(target_family = "unix")]
-            st_blksize: some(metadata.blksize()),
-            ..Default::default()
+            let ctime_secs = ack! {
+                u64::try_from(metadata.ctime()),
+                error: "negative inode change time"
+            };
+            if let Some(ctime_secs) = ctime_secs {
+                result.set_st_ctime(ctime_secs);
+            }
+
+            result.set_st_mode(metadata.mode().into());
+            result.set_st_ino(metadata.ino());
+            result.set_st_dev(metadata.dev());
+            result.set_st_rdev(metadata.rdev());
+            result.set_st_nlink(metadata.nlink());
+            result.set_st_uid(metadata.uid());
+            result.set_st_gid(metadata.gid());
+            result.set_st_blocks(metadata.blocks());
+            result.set_st_blksize(metadata.blksize());
         }
+
+        result
     }
+}
+
+impl std::convert::TryFrom<jobs::PathSpec> for std::path::PathBuf {
+
+    type Error = ParsePathSpecError;
+
+    fn try_from(mut spec: jobs::PathSpec) -> Result<std::path::PathBuf, ParsePathSpecError> {
+        if spec.get_pathtype() != jobs::PathSpec_PathType::OS {
+            return Err(ParsePathSpecError {
+                kind: ParsePathSpecErrorKind::InvalidType,
+            });
+        }
+
+        let path = spec.take_path();
+        if path.is_empty() {
+            return Err(ParsePathSpecError {
+                kind: ParsePathSpecErrorKind::Empty,
+            });
+        }
+
+        Ok(std::path::PathBuf::from(path))
+    }
+}
+
+impl From<std::path::PathBuf> for jobs::PathSpec {
+
+    fn from(path: std::path::PathBuf) -> jobs::PathSpec {
+        let mut result = jobs::PathSpec::new();
+        result.set_path(path.to_string_lossy().into_owned());
+        result.set_pathtype(jobs::PathSpec_PathType::OS);
+
+        result
+    }
+}
+
+/// An enum listing possible issues when parsing path specification.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum ParsePathSpecErrorKind {
+    /// Attempted to parse an empty path.
+    Empty,
+    /// Attempted to parse a path of invalid type.
+    InvalidType,
 }
 
 /// An error type for situations where parsing path specification failed.
 #[derive(Clone, Debug)]
-pub enum ParsePathSpecError {
-    /// Attempted to parse an empty path.
-    Empty,
-    /// Attempted to parse a path of unknown type.
-    UnknownType(i32),
-    /// Attempted to parse a path of invalid type.
-    InvalidType(path_spec::PathType),
+pub struct ParsePathSpecError {
+    kind: ParsePathSpecErrorKind,
+}
+
+impl ParsePathSpecError {
+
+    /// Describes the exact cause of the parsing failure.
+    pub fn kind(&self) -> ParsePathSpecErrorKind {
+        self.kind
+    }
 }
 
 impl std::fmt::Display for ParsePathSpecError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use ParsePathSpecError::*;
+        use ParsePathSpecErrorKind::*;
 
-        match *self {
-            Empty => {
-                write!(fmt, "empty path")
-            }
-            UnknownType(value) => {
-                write!(fmt, "unknown path type value: {}", value)
-            }
-            InvalidType(value) => {
-                write!(fmt, "invalid path type: {:?}", value)
-            }
+        match self.kind {
+            Empty => write!(fmt, "empty path"),
+            InvalidType => write!(fmt, "invalid path type"),
         }
     }
 }
@@ -269,38 +278,6 @@ impl std::error::Error for ParsePathSpecError {
 
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
-    }
-}
-
-impl std::convert::TryFrom<PathSpec> for PathBuf {
-
-    type Error = ParsePathSpecError;
-
-    fn try_from(spec: PathSpec) -> Result<PathBuf, ParsePathSpecError> {
-        use ParsePathSpecError::*;
-
-        let path_type = spec.pathtype.unwrap_or_default();
-        match path_spec::PathType::from_i32(path_type) {
-            Some(path_spec::PathType::Os) => (),
-            Some(path_type) => return Err(InvalidType(path_type)),
-            None => return Err(UnknownType(path_type)),
-        };
-
-        match spec.path {
-            Some(path) if path.len() > 0 => Ok(PathBuf::from(path)),
-            _ => Err(ParsePathSpecError::Empty),
-        }
-    }
-}
-
-impl From<PathBuf> for PathSpec {
-
-    fn from(path: PathBuf) -> PathSpec {
-        PathSpec {
-            path: Some(path.to_string_lossy().into_owned()),
-            pathtype: Some(path_spec::PathType::Os.into()),
-            ..Default::default()
-        }
     }
 }
 

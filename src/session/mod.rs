@@ -18,7 +18,6 @@ mod demand;
 mod error;
 mod response;
 mod sink;
-mod parse_enum;
 mod time;
 
 use std::convert::TryInto;
@@ -33,7 +32,6 @@ pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError,
 use self::response::{Response, Status};
 pub use self::sink::Sink;
 pub use self::time::time_from_micros;
-pub use self::parse_enum::{ProtoEnum, parse_enum};
 
 /// A specialized `Result` type for sessions.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -594,10 +592,13 @@ mod tests {
 
         const RDF_NAME: Option<&'static str> = Some("RDFString");
 
-        type Proto = String;
+        type Proto = protobuf::well_known_types::StringValue;
 
-        fn into_proto(self) -> String {
-            self.0
+        fn into_proto(self) -> protobuf::well_known_types::StringValue {
+            let mut proto = protobuf::well_known_types::StringValue::new();
+            proto.set_value(self.0);
+
+            proto
         }
     }
 }

@@ -47,21 +47,23 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("StartupInfo");
 
-    type Proto = rrg_proto::StartupInfo;
+    type Proto = rrg_proto::jobs::StartupInfo;
 
-    fn into_proto(self) -> rrg_proto::StartupInfo {
-        let boot_time_micros = match rrg_proto::micros(self.boot_time) {
-            Ok(boot_time_micros) => boot_time_micros,
+    fn into_proto(self) -> rrg_proto::jobs::StartupInfo {
+
+        let mut proto = rrg_proto::jobs::StartupInfo::new();
+        proto.set_client_info(self.metadata.into());
+
+        match rrg_proto::micros(self.boot_time) {
+            Ok(boot_time_micros) => {
+                proto.set_boot_time(boot_time_micros);
+            }
             Err(error) => {
                 error!("failed to convert boot time: {}", error);
-                0
             }
         };
 
-        rrg_proto::StartupInfo {
-            client_info: Some(self.metadata.into()),
-            boot_time: Some(boot_time_micros),
-        }
+        proto
     }
 }
 

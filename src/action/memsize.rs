@@ -28,11 +28,14 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("ByteSize");
 
-    type Proto = String;
+    type Proto = protobuf::well_known_types::StringValue;
     // TODO: Fix serialization issues.
 
     fn into_proto(self) -> Self::Proto {
-        self.memory_size.to_string()
+        let mut proto = protobuf::well_known_types::StringValue::new();
+        proto.set_value(self.memory_size.to_string());
+
+        proto
     }
 }
 

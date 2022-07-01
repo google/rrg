@@ -7,9 +7,8 @@ use log::{error, warn};
 
 use crate::opts::Opts;
 
-pub fn send(message: rrg_proto::GrrMessage) {
-        let mut data = Vec::new();
-        prost::Message::encode(&message, &mut data)
+pub fn send(message: rrg_proto::jobs::GrrMessage) {
+        let data = protobuf::Message::write_to_bytes(&message)
             // Encoding can fail only if the buffer is insufficiently large. But
             // since we use growable vector this should never happen (provided
             // that we have enough memory).
@@ -29,7 +28,8 @@ pub fn send(message: rrg_proto::GrrMessage) {
         };
 }
 
-pub fn collect(opts: &Opts) -> Option<rrg_proto::GrrMessage> {
+// TODO: Rename this method to `receive`.
+pub fn collect(opts: &Opts) -> Option<rrg_proto::jobs::GrrMessage> {
     use fleetspeak::ReadError::*;
 
     let message = match fleetspeak::receive_with_heartbeat(opts.heartbeat_rate) {
@@ -64,7 +64,7 @@ pub fn collect(opts: &Opts) -> Option<rrg_proto::GrrMessage> {
         }
     }
 
-    match prost::Message::decode(&message.data[..]) {
+    match protobuf::parse_from_bytes(&message.data[..]) {
         Ok(message) => Some(message),
         Err(error) => {
             error!("failed to decode the data: {}", error);

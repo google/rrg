@@ -6,8 +6,7 @@ edition = "2018"
 
 [dependencies]
 log = { version = "0.4.8" }
-prost = { version = "0.6.1" }
-prost-types = { version = "0.6.1" }
+protobuf = { version = "=2.8.2" }
 rrg-macro = { path = "../macro/" }
 
 [dev-dependencies]
@@ -15,5 +14,5 @@ quickcheck = { version = "1.0.3" }
 quickcheck_macros = { version = "1.0.0" }
 
 [build-dependencies]
-prost-build = { version = "0.6.1" }
+protobuf-codegen-pure = { version = "=2.8.2" }
 tempfile = { version = "3.1.0" }

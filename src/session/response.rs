@@ -39,56 +39,60 @@ pub struct Status {
     pub result: session::Result<()>,
 }
 
-impl<R: action::Response> TryInto<rrg_proto::GrrMessage> for Response<R> {
+impl<R> TryInto<rrg_proto::jobs::GrrMessage> for Response<R>
+where
+    R: action::Response,
+{
+    type Error = protobuf::ProtobufError;
 
-    type Error = prost::EncodeError;
+    fn try_into(self) -> Result<rrg_proto::jobs::GrrMessage, protobuf::ProtobufError> {
+        let mut message = rrg_proto::jobs::GrrMessage::new();
+        message.set_session_id(self.session_id);
+        // TODO: Is is really possible for us not to have the `request_id` or
+        // `response_id` fields? We should take a closer look at this and likely
+        // strengthen the types.
+        if let Some(request_id) = self.request_id {
+            message.set_request_id(request_id);
+        }
+        if let Some(response_id) = self.response_id {
+            message.set_response_id(response_id);
+        }
+        message.set_field_type(rrg_proto::jobs::GrrMessage_Type::MESSAGE);
 
-    fn try_into(self) -> Result<rrg_proto::GrrMessage, prost::EncodeError> {
-        let mut data = Vec::new();
-        prost::Message::encode(&self.data.into_proto(), &mut data)?;
+        if let Some(rdf_name) = R::RDF_NAME {
+            message.set_args_rdf_name(String::from(rdf_name));
+        }
+        message.set_args(protobuf::Message::write_to_bytes(&self.data.into_proto())?);
 
-        Ok(rrg_proto::GrrMessage {
-            session_id: Some(self.session_id),
-            response_id: self.response_id,
-            request_id: self.request_id,
-            r#type: Some(rrg_proto::grr_message::Type::Message.into()),
-            args_rdf_name: R::RDF_NAME.map(String::from),
-            args: Some(data),
-            ..Default::default()
-        })
+        Ok(message)
     }
 }
 
-impl TryInto<rrg_proto::GrrMessage> for Status {
+impl TryInto<rrg_proto::jobs::GrrMessage> for Status {
 
-    type Error = prost::EncodeError;
+    type Error = protobuf::ProtobufError;
 
-    fn try_into(self) -> Result<rrg_proto::GrrMessage, prost::EncodeError> {
-        use rrg_proto::grr_status::ReturnedStatus;
-
-        let status = match self.result {
-            Ok(()) => rrg_proto::GrrStatus {
-                status: Some(ReturnedStatus::Ok.into()),
-                ..Default::default()
+    fn try_into(self) -> Result<rrg_proto::jobs::GrrMessage, protobuf::ProtobufError> {
+        let mut status = rrg_proto::jobs::GrrStatus::new();
+        match self.result {
+            Ok(()) => {
+                status.set_status(rrg_proto::jobs::GrrStatus_ReturnedStatus::OK);
             },
-            Err(error) => rrg_proto::GrrStatus {
-                status: Some(ReturnedStatus::GenericError.into()),
-                error_message: Some(error.to_string()),
-                ..Default::default()
+            Err(error) => {
+                status.set_status(rrg_proto::jobs::GrrStatus_ReturnedStatus::GENERIC_ERROR);
+                status.set_error_message(error.to_string());
             },
-        };
+        }
 
-        let mut data = Vec::new();
-        prost::Message::encode(&status, &mut data)?;
+        let mut message = rrg_proto::jobs::GrrMessage::new();
+        message.set_session_id(self.session_id);
+        message.set_request_id(self.request_id);
+        message.set_response_id(self.response_id);
+        message.set_field_type(rrg_proto::jobs::GrrMessage_Type::STATUS);
 
-        Ok(rrg_proto::GrrMessage {
-            session_id: Some(self.session_id),
-            request_id: Some(self.request_id),
-            response_id: Some(self.response_id),
-            r#type: Some(rrg_proto::grr_message::Type::Status.into()),
-            args_rdf_name: Some(String::from("GrrStatus")),
-            args: Some(data),
-            ..Default::default()
-        })
+        message.set_args(protobuf::Message::write_to_bytes(&status)?);
+        message.set_args_rdf_name(String::from("GrrStatus"));
+
+        Ok(message)
     }
 }

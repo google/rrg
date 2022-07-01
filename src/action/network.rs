@@ -15,12 +15,6 @@ use std::net::IpAddr;
 use log::error;
 use sysinfo::{System, SystemExt, Process, ProcessExt};
 use netstat2::{self, ProtocolSocketInfo, TcpState};
-use rrg_proto::{
-    ListNetworkConnectionsArgs,
-    NetworkConnection,
-    NetworkEndpoint,
-    network_connection::{Family, Type, State},
-};
 
 use crate::session::{self, Session};
 
@@ -81,40 +75,43 @@ pub struct Response {
 }
 
 /// Gets the IP address type from a given address.
-fn make_family(addr: &IpAddr) -> Family {
+fn make_family(addr: &IpAddr) -> rrg_proto::sysinfo::NetworkConnection_Family {
+    use rrg_proto::sysinfo::NetworkConnection_Family::*;
     match addr {
-        IpAddr::V4(_) => Family::Inet,
-        IpAddr::V6(_) => Family::Inet6,
+        IpAddr::V4(_) => INET,
+        IpAddr::V6(_) => INET6,
     }
 }
 
 /// Contructs `NetworkEndpoint` from the specified address and port.
-fn make_network_endpoint(addr: &IpAddr, port: u16) -> NetworkEndpoint {
-    NetworkEndpoint {
-        ip: Some(addr.to_string()),
-        port: Some(port as i32),
-    }
+fn make_network_endpoint(addr: &IpAddr, port: u16) -> rrg_proto::sysinfo::NetworkEndpoint {
+    let mut proto = rrg_proto::sysinfo::NetworkEndpoint::new();
+    proto.set_ip(addr.to_string());
+    proto.set_port(port as i32);
+
+    proto
 }
 
 /// Converts [netstat2::TcpState][tcp_state] to `State`
 /// enum used in the protobuf
 ///
 /// [tcp_state]: ../../../netstat2/enum.TcpState.html
-fn make_state(state: &TcpState) -> State {
+fn make_state(state: &TcpState) -> rrg_proto::sysinfo::NetworkConnection_State {
+    use rrg_proto::sysinfo::NetworkConnection_State::*;
     match state {
-        TcpState::Unknown => State::Unknown,
-        TcpState::Closed => State::Closed,
-        TcpState::Listen => State::Listen,
-        TcpState::SynSent => State::SynSent,
-        TcpState::SynReceived => State::SynRecv,
-        TcpState::Established => State::Established,
-        TcpState::FinWait1 => State::FinWait1,
-        TcpState::FinWait2 => State::FinWait2,
-        TcpState::CloseWait => State::CloseWait,
-        TcpState::Closing => State::Closing,
-        TcpState::LastAck => State::LastAck,
-        TcpState::TimeWait => State::TimeWait,
-        TcpState::DeleteTcb => State::DeleteTcb,
+        TcpState::Unknown => UNKNOWN,
+        TcpState::Closed => CLOSED,
+        TcpState::Listen => LISTEN,
+        TcpState::SynSent => SYN_SENT,
+        TcpState::SynReceived => SYN_RECV,
+        TcpState::Established => ESTABLISHED,
+        TcpState::FinWait1 => FIN_WAIT1,
+        TcpState::FinWait2 => FIN_WAIT2,
+        TcpState::CloseWait => CLOSE_WAIT,
+        TcpState::Closing => CLOSING,
+        TcpState::LastAck => LAST_ACK,
+        TcpState::TimeWait => TIME_WAIT,
+        TcpState::DeleteTcb => DELETE_TCB,
     }
 }
 
@@ -125,45 +122,45 @@ fn make_state(state: &TcpState) -> State {
 /// [protocol_socket_info]: ../../../netstat2/enum.ProtocolSocketInfo.html
 fn make_connection_from_socket_info(
     socket_info: &ProtocolSocketInfo
-) -> NetworkConnection {
+) -> rrg_proto::sysinfo::NetworkConnection {
     use ProtocolSocketInfo::{Tcp, Udp};
 
+    let mut proto = rrg_proto::sysinfo::NetworkConnection::new();
+
     match socket_info {
-        Tcp(tcp_info) => NetworkConnection {
-            family: Some(make_family(&tcp_info.local_addr).into()),
-            r#type: Some(Type::SockStream.into()),
-            local_address: Some(make_network_endpoint(
+        Tcp(tcp_info) => {
+            proto.set_family(make_family(&tcp_info.local_addr));
+            proto.set_field_type(rrg_proto::sysinfo::NetworkConnection_Type::SOCK_STREAM);
+            proto.set_local_address(make_network_endpoint(
                 &tcp_info.local_addr,
                 tcp_info.local_port
-            )),
-            remote_address: Some(make_network_endpoint(
+            ));
+            proto.set_remote_address(make_network_endpoint(
                 &tcp_info.remote_addr,
                 tcp_info.remote_port
-            )),
-            state: Some(make_state(&tcp_info.state).into()),
-            ..Default::default()
+            ));
+            proto.set_state(make_state(&tcp_info.state));
         },
-        Udp(udp_info) => NetworkConnection {
-            family: Some(make_family(&udp_info.local_addr).into()),
-            r#type: Some(Type::SockDgram.into()),
-            local_address: Some(make_network_endpoint(
+        Udp(udp_info) => {
+            proto.set_family(make_family(&udp_info.local_addr));
+            proto.set_field_type(rrg_proto::sysinfo::NetworkConnection_Type::SOCK_DGRAM);
+            proto.set_local_address(make_network_endpoint(
                 &udp_info.local_addr,
                 udp_info.local_port
-            )),
-            remote_address: None,
-            state: None,
-            ..Default::default()
+            ));
         },
     }
+
+    proto
 }
 
 impl super::Request for Request {
 
-    type Proto = ListNetworkConnectionsArgs;
+    type Proto = rrg_proto::flows::ListNetworkConnectionsArgs;
 
     fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
         Ok(Request {
-            listening_only: proto.listening_only.unwrap_or(false),
+            listening_only: proto.get_listening_only(),
         })
     }
 }
@@ -172,14 +169,15 @@ impl super::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("NetworkConnection");
 
-    type Proto = NetworkConnection;
+    type Proto = rrg_proto::sysinfo::NetworkConnection;
 
     fn into_proto(self) -> Self::Proto {
-        let mut result: NetworkConnection;
-        result = make_connection_from_socket_info(&self.socket_info);
+        let mut result = make_connection_from_socket_info(&self.socket_info);
         if let Some(process_info) = self.process_info {
-            result.pid = Some(process_info.pid);
-            result.process_name = process_info.name;
+            result.set_pid(process_info.pid);
+            if let Some(name) = process_info.name {
+                result.set_process_name(name);
+            }
         }
         result
     }

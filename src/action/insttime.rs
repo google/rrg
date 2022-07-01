@@ -29,7 +29,7 @@ impl super::Response for Response {
     // "raw" strings without wrapping them into protobuf.
     const RDF_NAME: Option<&'static str> = Some("DataBlob");
 
-    type Proto = u64;
+    type Proto = protobuf::well_known_types::UInt64Value;
 
     fn into_proto(self) -> Self::Proto {
         let time = match self.time {
@@ -49,7 +49,11 @@ impl super::Response for Response {
                 Duration::from_secs(0)
             },
         };
-        since_epoch.as_secs()
+
+        let mut proto = protobuf::well_known_types::UInt64Value::new();
+        proto.set_value(since_epoch.as_secs());
+
+        proto
     }
 }
 

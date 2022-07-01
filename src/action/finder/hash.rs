@@ -3,8 +3,6 @@ use crate::fs::Entry;
 use crypto::digest::Digest;
 use log::warn;
 use rrg_macro::ack;
-use rrg_proto::file_finder_hash_action_options::OversizedFilePolicy;
-use rrg_proto::Hash as HashEntry;
 use std::cmp::min;
 use std::fs::File;
 use std::io::Read;
@@ -49,13 +47,14 @@ impl std::io::Write for Hasher {
 
 /// Performs `hash` action on the file in `entry` and returns the result to be reported in case of success.
 pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<FileHash> {
+    use rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::*;
     match config.oversized_file_policy {
-        OversizedFilePolicy::Skip => {
+        SKIP => {
             if entry.metadata.len() > config.max_size {
                 return None;
             }
         }
-        OversizedFilePolicy::HashTruncated => {}
+        HASH_TRUNCATED => {}
     };
 
     let file = ack! {
@@ -97,22 +96,6 @@ pub struct FileHash {
     pub num_bytes: u64,
 }
 
-impl From<FileHash> for HashEntry {
-    fn from(hash: FileHash) -> Self {
-        HashEntry {
-            sha256: Some(hash.sha256),
-            sha1: Some(hash.sha1),
-            md5: Some(hash.md5),
-            num_bytes: Some(hash.num_bytes),
-            pecoff_sha1: None,
-            pecoff_md5: None,
-            pecoff_sha256: None,
-            signed_data: vec![],
-            source_offset: None
-        }
-    }
-}
-
 fn result_vec<T: Digest>(digest: &mut T) -> Vec<u8> {
     let mut vec = vec![0; digest.output_bytes()];
     digest.result(&mut vec);
@@ -122,7 +105,6 @@ fn result_vec<T: Digest>(digest: &mut T) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rrg_proto::file_finder_hash_action_options::OversizedFilePolicy;
 
     #[test]
     fn test_hash_values() {
@@ -138,7 +120,7 @@ mod tests {
             &entry,
             &HashActionOptions {
                 max_size: 14,
-                oversized_file_policy: OversizedFilePolicy::Skip,
+                oversized_file_policy: rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::SKIP,
             },
         )
         .unwrap();
@@ -186,7 +168,7 @@ mod tests {
             &entry,
             &HashActionOptions {
                 max_size: 10,
-                oversized_file_policy: OversizedFilePolicy::HashTruncated,
+                oversized_file_policy: rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::HASH_TRUNCATED,
             },
         )
         .unwrap();
@@ -208,7 +190,7 @@ mod tests {
             &entry,
             &HashActionOptions {
                 max_size: 10,
-                oversized_file_policy: OversizedFilePolicy::Skip,
+                oversized_file_policy: rrg_proto::flows::FileFinderHashActionOptions_OversizedFilePolicy::SKIP,
             },
         )
         .is_none());

@@ -13,7 +13,8 @@ pub enum Error {
     /// Attempted to call an unknown or not implemented action.
     Dispatch(String),
     /// An error occurred when encoding bytes of a proto message.
-    Encode(prost::EncodeError),
+    // TODO: Determine whether we need this error type or we should just panic.
+    Encode(protobuf::ProtobufError),
     /// An error occurred when parsing a proto message.
     Parse(ParseError),
 }
@@ -71,9 +72,9 @@ impl std::error::Error for Error {
     }
 }
 
-impl From<prost::EncodeError> for Error {
+impl From<protobuf::ProtobufError> for Error {
 
-    fn from(error: prost::EncodeError) -> Error {
+    fn from(error: protobuf::ProtobufError) -> Error {
         Error::Encode(error)
     }
 }
@@ -91,7 +92,7 @@ pub enum ParseError {
     /// An error occurred because the decoded proto message was malformed.
     Malformed(Box<dyn std::error::Error + Send + Sync>),
     /// An error occurred when decoding bytes of a proto message.
-    Decode(prost::DecodeError),
+    Decode(protobuf::ProtobufError),
 }
 
 impl ParseError {
@@ -136,9 +137,9 @@ impl std::error::Error for ParseError {
     }
 }
 
-impl From<prost::DecodeError> for ParseError {
+impl From<protobuf::ProtobufError> for ParseError {
 
-    fn from(error: prost::DecodeError) -> ParseError {
+    fn from(error: protobuf::ProtobufError) -> ParseError {
         ParseError::Decode(error)
     }
 }
