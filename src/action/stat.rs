@@ -197,6 +197,10 @@ impl super::Response for Response {
         let mut proto = rrg_proto::jobs::StatEntry::from_lossy(self.metadata);
         proto.set_pathspec(self.path.into());
 
+        if let Some(symlink) = self.symlink {
+            proto.set_symlink(symlink.to_string_lossy().into_owned());
+        }
+
         #[cfg(target_family = "unix")]
         proto.set_ext_attrs(self.ext_attrs.into_iter().map(Into::into).collect());
 
