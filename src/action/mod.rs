@@ -35,7 +35,10 @@ pub mod stat;
 
 #[cfg(feature = "action-insttime")]
 pub mod insttime;
+
+#[cfg(feature = "action-memsize")]
 pub mod memsize;
+
 pub mod finder;
 
 // TODO: `startup` should not be an action but just a message sent when the
@@ -139,7 +142,9 @@ where
         #[cfg(target_os = "linux")]
         "EnumerateFilesystems" => task.execute(self::filesystems::handle),
 
+        #[cfg(feature = "action-memsize")]
         "GetMemorySize" => task.execute(self::memsize::handle),
+
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
