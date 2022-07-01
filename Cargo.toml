@@ -54,6 +54,7 @@ users = { version = "0.10.0" }
 [features]
 default = [
     "action-insttime",
+    "action-interfaces",
     "action-filesystems",
     "action-finder",
     "action-listdir",
@@ -63,6 +64,7 @@ default = [
 ]
 
 action-insttime = []
+action-interfaces = []
 action-filesystems = []
 action-finder = []
 action-listdir = []

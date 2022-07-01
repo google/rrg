@@ -19,6 +19,7 @@
 #[cfg(target_os = "linux")]
 pub mod filesystems;
 
+#[cfg(feature = "action-interfaces")]
 #[cfg(target_family = "unix")]
 pub mod interfaces;
 
@@ -138,6 +139,7 @@ where
         #[cfg(feature = "action-insttime")]
         "GetInstallDate" => task.execute(self::insttime::handle),
 
+        #[cfg(feature = "action-interfaces")]
         #[cfg(target_family = "unix")]
         "EnumerateInterfaces" => task.execute(self::interfaces::handle),
 
