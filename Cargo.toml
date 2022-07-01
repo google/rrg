@@ -52,5 +52,11 @@ fuse = { version = "0.3.1" }
 users = { version = "0.10.0" }
 
 [features]
+default = [
+    "action-listdir",
+]
+
+action-listdir = []
+
 test-chattr = []
 test-setfattr = []

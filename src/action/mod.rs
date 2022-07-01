@@ -23,7 +23,10 @@ pub mod interfaces;
 
 pub mod metadata;
 pub mod startup;
+
+#[cfg(feature = "action-listdir")]
 pub mod listdir;
+
 pub mod timeline;
 pub mod network;
 pub mod stat;
@@ -107,7 +110,10 @@ where
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
         "GetClientInfo" => task.execute(self::metadata::handle),
+
+        #[cfg(feature = "action-listdir")]
         "ListDirectory" => task.execute(self::listdir::handle),
+
         "Timeline" => task.execute(self::timeline::handle),
         "ListNetworkConnections" => task.execute(self::network::handle),
         "GetFileStat" => task.execute(self::stat::handle),
