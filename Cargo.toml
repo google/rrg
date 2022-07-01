@@ -53,11 +53,13 @@ users = { version = "0.10.0" }
 
 [features]
 default = [
+    "action-insttime",
     "action-listdir",
     "action-metadata",
     "action-stat",
 ]
 
+action-insttime = []
 action-listdir = []
 action-metadata = []
 action-stat = []

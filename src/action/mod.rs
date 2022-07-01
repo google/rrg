@@ -33,6 +33,7 @@ pub mod network;
 #[cfg(feature = "action-stat")]
 pub mod stat;
 
+#[cfg(feature = "action-insttime")]
 pub mod insttime;
 pub mod memsize;
 pub mod finder;
@@ -129,6 +130,7 @@ where
         #[cfg(feature = "action-stat")]
         "GetFileStat" => task.execute(self::stat::handle),
 
+        #[cfg(feature = "action-insttime")]
         "GetInstallDate" => task.execute(self::insttime::handle),
 
         #[cfg(target_family = "unix")]
