@@ -79,3 +79,7 @@ action-timeline = ["dep:flate2", "dep:sha2"]
 
 test-chattr = []
 test-setfattr = []
+
+[[example]]
+name = "timeline"
+required-features = ["action-timeline"]
