@@ -18,7 +18,6 @@ rrg-macro = { path = "macro/" }
 rrg-proto = { path = "proto/" }
 simplelog = { version = "0.7.6" }
 structopt = { version = "0.3.12" }
-sha2 = { version = "0.8.1" }
 flate2 = { version = "1.0.14" }
 byteorder = { version = "1.3.4" }
 chrono = { version = "0.4.11" }
@@ -28,6 +27,7 @@ lazy_static = { version = "1.4.0" }
 rust-crypto = { version = "0.2.36" }
 
 netstat2 = { version = "0.8.1", optional = true }
+sha2 = { version = "0.8.1", optional = true }
 sysinfo = { version = "0.14.1", optional = true }
 
 [target.'cfg(target_family = "unix")'.dependencies]
@@ -69,13 +69,13 @@ default = [
 action-insttime = []
 action-interfaces = []
 action-filesystems = []
-action-finder = []
+action-finder = ["dep:sha2"]
 action-listdir = []
 action-memsize = ["dep:sysinfo"]
 action-metadata = []
 action-network = ["dep:netstat2", "dep:sysinfo"]
 action-stat = []
-action-timeline = []
+action-timeline = ["dep:sha2"]
 
 test-chattr = []
 test-setfattr = []
