@@ -148,8 +148,6 @@ mod tests {
 
     #[test]
     fn test_fuse_filesystem() {
-        use users::{get_current_uid, get_current_gid};
-
         let fs_name = PathBuf::from("fuse-test-fs");
 
         let tmp_dir = tempfile::tempdir().unwrap();
@@ -191,12 +189,15 @@ mod tests {
         assert!(options.iter().any(|opt| opt == "nodev"));
         assert!(options.iter().any(|opt| opt == "relatime"));
 
+        let uid = unsafe { libc::getuid() };
+        let gid = unsafe { libc::getgid() };
+
         // `user_id` and `group_id` are set by libfuse.
         // http://man7.org/linux/man-pages/man8/mount.fuse.8.html
-        let current_uid_option = format!("user_id={}", get_current_uid());
+        let current_uid_option = format!("user_id={}", uid);
         assert!(options.iter().any(|opt| *opt == current_uid_option));
 
-        let current_gid_option = format!("group_id={}", get_current_gid());
+        let current_gid_option = format!("group_id={}", gid);
         assert!(options.iter().any(|opt| *opt == current_gid_option));
 
         drop(background_session);
