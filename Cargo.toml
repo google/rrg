@@ -39,8 +39,9 @@ xattr = { version = "0.2.2" }
 pnet = { version = "0.26.0", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-proc-mounts = { version = "0.2.4" }
 ioctls = { version = "0.6.1" }
+
+proc-mounts = { version = "0.2.4", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = { version = "0.7.0" }
@@ -66,9 +67,9 @@ default = [
     "action-timeline",
 ]
 
-action-insttime = ["dep:chrono"]
+action-insttime = ["dep:chrono", "dep:proc-mounts"]
 action-interfaces = ["dep:pnet"]
-action-filesystems = []
+action-filesystems = ["dep:proc-mounts"]
 action-finder = ["dep:rust-crypto", "dep:sha2"]
 action-listdir = []
 action-memsize = ["dep:sysinfo"]
