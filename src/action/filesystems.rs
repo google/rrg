@@ -141,13 +141,14 @@ mod tests {
         assert_ne!(session.reply_count(), 0);
     }
 
-    /// Unit-like struct, representing a filesystem for testing with `fuse`.
-    struct FuseFilesystem;
-
-    impl fuse::Filesystem for FuseFilesystem {}
-
+    #[cfg(feature = "test-fuse")]
     #[test]
     fn test_fuse_filesystem() {
+        /// Unit-like struct, representing a filesystem for testing with `fuse`.
+        struct FuseFilesystem;
+
+        impl fuse::Filesystem for FuseFilesystem {}
+
         let fs_name = PathBuf::from("fuse-test-fs");
 
         let tmp_dir = tempfile::tempdir().unwrap();

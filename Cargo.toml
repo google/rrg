@@ -44,6 +44,12 @@ pnet = { version = "0.26.0", optional = true }
 ioctls = { version = "0.6.1" }
 
 proc-mounts = { version = "0.2.4", optional = true }
+# TODO(https://github.com/google/rrg/issues/47): This should be a dev dependency
+# but because of Cargo limitations [1] it has to be marked not as such. However,
+# because it is hidden behind a feature flag, it should not be a big problem.
+#
+# [1]: https://github.com/rust-lang/cargo/issues/1596
+fuse = { version = "0.3.1", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = { version = "0.7.0", optional = true }
@@ -51,9 +57,6 @@ winreg = { version = "0.7.0", optional = true }
 [dev-dependencies]
 rand = { version = "0.8.5" }
 tempfile = { version = "3.3.0" }
-
-[target.'cfg(target_os = "linux")'.dev-dependencies]
-fuse = { version = "0.3.1" }
 
 [features]
 default = [
@@ -82,6 +85,7 @@ action-timeline = ["dep:flate2", "dep:sha2"]
 
 test-chattr = []
 test-setfattr = []
+test-fuse = ["dep:fuse"]
 
 [[example]]
 name = "timeline"
