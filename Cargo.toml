@@ -39,7 +39,7 @@ xattr = { version = "0.2.2" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 proc-mounts = { version = "0.2.4" }
-ioctls = { version = "0.5.1" }
+ioctls = { version = "0.6.1" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = { version = "0.7.0" }
