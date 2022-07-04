@@ -46,7 +46,7 @@ ioctls = { version = "0.6.1" }
 proc-mounts = { version = "0.2.4", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winreg = { version = "0.7.0" }
+winreg = { version = "0.7.0", optional = true }
 
 [dev-dependencies]
 rand = { version = "0.8.5" }
@@ -69,7 +69,7 @@ default = [
     "action-timeline",
 ]
 
-action-insttime = ["dep:chrono", "dep:proc-mounts"]
+action-insttime = ["dep:chrono", "dep:proc-mounts", "dep:winreg"]
 action-interfaces = ["dep:pnet"]
 action-filesystems = ["dep:proc-mounts"]
 action-finder = ["dep:rust-crypto", "dep:sha2"]
