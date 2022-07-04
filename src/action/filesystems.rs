@@ -132,7 +132,6 @@ impl super::Response for Response {
 mod tests {
 
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn test_if_any_filesystem_exists() {
@@ -149,7 +148,7 @@ mod tests {
 
         impl fuse::Filesystem for FuseFilesystem {}
 
-        let fs_name = PathBuf::from("fuse-test-fs");
+        let fs_name = std::path::PathBuf::from("fuse-test-fs");
 
         let tmp_dir = tempfile::tempdir().unwrap();
         let mountpoint = tmp_dir.path();
