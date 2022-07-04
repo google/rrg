@@ -12,7 +12,9 @@ pub mod opts;
 pub mod session;
 
 // Consider moving these to a separate submodule.
+#[cfg(feature = "action-timeline")]
 pub mod chunked;
+#[cfg(feature = "action-timeline")]
 pub mod gzchunked;
 
 use crate::opts::{Opts};

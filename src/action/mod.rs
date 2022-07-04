@@ -15,21 +15,41 @@
 //! instance of the corresponding request type and send some (zero or more)
 //! instances of the corresponding response type.
 
+#[cfg(feature = "action-filesystems")]
 #[cfg(target_os = "linux")]
 pub mod filesystems;
 
+#[cfg(feature = "action-interfaces")]
 #[cfg(target_family = "unix")]
 pub mod interfaces;
 
+#[cfg(feature = "action-metadata")]
 pub mod metadata;
-pub mod startup;
+
+#[cfg(feature = "action-listdir")]
 pub mod listdir;
+
+#[cfg(feature = "action-timeline")]
 pub mod timeline;
+
+#[cfg(feature = "action-network")]
 pub mod network;
+
+#[cfg(feature = "action-stat")]
 pub mod stat;
+
+#[cfg(feature = "action-insttime")]
 pub mod insttime;
+
+#[cfg(feature = "action-memsize")]
 pub mod memsize;
+
+#[cfg(feature = "action-finder")]
 pub mod finder;
+
+// TODO: `startup` should not be an action but just a message sent when the
+// agent boots up.
+pub mod startup;
 
 use crate::session::{self, Session, Task};
 
@@ -106,20 +126,36 @@ where
 {
     match action {
         "SendStartupInfo" => task.execute(self::startup::handle),
+
+        #[cfg(feature = "action-metadata")]
         "GetClientInfo" => task.execute(self::metadata::handle),
+
+        #[cfg(feature = "action-listdir")]
         "ListDirectory" => task.execute(self::listdir::handle),
+
+        #[cfg(feature = "action-timeline")]
         "Timeline" => task.execute(self::timeline::handle),
+
+        #[cfg(feature = "action-network")]
         "ListNetworkConnections" => task.execute(self::network::handle),
+
+        #[cfg(feature = "action-stat")]
         "GetFileStat" => task.execute(self::stat::handle),
+
+        #[cfg(feature = "action-insttime")]
         "GetInstallDate" => task.execute(self::insttime::handle),
 
+        #[cfg(feature = "action-interfaces")]
         #[cfg(target_family = "unix")]
         "EnumerateInterfaces" => task.execute(self::interfaces::handle),
 
+        #[cfg(feature = "action-filesystems")]
         #[cfg(target_os = "linux")]
         "EnumerateFilesystems" => task.execute(self::filesystems::handle),
 
+        #[cfg(feature = "action-memsize")]
         "GetMemorySize" => task.execute(self::memsize::handle),
+
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }

@@ -408,8 +408,11 @@ mod tests {
             let mode = entries[1].get_mode() as libc::mode_t;
             assert_eq!(mode & libc::S_IFMT, libc::S_IFREG);
 
-            assert_eq!(entries[1].get_uid(), users::get_current_uid() as i64);
-            assert_eq!(entries[1].get_gid(), users::get_current_gid() as i64);
+            let uid = unsafe { libc::getuid() };
+            assert_eq!(entries[1].get_uid(), uid.into());
+
+            let gid = unsafe { libc::getgid() };
+            assert_eq!(entries[1].get_gid(), gid.into());
         }
     }
 

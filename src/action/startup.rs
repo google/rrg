@@ -10,7 +10,7 @@
 //! special in a sense that generally it should be not invoked by flows, but be
 //! called explicitly during agent startup.
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use log::error;
 
@@ -37,10 +37,20 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 
 /// Returns information about the system boot time.
 fn boot_time() -> SystemTime {
-    use sysinfo::{System, SystemExt};
-    let boot_time_secs = System::new().get_boot_time();
+    // Make `sysinfo` or another crate not an optional dependency.
 
-    UNIX_EPOCH + Duration::from_secs(boot_time_secs)
+    #[cfg(feature = "dep:sysinfo")]
+    {
+        use sysinfo::{System, SystemExt};
+        let boot_time_secs = System::new().get_boot_time();
+
+        UNIX_EPOCH + Duration::from_secs(boot_time_secs)
+    }
+
+    #[cfg(not(feature = "dep:sysinfo"))]
+    {
+        UNIX_EPOCH
+    }
 }
 
 impl super::Response for Response {
@@ -72,6 +82,9 @@ mod tests {
 
     use super::*;
 
+    // TODO: Delete this once `sysinfo` (or a replacement) is made a mandatory
+    // dependency.
+    #[cfg(feature = "dep:sysinfo")]
     #[test]
     fn test_boot_time() {
         let mut session = session::test::Fake::new();
