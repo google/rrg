@@ -3,8 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use std::fs::File;
-
 use log::{error, info};
 
 use rrg::action;
@@ -30,33 +28,6 @@ fn main() {
     rrg::listen(&opts);
 }
 
-fn init(opts: &Opts) {
-    init_log(opts);
-}
-
-fn init_log(opts: &Opts) {
-    let level = opts.log_verbosity.level();
-
-    let mut loggers = Vec::<Box<dyn simplelog::SharedLogger>>::new();
-
-    if let Some(stream) = &opts.log_stream {
-        let config = Default::default();
-        let logger = simplelog::TermLogger::new(level, config, stream.mode())
-            .expect("failed to create a terminal logger");
-
-        loggers.push(logger);
-    }
-
-    if let Some(path) = &opts.log_file {
-        let file = File::create(path)
-            .expect("failed to create the log file");
-
-        let config = Default::default();
-        let logger = simplelog::WriteLogger::new(level, config, file);
-
-        loggers.push(logger);
-    }
-
-    simplelog::CombinedLogger::init(loggers)
-        .expect("failed to init logging");
+fn init(_: &Opts) {
+    env_logger::init();
 }
