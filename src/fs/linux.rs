@@ -65,8 +65,7 @@ impl<'p> Iterator for ExtAttrs<'p> {
             Err(error) => return Some(Err(error)),
         };
 
-        // TODO: Modify the `ExtAttr` struct not to use `Option` for `value`.
-        Some(Ok(super::unix::ExtAttr { name, value: Some(value) }))
+        Some(Ok(super::unix::ExtAttr { name, value }))
     }
 }
 
@@ -273,13 +272,13 @@ mod tests {
         ext_attrs.sort_by_cached_key(|attr| attr.name.clone());
 
         assert_eq!(ext_attrs[0].name, "user.attr1");
-        assert_eq!(ext_attrs[0].value, Some(b"foo".to_vec()));
+        assert_eq!(ext_attrs[0].value, b"foo");
 
         assert_eq!(ext_attrs[1].name, "user.attr2");
-        assert_eq!(ext_attrs[1].value, Some(b"bar".to_vec()));
+        assert_eq!(ext_attrs[1].value, b"bar");
 
         assert_eq!(ext_attrs[2].name, "user.attr3");
-        assert_eq!(ext_attrs[2].value, Some(b"baz".to_vec()));
+        assert_eq!(ext_attrs[2].value, b"baz");
     }
 
     #[test]

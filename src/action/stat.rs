@@ -216,8 +216,6 @@ impl super::Response for Response {
 /// Collects extended attributes of a file specified by the request.
 #[cfg(target_family = "unix")]
 fn ext_attrs(request: &Request) -> Vec<crate::fs::unix::ExtAttr> {
-    use std::borrow::Borrow as _;
-
     let path = match request.target() {
         Ok(path) => path,
         Err(error) => {
@@ -230,12 +228,30 @@ fn ext_attrs(request: &Request) -> Vec<crate::fs::unix::ExtAttr> {
         }
     };
 
-    let ext_attrs = ack! {
-        crate::fs::unix::ext_attrs::<PathBuf>(path.borrow()),
-        warn: "failed to collect attributes for '{}'", request.path.display()
+    let ext_attrs = match crate::fs::unix::ext_attrs(&path) {
+        Ok(ext_attrs) => ext_attrs,
+        Err(error) => {
+            rrg_macro::warn! {
+                "failed to collect extended attributes for '{path}': {cause}",
+                path = request.path.display(),
+                cause = error
+            };
+            return vec!();
+        }
     };
 
-    ext_attrs.map(Iterator::collect).unwrap_or_default()
+    ext_attrs.filter_map(|ext_attr| match ext_attr {
+        Ok(ext_attr) => Some(ext_attr),
+        Err(error) => {
+            rrg_macro::warn! {
+                "failed to collect an extended attribute for '{path}': {cause}",
+                path = request.path.display(),
+                cause = error
+            };
+
+            None
+        }
+    }).collect()
 }
 
 #[cfg(test)]
@@ -429,7 +445,7 @@ mod tests {
         let reply = session.reply::<Response>(0);
         assert_eq!(reply.ext_attrs.len(), 1);
         assert_eq!(reply.ext_attrs[0].name, "user.norf");
-        assert_eq!(reply.ext_attrs[0].value, Some(b"quux".to_vec()));
+        assert_eq!(reply.ext_attrs[0].value, b"quux");
     }
 
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
@@ -513,7 +529,7 @@ mod tests {
         let reply = session.reply::<Response>(0);
         assert_eq!(reply.ext_attrs.len(), 1);
         assert_eq!(reply.ext_attrs[0].name, "user.norf");
-        assert_eq!(reply.ext_attrs[0].value, Some(b"quux".to_vec()));
+        assert_eq!(reply.ext_attrs[0].value, b"quux");
     }
 
     #[cfg(all(target_os = "linux", feature = "test-chattr"))]
