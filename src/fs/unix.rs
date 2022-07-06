@@ -113,7 +113,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_ext_attrs_non_existing() {
+    fn ext_attrs_non_existing() {
         let tempdir = tempfile::tempdir().unwrap();
 
         assert!(ext_attrs(&tempdir.path().join("foo")).is_err());
@@ -121,7 +121,7 @@ mod tests {
 
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
-    fn test_ext_attrs_with_multiple_values() {
+    fn ext_attrs_with_multiple_values() {
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         setfattr(tempfile.path(), "user.abc", b"quux");
         setfattr(tempfile.path(), "user.def", b"norf");
@@ -142,7 +142,7 @@ mod tests {
 
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
-    fn test_ext_attrs_with_empty_value() {
+    fn ext_attrs_with_empty_value() {
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         setfattr(tempfile.path(), "user.abc", b"");
 
@@ -158,7 +158,7 @@ mod tests {
 
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
-    fn test_ext_attrs_with_bytes_value() {
+    fn ext_attrs_with_bytes_value() {
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         setfattr(tempfile.path(), "user.abc", b"\xff\xfe\xff\xfe\xff");
 
