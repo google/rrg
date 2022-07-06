@@ -1,3 +1,12 @@
+//! macOS-specific utilities for working with the filesystem.
+
+/// Collects names of all extended attributes for the specified file.
+///
+/// This function is a wrapper around the `listxattr` macOS call.
+///
+/// See [`ext_attr_names`] from the Unix module for more details.
+///
+/// [`ext_attr_names`]: super::unix::ext_attr_names
 pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<std::ffi::OsString>>
 where
     P: AsRef<std::path::Path>,
@@ -86,6 +95,13 @@ where
     Ok(result)
 }
 
+/// Collects value of a file extended attribute with the specified name.
+///
+/// This function is a wrapper around the `getxattr` macOS call.
+///
+/// See [`ext_attr_value`] from the Unix module for more details.
+///
+/// [`ext_attr_value`]: super::unix::ext_attr_names
 pub fn ext_attr_value<P, S>(path: P, name: S) -> std::io::Result<Vec<u8>>
 where
     P: AsRef<std::path::Path>,

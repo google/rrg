@@ -80,6 +80,27 @@ impl<'p> Iterator for ExtAttrs<'p> {
     }
 }
 
+/// Collects names of all extended attributes for the specified file.
+///
+/// This function is an idiomatic wrapper over lower-level system calls (like
+/// `llistxattr` on Linux or `listxattr` on macOS).
+///
+/// # Errors
+///
+/// This function will fail if the specified file does not exist, the process
+/// does not have permission to access the file or any other system error is
+/// raised.
+///
+/// # Examples
+///
+/// ```no_run
+/// let names = rrg::fs::unix::ext_attr_names("/tmp/foo").unwrap();
+///
+/// println!("{} attributes found", names.len());
+/// for name in names {
+///     println!("'{}'", name.to_string_lossy());
+/// }
+/// ```
 pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<std::ffi::OsString>>
 where
     P: AsRef<Path>,
@@ -93,6 +114,23 @@ where
     ext_attr_names(path)
 }
 
+/// Collects value of a file extended attribute with the specified name.
+///
+/// This function is an idiomatic wrapper over lower-level system calls (like
+/// `lgetxattr` on Linux or `getxattr` or macOS).
+///
+/// # Errors
+///
+/// This function will fail if the specified file or the attribute do not exist,
+/// the process does not have permission to access the file or any other system
+/// error is raised.
+///
+/// # Examples
+///
+/// ```no_run
+/// let value = rrg::fs::unix::ext_attr_value("/tmp/foo", "user.bar").unwrap();
+/// println!("'user.bar': '{}'", String::from_utf8_lossy(&value));
+/// ```
 pub fn ext_attr_value<P, S>(path: P, name: S) -> std::io::Result<Vec<u8>>
 where
     P: AsRef<Path>,
