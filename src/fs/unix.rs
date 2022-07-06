@@ -140,6 +140,27 @@ mod tests {
         assert_eq!(results[1].value, b"norf");
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn ext_attrs_with_multiple_values() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        xattr(tempfile.path(), "user.abc", b"quux");
+        xattr(tempfile.path(), "user.def", b"norf");
+
+        let mut results = ext_attrs(&tempfile.path()).unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+        results.sort_by_key(|attr| attr.name.clone());
+
+        assert_eq!(results.len(), 2);
+
+        assert_eq!(results[0].name, "user.abc");
+        assert_eq!(results[0].value, b"quux");
+
+        assert_eq!(results[1].name, "user.def");
+        assert_eq!(results[1].value, b"norf");
+    }
+
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn ext_attrs_with_empty_value() {
@@ -156,11 +177,43 @@ mod tests {
         assert_eq!(results[0].value, b"");
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn ext_attrs_with_empty_value() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        xattr(tempfile.path(), "user.abc", b"");
+
+        let results = ext_attrs(&tempfile.path()).unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+
+        assert_eq!(results[0].name, "user.abc");
+        assert_eq!(results[0].value, b"");
+    }
+
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn ext_attrs_with_bytes_value() {
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         setfattr(tempfile.path(), "user.abc", b"\xff\xfe\xff\xfe\xff");
+
+        let results = ext_attrs(&tempfile.path()).unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+
+        assert_eq!(results[0].name, "user.abc");
+        assert_eq!(results[0].value, b"\xff\xfe\xff\xfe\xff");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn ext_attrs_with_bytes_value() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        xattr(tempfile.path(), "user.abc", b"\xff\xfe\xff\xfe\xff");
 
         let results = ext_attrs(&tempfile.path()).unwrap()
             .map(Result::unwrap)
@@ -191,7 +244,25 @@ mod tests {
         };
     }
 
-    // TODO: Add macOS tests.
+    #[cfg(target_os = "macos")]
+    fn xattr<P, S>(path: P, name: S, value: &[u8])
+    where
+        P: AsRef<std::path::Path>,
+        S: AsRef<std::ffi::OsStr>,
+    {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        assert! {
+            std::process::Command::new("xattr")
+                .arg(name)
+                .arg(std::ffi::OsStr::from_bytes(value))
+                .arg(path.as_ref().as_os_str())
+                .status()
+                .unwrap()
+                .success()
+        };
+    }
+
     // TODO: Document and add tests for collecting attributes of a symlink.
 }
 
