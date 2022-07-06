@@ -172,7 +172,7 @@ mod tests {
         assert_eq!(results[0].value, b"\xff\xfe\xff\xfe\xff");
     }
 
-    #[cfg(feature = "test-setfattr")]
+    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     fn setfattr<P, S>(path: P, name: S, value: &[u8])
     where
         P: AsRef<std::path::Path>,
