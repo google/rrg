@@ -27,6 +27,9 @@ pub struct ExtAttr {
 
 /// Returns an iterator over extended attributes of the specified file.
 ///
+/// In case of a symlink this function returns the extended attributes of the
+/// link itself and not the file pointed by it.
+///
 /// # Errors
 ///
 /// The function will fail if a list of extended attributes of the file cannot
@@ -85,6 +88,9 @@ impl<'p> Iterator for ExtAttrs<'p> {
 /// This function is an idiomatic wrapper over lower-level system calls (like
 /// `llistxattr` on Linux or `listxattr` on macOS).
 ///
+/// In case of a symlink this function returns the extended attributes of the
+/// link itself and not the file pointed by it.
+///
 /// # Errors
 ///
 /// This function will fail if the specified file does not exist, the process
@@ -118,6 +124,9 @@ where
 ///
 /// This function is an idiomatic wrapper over lower-level system calls (like
 /// `lgetxattr` on Linux or `getxattr` or macOS).
+///
+/// In case of a symlink this function returns the extended attributes of the
+/// link itself and not the file pointed by it.
 ///
 /// # Errors
 ///
@@ -263,6 +272,12 @@ mod tests {
         assert_eq!(results[0].value, b"\xff\xfe\xff\xfe\xff");
     }
 
+    // Ideally, we would like to have tests for symlinks but turns out that it
+    // is not possible (at least currently) to have extended attributes on them
+    // as the kernel simply does not allow that [1].
+    //
+    // [1]: https://unix.stackexchange.com/questions/16537/extended-attribute-on-symbolic-link
+
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     fn setfattr<P, S>(path: P, name: S, value: &[u8])
     where
@@ -273,6 +288,7 @@ mod tests {
 
         assert! {
             std::process::Command::new("setfattr")
+                .arg("--no-dereference")
                 .arg("--name").arg(name)
                 .arg("--value").arg(std::ffi::OsStr::from_bytes(value))
                 .arg(path.as_ref().as_os_str())
@@ -300,8 +316,6 @@ mod tests {
                 .success()
         };
     }
-
-    // TODO: Document and add tests for collecting attributes of a symlink.
 }
 
 // TODO: Move this into the `rrg-proto` crate once generic purpose utilities are
