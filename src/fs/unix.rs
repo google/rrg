@@ -122,31 +122,11 @@ mod tests {
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn test_ext_attrs_with_multiple_values() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let tempfile = tempdir.path().join("foo");
-        std::fs::File::create(&tempfile).unwrap();
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        setfattr(tempfile.path(), "user.abc", b"quux");
+        setfattr(tempfile.path(), "user.def", b"norf");
 
-        assert! {
-            std::process::Command::new("setfattr")
-                .arg("--name").arg("user.abc")
-                .arg("--value").arg("quux")
-                .arg(&tempfile)
-                .status()
-                .unwrap()
-                .success()
-        };
-
-        assert! {
-            std::process::Command::new("setfattr")
-                .arg("--name").arg("user.def")
-                .arg("--value").arg("norf")
-                .arg(&tempfile)
-                .status()
-                .unwrap()
-                .success()
-        };
-
-        let mut results = ext_attrs(&tempfile).unwrap()
+        let mut results = ext_attrs(&tempfile.path()).unwrap()
             .map(Result::unwrap)
             .collect::<Vec<_>>();
         results.sort_by_key(|attr| attr.name.clone());
@@ -163,55 +143,52 @@ mod tests {
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn test_ext_attrs_with_empty_value() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let tempfile = tempdir.path().join("foo");
-        std::fs::File::create(&tempfile).unwrap();
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        setfattr(tempfile.path(), "user.abc", b"");
 
-        assert! {
-            std::process::Command::new("setfattr")
-                .arg("--name").arg("user.abc")
-                .arg(&tempfile)
-                .status()
-                .unwrap()
-                .success()
-        };
+        let results = ext_attrs(&tempfile.path()).unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
 
-        let mut iter = ext_attrs(&tempfile).unwrap();
+        assert_eq!(results.len(), 1);
 
-        let attr = iter.next().unwrap().unwrap();
-        assert_eq!(attr.name, "user.abc");
-        assert_eq!(attr.value, b"");
-
-        assert!(iter.next().is_none());
+        assert_eq!(results[0].name, "user.abc");
+        assert_eq!(results[0].value, b"");
     }
 
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn test_ext_attrs_with_bytes_value() {
-        use std::ffi::OsStr;
-        use std::os::unix::ffi::OsStrExt as _;
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        setfattr(tempfile.path(), "user.abc", b"\xff\xfe\xff\xfe\xff");
 
-        let tempdir = tempfile::tempdir().unwrap();
-        let tempfile = tempdir.path().join("foo");
-        std::fs::File::create(&tempfile).unwrap();
+        let results = ext_attrs(&tempfile.path()).unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+
+        assert_eq!(results[0].name, "user.abc");
+        assert_eq!(results[0].value, b"\xff\xfe\xff\xfe\xff");
+    }
+
+    #[cfg(feature = "test-setfattr")]
+    fn setfattr<P, S>(path: P, name: S, value: &[u8])
+    where
+        P: AsRef<std::path::Path>,
+        S: AsRef<std::ffi::OsStr>,
+    {
+        use std::os::unix::ffi::OsStrExt as _;
 
         assert! {
             std::process::Command::new("setfattr")
-                .arg("--name").arg("user.abc")
-                .arg("--value").arg(OsStr::from_bytes(b"\xff\xfe\xff\xfe\xff"))
-                .arg(&tempfile)
+                .arg("--name").arg(name)
+                .arg("--value").arg(std::ffi::OsStr::from_bytes(value))
+                .arg(path.as_ref().as_os_str())
                 .status()
                 .unwrap()
                 .success()
         };
-
-        let mut iter = ext_attrs(&tempfile).unwrap();
-
-        let attr = iter.next().unwrap().unwrap();
-        assert_eq!(attr.name, "user.abc");
-        assert_eq!(attr.value, b"\xff\xfe\xff\xfe\xff");
-
-        assert!(iter.next().is_none());
     }
 
     // TODO: Add macOS tests.
