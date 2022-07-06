@@ -53,7 +53,7 @@ where
     P: AsRef<Path>,
 {
     extern "C" {
-        // https://linux.die.net/man/2/llistxattr
+        // https://man7.org/linux/man-pages/man2/listxattr.2.html
         fn llistxattr(
             path: *const libc::c_char,
             list: *mut libc::c_char,
