@@ -48,35 +48,6 @@ pub fn flags<P>(path: P) -> std::io::Result<u32> where
     }
 }
 
-// TODO: Merge this with more general implementation in the `unix` module.
-pub struct ExtAttrs<'p> {
-    path: &'p Path,
-    names: std::vec::IntoIter<std::ffi::OsString>,
-}
-
-impl<'p> Iterator for ExtAttrs<'p> {
-
-    type Item = std::io::Result<super::unix::ExtAttr>;
-
-    fn next(&mut self) -> Option<std::io::Result<super::unix::ExtAttr>> {
-        let name = self.names.next()?;
-        let value = match ext_attr_value(self.path, &name) {
-            Ok(value) => value,
-            Err(error) => return Some(Err(error)),
-        };
-
-        Some(Ok(super::unix::ExtAttr { name, value }))
-    }
-}
-
-pub fn ext_attrs<'p>(path: &'p Path) -> std::io::Result<ExtAttrs<'p>> {
-    let names = ext_attr_names(path)?;
-    Ok(ExtAttrs {
-        path,
-        names: names.into_iter(),
-    })
-}
-
 pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<std::ffi::OsString>>
 where
     P: AsRef<Path>,
@@ -249,36 +220,6 @@ mod tests {
 
         let flags = flags(tempdir.path().join("foo")).unwrap();
         assert_eq!(flags & FS_NOATIME_FL as u32, FS_NOATIME_FL as u32);
-    }
-
-    #[test]
-    fn ext_attrs_none() {
-        let tempfile = tempfile::NamedTempFile::new().unwrap();
-
-        let mut ext_attrs = ext_attrs(tempfile.path()).unwrap();
-        assert!(ext_attrs.next().is_none());
-    }
-
-    #[cfg(feature = "test-setfattr")]
-    #[test]
-    fn ext_attrs_some() {
-        let tempfile = tempfile::NamedTempFile::new().unwrap();
-        setfattr(tempfile.path(), "user.attr1", b"foo");
-        setfattr(tempfile.path(), "user.attr2", b"bar");
-        setfattr(tempfile.path(), "user.attr3", b"baz");
-
-        let mut ext_attrs = ext_attrs(tempfile.path()).unwrap()
-            .collect::<std::io::Result<Vec<_>>>().unwrap();
-        ext_attrs.sort_by_cached_key(|attr| attr.name.clone());
-
-        assert_eq!(ext_attrs[0].name, "user.attr1");
-        assert_eq!(ext_attrs[0].value, b"foo");
-
-        assert_eq!(ext_attrs[1].name, "user.attr2");
-        assert_eq!(ext_attrs[1].value, b"bar");
-
-        assert_eq!(ext_attrs[2].name, "user.attr3");
-        assert_eq!(ext_attrs[2].value, b"baz");
     }
 
     #[test]
