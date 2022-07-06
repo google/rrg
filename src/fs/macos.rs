@@ -171,3 +171,94 @@ where
     buf.truncate(len as usize);
     Ok(buf)
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn ext_attr_names_none() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+
+        let ext_attr_names = ext_attr_names(tempfile.path()).unwrap();
+        assert!(ext_attr_names.is_empty());
+    }
+
+    #[test]
+    fn ext_attr_names_single() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        xattr(tempfile.path(), "user.foo", b"");
+
+        let ext_attr_names = ext_attr_names(tempfile.path()).unwrap();
+        assert_eq!(ext_attr_names, vec!["user.foo"]);
+    }
+
+    #[test]
+    fn ext_attr_names_multiple() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        xattr(tempfile.path(), "user.foo", b"");
+        xattr(tempfile.path(), "user.bar", b"");
+        xattr(tempfile.path(), "user.baz", b"");
+
+        let ext_attr_names = ext_attr_names(tempfile.path()).unwrap();
+        assert_eq!(ext_attr_names, vec!["user.foo", "user.bar", "user.baz"]);
+    }
+
+    #[test]
+    fn ext_attr_value_not_existing() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+
+        let error = ext_attr_value(tempfile.path(), "user.foo").unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(libc::ENOATTR));
+    }
+
+    #[test]
+    fn ext_attr_value_single() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        xattr(tempfile.path(), "user.foo", b"bar");
+
+        let value = ext_attr_value(tempfile.path(), "user.foo").unwrap();
+        assert_eq!(value, b"bar");
+    }
+
+    #[test]
+    fn ext_attr_value_single_not_unicode() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        xattr(tempfile.path(), "user.foo", b"\xff\xfe\xff");
+
+        let value = ext_attr_value(tempfile.path(), "user.foo").unwrap();
+        assert_eq!(value, b"\xff\xfe\xff");
+    }
+
+    #[test]
+    fn ext_attr_value_multiple() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        xattr(tempfile.path(), "user.foo", b"quux");
+        xattr(tempfile.path(), "user.bar", b"norf");
+
+        let foo_value = ext_attr_value(tempfile.path(), "user.foo").unwrap();
+        assert_eq!(foo_value, b"quux");
+
+        let bar_value = ext_attr_value(tempfile.path(), "user.bar").unwrap();
+        assert_eq!(bar_value, b"norf");
+    }
+
+    fn xattr<P, S>(path: P, name: S, value: &[u8])
+    where
+        P: AsRef<std::path::Path>,
+        S: AsRef<std::ffi::OsStr>,
+    {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        assert! {
+            std::process::Command::new("xattr")
+                .arg(name)
+                .arg(std::ffi::OsStr::from_bytes(value))
+                .arg(path.as_ref().as_os_str())
+                .status()
+                .unwrap()
+                .success()
+        };
+    }
+}
