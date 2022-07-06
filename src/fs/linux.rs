@@ -121,6 +121,72 @@ where
     Ok(result)
 }
 
+pub fn ext_attr_value<P, S>(path: P, name: S) -> std::io::Result<Vec<u8>>
+where
+    P: AsRef<Path>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    extern "C" {
+        // https://man7.org/linux/man-pages/man2/getxattr.2.html
+        fn lgetxattr(
+            path: *const libc::c_char,
+            name: *const libc::c_char,
+            value: *mut libc::c_void,
+            size: libc::size_t,
+        ) -> libc::ssize_t;
+    }
+
+    use std::os::unix::ffi::OsStrExt as _;
+
+    let os_str_path = path.as_ref().as_os_str();
+    let c_str_path = std::ffi::CString::new(os_str_path.as_bytes())
+        // It is not possible to have a null byte in a Linux path.
+        .expect("path with a null character");
+
+    let c_str_name = std::ffi::CString::new(name.as_ref().as_bytes())
+        // While `name` as returned by the `ext_attr_names` function cannot have
+        // null bytes inside, we cannot guarantee that the user doesn't supply
+        // a bogus string here. Thus, we have to do proper error handling here.
+        .map_err(|error| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, error)
+        })?;
+
+    // SAFETY: The correctness of the path and name is guaranteed by conversion
+    // to the `CString` type above. The rest is just is a FFI call respecting
+    // the spec.
+    let len = unsafe {
+        // First we call `lgetxattr` with empty buffer to get the size of the
+        // buffer that will collect the actual results.
+        lgetxattr(c_str_path.as_ptr(), c_str_name.as_ptr(), std::ptr::null_mut(), 0)
+    };
+    if len < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    let mut buf = vec![0; len as usize];
+    let buf_ptr = buf.as_mut_ptr() as *mut libc::c_void;
+
+    // SAFETY: The correctness of the path and name is guaranteed by conversion
+    // to the `CString` type above. For remaining parameters we provide a buffer
+    // with length obtained through the previous call and we explicitly supply
+    // its length as well. In case the result length increases between the calls
+    // the system will report an error but will not cause memory issues.
+    let len = unsafe {
+        // Now we can call `lgetxattr` with the actual buffer of the size we
+        // determined by the previous call.
+        lgetxattr(c_str_path.as_ptr(), c_str_name.as_ptr(), buf_ptr, buf.len())
+    };
+    if len < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    // In very rare cases (if the users tampers with the file inbetween calls to
+    // the `lgetxattr`), the length value can decrease. To avoid returning any
+    // garbage at the end, we have to truncate the buffer to its real length.
+    buf.truncate(len as usize);
+    Ok(buf)
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -184,6 +250,38 @@ mod tests {
 
         let ext_attr_names = ext_attr_names(tempfile.path()).unwrap();
         assert_eq!(ext_attr_names, vec!["user.foo", "user.bar", "user.baz"]);
+    }
+
+    #[test]
+    fn ext_attr_value_not_existing() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+
+        let error = ext_attr_value(tempfile.path(), "user.foo").unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(libc::ENODATA));
+    }
+
+    #[cfg(feature = "test-setfattr")]
+    #[test]
+    fn ext_attr_value_single() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        setfattr(tempfile.path(), "user.foo", b"bar");
+
+        let value = ext_attr_value(tempfile.path(), "user.foo").unwrap();
+        assert_eq!(value, b"bar");
+    }
+
+    #[cfg(feature = "test-setfattr")]
+    #[test]
+    fn ext_attr_value_multiple() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        setfattr(tempfile.path(), "user.foo", b"quux");
+        setfattr(tempfile.path(), "user.bar", b"norf");
+
+        let foo_value = ext_attr_value(tempfile.path(), "user.foo").unwrap();
+        assert_eq!(foo_value, b"quux");
+
+        let bar_value = ext_attr_value(tempfile.path(), "user.bar").unwrap();
+        assert_eq!(bar_value, b"norf");
     }
 
     #[cfg(feature = "test-setfattr")]
