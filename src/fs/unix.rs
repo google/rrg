@@ -13,8 +13,8 @@ use log::warn;
 /// An extended attribute of a file.
 ///
 /// On Linux, extended attributes can be obtained using `getfattr` and set with
-/// `setfattr` utilities. On macOS, they can be manipulated through `getxattr`
-/// and `setxattr` utilities.
+/// `setfattr` utilities. On macOS, they can be manipulated through the `xattr`
+/// utility.
 ///
 /// See the [Wikipedia] article for more details.
 ///
