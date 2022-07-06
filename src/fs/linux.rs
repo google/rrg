@@ -272,6 +272,16 @@ mod tests {
 
     #[cfg(feature = "test-setfattr")]
     #[test]
+    fn ext_attr_value_single_not_unicode() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+        setfattr(tempfile.path(), "user.foo", b"\xff\xfe\xff");
+
+        let value = ext_attr_value(tempfile.path(), "user.foo").unwrap();
+        assert_eq!(value, b"\xff\xfe\xff");
+    }
+
+    #[cfg(feature = "test-setfattr")]
+    #[test]
     fn ext_attr_value_multiple() {
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         setfattr(tempfile.path(), "user.foo", b"quux");
