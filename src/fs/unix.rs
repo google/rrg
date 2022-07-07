@@ -308,6 +308,7 @@ mod tests {
 
         assert! {
             std::process::Command::new("xattr")
+                .arg("-w")
                 .arg(name)
                 .arg(std::ffi::OsStr::from_bytes(value))
                 .arg(path.as_ref().as_os_str())
