@@ -258,12 +258,14 @@ mod tests {
     #[test]
     fn ext_attr_names_multiple() {
         let tempfile = tempfile::NamedTempFile::new().unwrap();
-        setfattr(tempfile.path(), "user.foo", b"");
-        setfattr(tempfile.path(), "user.bar", b"");
-        setfattr(tempfile.path(), "user.baz", b"");
+        setfattr(tempfile.path(), "user.abc", b"");
+        setfattr(tempfile.path(), "user.def", b"");
+        setfattr(tempfile.path(), "user.ghi", b"");
 
-        let ext_attr_names = ext_attr_names(tempfile.path()).unwrap();
-        assert_eq!(ext_attr_names, vec!["user.foo", "user.bar", "user.baz"]);
+        let mut ext_attr_names = ext_attr_names(tempfile.path()).unwrap();
+        ext_attr_names.sort();
+
+        assert_eq!(ext_attr_names, vec!["user.abc", "user.def", "user.ghi"]);
     }
 
     #[test]
