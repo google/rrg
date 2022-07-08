@@ -38,11 +38,11 @@ impl log::Log for StdoutLog {
     }
 }
 
-pub fn init() {
+pub fn init(verbosity: log::LevelFilter) {
     static LOGGER: StdoutLog = StdoutLog;
 
     log::set_logger(&LOGGER)
         .expect("failed to initialize logger");
 
-    log::set_max_level(log::STATIC_MAX_LEVEL);
+    log::set_max_level(verbosity);
 }

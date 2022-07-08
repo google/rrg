@@ -29,6 +29,6 @@ fn main() {
     rrg::listen(&opts);
 }
 
-fn init(_: &Opts) {
-    rrg::log::init();
+fn init(opts: &Opts) {
+    rrg::log::init(opts.verbosity);
 }
