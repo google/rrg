@@ -27,6 +27,11 @@ pub struct Opts {
                 parse(try_from_str = humantime::parse_duration),
                 help="Specifies the frequency of heartbeat messages")]
     pub heartbeat_rate: Duration,
+
+    /// A verbosity of logging.
+    #[structopt(long="verbosity", name="LEVEL", default_value="INFO",
+                help="Specifies the level of log verbosity")]
+    pub verbosity: log::LevelFilter,
 }
 
 /// Parses command-line arguments.
