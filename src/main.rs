@@ -29,5 +29,5 @@ fn main() {
 }
 
 fn init(_: &Opts) {
-    env_logger::init();
+    rrg::log::init();
 }

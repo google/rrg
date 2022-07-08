@@ -37,3 +37,12 @@ impl log::Log for StdoutLog {
         let _ = std::io::stdout().flush();
     }
 }
+
+pub fn init() {
+    static LOGGER: StdoutLog = StdoutLog;
+
+    log::set_logger(&LOGGER)
+        .expect("failed to initialize logger");
+
+    log::set_max_level(log::STATIC_MAX_LEVEL);
+}
