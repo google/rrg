@@ -14,27 +14,21 @@ impl log::Log for StdoutLog {
     fn log(&self, record: &log::Record) {
         let now = std::time::SystemTime::now();
 
-        print!("[");
         print! {
-            "{level} {timestamp} ",
+            "[{level} {timestamp} ",
             level = record.level(),
             timestamp = humantime::format_rfc3339_nanos(now)
         };
-
         match record.file() {
             Some(file) => print!("{file}"),
             None => print!("<unknown>"),
         }
-
         match record.line() {
-            Some(line) => print!(":{line}"),
-            None => print!(":<unknown>"),
+            Some(line) => print!(":{line}]"),
+            None => print!(":<unknown>]"),
         }
 
-        print!("{}", record.args());
-        print!("]");
-
-        println!();
+        println!(" {}", record.args());
     }
 
     fn flush(&self) {
