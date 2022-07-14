@@ -28,8 +28,7 @@ pub fn send(message: rrg_proto::jobs::GrrMessage) {
         };
 }
 
-// TODO: Rename this method to `receive`.
-pub fn collect(opts: &Opts) -> Option<rrg_proto::jobs::GrrMessage> {
+pub fn receive(opts: &Opts) -> Option<rrg_proto::jobs::GrrMessage> {
     use fleetspeak::ReadError::*;
 
     let message = match fleetspeak::receive_with_heartbeat(opts.heartbeat_rate) {

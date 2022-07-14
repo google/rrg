@@ -34,7 +34,7 @@ use crate::opts::{Opts};
 /// appropriate.
 pub fn listen(opts: &Opts) {
     loop {
-        if let Some(message) = message::collect(&opts) {
+        if let Some(message) = message::receive(&opts) {
             session::handle(message);
         }
     }
