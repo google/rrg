@@ -14,6 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use log::error;
 
+use crate::message;
 use crate::metadata::{Metadata};
 use crate::session::{self, Session};
 
@@ -25,19 +26,30 @@ pub struct Response {
     metadata: Metadata,
 }
 
-/// Handles requests for the startup action.
-pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
-    session.send(session::Sink::STARTUP, Response {
-        boot_time: boot_time(),
-        metadata: Metadata::from_cargo(),
-    })?;
+impl Response {
+
+    /// Build a response object with startup information filled-in.
+    fn build() -> Response {
+        Response {
+            boot_time: boot_time(),
+            metadata: Metadata::from_cargo(),
+        }
+    }
+}
+
+/// Sends startup information to the server.
+pub fn send() -> session::Result<()> {
+    use std::convert::TryInto as _;
+
+    let response = session::Sink::STARTUP.wrap(Response::build());
+    message::send(response.try_into()?);
 
     Ok(())
 }
 
 /// Returns information about the system boot time.
 fn boot_time() -> SystemTime {
-    // Make `sysinfo` or another crate not an optional dependency.
+    // TODO: Make `sysinfo` or another crate not an optional dependency.
 
     #[cfg(feature = "dep:sysinfo")]
     {
@@ -53,7 +65,9 @@ fn boot_time() -> SystemTime {
     }
 }
 
-impl super::Response for Response {
+// TODO: Using `action::Response` type feels awkward, try to have more genreic
+// type.
+impl crate::action::Response for Response {
 
     const RDF_NAME: Option<&'static str> = Some("StartupInfo");
 
@@ -87,26 +101,14 @@ mod tests {
     #[cfg(feature = "dep:sysinfo")]
     #[test]
     fn test_boot_time() {
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, ()).is_ok());
-
-        assert_eq!(session.reply_count(), 0);
-        assert_eq!(session.response_count(session::Sink::STARTUP), 1);
-
-        let response = session.response::<Response>(session::Sink::STARTUP, 0);
+        let response = Response::build();
         assert!(response.boot_time > std::time::UNIX_EPOCH);
         assert!(response.boot_time < std::time::SystemTime::now());
     }
 
     #[test]
     fn test_metadata() {
-        let mut session = session::test::Fake::new();
-        assert!(handle(&mut session, ()).is_ok());
-
-        assert_eq!(session.reply_count(), 0);
-        assert_eq!(session.response_count(session::Sink::STARTUP), 1);
-
-        let response = session.response::<Response>(session::Sink::STARTUP, 0);
+        let response = Response::build();
         assert!(response.metadata.version.as_numeric() > 0);
         assert_eq!(response.metadata.name, "rrg");
     }
