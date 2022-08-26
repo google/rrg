@@ -12,11 +12,11 @@ members = [".", "./macro", "./proto"]
 rrg-macro = { path = "macro/" }
 rrg-proto = { path = "proto/" }
 
-fleetspeak = { version = "0.3.0" }
+fleetspeak = { version = "0.3.1" }
 humantime = { version = "2.1.0" }
 libc = { version = "0.2.126" }
 log = { version = "0.4.17" }
-protobuf = { version = "=2.8.2" }
+protobuf = { version = "2.27.1" }
 structopt = { version = "0.3.26" }
 byteorder = { version = "1.3.4" }
 regex = { version = "1.5.5" }
