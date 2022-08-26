@@ -63,7 +63,7 @@ pub fn receive(opts: &Opts) -> Option<rrg_proto::jobs::GrrMessage> {
         }
     }
 
-    match protobuf::parse_from_bytes(&message.data[..]) {
+    match protobuf::Message::parse_from_bytes(&message.data[..]) {
         Ok(message) => Some(message),
         Err(error) => {
             error!("failed to decode the data: {}", error);

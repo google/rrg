@@ -16,7 +16,6 @@ const PROTOS: &'static [&'static str] = &[
     "vendor/grr/grr/proto/grr_response_proto/objects.proto",
     "vendor/grr/grr/proto/grr_response_proto/output_plugin.proto",
     "vendor/grr/grr/proto/grr_response_proto/flows.proto",
-    "vendor/grr/grr/proto/grr_response_proto/sysinfo.proto",
     "vendor/grr/grr/proto/grr_response_proto/user.proto",
 ];
 
@@ -28,26 +27,14 @@ fn main() {
     let proto_out_dir = outdir.join("proto");
     std::fs::create_dir_all(&proto_out_dir).unwrap();
 
-    protobuf_codegen_pure::run(protobuf_codegen_pure::Args {
-        out_dir: &proto_out_dir.to_string_lossy(),
-        includes: &[
-            "vendor/grr/grr/proto",
-            "vendor/protobuf/src"
-        ],
-        input: PROTOS,
-        ..Default::default()
-    }).unwrap();
-
-    std::fs::write(proto_out_dir.join("mod.rs"), b"
-        pub mod anomaly;
-        pub mod jobs;
-        pub mod export;
-        pub mod flows;
-        pub mod objects;
-        pub mod output_plugin;
-        pub mod sysinfo;
-        pub mod timeline;
-        pub mod user;
-        pub mod knowledge_base;
-    ").unwrap();
+    protobuf_codegen_pure::Codegen::new()
+        .out_dir(&proto_out_dir)
+        .include("vendor/grr/grr/proto")
+        .include("vendor/protobuf/src")
+        .inputs(PROTOS)
+        .customize(protobuf_codegen_pure::Customize {
+            gen_mod_rs: Some(true),
+            ..Default::default()
+        })
+        .run().unwrap();
 }

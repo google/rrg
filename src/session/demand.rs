@@ -56,7 +56,7 @@ impl Payload {
         R: action::Request,
     {
         let proto = match &self.data {
-            Some(ref bytes) => protobuf::parse_from_bytes(bytes)?,
+            Some(ref bytes) => protobuf::Message::parse_from_bytes(bytes)?,
             None => Default::default(),
         };
 

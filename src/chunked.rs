@@ -208,7 +208,7 @@ where
             Err(error) => return Some(Err(error)),
         }
 
-        let msg = match protobuf::parse_from_bytes(&self.buf[..]) {
+        let msg = match protobuf::Message::parse_from_bytes(&self.buf[..]) {
             Ok(msg) => msg,
             Err(error) => return Some(Err(error.into())),
         };
