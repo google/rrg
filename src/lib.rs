@@ -9,7 +9,7 @@ pub mod io;
 pub mod log;
 pub mod message;
 pub mod metadata;
-pub mod opts;
+pub mod args;
 pub mod session;
 
 // Consider moving these to a separate submodule.
@@ -18,7 +18,7 @@ pub mod chunked;
 #[cfg(feature = "action-timeline")]
 pub mod gzchunked;
 
-use crate::opts::{Opts};
+use crate::args::{Args};
 
 /// Enters the agent's main loop and waits for messages.
 ///
@@ -32,9 +32,9 @@ use crate::opts::{Opts};
 /// (e.g. the Fleetspeak connection has been broken). All non-critical errors
 /// are going to be handled carefully, notifying the server about the failure if
 /// appropriate.
-pub fn listen(opts: &Opts) {
+pub fn listen(args: &Args) {
     loop {
-        if let Some(message) = message::receive(&opts) {
+        if let Some(message) = message::receive(&args) {
             session::handle(message);
         }
     }
