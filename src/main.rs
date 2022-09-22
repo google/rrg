@@ -5,11 +5,11 @@
 
 use rrg::action;
 use rrg::session;
-use rrg::opts::{self, Opts};
+use rrg::args::Args;
 
 fn main() {
-    let opts = opts::from_args();
-    init(&opts);
+    let args = rrg::args::from_env_args();
+    init(&args);
 
     log::info!("sending Fleetspeak startup information");
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))
@@ -26,9 +26,9 @@ fn main() {
     }
 
     log::info!("listening for messages");
-    rrg::listen(&opts);
+    rrg::listen(&args);
 }
 
-fn init(opts: &Opts) {
-    rrg::log::init(opts.verbosity);
+fn init(args: &Args) {
+    rrg::log::init(args.verbosity);
 }

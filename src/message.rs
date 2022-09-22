@@ -5,7 +5,7 @@
 
 use log::{error, warn};
 
-use crate::opts::Opts;
+use crate::args::Args;
 
 pub fn send(message: rrg_proto::jobs::GrrMessage) {
         let data = protobuf::Message::write_to_bytes(&message)
@@ -28,10 +28,10 @@ pub fn send(message: rrg_proto::jobs::GrrMessage) {
         };
 }
 
-pub fn receive(opts: &Opts) -> Option<rrg_proto::jobs::GrrMessage> {
+pub fn receive(args: &Args) -> Option<rrg_proto::jobs::GrrMessage> {
     use fleetspeak::ReadError::*;
 
-    let message = match fleetspeak::receive_with_heartbeat(opts.heartbeat_rate) {
+    let message = match fleetspeak::receive_with_heartbeat(args.heartbeat_rate) {
         Ok(message) => message,
         Err(Malformed(error)) => {
             error!("received a malformed message: {}", error);

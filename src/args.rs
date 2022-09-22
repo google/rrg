@@ -9,17 +9,17 @@
 //! functions for parsing them into a high-level structure.
 //!
 //! Ideally, only one instance of this high-level structure should ever be
-//! created (using the [`from_args`] function). Then this instance should be
+//! created (using the [`from_env_args`] function). Then this instance should be
 //! shared through the entire lifetime of a program and explicitly passed to
 //! functions that care about it.
 //!
-//! [`from_args`]: fn.from_args.html
+//! [`from_env_args`]: fn.from_env_args.html
 
 use std::time::Duration;
 
 #[derive(argh::FromArgs)]
 /// A GRR agent written in Rust.
-pub struct Opts {
+pub struct Args {
     /// A frequency of heartbeat messages to send to the Fleetspeak client.
     #[argh(option,
            long="heartbeat-rate",
@@ -41,11 +41,11 @@ pub struct Opts {
 /// Parses command-line arguments.
 ///
 /// This is a just a convenience function intended to be used as a shortcut for
-/// creating instances of [`Opts`]. Ideally, it should be called only once in
+/// creating instances of [`Args`]. Ideally, it should be called only once in
 /// the entire lifetime of the agent.
 ///
-/// [`Opts`]: struct.Opts.html
-pub fn from_args() -> Opts {
+/// [`Args`]: struct.Args.html
+pub fn from_env_args() -> Args {
     argh::from_env()
 }
 
