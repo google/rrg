@@ -12,6 +12,7 @@ members = [".", "./macro", "./proto"]
 rrg-macro = { path = "macro/" }
 rrg-proto = { path = "proto/" }
 
+argh = { version = "0.1.8" }
 fleetspeak = { version = "0.3.1" }
 humantime = { version = "2.1.0" }
 libc = { version = "0.2.126" }

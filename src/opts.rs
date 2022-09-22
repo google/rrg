@@ -17,20 +17,24 @@
 
 use std::time::Duration;
 
-use structopt::StructOpt;
-
-#[derive(StructOpt)]
-#[structopt(name = "RRG", about = "A GRR agent rewritten in Rust.")]
+#[derive(argh::FromArgs)]
+/// A GRR agent written in Rust.
 pub struct Opts {
     /// A frequency of heartbeat messages to send to the Fleetspeak client.
-    #[structopt(long="heartbeat-rate", name="DURATION", default_value="5s",
-                parse(try_from_str = humantime::parse_duration),
-                help="Specifies the frequency of heartbeat messages")]
+    #[argh(option,
+           long="heartbeat-rate",
+           arg_name="DURATION",
+           default="::std::time::Duration::from_secs(5)",
+           description="frequency of heartbeat messages sent to Fleetspeak",
+           from_str_fn(parse_duration))]
     pub heartbeat_rate: Duration,
 
     /// A verbosity of logging.
-    #[structopt(long="verbosity", name="LEVEL", default_value="INFO",
-                help="Specifies the level of log verbosity")]
+    #[argh(option,
+           long="verbosity",
+           arg_name="LEVEL",
+           description="level of logging verbosity",
+           default="::log::LevelFilter::Info")]
     pub verbosity: log::LevelFilter,
 }
 
@@ -42,5 +46,10 @@ pub struct Opts {
 ///
 /// [`Opts`]: struct.Opts.html
 pub fn from_args() -> Opts {
-    Opts::from_args()
+    argh::from_env()
+}
+
+/// Parses a human-friendly duration description to a `Duration` object.
+fn parse_duration(value: &str) -> Result<Duration, String> {
+    humantime::parse_duration(value).map_err(|error| error.to_string())
 }
