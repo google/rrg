@@ -1,5 +1,41 @@
 use std::io::Write;
 
+struct MultiLog {
+    loggers: Vec<Box<dyn log::Log>>,
+}
+
+impl MultiLog {
+
+    fn new() -> MultiLog {
+        MultiLog {
+            loggers: Vec::new(),
+        }
+    }
+
+    fn push<L: log::Log + 'static>(&mut self, logger: L) {
+        self.loggers.push(Box::new(logger));
+    }
+}
+
+impl log::Log for MultiLog {
+
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        self.loggers.iter().any(|logger| logger.enabled(metadata))
+    }
+
+    fn log(&self, record: &log::Record) {
+        for log in &self.loggers {
+            log.log(record);
+        }
+    }
+
+    fn flush(&self) {
+        for logger in &self.loggers {
+            logger.flush();
+        }
+    }
+}
+
 struct WriterLog<W: Write> {
     writer: std::sync::Mutex<W>,
 }
