@@ -58,7 +58,7 @@ impl log::Log for MultiLog {
     }
 }
 
-struct WriterLog<W: Write> {
+struct WriterLog<W: Write + Send + Sync> {
     writer: std::sync::Mutex<W>,
 }
 
