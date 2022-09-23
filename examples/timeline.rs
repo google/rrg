@@ -17,7 +17,7 @@ use rrg::session::Sink;
 
 /// A binary for the timeline action.
 #[derive(argh::FromArgs)]
-struct Opts {
+struct Args {
     /// A path to the root directory to timeline.
     #[argh(option,
            long = "root",
@@ -99,9 +99,9 @@ impl rrg::session::Session for Session {
 }
 
 fn main() {
-    let opts: Opts = argh::from_env();
+    let args: Args = argh::from_env();
 
-    timeline::handle(&mut Session::open(opts.output), timeline::Request {
-        root: opts.root,
+    timeline::handle(&mut Session::open(args.output), timeline::Request {
+        root: args.root,
     }).expect("failed to execute the action");
 }
