@@ -1,3 +1,7 @@
+/// Initializes the logging submodule.
+///
+/// This function should be called only once at the beginning of the process
+/// startup.
 pub fn init(args: &crate::args::Args) {
     let mut logger = MultiLog::new();
     if args.log_to_stdout {
@@ -18,18 +22,22 @@ pub fn init(args: &crate::args::Args) {
     log::set_max_level(args.verbosity);
 }
 
+/// A wrapper for logging to multiple destinations.
 struct MultiLog {
+    /// A list of all registered loggers.
     loggers: Vec<Box<dyn log::Log>>,
 }
 
 impl MultiLog {
 
+    /// Creates a new wrapper with no registered loggers.
     fn new() -> MultiLog {
         MultiLog {
             loggers: Vec::new(),
         }
     }
 
+    /// Registers a new destination to log to.
     fn push<L: log::Log + 'static>(&mut self, logger: L) {
         self.loggers.push(Box::new(logger));
     }
@@ -54,12 +62,14 @@ impl log::Log for MultiLog {
     }
 }
 
+/// A simple logger implementation for logging to writable streams (e.g. files).
 struct WriterLog<W: std::io::Write + Send + Sync> {
     writer: std::sync::Mutex<W>,
 }
 
 impl<W: std::io::Write + Send + Sync> WriterLog<W> {
 
+    /// Create a new logger for the given writable stream.
     fn new(writer: W) -> WriterLog<W> {
         WriterLog { writer: std::sync::Mutex::new(writer) }
     }
