@@ -14,20 +14,22 @@ use std::path::{Path, PathBuf};
 
 use rrg::action::timeline;
 use rrg::session::Sink;
-use structopt::StructOpt;
 
-/// A type for the timelining example command-line arguments.
-#[derive(StructOpt)]
-#[structopt(name = "timeline", about = "A binary for the timeline action.")]
+/// A binary for the timeline action.
+#[derive(argh::FromArgs)]
 struct Opts {
     /// A path to the root directory to timeline.
-    #[structopt(long = "root", name = "FILE", default_value = "/",
-                help = "Root directory to timeline")]
+    #[argh(option,
+           long = "root",
+           arg_name = "FILE",
+           default = "::std::path::PathBuf::from(\"/\")",
+           description = "root directory to timeline")]
     root: PathBuf,
 
     /// A path to a file to dump the results into.
-    #[structopt(long = "output", name = "DIRECTORY",
-                help = "File to dump the results into")]
+    #[argh(positional,
+           arg_name = "OUTPUT",
+           description = "path to dump the results into")]
     output: PathBuf,
 }
 
@@ -97,7 +99,7 @@ impl rrg::session::Session for Session {
 }
 
 fn main() {
-    let opts = Opts::from_args();
+    let opts: Opts = argh::from_env();
 
     timeline::handle(&mut Session::open(opts.output), timeline::Request {
         root: opts.root,
