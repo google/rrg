@@ -36,6 +36,19 @@ pub struct Args {
            description="level of logging verbosity",
            default="::log::LevelFilter::Info")]
     pub verbosity: log::LevelFilter,
+
+    /// Determines whether to log to the standard output.
+    #[argh(switch,
+           long="log-to-stdout",
+           description="whether to log to standard output")]
+    pub log_to_stdout: bool,
+
+    /// Determines whether to log to a file (and where).
+    #[argh(option,
+           long="log-to-file",
+           arg_name="PATH",
+           description="whether to log to a file")]
+    pub log_to_file: Option<std::path::PathBuf>,
 }
 
 /// Parses command-line arguments.

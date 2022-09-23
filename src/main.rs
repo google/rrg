@@ -30,5 +30,5 @@ fn main() {
 }
 
 fn init(args: &Args) {
-    rrg::log::init(args.verbosity);
+    rrg::log::init(args);
 }
