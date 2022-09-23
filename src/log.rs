@@ -2,6 +2,26 @@ use std::io::Write;
 
 use crate::args::Args;
 
+pub fn init(args: &Args) {
+    let mut logger = MultiLog::new();
+    if args.log_to_stdout {
+        logger.push(WriterLog::new(std::io::stdout()));
+    }
+    if let Some(ref path) = args.log_to_file {
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .expect("failed to open the log file");
+
+        logger.push(WriterLog::new(file));
+    }
+
+    log::set_boxed_logger(Box::new(logger))
+        .expect("failed to initialize logger");
+
+    log::set_max_level(args.verbosity);
+}
+
 struct MultiLog {
     loggers: Vec<Box<dyn log::Log>>,
 }
@@ -99,24 +119,4 @@ impl<W: Write + Send + Sync> log::Log for WriterLog<W> {
             .flush()
             .expect("failed to flush the log output stream");
     }
-}
-
-pub fn init(args: &Args) {
-    let mut logger = MultiLog::new();
-    if args.log_to_stdout {
-        logger.push(WriterLog::new(std::io::stdout()));
-    }
-    if let Some(ref path) = args.log_to_file {
-        let file = std::fs::OpenOptions::new()
-            .append(true)
-            .open(path)
-            .expect("failed to open the log file");
-
-        logger.push(WriterLog::new(file));
-    }
-
-    log::set_boxed_logger(Box::new(logger))
-        .expect("failed to initialize logger");
-
-    log::set_max_level(args.verbosity);
 }
