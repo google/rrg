@@ -1,8 +1,17 @@
 use std::io::Write;
 
-struct StdoutLog;
+struct WriterLog<W: Write> {
+    writer: std::sync::Mutex<W>,
+}
 
-impl log::Log for StdoutLog {
+impl<W: Write + Send + Sync> WriterLog<W> {
+
+    fn new(writer: W) -> WriterLog<W> {
+        WriterLog { writer: std::sync::Mutex::new(writer) }
+    }
+}
+
+impl<W: Write + Send + Sync> log::Log for WriterLog<W> {
 
     // TODO: Add support for log filtering. For now we just output everything as
     // there is no way to change the log verbosity.
@@ -14,34 +23,55 @@ impl log::Log for StdoutLog {
     fn log(&self, record: &log::Record) {
         let now = std::time::SystemTime::now();
 
-        print! {
-            "[{level} {timestamp} ",
-            level = record.level(),
-            timestamp = humantime::format_rfc3339_nanos(now)
-        };
-        match record.file() {
-            Some(file) => print!("{file}"),
-            None => print!("<unknown>"),
-        }
-        match record.line() {
-            Some(line) => print!(":{line}]"),
-            None => print!(":<unknown>]"),
-        }
+        // We consider failures to write to the log stream critical. Otherwise,
+        // if there is some other issue with the system it is not possible to
+        // properly communicate it. Thus, we panic on all write errors.
+        let mut writer = self.writer.lock()
+            .expect("failed to acquire log output stream lock");
 
-        println!(" {}", record.args());
+        || -> Result<(), std::io::Error> {
+            write! {
+                writer,
+                "[{level} {timestamp} ",
+                level = record.level(),
+                timestamp = humantime::format_rfc3339_nanos(now)
+            }?;
+            match record.file() {
+                Some(file) => write!(writer, "{file}")?,
+                None => write!(writer, "<unknown>")?,
+            }
+            match record.line() {
+                Some(line) => write!(writer, ":{line}]")?,
+                None => write!(writer, ":<unknown>]")?,
+            }
+
+            write!(writer, " {}\n", record.args())?;
+
+            Ok(())
+        }().expect("failed to write to the log output stream")
     }
 
     fn flush(&self) {
-        // There is nothing we can do in case of a flushing error, so we just
-        // ignore it.
-        let _ = std::io::stdout().flush();
+        // Similarly to write errors, we also panic on flush errors as there is
+        // nothing we can do otherwise.
+        self.writer
+            .lock()
+            .expect("failed to acquire log output stream lock")
+            .flush()
+            .expect("failed to flush the log output stream");
     }
 }
 
 pub fn init(verbosity: log::LevelFilter) {
-    static LOGGER: StdoutLog = StdoutLog;
+    use lazy_static::lazy_static;
 
-    log::set_logger(&LOGGER)
+    lazy_static! {
+        static ref LOGGER: WriterLog<std::io::Stdout> = {
+            WriterLog::new(std::io::stdout())
+        };
+    }
+
+    log::set_logger(&*LOGGER)
         .expect("failed to initialize logger");
 
     log::set_max_level(verbosity);
