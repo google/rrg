@@ -1,5 +1,7 @@
 use std::io::Write;
 
+use crate::args::Args;
+
 struct MultiLog {
     loggers: Vec<Box<dyn log::Log>>,
 }
@@ -98,17 +100,22 @@ impl<W: Write + Send + Sync> log::Log for WriterLog<W> {
     }
 }
 
-pub fn init(verbosity: log::LevelFilter) {
-    use lazy_static::lazy_static;
+pub fn init(args: &Args) {
+    let mut logger = MultiLog::new();
+    if args.log_to_stdout {
+        logger.push(WriterLog::new(std::io::stdout()));
+    }
+    if let Some(ref path) = args.log_to_file {
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .expect("failed to open the log file");
 
-    lazy_static! {
-        static ref LOGGER: WriterLog<std::io::Stdout> = {
-            WriterLog::new(std::io::stdout())
-        };
+        logger.push(WriterLog::new(file));
     }
 
-    log::set_logger(&*LOGGER)
+    log::set_boxed_logger(Box::new(logger))
         .expect("failed to initialize logger");
 
-    log::set_max_level(verbosity);
+    log::set_max_level(args.verbosity);
 }
