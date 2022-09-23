@@ -51,14 +51,15 @@ impl<W: Write + Send + Sync> WriterLog<W> {
 
 impl<W: Write + Send + Sync> log::Log for WriterLog<W> {
 
-    // TODO: Add support for log filtering. For now we just output everything as
-    // there is no way to change the log verbosity.
-
     fn enabled(&self, _metadata: &log::Metadata) -> bool {
         true
     }
 
     fn log(&self, record: &log::Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+
         let now = std::time::SystemTime::now();
 
         // We consider failures to write to the log stream critical. Otherwise,
