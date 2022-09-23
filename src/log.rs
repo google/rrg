@@ -1,8 +1,4 @@
-use std::io::Write;
-
-use crate::args::Args;
-
-pub fn init(args: &Args) {
+pub fn init(args: &crate::args::Args) {
     let mut logger = MultiLog::new();
     if args.log_to_stdout {
         logger.push(WriterLog::new(std::io::stdout()));
@@ -58,18 +54,18 @@ impl log::Log for MultiLog {
     }
 }
 
-struct WriterLog<W: Write + Send + Sync> {
+struct WriterLog<W: std::io::Write + Send + Sync> {
     writer: std::sync::Mutex<W>,
 }
 
-impl<W: Write + Send + Sync> WriterLog<W> {
+impl<W: std::io::Write + Send + Sync> WriterLog<W> {
 
     fn new(writer: W) -> WriterLog<W> {
         WriterLog { writer: std::sync::Mutex::new(writer) }
     }
 }
 
-impl<W: Write + Send + Sync> log::Log for WriterLog<W> {
+impl<W: std::io::Write + Send + Sync> log::Log for WriterLog<W> {
 
     fn enabled(&self, _metadata: &log::Metadata) -> bool {
         true
