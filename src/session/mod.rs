@@ -133,39 +133,6 @@ pub trait Session {
     }
 }
 
-/// A session type for unrequested action executions.
-///
-/// Certain kind of actions are executed not only when a server flow decides to
-/// do so, but also upon particular kind of events (e.g. the agent's startup).
-/// In such cases, when one needs to trigger action execution manually, ad-hoc
-/// sessions should be used.
-pub struct Adhoc;
-
-impl Session for Adhoc {
-
-    // TODO: Session trait should be probably split into two traits and then
-    // make the actions that do not care about the `reply` method implement the
-    // simpler one.
-    fn reply<R>(&mut self, response: R) -> Result<()>
-    where
-        R: action::Response,
-    {
-        error!("attempted to reply to an ad-hoc session, dropping response");
-        drop(response);
-
-        Ok(())
-    }
-
-    fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
-    where
-        R: action::Response,
-    {
-        send(sink.wrap(response))?;
-
-        Ok(())
-    }
-}
-
 /// A session type for ordinary action requests.
 ///
 /// This is a normal session type that that is associated with some flow on the
