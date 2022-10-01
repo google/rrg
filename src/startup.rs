@@ -41,7 +41,7 @@ impl Response {
 pub fn send() -> session::Result<()> {
     use std::convert::TryInto as _;
 
-    let response = crate::sink::STARTUP.wrap(Response::build());
+    let response = crate::sink::STARTUP.address(Response::build());
     message::send(response.try_into()?);
 
     Ok(())
@@ -65,11 +65,9 @@ fn boot_time() -> SystemTime {
     }
 }
 
-// TODO: Using `action::Response` type feels awkward, try to have more genreic
-// type.
-impl crate::action::Response for Response {
+impl crate::sink::Parcel for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("StartupInfo");
+    const RDF_NAME: &'static str = "StartupInfo";
 
     type Proto = rrg_proto::jobs::StartupInfo;
 
