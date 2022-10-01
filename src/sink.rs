@@ -72,14 +72,6 @@ pub struct Sink {
 
 impl Sink {
 
-    // TODO: Move these sinks to top-level constants to avoid awkward imports.
-
-    /// A handle to the sink expecting startup information.
-    pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
-
-    /// A handle to the transfer store sink.
-    pub const TRANSFER_STORE: Sink = Sink { id: "/flows/F:TransferStore" };
-
     // TODO: Refactor sinks to use custom `Message` type rather than `Response`
     // and make response always have `request_id` and `response_id` fields.
 
@@ -105,3 +97,9 @@ impl Sink {
         }
     }
 }
+
+/// A handle to the sink expecting startup information.
+pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
+
+/// A handle to the transfer store sink.
+pub const TRANSFER_STORE: Sink = Sink { id: "/flows/F:TransferStore" };

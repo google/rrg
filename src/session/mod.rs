@@ -393,6 +393,7 @@ pub mod test {
 mod tests {
 
     use super::*;
+    use crate::sink;
 
     #[test]
     fn test_fake_reply_count() {
@@ -416,14 +417,14 @@ mod tests {
         // defined).
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(Sink::STARTUP, ()).unwrap();
-            session.send(Sink::STARTUP, ()).unwrap();
+            session.send(crate::sink::STARTUP, ()).unwrap();
+            session.send(crate::sink::STARTUP, ()).unwrap();
         }
 
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        assert_eq!(session.response_count(Sink::STARTUP), 2);
+        assert_eq!(session.response_count(crate::sink::STARTUP), 2);
     }
 
     #[test]
@@ -472,15 +473,15 @@ mod tests {
     fn test_fake_response_correct_response() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(Sink::STARTUP, StringResponse::from("foo")).unwrap();
-            session.send(Sink::STARTUP, StringResponse::from("bar")).unwrap();
+            session.send(sink::STARTUP, StringResponse::from("foo")).unwrap();
+            session.send(sink::STARTUP, StringResponse::from("bar")).unwrap();
         }
 
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        let response_foo = session.response::<StringResponse>(Sink::STARTUP, 0);
-        let response_bar = session.response::<StringResponse>(Sink::STARTUP, 1);
+        let response_foo = session.response::<StringResponse>(sink::STARTUP, 0);
+        let response_bar = session.response::<StringResponse>(sink::STARTUP, 1);
         assert_eq!(response_foo.0, "foo");
         assert_eq!(response_bar.0, "bar");
     }
@@ -490,14 +491,14 @@ mod tests {
     fn test_fake_response_incorrect_response_id() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(Sink::STARTUP, ()).unwrap();
-            session.send(Sink::STARTUP, ()).unwrap();
+            session.send(sink::STARTUP, ()).unwrap();
+            session.send(sink::STARTUP, ()).unwrap();
         }
 
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        session.response::<()>(Sink::STARTUP, 42);
+        session.response::<()>(sink::STARTUP, 42);
     }
 
     #[test]
@@ -505,13 +506,13 @@ mod tests {
     fn test_fake_response_incorrect_response_type() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(Sink::STARTUP, StringResponse::from("quux")).unwrap();
+            session.send(sink::STARTUP, StringResponse::from("quux")).unwrap();
         }
 
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        session.response::<()>(Sink::STARTUP, 0);
+        session.response::<()>(sink::STARTUP, 0);
     }
 
     #[test]
@@ -555,7 +556,7 @@ mod tests {
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        let mut responses = session.responses::<()>(Sink::STARTUP);
+        let mut responses = session.responses::<()>(crate::sink::STARTUP);
         assert_eq!(responses.next(), None);
     }
 
@@ -563,15 +564,15 @@ mod tests {
     fn test_fake_responses_multiple_responses() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(Sink::STARTUP, StringResponse::from("foo")).unwrap();
-            session.send(Sink::STARTUP, StringResponse::from("bar")).unwrap();
-            session.send(Sink::STARTUP, StringResponse::from("baz")).unwrap();
+            session.send(sink::STARTUP, StringResponse::from("foo")).unwrap();
+            session.send(sink::STARTUP, StringResponse::from("bar")).unwrap();
+            session.send(sink::STARTUP, StringResponse::from("baz")).unwrap();
         }
 
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        let mut responses = session.responses::<StringResponse>(Sink::STARTUP);
+        let mut responses = session.responses::<StringResponse>(sink::STARTUP);
         assert_eq!(responses.next().unwrap().0, "foo");
         assert_eq!(responses.next().unwrap().0, "bar");
         assert_eq!(responses.next().unwrap().0, "baz");

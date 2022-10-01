@@ -17,7 +17,6 @@ use log::error;
 use crate::message;
 use crate::metadata::{Metadata};
 use crate::session;
-use crate::sink::Sink;
 
 /// A response type for the startup action.
 pub struct Response {
@@ -42,7 +41,7 @@ impl Response {
 pub fn send() -> session::Result<()> {
     use std::convert::TryInto as _;
 
-    let response = Sink::STARTUP.wrap(Response::build());
+    let response = crate::sink::STARTUP.wrap(Response::build());
     message::send(response.try_into()?);
 
     Ok(())
