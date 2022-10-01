@@ -13,7 +13,6 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use rrg::action::timeline;
-use rrg::session::Sink;
 
 /// A binary for the timeline action.
 #[derive(argh::FromArgs)]
@@ -74,7 +73,7 @@ impl rrg::session::Session for Session {
         Ok(())
     }
 
-    fn send<R>(&mut self, sink: Sink, response: R) -> rrg::session::Result<()>
+    fn send<R>(&mut self, sink: rrg::sink::Sink, response: R) -> rrg::session::Result<()>
     where
         R: rrg::action::Response + 'static,
     {
@@ -83,7 +82,7 @@ impl rrg::session::Session for Session {
 
         // Just a sanity check in case the implementation of the timeline action
         // starts sending data to other sinks.
-        assert_eq!(sink, Sink::TRANSFER_STORE);
+        assert_eq!(sink, rrg::sink::TRANSFER_STORE);
 
         let response = (&response as &dyn std::any::Any)
             .downcast_ref::<timeline::Chunk>()
