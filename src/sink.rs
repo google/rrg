@@ -26,16 +26,13 @@ use crate::session;
 /// deduplicating data that we already collected in the past.
 pub trait Parcel {
     /// Low-level Protocol Buffers type representing the parcel data.
-    type Protobuf: protobuf::Message;
+    type Proto: protobuf::Message;
 
     /// A name of the corresponding RDF class in GRR.
     const RDF_NAME: &'static str;
 
     /// Converts the parcel to its low-level representation.
-    fn into_proto(self) -> Self::Protobuf;
-
-    /// Converts a Protocol Buffers message to high-level type.
-    fn from_proto(message: Self::Protobuf) -> Self;
+    fn into_proto(self) -> Self::Proto;
 }
 
 /// A parcel addressed to a particular server-side sink.
