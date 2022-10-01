@@ -11,6 +11,7 @@ pub mod message;
 pub mod metadata;
 pub mod args;
 pub mod session;
+pub mod sink;
 pub mod startup;
 
 // Consider moving these to a separate submodule.

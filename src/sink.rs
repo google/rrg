@@ -72,6 +72,8 @@ pub struct Sink {
 
 impl Sink {
 
+    // TODO: Move these sinks to top-level constants to avoid awkward imports.
+
     /// A handle to the sink expecting startup information.
     pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
 

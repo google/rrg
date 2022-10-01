@@ -17,7 +17,6 @@
 mod demand;
 mod error;
 mod response;
-mod sink;
 mod time;
 
 use std::convert::TryInto;
@@ -26,11 +25,12 @@ use log::{error, info};
 
 use crate::action;
 use crate::message;
+use crate::sink::Sink;
 pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError,
                       UnsupportedValueError, UnknownEnumValueError};
-use self::response::{Response, Status};
-pub use self::sink::Sink;
+// TODO: Revisit visibility once comms refactoring is complete.
+pub use self::response::{Response, Status};
 pub use self::time::time_from_micros;
 
 /// A specialized `Result` type for sessions.
