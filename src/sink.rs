@@ -38,9 +38,17 @@ pub trait Parcel {
 /// A parcel addressed to a particular server-side sink.
 pub struct AddressedParcel<P: Parcel> {
     /// Destination of the parcel.
-    dest: Sink,
+    sink: Sink,
     /// Actual parcel.
     parcel: P,
+}
+
+impl<P: Parcel> AddressedParcel<P> {
+
+    /// Sink to which the parcel should be delivered to.
+    pub fn sink(&self) -> Sink {
+        self.sink
+    }
 }
 
 impl<P: Parcel> std::convert::TryInto<rrg_proto::jobs::GrrMessage> for AddressedParcel<P> {
@@ -49,7 +57,7 @@ impl<P: Parcel> std::convert::TryInto<rrg_proto::jobs::GrrMessage> for Addressed
 
     fn try_into(self) -> Result<rrg_proto::jobs::GrrMessage, protobuf::ProtobufError> {
         let mut message = rrg_proto::jobs::GrrMessage::new();
-        message.set_session_id(String::from(self.dest.id));
+        message.set_session_id(String::from(self.sink.id));
         message.set_field_type(rrg_proto::jobs::GrrMessage_Type::MESSAGE);
         message.set_args_rdf_name(String::from(P::RDF_NAME));
 
@@ -75,7 +83,7 @@ impl Sink {
     /// Adresses a given `parcel` to this sink.
     pub fn address<P: Parcel>(&self, parcel: P) -> AddressedParcel<P> {
         AddressedParcel {
-            dest: *self,
+            sink: *self,
             parcel,
         }
     }
