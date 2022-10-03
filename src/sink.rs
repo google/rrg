@@ -13,9 +13,6 @@
 //! (which is clearly not a response to a particular request) or to transfer
 //! file blobs to a specialized storage.
 
-use crate::action;
-use crate::session;
-
 /// Data sent to a server not belonging to a particular action call.
 ///
 /// Sometimes the agent should send data to the server that is not connected
@@ -96,29 +93,11 @@ pub struct Sink {
 }
 
 impl Sink {
-
-    // TODO: Refactor sinks to use custom `Message` type rather than `Response`
-    // and make response always have `request_id` and `response_id` fields.
-
     /// Adresses a given `parcel` to this sink.
     pub fn address<P: Parcel>(&self, parcel: P) -> AddressedParcel<P> {
         AddressedParcel {
             sink: *self,
             parcel,
-        }
-    }
-
-    // TODO: Remove the function below once only parcels are used.
-    /// Wraps an action response to a sink-specific session response.
-    pub fn wrap<R>(&self, response: R) -> session::Response<R>
-    where
-        R: action::Response,
-    {
-        session::Response {
-            session_id: String::from(self.id),
-            request_id: None,
-            response_id: None,
-            data: response,
         }
     }
 }
