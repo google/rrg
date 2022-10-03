@@ -185,7 +185,7 @@ where
         let chunk = Chunk::from_bytes(part);
         let chunk_id = chunk.id();
 
-        session.send(crate::sink::TRANSFER_STORE, chunk)?;
+        session.send(crate::sink::TRANSFER_STORE.address(chunk))?;
         response.chunk_ids.push(chunk_id);
     }
 
@@ -227,9 +227,9 @@ impl super::Response for Response {
     }
 }
 
-impl super::Response for Chunk {
+impl crate::sink::Parcel for Chunk {
 
-    const RDF_NAME: Option<&'static str> = Some("DataBlob");
+    const RDF_NAME: &'static str = "DataBlob";
 
     type Proto = rrg_proto::jobs::DataBlob;
 
@@ -451,11 +451,11 @@ mod tests {
         use std::collections::HashMap;
         use crate::sink;
 
-        let chunk_count = session.response_count(sink::TRANSFER_STORE);
+        let chunk_count = session.parcel_count(sink::TRANSFER_STORE);
         assert_eq!(session.reply_count(), 1);
         assert_eq!(session.reply::<Response>(0).chunk_ids.len(), chunk_count);
 
-        let chunks_by_id = session.responses::<Chunk>(sink::TRANSFER_STORE)
+        let chunks_by_id = session.parcels::<Chunk>(sink::TRANSFER_STORE)
             .map(|chunk| (chunk.id(), chunk))
             .collect::<HashMap<_, _>>();
 

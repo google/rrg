@@ -25,7 +25,6 @@ use log::{error, info};
 
 use crate::action;
 use crate::message;
-use crate::sink::Sink;
 pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError,
                       UnsupportedValueError, UnknownEnumValueError};
@@ -123,9 +122,9 @@ pub trait Session {
     fn reply<R>(&mut self, response: R) -> Result<()>
     where R: action::Response + 'static;
 
-    /// Sends a message to a particular sink.
-    fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
-    where R: action::Response + 'static;
+    /// Sends an adressed parcel.
+    fn send<P>(&mut self, parcel: crate::sink::AddressedParcel<P>) -> Result<()>
+    where P: crate::sink::Parcel + 'static;
 
     /// Sends a heartbeat signal to the Fleetspeak process.
     fn heartbeat(&mut self) {
@@ -194,11 +193,11 @@ impl Session for Action {
         Ok(())
     }
 
-    fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
+    fn send<P>(&mut self, parcel: crate::sink::AddressedParcel<P>) -> Result<()>
     where
-        R: action::Response,
+        P: crate::sink::Parcel,
     {
-        send(sink.wrap(response))?;
+        crate::message::send(parcel.try_into()?);
 
         Ok(())
     }
@@ -221,10 +220,12 @@ where
 
 #[cfg(test)]
 pub mod test {
+
     use std::any::Any;
     use std::collections::HashMap;
 
     use super::*;
+    use crate::sink::Sink;
 
     /// A session type intended to be used in tests.
     ///
@@ -237,7 +238,7 @@ pub mod test {
     /// that the action sends and lets the creator inspect them later.
     pub struct Fake {
         replies: Vec<Box<dyn Any>>,
-        responses: HashMap<Sink, Vec<Box<dyn Any>>>,
+        parcels: HashMap<Sink, Vec<Box<dyn Any>>>,
     }
 
     impl Fake {
@@ -246,7 +247,7 @@ pub mod test {
         pub fn new() -> Fake {
             Fake {
                 replies: Vec::new(),
-                responses: std::collections::HashMap::new(),
+                parcels: std::collections::HashMap::new(),
             }
         }
 
@@ -285,38 +286,38 @@ pub mod test {
             })
         }
 
-        /// Yields the number of responses sent so far to the specified sink.
-        pub fn response_count(&self, sink: Sink) -> usize {
-            match self.responses.get(&sink) {
-                Some(responses) => responses.len(),
+        /// Yields the number of parcels sent so far to the specified sink.
+        pub fn parcel_count(&self, sink: Sink) -> usize {
+            match self.parcels.get(&sink) {
+                Some(parcels) => parcels.len(),
                 None => 0,
             }
         }
 
-        /// Retrieves a response with the given id sent to a particular sink.
+        /// Retrieves a parcel with the given id sent to a particular sink.
         ///
-        /// The identifier corresponding to the first response to the particular
+        /// The identifier corresponding to the first parcel to the particular
         /// sink is 0, to the second one (to the same sink) is 1 and so on.
         ///
         /// This method will panic if a reply with the specified `id` to the
         /// given `sink` does not exist or if it exists but has wrong type.
-        pub fn response<R>(&self, sink: Sink, id: usize) -> &R
+        pub fn parcel<P>(&self, sink: Sink, id: usize) -> &P
         where
-            R: action::Response + 'static,
+            P: crate::sink::Parcel + 'static,
         {
-            match self.responses(sink).nth(id) {
-                Some(response) => response,
-                None => panic!("no response #{} for sink '{:?}'", id, sink),
+            match self.parcels(sink).nth(id) {
+                Some(parcel) => parcel,
+                None => panic!("no parcel #{} for sink '{:?}'", id, sink),
             }
         }
 
-        /// Constructs an iterator over session responses for the given sink.
+        /// Constructs an iterator over session parcels for the given sink.
         ///
-        /// The iterator will panic (but not immediately) if some response has
+        /// The iterator will panic (but not immediately) if some parcels has
         /// an incorrect type.
-        pub fn responses<R>(&self, sink: Sink) -> impl Iterator<Item = &R>
+        pub fn parcels<P>(&self, sink: Sink) -> impl Iterator<Item = &P>
         where
-            R: action::Response + 'static,
+            P: crate::sink::Parcel + 'static,
         {
             // Since the empty iterator (as defined in the standard library) is
             // a specific type, it cannot be returned in one branch but not in
@@ -324,11 +325,11 @@ pub mod test {
             //
             // Instead, we use the fact that `Option` is an iterator and then we
             // squash it with `Iterator::flatten`.
-            let responses = self.responses.get(&sink).into_iter().flatten();
+            let parcels = self.parcels.get(&sink).into_iter().flatten();
 
-            responses.map(move |response| match response.downcast_ref() {
-                Some(response) => response,
-                None => panic!("unexpected response type in sink '{:?}'", sink),
+            parcels.map(move |parcel| match parcel.downcast_ref() {
+                Some(parcel) => parcel,
+                None => panic!("unexpected parcel type in sink '{:?}'", sink),
             })
         }
     }
@@ -344,12 +345,14 @@ pub mod test {
             Ok(())
         }
 
-        fn send<R>(&mut self, sink: Sink, response: R) -> Result<()>
+        fn send<P>(&mut self, parcel: crate::sink::AddressedParcel<P>) -> Result<()>
         where
-            R: action::Response + 'static,
+            P: crate::sink::Parcel + 'static,
         {
-            let responses = self.responses.entry(sink).or_insert_with(Vec::new);
-            responses.push(Box::new(response));
+            let sink = parcel.sink();
+
+            let parcels = self.parcels.entry(sink).or_insert_with(Vec::new);
+            parcels.push(Box::new(parcel.unpack()));
 
             Ok(())
         }
@@ -378,20 +381,20 @@ mod tests {
     }
 
     #[test]
-    fn test_fake_response_count() {
+    fn test_fake_parcel_count() {
 
         // TODO: Extend this test with more sinks (once we have some more sinks
         // defined).
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(crate::sink::STARTUP, ()).unwrap();
-            session.send(crate::sink::STARTUP, ()).unwrap();
+            session.send(crate::sink::STARTUP.address(())).unwrap();
+            session.send(crate::sink::STARTUP.address(())).unwrap();
         }
 
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        assert_eq!(session.response_count(crate::sink::STARTUP), 2);
+        assert_eq!(session.parcel_count(crate::sink::STARTUP), 2);
     }
 
     #[test]
@@ -437,53 +440,58 @@ mod tests {
     }
 
     #[test]
-    fn test_fake_response_correct_response() {
+    fn test_fake_parcel_correct_parcel() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP, StringResponse::from("foo")).unwrap();
-            session.send(sink::STARTUP, StringResponse::from("bar")).unwrap();
+            session.send(sink::STARTUP.address(StringResponse::from("foo")))
+                .unwrap();
+            session.send(sink::STARTUP.address(StringResponse::from("bar")))
+                .unwrap();
         }
 
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        let response_foo = session.response::<StringResponse>(sink::STARTUP, 0);
-        let response_bar = session.response::<StringResponse>(sink::STARTUP, 1);
+        let response_foo = session.parcel::<StringResponse>(sink::STARTUP, 0);
+        let response_bar = session.parcel::<StringResponse>(sink::STARTUP, 1);
         assert_eq!(response_foo.0, "foo");
         assert_eq!(response_bar.0, "bar");
     }
 
     #[test]
-    #[should_panic(expected = "no response #42")]
-    fn test_fake_response_incorrect_response_id() {
+    #[should_panic(expected = "no parcel #42")]
+    fn test_fake_parcel_incorrect_parcel_id() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP, ()).unwrap();
-            session.send(sink::STARTUP, ()).unwrap();
+            session.send(sink::STARTUP.address(()))
+                .unwrap();
+            session.send(sink::STARTUP.address(()))
+                .unwrap();
         }
 
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        session.response::<()>(sink::STARTUP, 42);
+        session.parcel::<()>(sink::STARTUP, 42);
     }
 
     #[test]
-    #[should_panic(expected = "unexpected response type")]
-    fn test_fake_response_incorrect_response_type() {
+    #[should_panic(expected = "unexpected parcel type")]
+    fn test_fake_parcel_incorrect_parcel_type() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP, StringResponse::from("quux")).unwrap();
+            session.send(sink::STARTUP.address(StringResponse::from("quux")))
+                .unwrap();
         }
 
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        session.response::<()>(sink::STARTUP, 0);
+        session.parcel::<()>(sink::STARTUP, 0);
     }
 
     #[test]
-    fn test_fake_replies_no_responses() {
+    fn test_fake_replies_no_parcels() {
 
         fn handle<S: Session>(_: &mut S, _: ()) {
         }
@@ -496,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fake_replies_multiple_responses() {
+    fn test_fake_replies_multiple_parcels() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
             session.reply(StringResponse::from("foo")).unwrap();
@@ -515,7 +523,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fake_responses_no_responses() {
+    fn test_fake_parcels_no_parcels() {
 
         fn handle<S: Session>(_: &mut S, _: ()) {
         }
@@ -523,27 +531,30 @@ mod tests {
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        let mut responses = session.responses::<()>(crate::sink::STARTUP);
-        assert_eq!(responses.next(), None);
+        let mut parcels = session.parcels::<()>(crate::sink::STARTUP);
+        assert_eq!(parcels.next(), None);
     }
 
     #[test]
-    fn test_fake_responses_multiple_responses() {
+    fn test_fake_parcels_multiple_parcels() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP, StringResponse::from("foo")).unwrap();
-            session.send(sink::STARTUP, StringResponse::from("bar")).unwrap();
-            session.send(sink::STARTUP, StringResponse::from("baz")).unwrap();
+            session.send(sink::STARTUP.address(StringResponse::from("foo")))
+                .unwrap();
+            session.send(sink::STARTUP.address(StringResponse::from("bar")))
+                .unwrap();
+            session.send(sink::STARTUP.address(StringResponse::from("baz")))
+                .unwrap();
         }
 
         let mut session = test::Fake::new();
         handle(&mut session, ());
 
-        let mut responses = session.responses::<StringResponse>(sink::STARTUP);
-        assert_eq!(responses.next().unwrap().0, "foo");
-        assert_eq!(responses.next().unwrap().0, "bar");
-        assert_eq!(responses.next().unwrap().0, "baz");
-        assert_eq!(responses.next(), None);
+        let mut parcels = session.parcels::<StringResponse>(sink::STARTUP);
+        assert_eq!(parcels.next().unwrap().0, "foo");
+        assert_eq!(parcels.next().unwrap().0, "bar");
+        assert_eq!(parcels.next().unwrap().0, "baz");
+        assert_eq!(parcels.next(), None);
     }
 
     #[derive(Debug, PartialEq, Eq)]
@@ -559,6 +570,20 @@ mod tests {
     impl action::Response for StringResponse {
 
         const RDF_NAME: Option<&'static str> = Some("RDFString");
+
+        type Proto = protobuf::well_known_types::StringValue;
+
+        fn into_proto(self) -> protobuf::well_known_types::StringValue {
+            let mut proto = protobuf::well_known_types::StringValue::new();
+            proto.set_value(self.0);
+
+            proto
+        }
+    }
+
+    impl crate::sink::Parcel for StringResponse {
+
+        const RDF_NAME: &'static str = "RDFString";
 
         type Proto = protobuf::well_known_types::StringValue;
 

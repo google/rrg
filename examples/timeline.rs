@@ -73,24 +73,24 @@ impl rrg::session::Session for Session {
         Ok(())
     }
 
-    fn send<R>(&mut self, sink: rrg::sink::Sink, response: R) -> rrg::session::Result<()>
+    fn send<P>(&mut self, parcel: rrg::sink::AddressedParcel<P>) -> rrg::session::Result<()>
     where
-        R: rrg::action::Response + 'static,
+        P: rrg::sink::Parcel + 'static,
     {
         use std::io::Write as _;
         use byteorder::{BigEndian, WriteBytesExt as _};
 
         // Just a sanity check in case the implementation of the timeline action
         // starts sending data to other sinks.
-        assert_eq!(sink, rrg::sink::TRANSFER_STORE);
+        assert_eq!(parcel.sink(), rrg::sink::TRANSFER_STORE);
 
-        let response = (&response as &dyn std::any::Any)
+        let parcel = (&parcel as &dyn std::any::Any)
             .downcast_ref::<timeline::Chunk>()
             .expect("unexpected response type");
 
-        self.output.write_u64::<BigEndian>(response.data.len() as u64)
+        self.output.write_u64::<BigEndian>(parcel.data.len() as u64)
             .expect("failed to write chunk size tag");
-        self.output.write_all(&response.data[..])
+        self.output.write_all(&parcel.data[..])
             .expect("failed to write chunk data");
 
         Ok(())

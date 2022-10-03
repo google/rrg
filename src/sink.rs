@@ -64,6 +64,11 @@ impl<P: Parcel> AddressedParcel<P> {
     pub fn sink(&self) -> Sink {
         self.sink
     }
+
+    /// Unpacks the underlying parcel.
+    pub fn unpack(self) -> P {
+        self.parcel
+    }
 }
 
 impl<P: Parcel> std::convert::TryInto<rrg_proto::jobs::GrrMessage> for AddressedParcel<P> {
