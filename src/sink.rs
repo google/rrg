@@ -35,6 +35,21 @@ pub trait Parcel {
     fn into_proto(self) -> Self::Proto;
 }
 
+impl Parcel for () {
+
+    type Proto = protobuf::well_known_types::Empty;
+
+    // This implementation is intended to be used only in tests and we do not
+    // really care about the `RDF_NAME` field there. And since GRR does not have
+    // any RDF wrapper for empty type (except maybe `EmptyFlowArgs`, but this is
+    // semantically different), we just leave it blank.
+    const RDF_NAME: &'static str = "";
+
+    fn into_proto(self) -> protobuf::well_known_types::Empty {
+        protobuf::well_known_types::Empty::new()
+    }
+}
+
 /// A parcel addressed to a particular server-side sink.
 pub struct AddressedParcel<P: Parcel> {
     /// Destination of the parcel.
