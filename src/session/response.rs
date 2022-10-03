@@ -5,14 +5,11 @@
 
 use std::convert::TryInto;
 
-use crate::action;
-use crate::session;
-
 /// Individual action response.
 ///
 /// This type can be used both for action replies (for a particular session) and
 /// responses sent to sinks.
-pub struct Response<R: action::Response> {
+pub struct Response<R: crate::action::Response> {
     /// A server-issued identifier, usually corresponding to a flow.
     pub session_id: String,
     /// A server-issued identifier for the current action request.
@@ -36,12 +33,12 @@ pub struct Status {
     /// An unique (to the current action request) identifier of status response.
     pub response_id: u64,
     /// A result of action execution.
-    pub result: session::Result<()>,
+    pub result: crate::session::Result<()>,
 }
 
 impl<R> TryInto<rrg_proto::jobs::GrrMessage> for Response<R>
 where
-    R: action::Response,
+    R: crate::action::Response,
 {
     type Error = protobuf::ProtobufError;
 
