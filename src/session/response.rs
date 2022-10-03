@@ -15,10 +15,10 @@ use crate::session;
 pub struct Response<R: action::Response> {
     /// A server-issued identifier, usually corresponding to a flow.
     pub session_id: String,
-    /// A server-issued identifier for the current action request (if any).
-    pub request_id: Option<u64>,
+    /// A server-issued identifier for the current action request.
+    pub request_id: u64,
     /// An unique (to the current action request) identifier of the response.
-    pub response_id: Option<u64>,
+    pub response_id: u64,
     /// An action-specific response.
     pub data: R,
 }
@@ -48,15 +48,8 @@ where
     fn try_into(self) -> Result<rrg_proto::jobs::GrrMessage, protobuf::ProtobufError> {
         let mut message = rrg_proto::jobs::GrrMessage::new();
         message.set_session_id(self.session_id);
-        // TODO: Is is really possible for us not to have the `request_id` or
-        // `response_id` fields? We should take a closer look at this and likely
-        // strengthen the types.
-        if let Some(request_id) = self.request_id {
-            message.set_request_id(request_id);
-        }
-        if let Some(response_id) = self.response_id {
-            message.set_response_id(response_id);
-        }
+        message.set_request_id(self.request_id);
+        message.set_response_id(self.response_id);
         message.set_field_type(rrg_proto::jobs::GrrMessage_Type::MESSAGE);
 
         if let Some(rdf_name) = R::RDF_NAME {

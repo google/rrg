@@ -163,8 +163,8 @@ impl Action {
     {
         Response {
             session_id: self.header.session_id.clone(),
-            request_id: Some(self.header.request_id),
-            response_id: Some(self.next_response_id),
+            request_id: self.header.request_id,
+            response_id: self.next_response_id,
             data: response,
         }
     }
