@@ -36,6 +36,22 @@ impl Request {
 
         A::from_proto(proto_args)
     }
+
+    /// Awaits for a new request message from Fleetspeak.
+    ///
+    /// This will suspend execution until the request is actually available.
+    /// However, the process will keep heartbeating at the specified rate.
+    pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ReceiveRequestError> {
+        // TODO(panhania@): Refactor `receive_raw` to return an actual error
+        // instead of an option.
+        let proto = match crate::message::receive_raw(heartbeat_rate) {
+            Some(proto) => proto,
+            None => todo!(),
+        };
+
+        use std::convert::TryFrom as _;
+        Ok(Request::try_from(proto)?)
+    }
 }
 
 impl std::convert::TryFrom<rrg_proto::jobs::GrrMessage> for Request {
@@ -123,4 +139,59 @@ impl std::fmt::Display for ParseRequestError {
 }
 
 impl std::error::Error for ParseRequestError {
+}
+
+/// The error type for cases when action request cannot be obtained.
+#[derive(Debug)]
+pub struct ReceiveRequestError {
+    /// A corresponding [`ReceiveRequestErrorKind`] of this error.
+    kind: ReceiveRequestErrorKind,
+    /// A nested error that caused this error.
+    error: Option<Box<dyn std::error::Error + Send + Sync>>,
+}
+
+/// Kinds of errors that can happen when trying to obtain an action request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ReceiveRequestErrorKind {
+    /// A custom error that does not fit any other kind.
+    Other,
+}
+
+impl ReceiveRequestErrorKind {
+
+    fn as_str(&self) -> &'static str {
+        use ReceiveRequestErrorKind::*;
+
+        match *self {
+            Other => "other error",
+        }
+    }
+}
+
+impl From<ParseRequestError> for ReceiveRequestError {
+
+    fn from(error: ParseRequestError) -> ReceiveRequestError {
+        ReceiveRequestError {
+            kind: ReceiveRequestErrorKind::Other,
+            error: Some(Box::new(error)),
+        }
+    }
+}
+
+impl std::fmt::Display for ReceiveRequestError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(ref error) = self.error {
+            return write!(fmt, "{}", error);
+        }
+
+        write!(fmt, "{}", self.kind.as_str())
+    }
+}
+
+impl std::error::Error for ReceiveRequestError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.error.as_deref().map(|error| error as &_)
+    }
 }
