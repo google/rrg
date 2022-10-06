@@ -33,7 +33,7 @@ pub struct Status<E: std::error::Error> {
 
 /// A unique identifier of a response.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ResponseId(u64);
+pub struct ResponseId(pub(super) u64);
 
 /// Response factory for building many responses to a single request.
 pub struct ResponseBuilder {
@@ -84,5 +84,80 @@ impl ResponseBuilder {
             response_id,
             item,
         }
+    }
+}
+
+impl<I> Into<rrg_proto::jobs::GrrMessage> for Item<I>
+where
+    I: crate::action::Item,
+{
+    fn into(self) -> rrg_proto::jobs::GrrMessage {
+        use protobuf::Message as _;
+
+        let mut proto = rrg_proto::jobs::GrrMessage::new();
+        proto.set_session_id(self.request_id.session_id);
+        proto.set_request_id(self.request_id.request_id);
+        proto.set_response_id(self.response_id.0);
+        proto.set_field_type(rrg_proto::jobs::GrrMessage_Type::MESSAGE);
+
+        let serialized_item = self.item
+            .into_proto()
+            .write_to_bytes()
+            // It is not clear what should we do in case of an error. It is very
+            // hard to imagine a scenario when serialization fails so for now we
+            // just fail hard. If we observe any problems with this assumption,
+            // we can always change this behaviour.
+            .expect("failed to serialize an action item");
+
+        // The protobuf message uses a field named "args" for storing the action
+        // item, so of course we repeat that. One day this should be improved,
+        // hopefully.
+        proto.set_args_rdf_name(String::from(I::RDF_NAME));
+        proto.set_args(serialized_item);
+
+        proto
+    }
+}
+
+impl<E> Into<rrg_proto::jobs::GrrMessage> for Status<E>
+where
+    E: std::error::Error,
+{
+    fn into(self) -> rrg_proto::jobs::GrrMessage {
+        use protobuf::Message as _;
+
+        let mut proto_status = rrg_proto::jobs::GrrStatus::new();
+        match self.result {
+            Ok(()) => {
+                proto_status.set_status(rrg_proto::jobs::GrrStatus_ReturnedStatus::OK);
+            },
+            Err(error) => {
+                // TODO(@panhania): Use more specific error types once we have
+                // custom error type for actions (see also the comment about the
+                // genericity of the `Status` type.
+                proto_status.set_status(rrg_proto::jobs::GrrStatus_ReturnedStatus::GENERIC_ERROR);
+                proto_status.set_error_message(error.to_string());
+            }
+        }
+
+        let serialized_status = proto_status
+            .write_to_bytes()
+            // See a comment in the conversion of the `Item` type for details on
+            // why we panic on errors here.
+            .expect("failed to serialized action status");
+
+        let mut proto = rrg_proto::jobs::GrrMessage::new();
+        proto.set_session_id(self.request_id.session_id);
+        proto.set_request_id(self.request_id.request_id);
+        proto.set_response_id(self.response_id.0);
+        proto.set_field_type(rrg_proto::jobs::GrrMessage_Type::STATUS);
+
+        // Again, for some reason GRR expects the status to be passed as as a
+        // serialized proto in a field named "args". This should be definitely
+        // fixed when designing the new protocol.
+        proto.set_args_rdf_name(String::from("GrrStatus"));
+        proto.set_args(serialized_status);
+
+        proto
     }
 }
