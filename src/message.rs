@@ -32,10 +32,10 @@ pub fn send_raw(message: rrg_proto::jobs::GrrMessage) {
 
 // TODO: Unexpose this function, make it possible to only receive the high-level
 // type (`Request`).
-pub fn receive_raw(args: &Args) -> Option<rrg_proto::jobs::GrrMessage> {
+pub fn receive_raw(heartbeat_rate: std::time::Duration) -> Option<rrg_proto::jobs::GrrMessage> {
     use fleetspeak::ReadError::*;
 
-    let message = match fleetspeak::receive_with_heartbeat(args.heartbeat_rate) {
+    let message = match fleetspeak::receive_with_heartbeat(heartbeat_rate) {
         Ok(message) => message,
         Err(Malformed(error)) => {
             error!("received a malformed message: {}", error);
