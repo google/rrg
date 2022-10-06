@@ -153,3 +153,75 @@ where
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
 }
+
+// TODO(panhania@): Remove all usages of the `Request` trait and replace it with
+// `Args`.
+pub trait Args: Sized {
+    /// Low-level Protocol Buffers type representing the action arguments.
+    type Proto: protobuf::Message + Default;
+
+    /// Converts a low-level type to a structured request arguments.
+    fn from_proto(proto: Self::Proto) -> Result<Self, ParseArgsError>;
+}
+
+pub trait Item: Sized {
+    /// Low-level Protocol Buffers type representing the action results.
+    type Proto: protobuf::Message + Default;
+
+    /// A name of the corresponding RDF class in GRR.
+    const RDF_NAME: &'static str;
+
+    /// Converts an action result ot its low-level representation.
+    fn into_proto(self) -> Self::Proto;
+}
+
+/// The error type for cases when action argument parsing fails.
+#[derive(Debug)]
+pub struct ParseArgsError {
+    /// A corresponding [`ParseArgsErrorKind`] of this error.
+    kind: ParseArgsErrorKind,
+    /// A detailed payload associated with the error.
+    error: Box<dyn std::error::Error + Send + Sync>,
+}
+
+/// Kinds of errors that can happen when parsing action arguments.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ParseArgsErrorKind {
+    /// The serialized message with arguments was impossible to deserialize.
+    InvalidProto,
+}
+
+impl ParseArgsErrorKind {
+
+    fn as_str(&self) -> &'static str {
+        use ParseArgsErrorKind::*;
+
+        match *self {
+            InvalidProto => "invalid serialized protobuf message",
+        }
+    }
+}
+
+impl std::fmt::Display for ParseArgsError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}: {}", self.kind.as_str(), self.error)
+    }
+}
+
+impl std::error::Error for ParseArgsError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.error.source()
+    }
+}
+
+impl From<protobuf::ProtobufError> for ParseArgsError {
+
+    fn from(error: protobuf::ProtobufError) -> Self {
+        ParseArgsError {
+            kind: ParseArgsErrorKind::InvalidProto,
+            error: Box::new(error),
+        }
+    }
+}
