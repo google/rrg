@@ -5,8 +5,6 @@
 
 use log::{error, warn};
 
-use crate::args::Args;
-
 // TODO: Unexpose this function, make it possible to only send the high-level
 // types (`Item`, `Status`).
 pub fn send_raw(message: rrg_proto::jobs::GrrMessage) {
