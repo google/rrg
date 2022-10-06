@@ -113,7 +113,7 @@ where
         }
     };
 
-    message::send(message);
+    message::send_raw(message);
 }
 
 /// Abstraction for various kinds of sessions.
@@ -197,7 +197,7 @@ impl Session for Action {
     where
         P: crate::sink::Parcel,
     {
-        crate::message::send(parcel.try_into()?);
+        crate::message::send_raw(parcel.try_into()?);
 
         Ok(())
     }
@@ -213,7 +213,7 @@ where
     R: action::Response,
 {
     let message = response.try_into()?;
-    message::send(message);
+    message::send_raw(message);
 
     Ok(())
 }

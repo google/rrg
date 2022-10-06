@@ -7,9 +7,9 @@ use log::{error, warn};
 
 use crate::args::Args;
 
-// TODO: Rename this to `send_raw` and unexpose it. Make it possible to only
-// send the high-level types (`Item`, `Status`).
-pub fn send(message: rrg_proto::jobs::GrrMessage) {
+// TODO: Unexpose this function, make it possible to only send the high-level
+// types (`Item`, `Status`).
+pub fn send_raw(message: rrg_proto::jobs::GrrMessage) {
         let data = protobuf::Message::write_to_bytes(&message)
             // Encoding can fail only if the buffer is insufficiently large. But
             // since we use growable vector this should never happen (provided
@@ -30,9 +30,9 @@ pub fn send(message: rrg_proto::jobs::GrrMessage) {
         };
 }
 
-// TODO: Rename this to `receive_raw` and unexpose it. Make it possible to only
-// receive the high-level type (`Request`).
-pub fn receive(args: &Args) -> Option<rrg_proto::jobs::GrrMessage> {
+// TODO: Unexpose this function, make it possible to only receive the high-level
+// type (`Request`).
+pub fn receive_raw(args: &Args) -> Option<rrg_proto::jobs::GrrMessage> {
     use fleetspeak::ReadError::*;
 
     let message = match fleetspeak::receive_with_heartbeat(args.heartbeat_rate) {
