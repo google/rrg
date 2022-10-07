@@ -38,8 +38,9 @@ use crate::args::{Args};
 /// appropriate.
 pub fn listen(args: &Args) {
     loop {
-        if let Some(message) = message::receive_raw(args.heartbeat_rate) {
-            session::handle(message);
+        match message::receive_raw(args.heartbeat_rate) {
+            Ok(message) => session::handle(message),
+            Err(error) => rrg_macro::error!("{}", error),
         }
     }
 }

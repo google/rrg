@@ -30,19 +30,14 @@ pub fn send_raw(message: rrg_proto::jobs::GrrMessage) {
 
 // TODO: Unexpose this function, make it possible to only receive the high-level
 // type (`Request`).
-pub fn receive_raw(heartbeat_rate: std::time::Duration) -> Option<rrg_proto::jobs::GrrMessage> {
+pub fn receive_raw(heartbeat_rate: std::time::Duration) -> Result<rrg_proto::jobs::GrrMessage, crate::comms::ReceiveRequestError> {
     use fleetspeak::ReadError::*;
 
+    // TODO(@panhania): Rework Fleetspeak errors to use kinds and delete those
+    // that make no sense to catch anyway.
     let message = match fleetspeak::receive_with_heartbeat(heartbeat_rate) {
         Ok(message) => message,
-        Err(Malformed(error)) => {
-            error!("received a malformed message: {}", error);
-            return None;
-        }
-        Err(Decode(error)) => {
-            error!("failed to decode a message: {}", error);
-            return None;
-        }
+        Err(error @ (Malformed(_) | Decode(_))) => return Err(error.into()),
         Err(error) => {
             // If we failed to collect the message because of I/O error or magic
             // check, it means that our communication is broken (e.g. the pipe
@@ -65,11 +60,5 @@ pub fn receive_raw(heartbeat_rate: std::time::Duration) -> Option<rrg_proto::job
         }
     }
 
-    match protobuf::Message::parse_from_bytes(&message.data[..]) {
-        Ok(message) => Some(message),
-        Err(error) => {
-            error!("failed to decode the data: {}", error);
-            None
-        }
-    }
+    Ok(protobuf::Message::parse_from_bytes(&message.data[..])?)
 }

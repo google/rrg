@@ -42,12 +42,7 @@ impl Request {
     /// This will suspend execution until the request is actually available.
     /// However, the process will keep heartbeating at the specified rate.
     pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ReceiveRequestError> {
-        // TODO(panhania@): Refactor `receive_raw` to return an actual error
-        // instead of an option.
-        let proto = match crate::message::receive_raw(heartbeat_rate) {
-            Some(proto) => proto,
-            None => todo!(),
-        };
+        let proto = crate::message::receive_raw(heartbeat_rate)?;
 
         use std::convert::TryFrom as _;
         Ok(Request::try_from(proto)?)
@@ -171,6 +166,26 @@ impl ReceiveRequestErrorKind {
 impl From<ParseRequestError> for ReceiveRequestError {
 
     fn from(error: ParseRequestError) -> ReceiveRequestError {
+        ReceiveRequestError {
+            kind: ReceiveRequestErrorKind::Other,
+            error: Some(Box::new(error)),
+        }
+    }
+}
+
+impl From<fleetspeak::ReadError> for ReceiveRequestError {
+
+    fn from(error: fleetspeak::ReadError) -> ReceiveRequestError {
+        ReceiveRequestError {
+            kind: ReceiveRequestErrorKind::Other,
+            error: Some(Box::new(error)),
+        }
+    }
+}
+
+impl From<protobuf::ProtobufError> for ReceiveRequestError {
+
+    fn from(error: protobuf::ProtobufError) -> ReceiveRequestError {
         ReceiveRequestError {
             kind: ReceiveRequestErrorKind::Other,
             error: Some(Box::new(error)),
