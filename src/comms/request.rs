@@ -142,14 +142,16 @@ pub struct ReceiveRequestError {
     /// A corresponding [`ReceiveRequestErrorKind`] of this error.
     kind: ReceiveRequestErrorKind,
     /// A nested error that caused this error.
-    error: Option<Box<dyn std::error::Error + Send + Sync>>,
+    error: Box<dyn std::error::Error + Send + Sync>,
 }
 
 /// Kinds of errors that can happen when trying to obtain an action request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ReceiveRequestErrorKind {
-    /// A custom error that does not fit any other kind.
-    Other,
+enum ReceiveRequestErrorKind {
+    /// Fleetspeak connector was unable to receive the message.
+    FleetspeakIssue,
+    /// The Protocol Buffers message was ill-formed.
+    MalformedProtobuf,
 }
 
 impl ReceiveRequestErrorKind {
@@ -158,7 +160,8 @@ impl ReceiveRequestErrorKind {
         use ReceiveRequestErrorKind::*;
 
         match *self {
-            Other => "other error",
+            FleetspeakIssue => "unable to retrieve a Fleetspeak message",
+            MalformedProtobuf => "request protobuf is ill-formed",
         }
     }
 }
@@ -167,8 +170,8 @@ impl From<ParseRequestError> for ReceiveRequestError {
 
     fn from(error: ParseRequestError) -> ReceiveRequestError {
         ReceiveRequestError {
-            kind: ReceiveRequestErrorKind::Other,
-            error: Some(Box::new(error)),
+            kind: ReceiveRequestErrorKind::MalformedProtobuf,
+            error: Box::new(error),
         }
     }
 }
@@ -177,8 +180,8 @@ impl From<fleetspeak::ReadError> for ReceiveRequestError {
 
     fn from(error: fleetspeak::ReadError) -> ReceiveRequestError {
         ReceiveRequestError {
-            kind: ReceiveRequestErrorKind::Other,
-            error: Some(Box::new(error)),
+            kind: ReceiveRequestErrorKind::FleetspeakIssue,
+            error: Box::new(error),
         }
     }
 }
@@ -187,8 +190,8 @@ impl From<protobuf::ProtobufError> for ReceiveRequestError {
 
     fn from(error: protobuf::ProtobufError) -> ReceiveRequestError {
         ReceiveRequestError {
-            kind: ReceiveRequestErrorKind::Other,
-            error: Some(Box::new(error)),
+            kind: ReceiveRequestErrorKind::MalformedProtobuf,
+            error: Box::new(error),
         }
     }
 }
@@ -196,17 +199,13 @@ impl From<protobuf::ProtobufError> for ReceiveRequestError {
 impl std::fmt::Display for ReceiveRequestError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(ref error) = self.error {
-            return write!(fmt, "{}", error);
-        }
-
-        write!(fmt, "{}", self.kind.as_str())
+        write!(fmt, "{}: {}", self.kind.as_str(), self.error)
     }
 }
 
 impl std::error::Error for ReceiveRequestError {
 
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.error.as_deref().map(|error| error as &_)
+        Some(&*self.error)
     }
 }
