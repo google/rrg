@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_loopback_presence() {
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         let mut is_loopback_present = false;

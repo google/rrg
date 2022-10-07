@@ -243,7 +243,7 @@ mod tests {
 
     use super::*;
 
-    use session::test::Fake as Session;
+    use session::test::FakeSession as Session;
 
     #[test]
     fn test_non_existent_path() {

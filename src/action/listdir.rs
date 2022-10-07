@@ -136,7 +136,7 @@ mod tests {
             path: tempdir.path().join("foo").to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         assert!(handle(&mut session, request).is_err());
     }
 
@@ -148,7 +148,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         assert_eq!(session.reply_count(), 0);
@@ -165,7 +165,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut replies = session.replies().collect::<Vec<&Response>>();
@@ -193,7 +193,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut replies = session.replies().collect::<Vec<&Response>>();
@@ -219,7 +219,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         assert_eq!(session.reply_count(), 1);
@@ -240,7 +240,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut replies = session.replies().collect::<Vec<&Response>>();
@@ -267,7 +267,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut replies = session.replies().collect::<Vec<&Response>>();

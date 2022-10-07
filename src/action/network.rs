@@ -341,7 +341,7 @@ mod tests {
         let client = TcpStream::connect(server_addr).unwrap();
         let client_addr = client.local_addr().unwrap();
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         let request = Request { listening_only: false };
         assert!(handle(&mut session, request).is_ok());
 
@@ -405,7 +405,7 @@ mod tests {
         let client_addr = client.local_addr().unwrap();
         client.connect(server_addr).unwrap();
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         let request = Request { listening_only: false };
         assert!(handle(&mut session, request).is_ok());
 
@@ -431,7 +431,7 @@ mod tests {
         let client = TcpStream::connect(server_addr).unwrap();
         let client_addr = client.local_addr().unwrap();
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         let request = Request { listening_only: true };
         assert!(handle(&mut session, request).is_ok());
 
@@ -460,7 +460,7 @@ mod tests {
         let connection = UdpSocket::bind("127.0.0.1:0").unwrap();
         let connection_addr = connection.local_addr().unwrap();
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         let request = Request { listening_only: true };
         assert!(handle(&mut session, request).is_ok());
 

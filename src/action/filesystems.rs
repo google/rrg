@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_if_any_filesystem_exists() {
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
         assert_ne!(session.reply_count(), 0);
     }
@@ -171,7 +171,7 @@ mod tests {
             fuse::spawn_mount(FuseFilesystem, &mountpoint, &options).unwrap()
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::test::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         let fuse_mounted_fs = session.replies::<Response>()

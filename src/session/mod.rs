@@ -89,7 +89,7 @@ where
         }
     };
 
-    let mut session = Action::from_demand(&demand);
+    let mut session = FleetspeakSession::from_demand(&demand);
 
     let result = action::dispatch(&demand.action, Task {
         session: &mut session,
@@ -132,25 +132,25 @@ pub trait Session {
     }
 }
 
-/// A session type for ordinary action requests.
+/// A session implementation that uses real Fleetspeak connection.
 ///
 /// This is a normal session type that that is associated with some flow on the
 /// server. It keeps track of the responses it sends and collects statistics
 /// about network and runtime utilization to kill the action if it is needed.
-pub struct Action {
+pub struct FleetspeakSession {
     header: Header,
     next_response_id: u64,
 }
 
-impl Action {
+impl FleetspeakSession {
 
     /// Constructs a new session for the given `demand` object.
-    pub fn from_demand(demand: &Demand) -> Action {
+    pub fn from_demand(demand: &Demand) -> FleetspeakSession {
         // Response identifiers that GRR agents use start at 1. Unfortunately,
         // the server uses this assumption (to determine the number of expected
         // responses when status message is received), so we have to follow this
         // behaviour in RRG as well.
-        Action {
+        FleetspeakSession {
             header: demand.header.clone(),
             next_response_id: 1,
         }
@@ -184,7 +184,7 @@ impl Action {
     }
 }
 
-impl Session for Action {
+impl Session for FleetspeakSession {
 
     fn reply<R: action::Response>(&mut self, response: R) -> Result<()> {
         send(self.wrap(response))?;
@@ -227,7 +227,7 @@ pub mod test {
     use super::*;
     use crate::sink::Sink;
 
-    /// A session type intended to be used in tests.
+    /// A session implementation intended to be used in tests.
     ///
     /// Testing actions with normal session objects can be quite hard, since
     /// they communicate with the outside world (through Fleetspeak). Since we
@@ -236,16 +236,16 @@ pub mod test {
     ///
     /// Instead, one can use a `Fake` session. It simply accumulates responses
     /// that the action sends and lets the creator inspect them later.
-    pub struct Fake {
+    pub struct FakeSession {
         replies: Vec<Box<dyn Any>>,
         parcels: HashMap<Sink, Vec<Box<dyn Any>>>,
     }
 
-    impl Fake {
+    impl FakeSession {
 
         /// Constructs a new fake session.
-        pub fn new() -> Fake {
-            Fake {
+        pub fn new() -> FakeSession {
+            FakeSession {
                 replies: Vec::new(),
                 parcels: std::collections::HashMap::new(),
             }
@@ -334,7 +334,7 @@ pub mod test {
         }
     }
 
-    impl Session for Fake {
+    impl Session for FakeSession {
 
         fn reply<R>(&mut self, response: R) -> Result<()>
         where
@@ -374,7 +374,7 @@ mod tests {
             session.reply(()).unwrap();
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         assert_eq!(session.reply_count(), 3);
@@ -391,7 +391,7 @@ mod tests {
             session.send(crate::sink::STARTUP.address(())).unwrap();
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         assert_eq!(session.parcel_count(crate::sink::STARTUP), 2);
@@ -405,7 +405,7 @@ mod tests {
             session.reply(StringResponse::from("bar")).unwrap();
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         assert_eq!(session.reply::<StringResponse>(0).0, "foo");
@@ -419,7 +419,7 @@ mod tests {
         fn handle<S: Session>(_: &mut S, _: ()) {
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         session.reply::<()>(0);
@@ -433,7 +433,7 @@ mod tests {
             session.reply(StringResponse::from("quux")).unwrap();
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         session.reply::<()>(0);
@@ -449,7 +449,7 @@ mod tests {
                 .unwrap();
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         let response_foo = session.parcel::<StringResponse>(sink::STARTUP, 0);
@@ -469,7 +469,7 @@ mod tests {
                 .unwrap();
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         session.parcel::<()>(sink::STARTUP, 42);
@@ -484,7 +484,7 @@ mod tests {
                 .unwrap();
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         session.parcel::<()>(sink::STARTUP, 0);
@@ -496,7 +496,7 @@ mod tests {
         fn handle<S: Session>(_: &mut S, _: ()) {
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         let mut replies = session.replies::<()>();
@@ -512,7 +512,7 @@ mod tests {
             session.reply(StringResponse::from("baz")).unwrap();
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         let mut replies = session.replies::<StringResponse>();
@@ -528,7 +528,7 @@ mod tests {
         fn handle<S: Session>(_: &mut S, _: ()) {
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         let mut parcels = session.parcels::<()>(crate::sink::STARTUP);
@@ -547,7 +547,7 @@ mod tests {
                 .unwrap();
         }
 
-        let mut session = test::Fake::new();
+        let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
         let mut parcels = session.parcels::<StringResponse>(sink::STARTUP);
