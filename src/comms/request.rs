@@ -3,7 +3,7 @@ pub struct Request {
     /// A unique id of the request.
     id: RequestId,
     /// A name of the action to execute.
-    action: String,
+    action_name: String,
     /// Serialized Protocol Buffers message with request arguments.
     serialized_args: Option<Vec<u8>>,
 }
@@ -18,6 +18,15 @@ pub struct RequestId {
 }
 
 impl Request {
+    /// Gets the unique identifier of this request.
+    pub fn id(&self) -> RequestId {
+        self.id.clone()
+    }
+
+    /// Gets the name of the action this request wants ought to execute.
+    pub fn action_name(&self) -> &str {
+        &self.action_name
+    }
 
     /// Parses the action arguments stored in this request.
     ///
@@ -70,7 +79,7 @@ impl std::convert::TryFrom<rrg_proto::jobs::GrrMessage> for Request {
         if !proto.has_name() {
             return Err(NoActionName.into());
         }
-        let action = proto.take_name();
+        let action_name = proto.take_name();
 
         let serialized_args = if proto.has_args() {
             Some(proto.take_args())
@@ -80,7 +89,7 @@ impl std::convert::TryFrom<rrg_proto::jobs::GrrMessage> for Request {
 
         Ok(Request {
             id: request_id,
-            action: action,
+            action_name: action_name,
             serialized_args,
         })
     }
