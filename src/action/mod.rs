@@ -184,11 +184,28 @@ pub struct ParseArgsError {
     error: Box<dyn std::error::Error + Send + Sync>,
 }
 
+impl ParseArgsError {
+
+    /// Creates a new error instance caused by some invalid field error.
+    fn invalid_field<E>(error: E) -> ParseArgsError
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        ParseArgsError {
+            kind: ParseArgsErrorKind::InvalidField,
+            error: Box::new(error),
+        }
+    }
+}
+
 /// Kinds of errors that can happen when parsing action arguments.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParseArgsErrorKind {
     /// The serialized message with arguments was impossible to deserialize.
     InvalidProto,
+    // TODO(panhania@): Augment with field name.
+    /// One of the fields of the arguments struct is invalid.
+    InvalidField,
 }
 
 impl ParseArgsErrorKind {
@@ -198,6 +215,7 @@ impl ParseArgsErrorKind {
 
         match *self {
             InvalidProto => "invalid serialized protobuf message",
+            InvalidField => "invalid argument field",
         }
     }
 }
