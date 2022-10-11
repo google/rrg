@@ -164,6 +164,15 @@ pub trait Args: Sized {
     fn from_proto(proto: Self::Proto) -> Result<Self, ParseArgsError>;
 }
 
+impl Args for () {
+
+    type Proto = protobuf::well_known_types::Empty;
+
+    fn from_proto(_: protobuf::well_known_types::Empty) -> Result<(), ParseArgsError> {
+        Ok(())
+    }
+}
+
 pub trait Item: Sized {
     /// Low-level Protocol Buffers type representing the action results.
     type Proto: protobuf::Message + Default;
@@ -173,6 +182,21 @@ pub trait Item: Sized {
 
     /// Converts an action result ot its low-level representation.
     fn into_proto(self) -> Self::Proto;
+}
+
+impl Item for () {
+
+    // This implementation is intended to be used only in tests and we do not
+    // really care about the `RDF_NAME` field there. And since GRR does not have
+    // any RDF wrapper for empty type (except maybe `EmptyFlowArgs`, but this is
+    // semantically different), we just leave it blank.
+    const RDF_NAME: &'static str = "";
+
+    type Proto = protobuf::well_known_types::Empty;
+
+    fn into_proto(self) -> protobuf::well_known_types::Empty {
+        protobuf::well_known_types::Empty::new()
+    }
 }
 
 /// The error type for cases when action argument parsing fails.
