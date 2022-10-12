@@ -7,6 +7,7 @@
 
 mod request;
 mod response;
+pub mod sink;
 
 pub use request::{Request, RequestId, ReceiveRequestError};
 pub use response::{Item, Status, ResponseBuilder, ResponseId};

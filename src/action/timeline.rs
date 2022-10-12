@@ -185,7 +185,7 @@ where
         let chunk = Chunk::from_bytes(part);
         let chunk_id = chunk.id();
 
-        session.send(crate::sink::TRANSFER_STORE.address(chunk))?;
+        session.send(crate::message::sink::TRANSFER_STORE.address(chunk))?;
         response.chunk_ids.push(chunk_id);
     }
 
@@ -227,7 +227,7 @@ impl super::Item for Response {
     }
 }
 
-impl crate::sink::Parcel for Chunk {
+impl crate::message::sink::Parcel for Chunk {
 
     const RDF_NAME: &'static str = "DataBlob";
 
@@ -449,7 +449,7 @@ mod tests {
     /// Retrieves timeline entries from the given session object.
     fn entries(session: &Session) -> Vec<rrg_proto::timeline::TimelineEntry> {
         use std::collections::HashMap;
-        use crate::sink;
+        use crate::message::sink;
 
         let chunk_count = session.parcel_count(sink::TRANSFER_STORE);
         assert_eq!(session.reply_count(), 1);

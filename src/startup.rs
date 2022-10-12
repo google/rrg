@@ -41,7 +41,7 @@ impl Response {
 pub fn send() -> session::Result<()> {
     use std::convert::TryInto as _;
 
-    let response = crate::sink::STARTUP.address(Response::build());
+    let response = crate::message::sink::STARTUP.address(Response::build());
     message::send_raw(response.try_into()?);
 
     Ok(())
@@ -65,7 +65,7 @@ fn boot_time() -> SystemTime {
     }
 }
 
-impl crate::sink::Parcel for Response {
+impl crate::message::sink::Parcel for Response {
 
     const RDF_NAME: &'static str = "StartupInfo";
 

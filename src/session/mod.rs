@@ -42,8 +42,8 @@ pub trait Session {
     where I: action::Item + 'static;
 
     /// Sends an adressed parcel.
-    fn send<P>(&mut self, parcel: crate::sink::AddressedParcel<P>) -> Result<()>
-    where P: crate::sink::Parcel + 'static;
+    fn send<P>(&mut self, parcel: crate::message::sink::AddressedParcel<P>) -> Result<()>
+    where P: crate::message::sink::Parcel + 'static;
 
     /// Sends a heartbeat signal to the Fleetspeak process.
     fn heartbeat(&mut self) {
@@ -89,9 +89,9 @@ impl Session for FleetspeakSession {
         Ok(())
     }
 
-    fn send<P>(&mut self, parcel: crate::sink::AddressedParcel<P>) -> Result<()>
+    fn send<P>(&mut self, parcel: crate::message::sink::AddressedParcel<P>) -> Result<()>
     where
-        P: crate::sink::Parcel,
+        P: crate::message::sink::Parcel,
     {
         crate::message::send_raw(parcel.try_into()?);
 
@@ -121,7 +121,7 @@ pub mod test {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::sink::Sink;
+    use crate::message::sink::Sink;
 
     /// A session implementation intended to be used in tests.
     ///
@@ -199,7 +199,7 @@ pub mod test {
         /// given `sink` does not exist or if it exists but has wrong type.
         pub fn parcel<P>(&self, sink: Sink, id: usize) -> &P
         where
-            P: crate::sink::Parcel + 'static,
+            P: crate::message::sink::Parcel + 'static,
         {
             match self.parcels(sink).nth(id) {
                 Some(parcel) => parcel,
@@ -213,7 +213,7 @@ pub mod test {
         /// an incorrect type.
         pub fn parcels<P>(&self, sink: Sink) -> impl Iterator<Item = &P>
         where
-            P: crate::sink::Parcel + 'static,
+            P: crate::message::sink::Parcel + 'static,
         {
             // Since the empty iterator (as defined in the standard library) is
             // a specific type, it cannot be returned in one branch but not in
@@ -241,9 +241,9 @@ pub mod test {
             Ok(())
         }
 
-        fn send<P>(&mut self, parcel: crate::sink::AddressedParcel<P>) -> Result<()>
+        fn send<P>(&mut self, parcel: crate::message::sink::AddressedParcel<P>) -> Result<()>
         where
-            P: crate::sink::Parcel + 'static,
+            P: crate::message::sink::Parcel + 'static,
         {
             let sink = parcel.sink();
 
@@ -259,7 +259,7 @@ pub mod test {
 mod tests {
 
     use super::*;
-    use crate::sink;
+    use crate::message::sink;
 
     #[test]
     fn test_fake_reply_count() {
@@ -283,14 +283,14 @@ mod tests {
         // defined).
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(crate::sink::STARTUP.address(())).unwrap();
-            session.send(crate::sink::STARTUP.address(())).unwrap();
+            session.send(crate::message::sink::STARTUP.address(())).unwrap();
+            session.send(crate::message::sink::STARTUP.address(())).unwrap();
         }
 
         let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
-        assert_eq!(session.parcel_count(crate::sink::STARTUP), 2);
+        assert_eq!(session.parcel_count(crate::message::sink::STARTUP), 2);
     }
 
     #[test]
@@ -427,7 +427,7 @@ mod tests {
         let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
-        let mut parcels = session.parcels::<()>(crate::sink::STARTUP);
+        let mut parcels = session.parcels::<()>(crate::message::sink::STARTUP);
         assert_eq!(parcels.next(), None);
     }
 
@@ -477,7 +477,7 @@ mod tests {
         }
     }
 
-    impl crate::sink::Parcel for StringResponse {
+    impl crate::message::sink::Parcel for StringResponse {
 
         const RDF_NAME: &'static str = "RDFString";
 
