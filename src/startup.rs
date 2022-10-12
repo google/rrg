@@ -14,7 +14,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use log::error;
 
-use crate::message;
 use crate::metadata::{Metadata};
 use crate::session;
 
@@ -39,10 +38,7 @@ impl Response {
 
 /// Sends startup information to the server.
 pub fn send() -> session::Result<()> {
-    use std::convert::TryInto as _;
-
-    let response = crate::message::sink::STARTUP.address(Response::build());
-    message::fleetspeak::send_raw(response.try_into()?);
+    crate::message::sink::STARTUP.address(Response::build()).send();
 
     Ok(())
 }

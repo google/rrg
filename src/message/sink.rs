@@ -66,22 +66,47 @@ impl<P: Parcel> AddressedParcel<P> {
     pub fn unpack(self) -> P {
         self.parcel
     }
+
+    /// Sends the parcel message through Fleetspeak to the GRR server.
+    ///
+    /// This function consumes the parcel to ensure that it is not sent twice.
+    ///
+    /// Note that this function should generally not be used if running as part
+    /// of some [`Session`], otherwise network usage might not be correctly
+    /// accounted for. Prefer to use [`Session::send`] for such cases.
+    ///
+    /// [`Session`]: crate::session::Session
+    /// [`Session::send`]: crate::session::Session::send
+    pub fn send(self) {
+        super::fleetspeak::send_raw(self.into());
+    }
 }
 
-impl<P: Parcel> std::convert::TryInto<rrg_proto::jobs::GrrMessage> for AddressedParcel<P> {
+impl<P: Parcel> Into<rrg_proto::jobs::GrrMessage> for AddressedParcel<P> {
 
-    type Error = protobuf::ProtobufError;
+    fn into(self) -> rrg_proto::jobs::GrrMessage {
+        use protobuf::Message as _;
 
-    fn try_into(self) -> Result<rrg_proto::jobs::GrrMessage, protobuf::ProtobufError> {
         let mut message = rrg_proto::jobs::GrrMessage::new();
         message.set_session_id(String::from(self.sink.id));
         message.set_field_type(rrg_proto::jobs::GrrMessage_Type::MESSAGE);
+
+        let serialized_parcel = self.parcel
+            .into_proto()
+            .write_to_bytes()
+            // It is not clear what should we do in case of an error. It is very
+            // hard to imagine a scenario when serialization fails so for now we
+            // just fail hard. If we observe any problems with this assumption,
+            // we can always change this behaviour.
+            .expect("failed to serialize a parcel message");
+
+        // Like with response messages, for parcels we also have to store the
+        // parcel data in the field named "args". This is something that should
+        // be fixed one day.
         message.set_args_rdf_name(String::from(P::RDF_NAME));
+        message.set_args(serialized_parcel);
 
-        let proto = self.parcel.into_proto();
-        message.set_args(protobuf::Message::write_to_bytes(&proto)?);
-
-        Ok(message)
+        message
     }
 }
 

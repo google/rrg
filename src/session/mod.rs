@@ -19,8 +19,6 @@ mod error;
 mod response;
 mod time;
 
-use std::convert::TryInto;
-
 use crate::action;
 pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError,
@@ -90,7 +88,8 @@ impl Session for FleetspeakSession {
     where
         P: crate::message::sink::Parcel,
     {
-        crate::message::fleetspeak::send_raw(parcel.try_into()?);
+        // TODO(panhania@): Enforce limits.
+        parcel.send();
 
         Ok(())
     }
