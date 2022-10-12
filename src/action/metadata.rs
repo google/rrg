@@ -26,9 +26,9 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     Ok(())
 }
 
-impl super::Response for Response {
+impl super::Item for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("ClientInformation");
+    const RDF_NAME: &'static str = "ClientInformation";
 
     type Proto = rrg_proto::jobs::ClientInformation;
 

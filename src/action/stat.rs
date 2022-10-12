@@ -167,15 +167,15 @@ where
     Ok(())
 }
 
-impl super::Request for Request {
+impl super::Args for Request {
 
     type Proto = rrg_proto::jobs::GetFileStatRequest;
 
-    fn from_proto(mut proto: Self::Proto) -> Result<Self, session::ParseError> {
+    fn from_proto(mut proto: Self::Proto) -> Result<Self, crate::action::ParseArgsError> {
         use std::convert::TryInto as _;
 
         let path = proto.take_pathspec().try_into()
-            .map_err(session::ParseError::malformed)?;
+            .map_err(crate::action::ParseArgsError::invalid_field)?;
 
         Ok(Request {
             path: path,
@@ -185,9 +185,9 @@ impl super::Request for Request {
     }
 }
 
-impl super::Response for Response {
+impl super::Item for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("StatEntry");
+    const RDF_NAME: &'static str = "StatEntry";
 
     type Proto = rrg_proto::jobs::StatEntry;
 

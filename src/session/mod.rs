@@ -35,92 +35,11 @@ pub use self::time::time_from_micros;
 /// A specialized `Result` type for sessions.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Object associating a session with particular action request.
-///
-/// This is just a convenience type used to avoid threading large numbers of
-/// parameters through different function calls.
-///
-/// Note that the payload can be a quite large object, so it should not be stored
-/// with the session itself. The payload should be consumed as soon as the
-/// request is dispatched to a particular handler and parsed to a concrete type.
-pub struct Task<'s, S: Session> {
-    /// A session that this task should be run on.
-    pub session: &'s mut S,
-    /// Serialized data of the action request.
-    pub payload: Payload,
-}
-
-impl<'s, S: Session> Task<'s, S> {
-
-    /// Executes the task with a particular action handler.
-    pub fn execute<R, H>(self, handler: H) -> Result<()>
-    where
-        R: action::Request,
-        H: FnOnce(&mut S, R) -> Result<()>,
-    {
-        let request = self.payload.parse()?;
-        handler(self.session, request)
-    }
-}
-
-/// Processes given message, handling all errors.
-///
-/// This function takes a message from the GRR server and interprets it as an
-/// action request. It creates a new session object and dispatches the request
-/// to an appropriate action handler. Once the action finishes, the function
-/// will send a final status message, informing the server about a success
-/// or a failure.
-///
-/// Note that if action execution fails, this function deals with all the errors
-/// by sending appropriate information to the server (if possible), logging them
-/// and failing hard if a critical error (e.g. communication failure) occurred.
-pub fn handle<M>(message: M)
-where
-    M: TryInto<Demand, Error=ParseError>,
-{
-    let demand = match message.try_into() {
-        Ok(demand) => {
-            info!("requested to execute the '{}' action", demand.action);
-            demand
-        }
-        Err(error) => {
-            error!("failed to parse the message: {}", error);
-            return;
-        }
-    };
-
-    let mut session = FleetspeakSession::from_demand(&demand);
-
-    let result = action::dispatch(&demand.action, Task {
-        session: &mut session,
-        payload: demand.payload,
-    });
-
-    if let Err(ref error) = result {
-        error!("failed to execute the '{}' action: {}", demand.action, error);
-    } else {
-        info!("finished executing the '{}' action", demand.action);
-    }
-
-    let message = match session.status(result).try_into() {
-        Ok(message) => message,
-        Err(error) => {
-            // If we cannot encode the final status message, there is nothing
-            // we can do to notify the server, as status is responsible for
-            // reporting errors. We can only log the error and carry on.
-            error!("failed to encode status message: {}", error);
-            return;
-        }
-    };
-
-    message::send_raw(message);
-}
-
 /// Abstraction for various kinds of sessions.
 pub trait Session {
     /// Sends a reply to the flow that call the action.
-    fn reply<R>(&mut self, response: R) -> Result<()>
-    where R: action::Response + 'static;
+    fn reply<I>(&mut self, item: I) -> Result<()>
+    where I: action::Item + 'static;
 
     /// Sends an adressed parcel.
     fn send<P>(&mut self, parcel: crate::sink::AddressedParcel<P>) -> Result<()>
@@ -138,57 +57,37 @@ pub trait Session {
 /// server. It keeps track of the responses it sends and collects statistics
 /// about network and runtime utilization to kill the action if it is needed.
 pub struct FleetspeakSession {
-    header: Header,
-    next_response_id: u64,
+    response_builder: crate::comms::ResponseBuilder,
 }
 
 impl FleetspeakSession {
 
-    /// Constructs a new session for the given `demand` object.
-    pub fn from_demand(demand: &Demand) -> FleetspeakSession {
-        // Response identifiers that GRR agents use start at 1. Unfortunately,
-        // the server uses this assumption (to determine the number of expected
-        // responses when status message is received), so we have to follow this
-        // behaviour in RRG as well.
+    /// Creates a new Fleetspeak session for the given `request` object.
+    fn new(request_id: crate::comms::RequestId) -> FleetspeakSession {
         FleetspeakSession {
-            header: demand.header.clone(),
-            next_response_id: 1,
+            response_builder: crate::comms::ResponseBuilder::new(request_id),
         }
     }
 
-    /// Wraps an action response to a session-specific response.
-    fn wrap<R>(&self, response: R) -> Response<R>
-    where
-        R: action::Response
-    {
-        Response {
-            session_id: self.header.session_id.clone(),
-            request_id: self.header.request_id,
-            response_id: self.next_response_id,
-            data: response,
-        }
-    }
+    pub fn handle(request: crate::comms::Request) {
+        let mut session = FleetspeakSession::new(request.id());
 
-    /// Wraps an action result to a session-specific status response.
-    ///
-    /// Note that this method consumes the session. The reason for this is that
-    /// status response should be obtained as the very last response and no
-    /// further replies should be possible after that.
-    fn status(self, result: Result<()>) -> Status {
-        Status {
-            session_id: self.header.session_id,
-            request_id: self.header.request_id,
-            response_id: self.next_response_id,
-            result: result,
-        }
+        let result = crate::action::dispatch(&mut session, request);
+        let status = session.response_builder.status(result);
+
+        // TODO(panhania@): Don't use `send_raw`.
+        crate::message::send_raw(status.into());
+
+        // TODO(panhania@): Consider returning the status so that the parent can
+        // log appropriate message.
     }
 }
 
 impl Session for FleetspeakSession {
 
-    fn reply<R: action::Response>(&mut self, response: R) -> Result<()> {
-        send(self.wrap(response))?;
-        self.next_response_id += 1;
+    fn reply<I: crate::action::Item>(&mut self, item: I) -> Result<()> {
+        // TODO(panhania@): Enforce limits.
+        crate::message::send_raw(self.response_builder.item(item).into());
 
         Ok(())
     }
@@ -265,7 +164,7 @@ pub mod test {
         /// exist or if it exists but has a wrong type.
         pub fn reply<R>(&self, id: usize) -> &R
         where
-            R: action::Response + 'static,
+            R: crate::action::Item + 'static,
         {
             match self.replies().nth(id) {
                 Some(reply) => reply,
@@ -279,7 +178,7 @@ pub mod test {
         /// incorrect type.
         pub fn replies<R>(&self) -> impl Iterator<Item = &R>
         where
-            R: action::Response + 'static
+            R: crate::action::Item + 'static
         {
             self.replies.iter().map(|reply| {
                 reply.downcast_ref().expect("unexpected reply type")
@@ -336,11 +235,11 @@ pub mod test {
 
     impl Session for FakeSession {
 
-        fn reply<R>(&mut self, response: R) -> Result<()>
+        fn reply<I>(&mut self, item: I) -> Result<()>
         where
-            R: action::Response + 'static,
+            I: crate::action::Item + 'static,
         {
-            self.replies.push(Box::new(response));
+            self.replies.push(Box::new(item));
 
             Ok(())
         }
@@ -567,9 +466,9 @@ mod tests {
         }
     }
 
-    impl action::Response for StringResponse {
+    impl action::Item for StringResponse {
 
-        const RDF_NAME: Option<&'static str> = Some("RDFString");
+        const RDF_NAME: &'static str = "RDFString";
 
         type Proto = protobuf::well_known_types::StringValue;
 

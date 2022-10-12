@@ -58,9 +58,9 @@ impl Session {
 
 impl rrg::session::Session for Session {
 
-    fn reply<R>(&mut self, response: R) -> rrg::session::Result<()>
+    fn reply<I>(&mut self, item: I) -> rrg::session::Result<()>
     where
-        R: rrg::action::Response + 'static,
+        I: rrg::action::Item + 'static,
     {
         // For now we are not interested in doing anything useful with chunk ids
         // since everything is dumped into one file and there is no need to
@@ -68,7 +68,7 @@ impl rrg::session::Session for Session {
         //
         // In the future they might be useful for printing some statistics about
         // the collected files.
-        drop(response);
+        drop(item);
 
         Ok(())
     }

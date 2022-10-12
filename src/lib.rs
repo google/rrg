@@ -38,9 +38,14 @@ use crate::args::{Args};
 /// appropriate.
 pub fn listen(args: &Args) {
     loop {
-        match message::receive_raw(args.heartbeat_rate) {
-            Ok(message) => session::handle(message),
-            Err(error) => rrg_macro::error!("{}", error),
-        }
+        let request = match crate::comms::Request::receive(args.heartbeat_rate) {
+            Ok(request) => request,
+            Err(error) => {
+                rrg_macro::error!("failed to obtain a request: {}", error);
+                continue
+            }
+        };
+
+        session::FleetspeakSession::handle(request);
     }
 }

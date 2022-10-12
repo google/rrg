@@ -5,6 +5,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use regex::Error as RegexError;
 
+// TODO(panhania@): Migrate to error kind design.
 /// An error type for failures that can occur during a session.
 #[derive(Debug)]
 pub enum Error {
@@ -16,7 +17,7 @@ pub enum Error {
     // TODO: Determine whether we need this error type or we should just panic.
     Encode(protobuf::ProtobufError),
     /// An error occurred when parsing a proto message.
-    Parse(ParseError),
+    Parse(crate::action::ParseArgsError),
 }
 
 impl Error {
@@ -79,9 +80,9 @@ impl From<protobuf::ProtobufError> for Error {
     }
 }
 
-impl From<ParseError> for Error {
+impl From<crate::action::ParseArgsError> for Error {
 
-    fn from(error: ParseError) -> Error {
+    fn from(error: crate::action::ParseArgsError) -> Error {
         Error::Parse(error)
     }
 }

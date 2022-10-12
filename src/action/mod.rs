@@ -47,7 +47,7 @@ pub mod memsize;
 #[cfg(feature = "action-finder")]
 pub mod finder;
 
-use crate::session::{self, Session, Task};
+use crate::session::{self, Session};
 
 /// Abstraction for action-specific requests.
 ///
@@ -109,49 +109,73 @@ impl Response for () {
     }
 }
 
-/// Dispatches `task` to a handler appropriate for the given `action`.
+/// Dispatches the given `request` to an appropriate action handler.
 ///
 /// This method is a mapping between action names (as specified in the protocol)
 /// and action handlers (implemented on the agent).
 ///
-/// If the given action is unknown (or not yet implemented), this function will
-/// return an error.
-pub fn dispatch<'s, S>(action: &str, task: Task<'s, S>) -> session::Result<()>
+/// # Errors
+///
+/// This function will return an error if the given action is unknown (or not
+/// yet implemented).
+///
+/// It will also error out if the action execution itself fails for whatever
+/// reason.
+pub fn dispatch<'s, S>(session: &mut S, request: crate::comms::Request) -> session::Result<()>
 where
     S: Session,
 {
-    match action {
+    match request.action_name() {
         #[cfg(feature = "action-metadata")]
-        "GetClientInfo" => task.execute(self::metadata::handle),
+        "GetClientInfo" => handle(session, request, self::metadata::handle),
 
         #[cfg(feature = "action-listdir")]
-        "ListDirectory" => task.execute(self::listdir::handle),
+        "ListDirectory" => handle(session, request, self::listdir::handle),
 
         #[cfg(feature = "action-timeline")]
-        "Timeline" => task.execute(self::timeline::handle),
+        "Timeline" => handle(session, request, self::timeline::handle),
 
         #[cfg(feature = "action-network")]
-        "ListNetworkConnections" => task.execute(self::network::handle),
+        "ListNetworkConnections" => handle(session, request, self::network::handle),
 
         #[cfg(feature = "action-stat")]
-        "GetFileStat" => task.execute(self::stat::handle),
+        "GetFileStat" => handle(session, request, self::stat::handle),
 
         #[cfg(feature = "action-insttime")]
-        "GetInstallDate" => task.execute(self::insttime::handle),
+        "GetInstallDate" => handle(session, request, self::insttime::handle),
 
         #[cfg(feature = "action-interfaces")]
         #[cfg(target_family = "unix")]
-        "EnumerateInterfaces" => task.execute(self::interfaces::handle),
+        "EnumerateInterfaces" => handle(session, request, self::interfaces::handle),
 
         #[cfg(feature = "action-filesystems")]
         #[cfg(target_os = "linux")]
-        "EnumerateFilesystems" => task.execute(self::filesystems::handle),
+        "EnumerateFilesystems" => handle(session, request, self::filesystems::handle),
 
         #[cfg(feature = "action-memsize")]
-        "GetMemorySize" => task.execute(self::memsize::handle),
+        "GetMemorySize" => handle(session, request, self::memsize::handle),
 
         action => return Err(session::Error::Dispatch(String::from(action))),
     }
+}
+
+/// Handles a `request` using the specified `handler`.
+///
+/// This method will attempt to interpret request arguments for the specific
+/// action and execute the handler with them.
+///
+/// # Errors
+///
+/// This function will return an error if the request arguments cannot be parsed
+/// for the specific action or if the action execution fails.
+fn handle<S, A, H>(session: &mut S, request: crate::comms::Request, handler: H) -> session::Result<()>
+where
+    S: crate::session::Session,
+    A: Args,
+    H: FnOnce(&mut S, A) -> session::Result<()>,
+{
+    let args = request.parse_args()?;
+    handler(session, args)
 }
 
 // TODO(panhania@): Remove all usages of the `Request` trait and replace it with

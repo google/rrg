@@ -24,9 +24,9 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 }
 
 /// A response type for the memory size action.
-impl super::Response for Response {
+impl super::Item for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("ByteSize");
+    const RDF_NAME: &'static str = "ByteSize";
 
     type Proto = protobuf::well_known_types::StringValue;
     // TODO: Fix serialization issues.

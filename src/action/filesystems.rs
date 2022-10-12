@@ -104,9 +104,9 @@ fn option_to_key_value(option: String) -> rrg_proto::jobs::KeyValue {
     }
 }
 
-impl super::Response for Response {
+impl super::Item for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("Filesystem");
+    const RDF_NAME: &'static str = "Filesystem";
 
     type Proto = rrg_proto::sysinfo::Filesystem;
 

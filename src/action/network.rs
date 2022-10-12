@@ -154,20 +154,20 @@ fn make_connection_from_socket_info(
     proto
 }
 
-impl super::Request for Request {
+impl super::Args for Request {
 
     type Proto = rrg_proto::flows::ListNetworkConnectionsArgs;
 
-    fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
+    fn from_proto(proto: Self::Proto) -> Result<Request, crate::action::ParseArgsError> {
         Ok(Request {
             listening_only: proto.get_listening_only(),
         })
     }
 }
 
-impl super::Response for Response {
+impl super::Item for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("NetworkConnection");
+    const RDF_NAME: &'static str = "NetworkConnection";
 
     type Proto = rrg_proto::sysinfo::NetworkConnection;
 
