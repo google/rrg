@@ -73,10 +73,7 @@ impl FleetspeakSession {
         let mut session = FleetspeakSession::new(request.id());
 
         let result = crate::action::dispatch(&mut session, request);
-        let status = session.response_builder.status(result);
-
-        // TODO(panhania@): Don't use `send_raw`.
-        crate::message::send_raw(status.into());
+        session.response_builder.status(result).send();
 
         // TODO(panhania@): Consider returning the status so that the parent can
         // log appropriate message.
@@ -87,7 +84,7 @@ impl Session for FleetspeakSession {
 
     fn reply<I: crate::action::Item>(&mut self, item: I) -> Result<()> {
         // TODO(panhania@): Enforce limits.
-        crate::message::send_raw(self.response_builder.item(item).into());
+        self.response_builder.item(item).send();
 
         Ok(())
     }

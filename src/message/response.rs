@@ -15,6 +15,16 @@ pub struct Item<I: crate::action::Item> {
     item: I,
 }
 
+impl<I: crate::action::Item> Item<I> {
+
+    /// Sends the item message through Fleetspeak to the GRR server.
+    ///
+    /// This function consumes the item to ensure that it is not sent twice.
+    pub fn send(self) {
+        super::send_raw(self.into());
+    }
+}
+
 // TODO(@panhania): Consider defining an `crate::action::Error` type and make
 // the `Status` type non-generic.
 /// An action execution status message.
@@ -29,6 +39,16 @@ pub struct Status<E: std::error::Error> {
     response_id: ResponseId,
     /// The action execution status.
     result: Result<(), E>,
+}
+
+impl<E: std::error::Error> Status<E> {
+
+    /// Sends the status message through Fleetspeak to the GRR server.
+    ///
+    /// This function consumes the status to ensure that it is not sent twice.
+    pub fn send(self) {
+        super::send_raw(self.into())
+    }
 }
 
 /// A unique identifier of a response.
