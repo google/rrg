@@ -5,8 +5,7 @@
 
 // TODO: Write top-level documentation for this module (and its submodules).
 
-// TODO(panhania@): Hide the `fleetspeak` submodule.
-pub mod fleetspeak;
+mod fleetspeak;
 mod request;
 mod response;
 pub mod sink;
