@@ -3,6 +3,14 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+// TODO: Write top-level documentation for this module (and its submodules).
+
+mod request;
+mod response;
+
+pub use request::{Request, RequestId, ReceiveRequestError};
+pub use response::{Item, Status, ResponseBuilder, ResponseId};
+
 use log::{error, warn};
 
 // TODO: Unexpose this function, make it possible to only send the high-level
@@ -30,7 +38,7 @@ pub fn send_raw(message: rrg_proto::jobs::GrrMessage) {
 
 // TODO: Unexpose this function, make it possible to only receive the high-level
 // type (`Request`).
-pub fn receive_raw(heartbeat_rate: std::time::Duration) -> Result<rrg_proto::jobs::GrrMessage, crate::comms::ReceiveRequestError> {
+pub fn receive_raw(heartbeat_rate: std::time::Duration) -> Result<rrg_proto::jobs::GrrMessage, ReceiveRequestError> {
     use fleetspeak::ReadError::*;
 
     // TODO(@panhania): Rework Fleetspeak errors to use kinds and delete those

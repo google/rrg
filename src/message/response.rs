@@ -1,4 +1,4 @@
-use crate::comms::RequestId;
+use crate::message::RequestId;
 
 /// An action item message.
 ///

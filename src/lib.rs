@@ -3,8 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-mod comms;
-
 pub mod action;
 pub mod fs;
 pub mod io;
@@ -38,7 +36,7 @@ use crate::args::{Args};
 /// appropriate.
 pub fn listen(args: &Args) {
     loop {
-        let request = match crate::comms::Request::receive(args.heartbeat_rate) {
+        let request = match crate::message::Request::receive(args.heartbeat_rate) {
             Ok(request) => request,
             Err(error) => {
                 rrg_macro::error!("failed to obtain a request: {}", error);

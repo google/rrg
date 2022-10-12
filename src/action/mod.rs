@@ -121,7 +121,7 @@ impl Response for () {
 ///
 /// It will also error out if the action execution itself fails for whatever
 /// reason.
-pub fn dispatch<'s, S>(session: &mut S, request: crate::comms::Request) -> session::Result<()>
+pub fn dispatch<'s, S>(session: &mut S, request: crate::message::Request) -> session::Result<()>
 where
     S: Session,
 {
@@ -168,7 +168,7 @@ where
 ///
 /// This function will return an error if the request arguments cannot be parsed
 /// for the specific action or if the action execution fails.
-fn handle<S, A, H>(session: &mut S, request: crate::comms::Request, handler: H) -> session::Result<()>
+fn handle<S, A, H>(session: &mut S, request: crate::message::Request, handler: H) -> session::Result<()>
 where
     S: crate::session::Session,
     A: Args,
