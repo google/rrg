@@ -21,7 +21,7 @@ impl<I: crate::action::Item> Item<I> {
     ///
     /// This function consumes the item to ensure that it is not sent twice.
     pub fn send(self) {
-        super::send_raw(self.into());
+        super::fleetspeak::send_raw(self.into());
     }
 }
 
@@ -47,7 +47,7 @@ impl<E: std::error::Error> Status<E> {
     ///
     /// This function consumes the status to ensure that it is not sent twice.
     pub fn send(self) {
-        super::send_raw(self.into())
+        super::fleetspeak::send_raw(self.into())
     }
 }
 

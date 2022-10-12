@@ -93,7 +93,7 @@ impl Session for FleetspeakSession {
     where
         P: crate::message::sink::Parcel,
     {
-        crate::message::send_raw(parcel.try_into()?);
+        crate::message::fleetspeak::send_raw(parcel.try_into()?);
 
         Ok(())
     }
@@ -109,7 +109,7 @@ where
     R: action::Response,
 {
     let message = response.try_into()?;
-    message::send_raw(message);
+    message::fleetspeak::send_raw(message);
 
     Ok(())
 }

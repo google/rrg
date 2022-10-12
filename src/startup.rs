@@ -42,7 +42,7 @@ pub fn send() -> session::Result<()> {
     use std::convert::TryInto as _;
 
     let response = crate::message::sink::STARTUP.address(Response::build());
-    message::send_raw(response.try_into()?);
+    message::fleetspeak::send_raw(response.try_into()?);
 
     Ok(())
 }
