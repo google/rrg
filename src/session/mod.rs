@@ -21,10 +21,7 @@ mod time;
 
 use std::convert::TryInto;
 
-use log::{error, info};
-
 use crate::action;
-use crate::message;
 pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError,
                       UnsupportedValueError, UnknownEnumValueError};
@@ -97,21 +94,6 @@ impl Session for FleetspeakSession {
 
         Ok(())
     }
-}
-
-/// Sends a session response to the server.
-///
-/// Note that this function is not exposed on purpose. Actions should send
-/// responses through session objects which introduce a layer of safety. `send`
-/// is a low-level utility supposed to be used internally.
-fn send<R>(response: Response<R>) -> Result<()>
-where
-    R: action::Response,
-{
-    let message = response.try_into()?;
-    message::fleetspeak::send_raw(message);
-
-    Ok(())
 }
 
 #[cfg(test)]
