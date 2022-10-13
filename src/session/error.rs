@@ -131,67 +131,6 @@ impl From<protobuf::ProtobufError> for ParseError {
     }
 }
 
-/// An error type for situations where required proto field is missing.
-#[derive(Debug)]
-pub struct MissingFieldError {
-    /// A name of the missing field.
-    name: &'static str,
-}
-
-impl MissingFieldError {
-
-    /// Creates a new error indicating that required field `name` is missing.
-    pub fn new(name: &'static str) -> MissingFieldError {
-        MissingFieldError {
-            name: name,
-        }
-    }
-}
-
-impl Display for MissingFieldError {
-
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "required field '{}' is missing", self.name)
-    }
-}
-
-impl std::error::Error for MissingFieldError {
-
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
-impl From<MissingFieldError> for ParseError {
-
-    fn from(error: MissingFieldError) -> ParseError {
-        ParseError::malformed(error)
-    }
-}
-
-/// An error type for situations where a given proto value is not supported.
-#[derive(Debug)]
-pub struct UnsupportedValueError<T> {
-    /// A name of the field the value belongs to.
-    pub name: &'static str,
-    /// A value that is not supported.
-    pub value: T,
-}
-
-impl<T: Debug> Display for UnsupportedValueError<T> {
-
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "unsupported value for '{}': {:?}", self.name, self.value)
-    }
-}
-
-impl<T: Debug> std::error::Error for UnsupportedValueError<T> {
-
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
 /// An error type for situations where time micros cannot be converted
 /// to `std::time::SystemTime`.
 #[derive(Debug)]
