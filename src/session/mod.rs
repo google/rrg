@@ -91,7 +91,7 @@ impl Session for FleetspeakSession {
         I: crate::action::Item,
     {
         // TODO(panhania@): Enforce limits.
-        sink.address(item).send();
+        crate::message::Parcel::new(sink, item).send();
 
         Ok(())
     }
