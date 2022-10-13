@@ -15,15 +15,12 @@
 //! for a particular request.
 
 mod error;
-mod response;
 mod time;
 
 use crate::action;
 
 pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError,
                       UnsupportedValueError, UnknownEnumValueError};
-// TODO: Revisit visibility once comms refactoring is complete.
-pub use self::response::{Response, Status};
 pub use self::time::time_from_micros;
 
 /// A specialized `Result` type for sessions.
