@@ -11,5 +11,5 @@ mod response;
 mod sink;
 
 pub use request::{Request, RequestId, ReceiveRequestError};
-pub use response::{Item, Status, Parcel, ResponseBuilder, ResponseId};
+pub use response::{Reply, Status, Parcel, ResponseBuilder, ResponseId};
 pub use sink::{Sink};

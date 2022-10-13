@@ -1,23 +1,23 @@
 use crate::message::RequestId;
 
-/// An action item message.
+/// An action reply message.
 ///
-/// This is a message wrapper around the [`Item`] type that also contains
-/// metadata of the response.
+/// This is a message wrapper around the [`Item`] type but associates it with a
+/// particular request.
 ///
 /// [`Item`]: crate::action::Item
-pub struct Item<I: crate::action::Item> {
+pub struct Reply<I: crate::action::Item> {
     /// A unique request identifier for which this item was yielded.
     request_id: RequestId,
     /// A unique response identifier of this item.
     response_id: ResponseId,
-    /// An actual action result.
+    /// An actual item that the action yielded.
     item: I,
 }
 
-impl<I: crate::action::Item> Item<I> {
+impl<I: crate::action::Item> Reply<I> {
 
-    /// Sends the item message through Fleetspeak to the GRR server.
+    /// Sends the reply message through Fleetspeak to the GRR server.
     ///
     /// This function consumes the item to ensure that it is not sent twice.
     pub fn send(self) {
@@ -91,15 +91,15 @@ impl ResponseBuilder {
         }
     }
 
-    /// Builds a new item response for the given action item.
-    pub fn item<I>(&mut self, item: I) -> Item<I>
+    /// Builds a new reply response for the given action item.
+    pub fn reply<I>(&mut self, item: I) -> Reply<I>
     where
         I: crate::action::Item,
     {
         let response_id = self.next_response_id;
         self.next_response_id.0 += 1;
 
-        Item {
+        Reply {
             request_id: self.request_id.clone(),
             response_id,
             item,
@@ -167,7 +167,7 @@ impl<I: crate::action::Item> Parcel<I> {
 }
 
 
-impl<I> Into<rrg_proto::jobs::GrrMessage> for Item<I>
+impl<I> Into<rrg_proto::jobs::GrrMessage> for Reply<I>
 where
     I: crate::action::Item,
 {

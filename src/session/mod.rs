@@ -80,7 +80,7 @@ impl Session for FleetspeakSession {
 
     fn reply<I: crate::action::Item>(&mut self, item: I) -> Result<()> {
         // TODO(panhania@): Enforce limits.
-        self.response_builder.item(item).send();
+        self.response_builder.reply(item).send();
 
         Ok(())
     }
