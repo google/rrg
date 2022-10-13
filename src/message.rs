@@ -8,7 +8,8 @@
 mod fleetspeak;
 mod request;
 mod response;
-pub mod sink;
+mod sink;
 
 pub use request::{Request, RequestId, ReceiveRequestError};
 pub use response::{Item, Status, Parcel, ResponseBuilder, ResponseId};
+pub use sink::{Sink};

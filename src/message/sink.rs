@@ -21,15 +21,14 @@ pub struct Sink {
 }
 
 impl Sink {
+    /// A handle to the sink expecting startup information.
+    pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
+
+    /// A handle to the transfer store sink.
+    pub const TRANSFER_STORE: Sink = Sink { id: "/flows/F:TransferStore" };
 
     /// Gets the sink's unique identifier.
     pub fn id(&self) -> &'static str {
         self.id
     }
 }
-
-/// A handle to the sink expecting startup information.
-pub const STARTUP: Sink = Sink { id: "/flows/F:Startup" };
-
-/// A handle to the transfer store sink.
-pub const TRANSFER_STORE: Sink = Sink { id: "/flows/F:TransferStore" };

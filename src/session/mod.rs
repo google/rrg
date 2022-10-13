@@ -20,7 +20,6 @@ mod response;
 mod time;
 
 use crate::action;
-use crate::message::sink::Sink;
 
 pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError,
@@ -39,7 +38,7 @@ pub trait Session {
     where I: action::Item + 'static;
 
     /// Sends an item to a particular sink.
-    fn send<I>(&mut self, sink: Sink, item: I) -> Result<()>
+    fn send<I>(&mut self, sink: crate::message::Sink, item: I) -> Result<()>
     where I: action::Item + 'static;
 
     /// Sends a heartbeat signal to the Fleetspeak process.
@@ -86,7 +85,7 @@ impl Session for FleetspeakSession {
         Ok(())
     }
 
-    fn send<I>(&mut self, sink: Sink, item: I) -> Result<()>
+    fn send<I>(&mut self, sink: crate::message::Sink, item: I) -> Result<()>
     where
         I: crate::action::Item,
     {
@@ -104,7 +103,6 @@ pub mod test {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::message::sink::Sink;
 
     /// A session implementation intended to be used in tests.
     ///
@@ -117,7 +115,7 @@ pub mod test {
     /// that the action sends and lets the creator inspect them later.
     pub struct FakeSession {
         replies: Vec<Box<dyn Any>>,
-        parcels: HashMap<Sink, Vec<Box<dyn Any>>>,
+        parcels: HashMap<crate::message::Sink, Vec<Box<dyn Any>>>,
     }
 
     impl FakeSession {
@@ -166,7 +164,7 @@ pub mod test {
         }
 
         /// Yields the number of parcels sent so far to the specified sink.
-        pub fn parcel_count(&self, sink: Sink) -> usize {
+        pub fn parcel_count(&self, sink: crate::message::Sink) -> usize {
             match self.parcels.get(&sink) {
                 Some(parcels) => parcels.len(),
                 None => 0,
@@ -180,7 +178,7 @@ pub mod test {
         ///
         /// This method will panic if a reply with the specified `id` to the
         /// given `sink` does not exist or if it exists but has wrong type.
-        pub fn parcel<I>(&self, sink: Sink, id: usize) -> &I
+        pub fn parcel<I>(&self, sink: crate::message::Sink, id: usize) -> &I
         where
             I: crate::action::Item + 'static,
         {
@@ -194,7 +192,7 @@ pub mod test {
         ///
         /// The iterator will panic (but not immediately) if some parcels has
         /// an incorrect type.
-        pub fn parcels<I>(&self, sink: Sink) -> impl Iterator<Item = &I>
+        pub fn parcels<I>(&self, sink: crate::message::Sink) -> impl Iterator<Item = &I>
         where
             I: crate::action::Item + 'static,
         {
@@ -224,7 +222,7 @@ pub mod test {
             Ok(())
         }
 
-        fn send<I>(&mut self, sink: Sink, item: I) -> Result<()>
+        fn send<I>(&mut self, sink: crate::message::Sink, item: I) -> Result<()>
         where
             I: crate::action::Item + 'static,
         {
@@ -240,7 +238,7 @@ pub mod test {
 mod tests {
 
     use super::*;
-    use crate::message::sink;
+    use crate::message::Sink;
 
     #[test]
     fn test_fake_reply_count() {
@@ -264,14 +262,14 @@ mod tests {
         // defined).
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(crate::message::sink::STARTUP, ()).unwrap();
-            session.send(crate::message::sink::STARTUP, ()).unwrap();
+            session.send(Sink::STARTUP, ()).unwrap();
+            session.send(Sink::STARTUP, ()).unwrap();
         }
 
         let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
-        assert_eq!(session.parcel_count(crate::message::sink::STARTUP), 2);
+        assert_eq!(session.parcel_count(Sink::STARTUP), 2);
     }
 
     #[test]
@@ -320,17 +318,15 @@ mod tests {
     fn test_fake_parcel_correct_parcel() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP, StringResponse::from("foo"))
-                .unwrap();
-            session.send(sink::STARTUP, StringResponse::from("bar"))
-                .unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("foo")).unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("bar")).unwrap();
         }
 
         let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
-        let response_foo = session.parcel::<StringResponse>(sink::STARTUP, 0);
-        let response_bar = session.parcel::<StringResponse>(sink::STARTUP, 1);
+        let response_foo = session.parcel::<StringResponse>(Sink::STARTUP, 0);
+        let response_bar = session.parcel::<StringResponse>(Sink::STARTUP, 1);
         assert_eq!(response_foo.0, "foo");
         assert_eq!(response_bar.0, "bar");
     }
@@ -340,16 +336,14 @@ mod tests {
     fn test_fake_parcel_incorrect_parcel_id() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP, ())
-                .unwrap();
-            session.send(sink::STARTUP, ())
-                .unwrap();
+            session.send(Sink::STARTUP, ()).unwrap();
+            session.send(Sink::STARTUP, ()).unwrap();
         }
 
         let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
-        session.parcel::<()>(sink::STARTUP, 42);
+        session.parcel::<()>(Sink::STARTUP, 42);
     }
 
     #[test]
@@ -357,14 +351,13 @@ mod tests {
     fn test_fake_parcel_incorrect_parcel_type() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP, StringResponse::from("quux"))
-                .unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("quux")).unwrap();
         }
 
         let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
-        session.parcel::<()>(sink::STARTUP, 0);
+        session.parcel::<()>(Sink::STARTUP, 0);
     }
 
     #[test]
@@ -408,7 +401,7 @@ mod tests {
         let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
-        let mut parcels = session.parcels::<()>(crate::message::sink::STARTUP);
+        let mut parcels = session.parcels::<()>(Sink::STARTUP);
         assert_eq!(parcels.next(), None);
     }
 
@@ -416,18 +409,15 @@ mod tests {
     fn test_fake_parcels_multiple_parcels() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP, StringResponse::from("foo"))
-                .unwrap();
-            session.send(sink::STARTUP, StringResponse::from("bar"))
-                .unwrap();
-            session.send(sink::STARTUP, StringResponse::from("baz"))
-                .unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("foo")).unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("bar")).unwrap();
+            session.send(Sink::STARTUP, StringResponse::from("baz")).unwrap();
         }
 
         let mut session = test::FakeSession::new();
         handle(&mut session, ());
 
-        let mut parcels = session.parcels::<StringResponse>(sink::STARTUP);
+        let mut parcels = session.parcels::<StringResponse>(Sink::STARTUP);
         assert_eq!(parcels.next().unwrap().0, "foo");
         assert_eq!(parcels.next().unwrap().0, "bar");
         assert_eq!(parcels.next().unwrap().0, "baz");

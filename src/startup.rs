@@ -38,9 +38,8 @@ impl Response {
 
 /// Sends startup information to the server.
 pub fn send() -> session::Result<()> {
-    let response = Response::build();
-    crate::message::Parcel::new(crate::message::sink::TRANSFER_STORE, response)
-        .send();
+    let sink = crate::message::Sink::TRANSFER_STORE;
+    crate::message::Parcel::new(sink, Response::build()).send();
 
     Ok(())
 }

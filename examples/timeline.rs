@@ -73,7 +73,7 @@ impl rrg::session::Session for Session {
         Ok(())
     }
 
-    fn send<I>(&mut self, sink: rrg::message::sink::Sink, item: I) -> rrg::session::Result<()>
+    fn send<I>(&mut self, sink: rrg::message::Sink, item: I) -> rrg::session::Result<()>
     where
         I: rrg::action::Item + 'static,
     {
@@ -82,7 +82,7 @@ impl rrg::session::Session for Session {
 
         // Just a sanity check in case the implementation of the timeline action
         // starts sending data to other sinks.
-        assert_eq!(sink, rrg::message::sink::TRANSFER_STORE);
+        assert_eq!(sink, rrg::message::Sink::TRANSFER_STORE);
 
         let parcel = (&item as &dyn std::any::Any)
             .downcast_ref::<timeline::Chunk>()
