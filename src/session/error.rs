@@ -13,9 +13,6 @@ pub enum Error {
     Action(Box<dyn std::error::Error>),
     /// Attempted to call an unknown or not implemented action.
     Dispatch(String),
-    /// An error occurred when encoding bytes of a proto message.
-    // TODO: Determine whether we need this error type or we should just panic.
-    Encode(protobuf::ProtobufError),
     /// An error occurred when parsing a proto message.
     Parse(crate::action::ParseArgsError),
 }
@@ -49,9 +46,6 @@ impl Display for Error {
             Dispatch(ref name) => {
                 write!(fmt, "unknown action: {}", name)
             }
-            Encode(ref error) => {
-                write!(fmt, "failure during encoding proto message: {}", error)
-            }
             Parse(ref error) => {
                 write!(fmt, "malformed proto message: {}", error)
             }
@@ -67,16 +61,8 @@ impl std::error::Error for Error {
         match *self {
             Action(ref error) => Some(error.as_ref()),
             Dispatch(_) => None,
-            Encode(ref error) => Some(error),
             Parse(ref error) => Some(error),
         }
-    }
-}
-
-impl From<protobuf::ProtobufError> for Error {
-
-    fn from(error: protobuf::ProtobufError) -> Error {
-        Error::Encode(error)
     }
 }
 
