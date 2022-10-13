@@ -13,58 +13,40 @@
 //! (which is clearly not a response to a particular request) or to transfer
 //! file blobs to a specialized storage.
 
-/// Data sent to a server not belonging to a particular action call.
+/// A wrapper around [`Item`] objects addressed to a particular sink.
 ///
-/// Sometimes the agent should send data to the server that is not connected
+/// Sometimes the agent should send data to the server that is not associated
 /// with a particular flow request. An example can be the agent startup data
 /// sent to the server regardless of whether there was a request for it or not.
 /// Another example can be file contents that are delivered to the server not
 /// as part of the flow results but go to a separate store that has logic for
 /// deduplicating data that we already collected in the past.
-pub trait Parcel {
-    /// Low-level Protocol Buffers type representing the parcel data.
-    type Proto: protobuf::Message;
-
-    /// A name of the corresponding RDF class in GRR.
-    const RDF_NAME: &'static str;
-
-    /// Converts the parcel to its low-level representation.
-    fn into_proto(self) -> Self::Proto;
-}
-
-impl Parcel for () {
-
-    type Proto = protobuf::well_known_types::Empty;
-
-    // This implementation is intended to be used only in tests and we do not
-    // really care about the `RDF_NAME` field there. And since GRR does not have
-    // any RDF wrapper for empty type (except maybe `EmptyFlowArgs`, but this is
-    // semantically different), we just leave it blank.
-    const RDF_NAME: &'static str = "";
-
-    fn into_proto(self) -> protobuf::well_known_types::Empty {
-        protobuf::well_known_types::Empty::new()
-    }
-}
-
-/// A parcel addressed to a particular server-side sink.
-pub struct AddressedParcel<P: Parcel> {
+///
+/// Since this data is not associated with any flow request it still has to be
+/// somehow identified. This is why we send data to a particular [`Sink`] that
+/// knows how to deal with items of particular kind (e.g. there is a sink for
+/// file contents and a separate sink for startup information).
+///
+/// [`Item`]: crate::action::Item
+/// [`Sink`]: crate::message::sink::Sink
+pub struct Parcel<I: crate::action::Item> {
     /// Destination of the parcel.
     sink: Sink,
-    /// Actual parcel.
-    parcel: P,
+    /// The item contained within this parcel.
+    item: I,
 }
 
-impl<P: Parcel> AddressedParcel<P> {
+impl<I: crate::action::Item> Parcel<I> {
 
     /// Sink to which the parcel should be delivered to.
     pub fn sink(&self) -> Sink {
         self.sink
     }
 
+    // TODO: Delete or rename this method.
     /// Unpacks the underlying parcel.
-    pub fn unpack(self) -> P {
-        self.parcel
+    pub fn unpack(self) -> I {
+        self.item
     }
 
     /// Sends the parcel message through Fleetspeak to the GRR server.
@@ -82,7 +64,7 @@ impl<P: Parcel> AddressedParcel<P> {
     }
 }
 
-impl<P: Parcel> Into<rrg_proto::jobs::GrrMessage> for AddressedParcel<P> {
+impl<I: crate::action::Item> Into<rrg_proto::jobs::GrrMessage> for Parcel<I> {
 
     fn into(self) -> rrg_proto::jobs::GrrMessage {
         use protobuf::Message as _;
@@ -91,20 +73,20 @@ impl<P: Parcel> Into<rrg_proto::jobs::GrrMessage> for AddressedParcel<P> {
         message.set_session_id(String::from(self.sink.id));
         message.set_field_type(rrg_proto::jobs::GrrMessage_Type::MESSAGE);
 
-        let serialized_parcel = self.parcel
+        let serialized_item = self.item
             .into_proto()
             .write_to_bytes()
             // It is not clear what should we do in case of an error. It is very
             // hard to imagine a scenario when serialization fails so for now we
             // just fail hard. If we observe any problems with this assumption,
             // we can always change this behaviour.
-            .expect("failed to serialize a parcel message");
+            .expect("failed to serialize the item message");
 
         // Like with response messages, for parcels we also have to store the
         // parcel data in the field named "args". This is something that should
         // be fixed one day.
-        message.set_args_rdf_name(String::from(P::RDF_NAME));
-        message.set_args(serialized_parcel);
+        message.set_args_rdf_name(String::from(I::RDF_NAME));
+        message.set_args(serialized_item);
 
         message
     }
@@ -118,11 +100,12 @@ pub struct Sink {
 }
 
 impl Sink {
-    /// Adresses a given `parcel` to this sink.
-    pub fn address<P: Parcel>(&self, parcel: P) -> AddressedParcel<P> {
-        AddressedParcel {
+    // TODO(panhania@): Consider removing this method.
+    /// Adresses the given `item` to this sink.
+    pub fn address<I: crate::action::Item>(&self, item: I) -> Parcel<I> {
+        Parcel {
             sink: *self,
-            parcel,
+            item,
         }
     }
 }

@@ -185,7 +185,7 @@ where
         let chunk = Chunk::from_bytes(part);
         let chunk_id = chunk.id();
 
-        session.send(crate::message::sink::TRANSFER_STORE.address(chunk))?;
+        session.send(crate::message::sink::TRANSFER_STORE, chunk)?;
         response.chunk_ids.push(chunk_id);
     }
 
@@ -227,7 +227,7 @@ impl super::Item for Response {
     }
 }
 
-impl crate::message::sink::Parcel for Chunk {
+impl crate::action::Item for Chunk {
 
     const RDF_NAME: &'static str = "DataBlob";
 

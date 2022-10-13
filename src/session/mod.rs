@@ -20,6 +20,8 @@ mod response;
 mod time;
 
 use crate::action;
+use crate::message::sink::Sink;
+
 pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError,
                       UnsupportedValueError, UnknownEnumValueError};
@@ -36,9 +38,9 @@ pub trait Session {
     fn reply<I>(&mut self, item: I) -> Result<()>
     where I: action::Item + 'static;
 
-    /// Sends an adressed parcel.
-    fn send<P>(&mut self, parcel: crate::message::sink::AddressedParcel<P>) -> Result<()>
-    where P: crate::message::sink::Parcel + 'static;
+    /// Sends an item to a particular sink.
+    fn send<I>(&mut self, sink: Sink, item: I) -> Result<()>
+    where I: action::Item + 'static;
 
     /// Sends a heartbeat signal to the Fleetspeak process.
     fn heartbeat(&mut self) {
@@ -84,12 +86,12 @@ impl Session for FleetspeakSession {
         Ok(())
     }
 
-    fn send<P>(&mut self, parcel: crate::message::sink::AddressedParcel<P>) -> Result<()>
+    fn send<I>(&mut self, sink: Sink, item: I) -> Result<()>
     where
-        P: crate::message::sink::Parcel,
+        I: crate::action::Item,
     {
         // TODO(panhania@): Enforce limits.
-        parcel.send();
+        sink.address(item).send();
 
         Ok(())
     }
@@ -178,9 +180,9 @@ pub mod test {
         ///
         /// This method will panic if a reply with the specified `id` to the
         /// given `sink` does not exist or if it exists but has wrong type.
-        pub fn parcel<P>(&self, sink: Sink, id: usize) -> &P
+        pub fn parcel<I>(&self, sink: Sink, id: usize) -> &I
         where
-            P: crate::message::sink::Parcel + 'static,
+            I: crate::action::Item + 'static,
         {
             match self.parcels(sink).nth(id) {
                 Some(parcel) => parcel,
@@ -192,9 +194,9 @@ pub mod test {
         ///
         /// The iterator will panic (but not immediately) if some parcels has
         /// an incorrect type.
-        pub fn parcels<P>(&self, sink: Sink) -> impl Iterator<Item = &P>
+        pub fn parcels<I>(&self, sink: Sink) -> impl Iterator<Item = &I>
         where
-            P: crate::message::sink::Parcel + 'static,
+            I: crate::action::Item + 'static,
         {
             // Since the empty iterator (as defined in the standard library) is
             // a specific type, it cannot be returned in one branch but not in
@@ -222,14 +224,12 @@ pub mod test {
             Ok(())
         }
 
-        fn send<P>(&mut self, parcel: crate::message::sink::AddressedParcel<P>) -> Result<()>
+        fn send<I>(&mut self, sink: Sink, item: I) -> Result<()>
         where
-            P: crate::message::sink::Parcel + 'static,
+            I: crate::action::Item + 'static,
         {
-            let sink = parcel.sink();
-
             let parcels = self.parcels.entry(sink).or_insert_with(Vec::new);
-            parcels.push(Box::new(parcel.unpack()));
+            parcels.push(Box::new(item));
 
             Ok(())
         }
@@ -264,8 +264,8 @@ mod tests {
         // defined).
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(crate::message::sink::STARTUP.address(())).unwrap();
-            session.send(crate::message::sink::STARTUP.address(())).unwrap();
+            session.send(crate::message::sink::STARTUP, ()).unwrap();
+            session.send(crate::message::sink::STARTUP, ()).unwrap();
         }
 
         let mut session = test::FakeSession::new();
@@ -320,9 +320,9 @@ mod tests {
     fn test_fake_parcel_correct_parcel() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP.address(StringResponse::from("foo")))
+            session.send(sink::STARTUP, StringResponse::from("foo"))
                 .unwrap();
-            session.send(sink::STARTUP.address(StringResponse::from("bar")))
+            session.send(sink::STARTUP, StringResponse::from("bar"))
                 .unwrap();
         }
 
@@ -340,9 +340,9 @@ mod tests {
     fn test_fake_parcel_incorrect_parcel_id() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP.address(()))
+            session.send(sink::STARTUP, ())
                 .unwrap();
-            session.send(sink::STARTUP.address(()))
+            session.send(sink::STARTUP, ())
                 .unwrap();
         }
 
@@ -357,7 +357,7 @@ mod tests {
     fn test_fake_parcel_incorrect_parcel_type() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP.address(StringResponse::from("quux")))
+            session.send(sink::STARTUP, StringResponse::from("quux"))
                 .unwrap();
         }
 
@@ -416,11 +416,11 @@ mod tests {
     fn test_fake_parcels_multiple_parcels() {
 
         fn handle<S: Session>(session: &mut S, _: ()) {
-            session.send(sink::STARTUP.address(StringResponse::from("foo")))
+            session.send(sink::STARTUP, StringResponse::from("foo"))
                 .unwrap();
-            session.send(sink::STARTUP.address(StringResponse::from("bar")))
+            session.send(sink::STARTUP, StringResponse::from("bar"))
                 .unwrap();
-            session.send(sink::STARTUP.address(StringResponse::from("baz")))
+            session.send(sink::STARTUP, StringResponse::from("baz"))
                 .unwrap();
         }
 
@@ -445,20 +445,6 @@ mod tests {
     }
 
     impl action::Item for StringResponse {
-
-        const RDF_NAME: &'static str = "RDFString";
-
-        type Proto = protobuf::well_known_types::StringValue;
-
-        fn into_proto(self) -> protobuf::well_known_types::StringValue {
-            let mut proto = protobuf::well_known_types::StringValue::new();
-            proto.set_value(self.0);
-
-            proto
-        }
-    }
-
-    impl crate::message::sink::Parcel for StringResponse {
 
         const RDF_NAME: &'static str = "RDFString";
 

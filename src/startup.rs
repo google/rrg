@@ -61,7 +61,7 @@ fn boot_time() -> SystemTime {
     }
 }
 
-impl crate::message::sink::Parcel for Response {
+impl crate::action::Item for Response {
 
     const RDF_NAME: &'static str = "StartupInfo";
 
