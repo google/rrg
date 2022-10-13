@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn test_install_date() {
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
         assert_eq!(session.reply_count(), 1);
         let response: &Response = session.reply(0);

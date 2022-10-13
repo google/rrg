@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);

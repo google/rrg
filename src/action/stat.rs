@@ -271,7 +271,7 @@ mod tests {
             collect_ext_attrs: false,
         };
 
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_err());
     }
 
@@ -286,7 +286,7 @@ mod tests {
             collect_ext_attrs: false,
         };
 
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         assert_eq!(session.reply_count(), 1);
@@ -313,7 +313,7 @@ mod tests {
             collect_ext_attrs: false,
         };
 
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         assert_eq!(session.reply_count(), 1);
@@ -345,7 +345,7 @@ mod tests {
             collect_ext_attrs: false,
         };
 
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         assert_eq!(session.reply_count(), 1);
@@ -373,7 +373,7 @@ mod tests {
             collect_ext_attrs: false,
         };
 
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         assert_eq!(session.reply_count(), 1);
@@ -405,7 +405,7 @@ mod tests {
             collect_ext_attrs: false,
         };
 
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let reply = session.reply::<Response>(0);

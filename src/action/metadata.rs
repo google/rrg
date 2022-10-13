@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn test_name() {
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
@@ -55,7 +55,7 @@ mod tests {
 
     #[test]
     fn test_description() {
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
@@ -66,7 +66,7 @@ mod tests {
 
     #[test]
     fn test_version() {
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);

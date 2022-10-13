@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_if_any_filesystem_exists() {
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
         assert_ne!(session.reply_count(), 0);
     }
