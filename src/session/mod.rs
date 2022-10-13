@@ -14,14 +14,12 @@
 //! bytes, action runtime, etc.) and stop the execution if they exceed limits
 //! for a particular request.
 
-mod demand;
 mod error;
 mod response;
 mod time;
 
 use crate::action;
 
-pub use self::demand::{Demand, Header, Payload};
 pub use self::error::{Error, ParseError, MissingFieldError, RegexParseError,
                       UnsupportedValueError, UnknownEnumValueError};
 // TODO: Revisit visibility once comms refactoring is complete.
