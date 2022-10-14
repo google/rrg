@@ -122,7 +122,7 @@ impl ResponseBuilder {
 /// file contents and a separate sink for startup information).
 ///
 /// [`Item`]: crate::action::Item
-/// [`Sink`]: crate::message::sink::Sink
+/// [`Sink`]: crate::message::Sink
 pub struct Parcel<I: crate::action::Item> {
     /// Destination of the parcel.
     sink: crate::message::sink::Sink,

@@ -1,3 +1,15 @@
+/// Awaits for the raw GRR Protocol Buffers message object from Fleetspeak.
+///
+/// This function will block until the message is available. While waiting, it
+/// will heartbeat at the specified rate making sure that Fleetspeak does not
+/// kill the agent for unresponsiveness.
+///
+/// # Errors
+///
+/// This function will return error in case of recoverable issues (e.g. the
+/// message is missing some required field). However, it will panic in case
+/// there is a fundamental problem (e.g. the Fleetspeak connection is broken)
+/// as it makes no sense to continue running in such case.
 pub fn receive_raw(heartbeat_rate: std::time::Duration) -> Result<rrg_proto::jobs::GrrMessage, super::ReceiveRequestError> {
     use fleetspeak::ReadError::*;
 
@@ -31,6 +43,17 @@ pub fn receive_raw(heartbeat_rate: std::time::Duration) -> Result<rrg_proto::job
     Ok(protobuf::Message::parse_from_bytes(&message.data[..])?)
 }
 
+/// Sends a raw GRR Protocol Buffers message object to Fleetspeak.
+///
+/// This function will block until it is possible to send the message (which
+/// should always be possible if there is no problem with the underlying file
+/// for communicating with Fleetspeak).
+///
+/// # Errors
+///
+/// This function never errors but may panic during an unrecoverable issue (e.g.
+/// the Fleetspeak connection is broken) as running in such a state does not
+/// make sense.
 pub fn send_raw(message: rrg_proto::jobs::GrrMessage) {
     let data = protobuf::Message::write_to_bytes(&message)
         // Encoding can fail only if the buffer is insufficiently large. But
