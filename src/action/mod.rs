@@ -55,66 +55,6 @@ pub use error::{
 };
 use crate::session::{self, Session};
 
-/// Abstraction for action-specific requests.
-///
-/// Protocol Buffer messages received from the GRR server are not necessarily
-/// easy to work with and are hardly idiomatic to Rust. For this reason, actions
-/// should define more structured data types to represent their input and should
-/// be able to parse raw messages into them.
-pub trait Request: Sized {
-
-    /// A type of the corresponding raw proto message.
-    type Proto: protobuf::Message + Default;
-
-    /// A method for converting raw proto messages into structured requests.
-    fn from_proto(proto: Self::Proto) -> Result<Self, session::ParseError>;
-}
-
-/// Abstraction for action-specific responses.
-///
-/// Like with the [`Request`] type, Protocol Buffer messages sent to the GRR
-/// server are very idiomatic to Rust. For this reason, actions should define
-/// more structured data types to represent responses and provide a way to
-/// convert them into the wire format.
-///
-/// Note that because of the design flaws in the protocol, actions also need to
-/// specify a name of the wrapper RDF class from the Python implementation.
-/// Hopefully, one day this issue would be fixed and class names will not leak
-/// into the specification.
-///
-/// [`Request`]: trait.Request.html
-pub trait Response: Sized {
-
-    /// A name of the corresponding RDF class.
-    const RDF_NAME: Option<&'static str>;
-
-    /// A type of the corresponding raw proto message.
-    type Proto: protobuf::Message + Default;
-
-    /// A method for converting structured responses into raw proto messages.
-    fn into_proto(self) -> Self::Proto;
-}
-
-impl Request for () {
-
-    type Proto = protobuf::well_known_types::Empty;
-
-    fn from_proto(_: protobuf::well_known_types::Empty) -> Result<(), session::ParseError> {
-        Ok(())
-    }
-}
-
-impl Response for () {
-
-    const RDF_NAME: Option<&'static str> = None;
-
-    type Proto = protobuf::well_known_types::Empty;
-
-    fn into_proto(self) -> protobuf::well_known_types::Empty {
-        protobuf::well_known_types::Empty::new()
-    }
-}
-
 /// Dispatches the given `request` to an appropriate action handler.
 ///
 /// This method is a mapping between action names (as specified in the protocol)
