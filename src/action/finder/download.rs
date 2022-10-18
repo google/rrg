@@ -115,8 +115,8 @@ pub struct Chunk {
     pub data: Vec<u8>,
 }
 
-impl super::super::Response for Chunk {
-    const RDF_NAME: Option<&'static str> = Some("DataBlob");
+impl super::super::Item for Chunk {
+    const RDF_NAME: &'static str = "DataBlob";
 
     type Proto = rrg_proto::jobs::DataBlob;
 

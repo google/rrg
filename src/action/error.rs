@@ -24,6 +24,11 @@ impl ParseArgsError {
             error: Box::new(error),
         }
     }
+
+    /// Returns the corresponding [`ParseArgsErrorKind`] of this error.
+    pub fn kind(&self) -> ParseArgsErrorKind {
+        self.kind
+    }
 }
 
 /// Kinds of errors that can happen when parsing action arguments.
