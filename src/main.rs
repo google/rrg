@@ -3,8 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use rrg::action;
-use rrg::session;
 use rrg::args::Args;
 
 fn main() {
@@ -16,7 +14,7 @@ fn main() {
         .expect("failed to initialize Fleetspeak connection");
 
     log::info!("sending RRG startup information");
-    match action::startup::handle(&mut session::Adhoc, ()) {
+    match rrg::startup::send() {
         Err(error) => {
             log::error!("failed to collect startup information: {}", error);
         }

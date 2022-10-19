@@ -3,71 +3,27 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use log::{error, warn};
+//! Wrapper types for low-level communication messages.
+//!
+//! At the bottom there is only one message type that GRR understands and uses
+//! for all sorts of purposes. This is not a great situation to be in or reason
+//! about, so in RRG we introduce new abstractions above this type:
+//!
+//!   * [`Request`]: A request message to execute some action.
+//!   * [`Reply`]: A response message with an item that the action yielded.
+//!   * [`Status`]: A response message with summary of action execution.
+//!   * [`Parcel`]: A response message not associated with any particular flow.
+//!
+//! [`Request`]: crate::message::Request
+//! [`Reply`]: crate::message::Reply
+//! [`Status`]: crate::message::Status
+//! [`Parcel`]: crate::message::Parcel
 
-use crate::args::Args;
+mod fleetspeak;
+mod request;
+mod response;
+mod sink;
 
-pub fn send(message: rrg_proto::jobs::GrrMessage) {
-        let data = protobuf::Message::write_to_bytes(&message)
-            // Encoding can fail only if the buffer is insufficiently large. But
-            // since we use growable vector this should never happen (provided
-            // that we have enough memory).
-            .expect("message encoding failure");
-
-        let message = fleetspeak::Message {
-            service: String::from("GRR"),
-            kind: Some(String::from("GrrMessage")),
-            data,
-        };
-
-        if let Err(error) = fleetspeak::send(message) {
-            // If we failed to deliver the message through Fleetspeak, it means
-            // that our communication is broken (e.g. the pipe was closed) and
-            // the agent should be killed.
-            panic!("message delivery failure: {}", error)
-        };
-}
-
-pub fn receive(args: &Args) -> Option<rrg_proto::jobs::GrrMessage> {
-    use fleetspeak::ReadError::*;
-
-    let message = match fleetspeak::receive_with_heartbeat(args.heartbeat_rate) {
-        Ok(message) => message,
-        Err(Malformed(error)) => {
-            error!("received a malformed message: {}", error);
-            return None;
-        }
-        Err(Decode(error)) => {
-            error!("failed to decode a message: {}", error);
-            return None;
-        }
-        Err(error) => {
-            // If we failed to collect the message because of I/O error or magic
-            // check, it means that our communication is broken (e.g. the pipe
-            // was closed) and the agent should be killed.
-            panic!("failed to collect a message: {}", error)
-        }
-    };
-
-    if message.service != "GRR" {
-        warn!("message send by '{}' service (instead of GRR)", message.service);
-    }
-
-    match message.kind {
-        Some(ref kind) if kind != "GrrMessage" => {
-            warn!("message with unrecognized type '{}'", kind);
-        }
-        Some(_) => (),
-        None => {
-            warn!("message with missing type specification");
-        }
-    }
-
-    match protobuf::Message::parse_from_bytes(&message.data[..]) {
-        Ok(message) => Some(message),
-        Err(error) => {
-            error!("failed to decode the data: {}", error);
-            None
-        }
-    }
-}
+pub use request::{Request, RequestId, ReceiveRequestError};
+pub use response::{Reply, Status, Parcel, ResponseBuilder, ResponseId};
+pub use sink::{Sink};

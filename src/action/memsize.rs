@@ -24,9 +24,9 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 }
 
 /// A response type for the memory size action.
-impl super::Response for Response {
+impl super::Item for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("ByteSize");
+    const RDF_NAME: &'static str = "ByteSize";
 
     type Proto = protobuf::well_known_types::StringValue;
     // TODO: Fix serialization issues.
@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);

@@ -23,11 +23,11 @@ struct Response {
     time: Option<SystemTime>,
 }
 
-impl super::Response for Response {
+impl super::Item for Response {
 
     // TODO: Change to RDFDatetime when the client will be capable to send
     // "raw" strings without wrapping them into protobuf.
-    const RDF_NAME: Option<&'static str> = Some("DataBlob");
+    const RDF_NAME: &'static str = "DataBlob";
 
     type Proto = protobuf::well_known_types::UInt64Value;
 
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn test_install_date() {
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
         assert_eq!(session.reply_count(), 1);
         let response: &Response = session.reply(0);

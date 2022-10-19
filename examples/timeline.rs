@@ -13,7 +13,6 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use rrg::action::timeline;
-use rrg::session::Sink;
 
 /// A binary for the timeline action.
 #[derive(argh::FromArgs)]
@@ -59,9 +58,9 @@ impl Session {
 
 impl rrg::session::Session for Session {
 
-    fn reply<R>(&mut self, response: R) -> rrg::session::Result<()>
+    fn reply<I>(&mut self, item: I) -> rrg::session::Result<()>
     where
-        R: rrg::action::Response + 'static,
+        I: rrg::action::Item + 'static,
     {
         // For now we are not interested in doing anything useful with chunk ids
         // since everything is dumped into one file and there is no need to
@@ -69,29 +68,29 @@ impl rrg::session::Session for Session {
         //
         // In the future they might be useful for printing some statistics about
         // the collected files.
-        drop(response);
+        drop(item);
 
         Ok(())
     }
 
-    fn send<R>(&mut self, sink: Sink, response: R) -> rrg::session::Result<()>
+    fn send<I>(&mut self, sink: rrg::message::Sink, item: I) -> rrg::session::Result<()>
     where
-        R: rrg::action::Response + 'static,
+        I: rrg::action::Item + 'static,
     {
         use std::io::Write as _;
         use byteorder::{BigEndian, WriteBytesExt as _};
 
         // Just a sanity check in case the implementation of the timeline action
         // starts sending data to other sinks.
-        assert_eq!(sink, Sink::TRANSFER_STORE);
+        assert_eq!(sink, rrg::message::Sink::TRANSFER_STORE);
 
-        let response = (&response as &dyn std::any::Any)
+        let parcel = (&item as &dyn std::any::Any)
             .downcast_ref::<timeline::Chunk>()
             .expect("unexpected response type");
 
-        self.output.write_u64::<BigEndian>(response.data.len() as u64)
+        self.output.write_u64::<BigEndian>(parcel.data.len() as u64)
             .expect("failed to write chunk size tag");
-        self.output.write_all(&response.data[..])
+        self.output.write_all(&parcel.data[..])
             .expect("failed to write chunk data");
 
         Ok(())

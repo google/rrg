@@ -75,9 +75,9 @@ fn ips_to_protos(ips: Vec<IpNetwork>) -> Vec<rrg_proto::jobs::NetworkAddress> {
     ips.into_iter().map(ip_to_proto).collect()
 }
 
-impl super::Response for Response {
+impl super::Item for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("Interface");
+    const RDF_NAME: &'static str = "Interface";
 
     type Proto = rrg_proto::jobs::Interface;
 
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_loopback_presence() {
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         let mut is_loopback_present = false;

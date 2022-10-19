@@ -89,15 +89,15 @@ where
     Ok(())
 }
 
-impl super::Request for Request {
+impl super::Args for Request {
 
     type Proto = rrg_proto::jobs::ListDirRequest;
 
-    fn from_proto(mut proto: Self::Proto) -> Result<Request, session::ParseError> {
+    fn from_proto(mut proto: Self::Proto) -> Result<Request, super::ParseArgsError> {
         use std::convert::TryInto as _;
 
         let path = proto.take_pathspec().try_into()
-            .map_err(session::ParseError::malformed)?;
+            .map_err(crate::action::ParseArgsError::invalid_field)?;
 
         Ok(Request {
             path: path,
@@ -105,9 +105,9 @@ impl super::Request for Request {
     }
 }
 
-impl super::Response for Response {
+impl super::Item for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("StatEntry");
+    const RDF_NAME: &'static str = "StatEntry";
 
     type Proto = rrg_proto::jobs::StatEntry;
 
@@ -136,7 +136,7 @@ mod tests {
             path: tempdir.path().join("foo").to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_err());
     }
 
@@ -148,7 +148,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         assert_eq!(session.reply_count(), 0);
@@ -165,7 +165,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut replies = session.replies().collect::<Vec<&Response>>();
@@ -193,7 +193,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut replies = session.replies().collect::<Vec<&Response>>();
@@ -219,7 +219,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         assert_eq!(session.reply_count(), 1);
@@ -240,7 +240,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut replies = session.replies().collect::<Vec<&Response>>();
@@ -267,7 +267,7 @@ mod tests {
             path: tempdir.path().to_path_buf(),
         };
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut replies = session.replies().collect::<Vec<&Response>>();

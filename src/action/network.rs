@@ -154,20 +154,20 @@ fn make_connection_from_socket_info(
     proto
 }
 
-impl super::Request for Request {
+impl super::Args for Request {
 
     type Proto = rrg_proto::flows::ListNetworkConnectionsArgs;
 
-    fn from_proto(proto: Self::Proto) -> Result<Request, session::ParseError> {
+    fn from_proto(proto: Self::Proto) -> Result<Request, crate::action::ParseArgsError> {
         Ok(Request {
             listening_only: proto.get_listening_only(),
         })
     }
 }
 
-impl super::Response for Response {
+impl super::Item for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("NetworkConnection");
+    const RDF_NAME: &'static str = "NetworkConnection";
 
     type Proto = rrg_proto::sysinfo::NetworkConnection;
 
@@ -341,7 +341,7 @@ mod tests {
         let client = TcpStream::connect(server_addr).unwrap();
         let client_addr = client.local_addr().unwrap();
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         let request = Request { listening_only: false };
         assert!(handle(&mut session, request).is_ok());
 
@@ -405,7 +405,7 @@ mod tests {
         let client_addr = client.local_addr().unwrap();
         client.connect(server_addr).unwrap();
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         let request = Request { listening_only: false };
         assert!(handle(&mut session, request).is_ok());
 
@@ -431,7 +431,7 @@ mod tests {
         let client = TcpStream::connect(server_addr).unwrap();
         let client_addr = client.local_addr().unwrap();
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         let request = Request { listening_only: true };
         assert!(handle(&mut session, request).is_ok());
 
@@ -460,7 +460,7 @@ mod tests {
         let connection = UdpSocket::bind("127.0.0.1:0").unwrap();
         let connection_addr = connection.local_addr().unwrap();
 
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         let request = Request { listening_only: true };
         assert!(handle(&mut session, request).is_ok());
 

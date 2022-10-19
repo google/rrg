@@ -11,6 +11,7 @@ pub mod message;
 pub mod metadata;
 pub mod args;
 pub mod session;
+pub mod startup;
 
 // Consider moving these to a separate submodule.
 #[cfg(feature = "action-timeline")]
@@ -34,8 +35,14 @@ use crate::args::{Args};
 /// appropriate.
 pub fn listen(args: &Args) {
     loop {
-        if let Some(message) = message::receive(&args) {
-            session::handle(message);
-        }
+        let request = match crate::message::Request::receive(args.heartbeat_rate) {
+            Ok(request) => request,
+            Err(error) => {
+                rrg_macro::error!("failed to obtain a request: {}", error);
+                continue
+            }
+        };
+
+        session::FleetspeakSession::handle(request);
     }
 }

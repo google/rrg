@@ -26,9 +26,9 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     Ok(())
 }
 
-impl super::Response for Response {
+impl super::Item for Response {
 
-    const RDF_NAME: Option<&'static str> = Some("ClientInformation");
+    const RDF_NAME: &'static str = "ClientInformation";
 
     type Proto = rrg_proto::jobs::ClientInformation;
 
@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn test_name() {
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
@@ -55,7 +55,7 @@ mod tests {
 
     #[test]
     fn test_description() {
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
@@ -66,7 +66,7 @@ mod tests {
 
     #[test]
     fn test_version() {
-        let mut session = session::test::Fake::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         assert_eq!(session.reply_count(), 1);
