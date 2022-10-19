@@ -50,7 +50,6 @@ pub mod memsize;
 pub mod finder;
 
 pub use error::{ParseArgsError, ParseArgsErrorKind, DispatchError};
-use crate::session::{self, Session};
 
 /// Dispatches the given `request` to an appropriate action handler.
 ///
@@ -66,37 +65,55 @@ use crate::session::{self, Session};
 /// reason.
 pub fn dispatch<'s, S>(session: &mut S, request: crate::message::Request) -> Result<(), DispatchError>
 where
-    S: Session,
+    S: crate::session::Session,
 {
     match request.action_name() {
         #[cfg(feature = "action-metadata")]
-        "GetClientInfo" => handle(session, request, self::metadata::handle),
+        "GetClientInfo" => {
+            handle(session, request, self::metadata::handle)
+        }
 
         #[cfg(feature = "action-listdir")]
-        "ListDirectory" => handle(session, request, self::listdir::handle),
+        "ListDirectory" => {
+            handle(session, request, self::listdir::handle)
+        }
 
         #[cfg(feature = "action-timeline")]
-        "Timeline" => handle(session, request, self::timeline::handle),
+        "Timeline" => {
+            handle(session, request, self::timeline::handle)
+        }
 
         #[cfg(feature = "action-network")]
-        "ListNetworkConnections" => handle(session, request, self::network::handle),
+        "ListNetworkConnections" => {
+            handle(session, request, self::network::handle)
+        }
 
         #[cfg(feature = "action-stat")]
-        "GetFileStat" => handle(session, request, self::stat::handle),
+        "GetFileStat" => {
+            handle(session, request, self::stat::handle)
+        }
 
         #[cfg(feature = "action-insttime")]
-        "GetInstallDate" => handle(session, request, self::insttime::handle),
+        "GetInstallDate" => {
+            handle(session, request, self::insttime::handle)
+        }
 
         #[cfg(feature = "action-interfaces")]
         #[cfg(target_family = "unix")]
-        "EnumerateInterfaces" => handle(session, request, self::interfaces::handle),
+        "EnumerateInterfaces" => {
+            handle(session, request, self::interfaces::handle)
+        }
 
         #[cfg(feature = "action-filesystems")]
         #[cfg(target_os = "linux")]
-        "EnumerateFilesystems" => handle(session, request, self::filesystems::handle),
+        "EnumerateFilesystems" => {
+            handle(session, request, self::filesystems::handle)
+        }
 
         #[cfg(feature = "action-memsize")]
-        "GetMemorySize" => handle(session, request, self::memsize::handle),
+        "GetMemorySize" => {
+            handle(session, request, self::memsize::handle)
+        }
 
         action_name => {
             return Err(error::UnknownActionError::new(action_name).into())
@@ -117,7 +134,7 @@ fn handle<S, A, H>(session: &mut S, request: crate::message::Request, handler: H
 where
     S: crate::session::Session,
     A: Args,
-    H: FnOnce(&mut S, A) -> session::Result<()>,
+    H: FnOnce(&mut S, A) -> crate::session::Result<()>,
 {
     let args = request.parse_args()?;
     Ok(handler(session, args)?)
