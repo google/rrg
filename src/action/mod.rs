@@ -49,10 +49,7 @@ pub mod memsize;
 #[cfg(feature = "action-finder")]
 pub mod finder;
 
-pub use error::{
-    ParseArgsError, ParseArgsErrorKind,
-    DispatchError, DispatchErrorKind,
-};
+pub use error::{ParseArgsError, ParseArgsErrorKind, DispatchError};
 use crate::session::{self, Session};
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -101,12 +98,9 @@ where
         #[cfg(feature = "action-memsize")]
         "GetMemorySize" => handle(session, request, self::memsize::handle),
 
-        action_name => return Err(DispatchError {
-            // TODO(panhania@): Fix the `DispatchError` hierarchy to properly
-            // support action names.
-            kind: DispatchErrorKind::UnknownAction("???"),
-            error: None,
-        })
+        action_name => {
+            return Err(error::UnknownActionError::new(action_name).into())
+        }
     }
 }
 

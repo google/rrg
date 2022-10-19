@@ -77,53 +77,49 @@ impl From<protobuf::ProtobufError> for ParseArgsError {
     }
 }
 
+/// The error type for cases when there was a request to run an unknown action.
+#[derive(Debug)]
+pub struct UnknownActionError {
+    action_name: String,
+}
+
+impl UnknownActionError {
+
+    pub fn new<S: Into<String>>(action_name: S) -> UnknownActionError {
+        UnknownActionError {
+            action_name: action_name.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for UnknownActionError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "unknown action '{}'", self.action_name)
+    }
+}
+
+impl std::error::Error for UnknownActionError {
+}
+
 /// The error type for cases when action dispatch (or execution) fails.
 #[derive(Debug)]
 pub struct DispatchError {
-    /// A corresponding [`DispatchErrorKind`] of this error.
-    pub(crate) kind: DispatchErrorKind,
     /// A detailed error object.
-    pub(crate) error: Option<Box<dyn std::error::Error + Send + Sync>>,
-}
-
-/// Kinds of errors that can happen when dispatching an action.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum DispatchErrorKind {
-    /// The action handler is unknown or does not exist yet.
-    UnknownAction(&'static str),
-    /// The action arguments were invalid.
-    InvalidArgs,
-    /// An error occured during a session.
-    SessionFailure,
+    error: Box<dyn std::error::Error + Send + Sync>,
 }
 
 impl std::fmt::Display for DispatchError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.error {
-            Some(ref error) => write!(fmt, "{}: {}", self.kind, error),
-            None => write!(fmt, "{}", self.kind),
-        }
+        write!(fmt, "{}", self.error)
     }
 }
 
 impl std::error::Error for DispatchError {
 
     fn cause(&self) -> Option<&dyn std::error::Error> {
-        self.error.as_deref().map(|error| error as &_)
-    }
-}
-
-impl std::fmt::Display for DispatchErrorKind {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use DispatchErrorKind::*;
-
-        match *self {
-            UnknownAction(name) => write!(fmt, "unknown action '{}'", name),
-            InvalidArgs => write!(fmt, "invalid action arguments"),
-            SessionFailure => write!(fmt, "session evaluation failure"),
-        }
+        Some(self.error.as_ref())
     }
 }
 
@@ -131,8 +127,16 @@ impl From<ParseArgsError> for DispatchError {
 
     fn from(error: ParseArgsError) -> DispatchError {
         DispatchError {
-            kind: DispatchErrorKind::InvalidArgs,
-            error: Some(Box::new(error)),
+            error: Box::new(error),
+        }
+    }
+}
+
+impl From<UnknownActionError> for DispatchError {
+
+    fn from(error: UnknownActionError) -> DispatchError {
+        DispatchError {
+            error: Box::new(error),
         }
     }
 }
@@ -141,8 +145,7 @@ impl From<crate::session::Error> for DispatchError {
 
     fn from(error: crate::session::Error) -> DispatchError {
         DispatchError {
-            kind: DispatchErrorKind::SessionFailure,
-            error: Some(Box::new(error)),
+            error: Box::new(error),
         }
     }
 }
