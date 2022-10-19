@@ -171,7 +171,7 @@ mod tests {
             fuse::spawn_mount(FuseFilesystem, &mountpoint, &options).unwrap()
         };
 
-        let mut session = session::test::FakeSession::new();
+        let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         let fuse_mounted_fs = session.replies::<Response>()
