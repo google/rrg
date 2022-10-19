@@ -81,9 +81,9 @@ impl From<protobuf::ProtobufError> for ParseArgsError {
 #[derive(Debug)]
 pub struct DispatchError {
     /// A corresponding [`DispatchErrorKind`] of this error.
-    kind: DispatchErrorKind,
+    pub(crate) kind: DispatchErrorKind,
     /// A detailed error object.
-    error: Option<Box<dyn std::error::Error + Send + Sync>>,
+    pub(crate) error: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
 /// Kinds of errors that can happen when dispatching an action.
@@ -93,6 +93,8 @@ pub enum DispatchErrorKind {
     UnknownAction(&'static str),
     /// The action arguments were invalid.
     InvalidArgs,
+    /// An error occured during a session.
+    SessionFailure,
 }
 
 impl std::fmt::Display for DispatchError {
@@ -120,6 +122,7 @@ impl std::fmt::Display for DispatchErrorKind {
         match *self {
             UnknownAction(name) => write!(fmt, "unknown action '{}'", name),
             InvalidArgs => write!(fmt, "invalid action arguments"),
+            SessionFailure => write!(fmt, "session evaluation failure"),
         }
     }
 }
@@ -129,6 +132,16 @@ impl From<ParseArgsError> for DispatchError {
     fn from(error: ParseArgsError) -> DispatchError {
         DispatchError {
             kind: DispatchErrorKind::InvalidArgs,
+            error: Some(Box::new(error)),
+        }
+    }
+}
+
+impl From<crate::session::Error> for DispatchError {
+
+    fn from(error: crate::session::Error) -> DispatchError {
+        DispatchError {
+            kind: DispatchErrorKind::SessionFailure,
             error: Some(Box::new(error)),
         }
     }

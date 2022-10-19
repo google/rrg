@@ -67,7 +67,7 @@ use crate::session::{self, Session};
 ///
 /// It will also error out if the action execution itself fails for whatever
 /// reason.
-pub fn dispatch<'s, S>(session: &mut S, request: crate::message::Request) -> session::Result<()>
+pub fn dispatch<'s, S>(session: &mut S, request: crate::message::Request) -> Result<(), DispatchError>
 where
     S: Session,
 {
@@ -101,7 +101,12 @@ where
         #[cfg(feature = "action-memsize")]
         "GetMemorySize" => handle(session, request, self::memsize::handle),
 
-        action => return Err(session::Error::Dispatch(String::from(action))),
+        action_name => return Err(DispatchError {
+            // TODO(panhania@): Fix the `DispatchError` hierarchy to properly
+            // support action names.
+            kind: DispatchErrorKind::UnknownAction("???"),
+            error: None,
+        })
     }
 }
 
@@ -114,14 +119,14 @@ where
 ///
 /// This function will return an error if the request arguments cannot be parsed
 /// for the specific action or if the action execution fails.
-fn handle<S, A, H>(session: &mut S, request: crate::message::Request, handler: H) -> session::Result<()>
+fn handle<S, A, H>(session: &mut S, request: crate::message::Request, handler: H) -> Result<(), DispatchError>
 where
     S: crate::session::Session,
     A: Args,
     H: FnOnce(&mut S, A) -> session::Result<()>,
 {
     let args = request.parse_args()?;
-    handler(session, args)
+    Ok(handler(session, args)?)
 }
 
 // TODO(panhania@): Remove all usages of the `Request` trait and replace it with

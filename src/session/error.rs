@@ -5,16 +5,20 @@
 use std::fmt::{Debug, Display, Formatter};
 use regex::Error as RegexError;
 
-// TODO(panhania@): Migrate to error kind design.
 /// An error type for failures that can occur during a session.
 #[derive(Debug)]
-pub enum Error {
-    /// Action-specific failure.
-    Action(Box<dyn std::error::Error>),
-    /// Attempted to call an unknown or not implemented action.
-    Dispatch(String),
-    /// An error occurred when parsing a proto message.
-    Parse(crate::action::ParseArgsError),
+pub struct Error {
+    /// A corresponding [`ErrorKind`] of this error.
+    kind: ErrorKind,
+    /// A detailed error object.
+    error: Box<dyn std::error::Error + Send + Sync>,
+}
+
+/// Kinds of errors that can happen during a session.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ErrorKind {
+    /// The action execution failed.
+    ExecutionFailure,
 }
 
 impl Error {
@@ -25,51 +29,37 @@ impl Error {
     /// specific error types and propagate them further in the session pipeline.
     pub fn action<E>(error: E) -> Error
     where
-        E: std::error::Error + 'static
+        E: std::error::Error + Send + Sync + 'static,
     {
-        Error::Action(Box::new(error))
+        Error {
+            kind: ErrorKind::ExecutionFailure,
+            error: Box::new(error),
+        }
+    }
+}
+
+impl ErrorKind {
+
+    fn as_str(&self) -> &'static str {
+        use ErrorKind::*;
+
+        match *self {
+            ExecutionFailure => "action execution failed",
+        }
     }
 }
 
 impl Display for Error {
 
     fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        use Error::*;
-
-        match *self {
-            Action(ref error) => {
-                write!(fmt, "action error: {}", error)
-            }
-            Dispatch(ref name) if name.is_empty() => {
-                write!(fmt, "missing action")
-            }
-            Dispatch(ref name) => {
-                write!(fmt, "unknown action: {}", name)
-            }
-            Parse(ref error) => {
-                write!(fmt, "malformed proto message: {}", error)
-            }
-        }
+        write!(fmt, "{}: {}", self.kind.as_str(), self.error)
     }
 }
 
 impl std::error::Error for Error {
 
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use Error::*;
-
-        match *self {
-            Action(ref error) => Some(error.as_ref()),
-            Dispatch(_) => None,
-            Parse(ref error) => Some(error),
-        }
-    }
-}
-
-impl From<crate::action::ParseArgsError> for Error {
-
-    fn from(error: crate::action::ParseArgsError) -> Error {
-        Error::Parse(error)
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        Some(self.error.as_ref())
     }
 }
 
