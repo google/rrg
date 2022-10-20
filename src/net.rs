@@ -30,3 +30,31 @@ impl From<[u8; 6]> for MacAddr {
         MacAddr { octets }
     }
 }
+
+/// A network interface information.
+struct Interface {
+    /// A name of this interface as reported by the system.
+    name: std::ffi::OsString,
+    /// IP addresses associated with this interface.
+    ip_addrs: Vec<std::net::IpAddr>,
+    /// The MAC address associated with this interface.
+    mac_addr: Option<MacAddr>,
+}
+
+impl Interface {
+
+    /// Returns the name of this interface as reported by the system.
+    pub fn name(&self) -> &std::ffi::OsStr {
+        self.name.as_os_str()
+    }
+
+    /// Returns the IP addresses associated with this interface.
+    pub fn ip_addrs(&self) -> &[std::net::IpAddr] {
+        self.ip_addrs.as_slice()
+    }
+
+    /// Returns the MAC address associated with this interface (if any).
+    pub fn mac_addr(&self) -> Option<&MacAddr> {
+        self.mac_addr.as_ref()
+    }
+}
