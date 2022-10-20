@@ -5,6 +5,9 @@
 
 //! Networking primitives not covered by the standard library.
 
+#[cfg(target_os = "linux")]
+pub mod linux;
+
 /// A MAC address.
 ///
 /// MAC addresses are defined as 48-bit numbers in a IEEE 802 standard [1].
