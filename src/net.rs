@@ -8,6 +8,9 @@
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+// TODO(panhania@): Add support for macOS.
+// TODO(panhania@): Add support for Windows.
+
 /// A MAC address.
 ///
 /// MAC addresses are defined as 48-bit numbers in a IEEE 802 standard [1].
