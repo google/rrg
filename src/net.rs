@@ -11,7 +11,7 @@
 ///
 /// [1]: https://standards.ieee.org/wp-content/uploads/import/documents/tutorials/macgrp.pdf
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct MacAddr {
+pub struct MacAddr {
     /// Octets forming up the 48-bit MAC address number.
     octets: [u8; 6],
 }
@@ -32,7 +32,7 @@ impl From<[u8; 6]> for MacAddr {
 }
 
 /// A network interface information.
-struct Interface {
+pub struct Interface {
     /// A name of this interface as reported by the system.
     name: std::ffi::OsString,
     /// IP addresses associated with this interface.
