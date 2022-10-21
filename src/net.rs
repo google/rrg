@@ -8,7 +8,9 @@
 #[cfg(target_os = "linux")]
 pub mod linux;
 
-// TODO(panhania@): Add support for macOS.
+#[cfg(target_os = "macos")]
+pub mod macos;
+
 // TODO(panhania@): Add support for Windows.
 
 /// A MAC address.
