@@ -24,11 +24,10 @@ lazy_static = { version = "1.4.0" }
 
 chrono = { version = "0.4.11", optional = true }
 flate2 = { version = "1.0.14", optional = true }
+md-5 = { version = "0.10.5", optional = true }
 netstat2 = { version = "0.8.1", optional = true }
-# TODO: Remove `rust-crypto` from project dependencies altogether. It is no
-# longer maintained and can be replaced by smaller and more specialized crates.
-rust-crypto = { version = "0.2.36", optional = true }
-sha2 = { version = "0.8.1", optional = true }
+sha1 = { version = "0.10.5", optional = true }
+sha2 = { version = "0.10.6", optional = true }
 sysinfo = { version = "0.14.1", optional = true }
 
 [target.'cfg(target_family = "unix")'.dependencies]
@@ -69,7 +68,7 @@ default = [
 action-insttime = ["dep:chrono", "dep:proc-mounts", "dep:winreg"]
 action-interfaces = ["dep:pnet"]
 action-filesystems = ["dep:proc-mounts"]
-action-finder = ["dep:rust-crypto", "dep:sha2"]
+action-finder = ["dep:md-5", "dep:sha1", "dep:sha2"]
 action-listdir = []
 action-memsize = ["dep:sysinfo"]
 action-metadata = []

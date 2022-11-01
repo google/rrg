@@ -1,8 +1,10 @@
 use crate::action::finder::request::HashActionOptions;
 use crate::fs::Entry;
-use crypto::digest::Digest;
 use log::warn;
+use md5::Md5;
 use rrg_macro::ack;
+use sha1::Sha1;
+use sha2::{Digest, Sha256};
 use std::cmp::min;
 use std::fs::File;
 use std::io::Read;
@@ -10,11 +12,11 @@ use std::io::Read;
 /// Hashes data writen to it using SHA-1, SHA-256 and MD5 algorithms.
 struct Hasher {
     /// Digest with SHA-1 hash.
-    sha1: crypto::sha1::Sha1,
+    sha1: Sha1,
     /// Digest with SHA-256 hash.
-    sha256: crypto::sha2::Sha256,
+    sha256: Sha256,
     /// Digest with MD5 hash.
-    md5: crypto::md5::Md5,
+    md5: Md5,
     /// Stores total number of bytes inserted into hasher.
     total_byte_count: u64,
 }
@@ -22,9 +24,9 @@ struct Hasher {
 impl Hasher {
     pub fn new() -> Hasher {
         Hasher {
-            sha1: crypto::sha1::Sha1::new(),
-            sha256: crypto::sha2::Sha256::new(),
-            md5: crypto::md5::Md5::new(),
+            sha1: sha1::Sha1::new(),
+            sha256: sha2::Sha256::new(),
+            md5: md5::Md5::new(),
             total_byte_count: 0,
         }
     }
@@ -32,9 +34,9 @@ impl Hasher {
 
 impl std::io::Write for Hasher {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.sha1.input(buf);
-        self.sha256.input(buf);
-        self.md5.input(buf);
+        self.sha1.update(buf);
+        self.sha256.update(buf);
+        self.md5.update(buf);
         self.total_byte_count += buf.len() as u64;
 
         Ok(buf.len())
@@ -81,9 +83,9 @@ pub fn hash(entry: &Entry, config: &HashActionOptions) -> Option<FileHash> {
     }
 
     Some(FileHash {
-        sha1: result_vec(&mut hasher.sha1),
-        sha256: result_vec(&mut hasher.sha256),
-        md5: result_vec(&mut hasher.md5),
+        sha1: hasher.sha1.finalize().to_vec(),
+        sha256: hasher.sha256.finalize().to_vec(),
+        md5: hasher.md5.finalize().to_vec(),
         num_bytes: hasher.total_byte_count,
     })
 }
@@ -94,12 +96,6 @@ pub struct FileHash {
     pub sha1: std::vec::Vec<u8>,
     pub md5: std::vec::Vec<u8>,
     pub num_bytes: u64,
-}
-
-fn result_vec<T: Digest>(digest: &mut T) -> Vec<u8> {
-    let mut vec = vec![0; digest.output_bytes()];
-    digest.result(&mut vec);
-    vec
 }
 
 #[cfg(test)]
