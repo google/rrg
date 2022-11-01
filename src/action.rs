@@ -49,6 +49,9 @@ pub mod memsize;
 #[cfg(feature = "action-finder")]
 pub mod finder;
 
+#[cfg(feature = "action-hostname")]
+pub mod hostname;
+
 pub use error::{ParseArgsError, ParseArgsErrorKind, DispatchError};
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -113,6 +116,11 @@ where
         #[cfg(feature = "action-memsize")]
         "GetMemorySize" => {
             handle(session, request, self::memsize::handle)
+        }
+
+        #[cfg(feature = "action-hostname")]
+        "GetHostname" => {
+            handle(session, request, self::hostname::handle)
         }
 
         action_name => {
