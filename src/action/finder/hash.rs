@@ -1,10 +1,11 @@
 use crate::action::finder::request::HashActionOptions;
 use crate::fs::Entry;
+use digest::Digest as _;
 use log::warn;
 use md5::Md5;
 use rrg_macro::ack;
 use sha1::Sha1;
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use std::cmp::min;
 use std::fs::File;
 use std::io::Read;

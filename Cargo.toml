@@ -23,6 +23,7 @@ regex = { version = "1.5.5" }
 lazy_static = { version = "1.4.0" }
 
 chrono = { version = "0.4.11", optional = true }
+digest = { version = "0.10.5", optional = true }
 flate2 = { version = "1.0.14", optional = true }
 md-5 = { version = "0.10.5", optional = true }
 netstat2 = { version = "0.8.1", optional = true }
@@ -68,7 +69,7 @@ default = [
 action-insttime = ["dep:chrono", "dep:proc-mounts", "dep:winreg"]
 action-interfaces = ["dep:pnet"]
 action-filesystems = ["dep:proc-mounts"]
-action-finder = ["dep:md-5", "dep:sha1", "dep:sha2"]
+action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
 action-listdir = []
 action-memsize = ["dep:sysinfo"]
 action-metadata = []
