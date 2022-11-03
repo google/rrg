@@ -10,24 +10,27 @@ use libc::c_char;
 use log::error;
 #[cfg(target_family = "unix")]
 use std::ffi::CStr;
-#[cfg(target_os = "windows")]
 use std::ffi::OsString;
+#[cfg(target_family = "unix")]
+use std::io::Error;
+#[cfg(target_family = "unix")]
+use std::os::unix::prelude::OsStringExt as _;
 #[cfg(target_os = "windows")]
-use std::os::windows::ffi::OsStringExt;
+use std::os::windows::ffi::OsStringExt as _;
 #[cfg(target_os = "windows")]
 use windows::{
+    core::{Error, PWSTR},
     Win32::System::SystemInformation::{
         ComputerNamePhysicalDnsHostname, GetComputerNameExW,
     },
-    core::PWSTR
 };
 use crate::session::{self, Session};
 
 /// A response type for the hostname action.
 struct Response {
-    /// The host name reported by the kernel, or `None` if the attemps to
+    /// The host name reported by the kernel, or an error if the attemps to
     /// obtain the host name failed.
-    hostname: Option<String>,
+    hostname: Result<OsString, Error>,
 }
 
 impl super::Item for Response {
@@ -37,15 +40,15 @@ impl super::Item for Response {
 
     fn into_proto(self) -> Self::Proto {
         let hostname = match self.hostname {
-            Some(hostname) => hostname,
-            None => {
-                error!("cannot get hostname, all methods failed");
-                String::new()
+            Ok(hostname) => hostname,
+            Err(err) => {
+                error!("{}", err);
+                OsString::new()
             },
         };
 
         let mut proto = protobuf::well_known_types::StringValue::new();
-        proto.set_value(hostname);
+        proto.set_value(hostname.to_string_lossy().to_string());
 
         proto
     }
@@ -53,34 +56,35 @@ impl super::Item for Response {
 
 /// Obtains system hostname (Unix version).
 ///
-/// This function returns `None` in case of errors.
+/// This function returns `std::io::Error` in case of errors.
 #[cfg(target_family = "unix")]
-fn get_hostname() -> Option<String> {
+fn get_hostname() -> Result<OsString, Error> {
 	let size =
         unsafe { libc::sysconf(libc::_SC_HOST_NAME_MAX) as libc::size_t };
 
-    let mut buf = vec![0 as c_char; size];
+    let mut buf = vec![0_u8 as c_char; size + 1];
 
-    let p = buf.as_mut_ptr();
     let result = unsafe {
-        libc::gethostname(p, size)
+        libc::gethostname(buf.as_mut_ptr(), size)
     };
 
     if result != 0 {
-        None
+        Err(Error::last_os_error())
     } else {
-        let hostname = 
-            unsafe { String::from_utf8_lossy(CStr::from_ptr(p).to_bytes()).into() };
+        buf.push(0);
+        let hostname = unsafe {
+            OsString::from_vec(CStr::from_ptr(buf.as_ptr()).to_bytes().to_vec())
+        };
 
-        Some(hostname)
+        Ok(hostname)
     }
 }
 
 /// Obtains system hostname (Windows version).
 ///
-/// This function returns `None` in case of errors.
+/// This function returns `windows::core::Error` in case of errors.
 #[cfg(target_os = "windows")]
-fn get_hostname() -> Option<String> {
+fn get_hostname() -> Result<OsString, Error> {
     let mut size = 0;
     unsafe {
         GetComputerNameExW(
@@ -99,19 +103,19 @@ fn get_hostname() -> Option<String> {
         )
     };
 
-    if result.as_bool() {
-        unsafe { buf.set_len(size as usize); }
+    match result.ok() {
+        Ok(()) => {
+            unsafe { buf.set_len(size as usize); }
 
-        Some(OsString::from_wide(&buf).to_string_lossy().to_string())
-    } else {
-        None
+            Ok(OsString::from_wide(&buf))
+        },
+        Err(err) => Err(err)
     }
 }
 
 /// Handles requests for the hostname action.
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
-    session.reply(Response {hostname: get_hostname()})?;
-    Ok(())
+    session.reply(Response {hostname: get_hostname()})
 }
 
 #[cfg(test)]
@@ -125,15 +129,10 @@ mod tests {
         let output = match Command::new("hostname")
             .stdout(Stdio::piped())
             .spawn() {
-            Ok(child) => child.wait_with_output().ok().unwrap(),
-            Err(err) => {
-                if let ErrorKind::NotFound = err.kind() {
-                    return
-                }
-
-                panic!("{}", err);
-            }, 
-        };
+                Ok(child) => child.wait_with_output().ok().unwrap(),
+                Err(err) if err.kind() == ErrorKind::NotFound => return,
+                Err(err) => panic!("{}", err),
+            };
 
         assert!(output.status.success());
 
@@ -144,8 +143,8 @@ mod tests {
         assert!(handle(&mut session, ()).is_ok());
         assert_eq!(session.reply_count(), 1);
         let response: &Response = session.reply(0);
-        let hostname = response.hostname.clone().unwrap();
+        let hostname = response.hostname.as_ref().unwrap();
 
-        assert_eq!(hostname, expect);
+        assert_eq!(hostname.to_string_lossy().to_string(), expect);
     }
 }
