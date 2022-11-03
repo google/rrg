@@ -22,5 +22,5 @@ addons:
 
 script:
   - cargo build --verbose
-  - cargo test --verbose --package rrg-macro --package rrg-proto --package rrg --features 'test-chattr test-setfattr'
+  - cargo test --verbose --package rrg-macro --package rrg-proto --package rrg --features 'test-chattr test-setfattr test-hostname'
   - cargo run -- --version

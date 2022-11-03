@@ -118,6 +118,7 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     session.reply(Response {hostname: get_hostname()})
 }
 
+#[cfg(feature = "test-hostname")]
 #[cfg(test)]
 mod tests {
     use super::*;

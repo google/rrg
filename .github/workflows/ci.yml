@@ -39,4 +39,4 @@ jobs:
           command: test
           args: >
             --workspace
-            --features 'test-chattr test-setfattr test-fuse'
+            --features 'test-chattr test-setfattr test-hostname test-fuse'
