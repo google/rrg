@@ -138,6 +138,11 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
         addr_iter = addr.ifa_next;
     }
 
+    // We need to collect the interfaces to free the addresses below. Otherwise,
+    // the keys of the hash map will point to dangling references (since the map
+    // keys are owned by the address list).
+    let ifaces = ifaces.into_values().collect::<Vec<_>>();
+
     // SAFETY: The `getifaddrs` call at the beginning of this function creates
     // a linked list that we are responsible for freeing using the `freeifaddrs`
     // function [1]. This is safe as we never release the allocated memory.
@@ -147,7 +152,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
         libc::freeifaddrs(addrs);
     }
 
-    Ok(ifaces.into_values())
+    Ok(ifaces.into_iter())
 }
 
 #[cfg(test)]
