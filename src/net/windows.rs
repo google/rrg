@@ -5,13 +5,16 @@
 
 use super::*;
 
-// TODO(@panhania): Extend the docs with a reference to the parent module
-// version of this function once it is implemented for all systems.
 /// Collects information about available network interfaces.
+///
+/// A system agnostic [`interfaces`] function is available in the parent module
+/// and should be the preferred choice in general.
 ///
 /// This function is a wrapper around [`GetAdaptersAddresses`][1] Windows call.
 ///
-// [1]: https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getadaptersaddresses
+/// [1]: https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getadaptersaddresses
+///
+/// [`interfaces`]: super::interfaces
 pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     use std::convert::TryFrom as _;
 

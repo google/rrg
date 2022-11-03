@@ -5,13 +5,16 @@
 
 use super::*;
 
-// TODO(@panhania): Extend the docs with a reference to the parent module
-// version of this function once it is implemented for all systems.
 /// Collects information about available network interfaces.
+///
+/// A system agnostic [`interfaces`] function is available in the parent module
+/// and should be the preferred choice in general.
 ///
 /// This function is a wrapper around [`getifaddrs`][1] Linux call.
 ///
-// [1]: https://man7.org/linux/man-pages/man3/getifaddrs.3.html
+/// [1]: https://man7.org/linux/man-pages/man3/getifaddrs.3.html
+///
+/// [`interfaces`]: super::interfaces
 pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     let mut addrs = std::mem::MaybeUninit::uninit();
 

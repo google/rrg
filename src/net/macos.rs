@@ -5,13 +5,16 @@
 
 use super::*;
 
-// TODO(@panhania): Extend the docs with a reference to the parent module
-// version of this function once it is implemented for all systems.
 /// Collects information about available network interfaces.
+///
+/// A system agnostic [`interfaces`] function is available in the parent module
+/// and should be the preferred choice in general.
 ///
 /// This function is a wrapper around [`getifaddrs`][1] macOS call.
 ///
-// [1]: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/getifaddrs.3.html
+/// [1]: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/getifaddrs.3.html
+///
+/// [`interfaces`]: super::interfaces
 pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     // Note that the this function is implemented nearly identically to the
     // Linux one. However, despite identical structure names (except for the
