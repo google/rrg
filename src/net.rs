@@ -69,3 +69,35 @@ impl Interface {
         self.mac_addr.as_ref()
     }
 }
+
+/// Collects information about available network interfaces.
+///
+/// The information collected by this mathod can be more or less complete,
+/// depending on the operating system.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+///
+/// # Examples
+///
+/// ```
+/// let ifaces = rrg::net::interfaces().unwrap();
+/// for iface in ifaces {
+///     let name = iface.name().to_string_lossy();
+///     println!("{} ({} IP addresses)", name, iface.ip_addrs().len());
+/// }
+/// ```
+pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
+    #[cfg(target_os = "linux")]
+    use self::linux::interfaces;
+
+    #[cfg(target_os = "macos")]
+    use self::macos::interfaces;
+
+    #[cfg(target_os = "windows")]
+    use self::windows::interfaces;
+
+    interfaces()
+}
