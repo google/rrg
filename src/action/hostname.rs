@@ -71,7 +71,6 @@ fn get_hostname() -> Result<OsString, Error> {
     if result != 0 {
         Err(Error::last_os_error())
     } else {
-        buf.push(0);
         let hostname = unsafe {
             OsString::from_vec(CStr::from_ptr(buf.as_ptr()).to_bytes().to_vec())
         };
