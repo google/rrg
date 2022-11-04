@@ -59,7 +59,7 @@ impl super::Item for Response {
 /// This function returns `std::io::Error` in case of errors.
 #[cfg(target_family = "unix")]
 fn get_hostname() -> Result<OsString, Error> {
-	let size =
+    let size =
         unsafe { libc::sysconf(libc::_SC_HOST_NAME_MAX) as libc::size_t };
 
     let mut buf = vec![0_u8 as c_char; size + 1];
