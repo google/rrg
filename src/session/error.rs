@@ -19,6 +19,12 @@ pub struct Error {
 pub enum ErrorKind {
     /// The action execution failed.
     ExecutionFailure,
+    /// I/O error.
+    #[cfg(target_family = "unix")]
+    IoError(std::io::ErrorKind),
+    /// Windows error.
+    #[cfg(target_os = "windows")]
+    WindowsError,
 }
 
 impl Error {
@@ -45,6 +51,10 @@ impl ErrorKind {
 
         match *self {
             ExecutionFailure => "action execution failed",
+            #[cfg(target_family = "unix")]
+            IoError(_) => "I/O error",
+            #[cfg(target_os = "windows")]
+            WindowsError => "Windows error",
         }
     }
 }
@@ -60,6 +70,28 @@ impl std::error::Error for Error {
 
     fn cause(&self) -> Option<&dyn std::error::Error> {
         Some(self.error.as_ref())
+    }
+}
+
+#[cfg(target_family = "unix")]
+impl From<std::io::Error> for Error {
+
+    fn from(error: std::io::Error) -> Self {
+        Error {
+            kind: ErrorKind::IoError(error.kind()),
+            error: Box::new(error),
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl From<windows::core::Error> for Error {
+
+    fn from(error: windows::core::Error) -> Self {
+        Error {
+            kind: ErrorKind::WindowsError,
+            error: Box::new(error),
+        }
     }
 }
 
