@@ -49,6 +49,9 @@ pub mod memsize;
 #[cfg(feature = "action-finder")]
 pub mod finder;
 
+#[cfg(feature = "action-platform-info")]
+pub mod platform_info;
+
 pub use error::{ParseArgsError, ParseArgsErrorKind, DispatchError};
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -71,6 +74,11 @@ where
         #[cfg(feature = "action-metadata")]
         "GetClientInfo" => {
             handle(session, request, self::metadata::handle)
+        }
+
+        #[cfg(feature = "action-platform-info")]
+        "GetPlatformInfo" => {
+            handle(session, request, self::platform_info::handle)
         }
 
         #[cfg(feature = "action-listdir")]

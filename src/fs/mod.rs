@@ -23,6 +23,9 @@ pub mod macos;
 #[cfg(target_family = "unix")]
 pub mod unix;
 
+#[cfg(target_family = "windows")]
+pub mod windows;
+
 /// A path to a filesystem item and associated metadata.
 ///
 /// This type is very similar to standard `DirEntry` but its `metadata` property

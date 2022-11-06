@@ -45,12 +45,20 @@ proc-mounts = { version = "0.2.4", optional = true }
 # [1]: https://github.com/rust-lang/cargo/issues/1596
 fuse = { version = "0.3.1", optional = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = { git = "https://github.com/servo/core-foundation-rs.git", rev = "786895643140fa0ee4f913d7b4aeb0c4626b2085", optional = true }
+objc = { version = "0.2", optional = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.43.0", features = ["Win32_Foundation", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem", "Win32_System_LibraryLoader", "Win32_System_SystemInformation"], optional = true }
 winreg = { version = "0.7.0", optional = true }
 
 [dev-dependencies]
 rand = { version = "0.8.5" }
 tempfile = { version = "3.3.0" }
+
+[target.'cfg(target_os = "linux")'.build-dependencies]
+cc = { version = "1.0", optional = true }
 
 [features]
 default = [
@@ -62,6 +70,7 @@ default = [
     "action-memsize",
     "action-metadata",
     "action-network",
+    "action-platform-info",
     "action-stat",
     "action-timeline",
 ]
@@ -74,6 +83,7 @@ action-listdir = []
 action-memsize = ["dep:sysinfo"]
 action-metadata = []
 action-network = ["dep:netstat2", "dep:sysinfo"]
+action-platform-info = ["dep:cc", "dep:cocoa", "dep:objc", "dep:windows"]
 action-stat = []
 action-timeline = ["dep:flate2", "dep:sha2"]
 

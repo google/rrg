@@ -172,7 +172,7 @@ mod e2fs_utils {
 ///
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "linux")]
-fn get_install_time() -> Option<SystemTime> {
+pub fn get_install_time() -> Option<SystemTime> {
     // First, check the creation time of the root. Rust implementation of
     // `Metadata::created()` on Linux utilizes `statx` syscall, so this
     // method will work only on kernels >= 4.11.
@@ -221,7 +221,7 @@ fn get_install_time() -> Option<SystemTime> {
 ///
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "macos")]
-fn get_install_time() -> Option<SystemTime> {
+pub fn get_install_time() -> Option<SystemTime> {
     // Here, we use the same way as Python version of GRR client does. We just
     // check the modification time for some of the paths.
     const CANDIDATES: [&str; 3] = [
@@ -239,7 +239,7 @@ fn get_install_time() -> Option<SystemTime> {
 ///
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "windows")]
-fn get_install_time() -> Option<SystemTime> {
+pub fn get_install_time() -> Option<SystemTime> {
     use winreg::RegKey;
 
     // Don't use winreg::enums::KEY_WOW64_64KEY since it breaks on Windows 2000.
