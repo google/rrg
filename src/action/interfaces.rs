@@ -79,17 +79,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_loopback_presence() {
+    fn loopback_exists() {
         let mut session = session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
-        let mut is_loopback_present = false;
-        for i in 0..session.reply_count() {
-            let interface = &session.reply::<Response>(i).interface;
-            for ip_addr in interface.ip_addrs() {
-                is_loopback_present |= ip_addr.is_loopback();
-            }
+        // We have a choice: either require any of the addresses to be the loop-
+        // back address or require all of them for it to be considered loopback.
+        // Both of these options feel equally wrong and equally right but the
+        // former one will return `true` for interfaces with no known addresses.
+        // Since this feels awkward, we lean towards the "all" option.
+        fn is_loopback(iface: &crate::net::Interface) -> bool {
+            iface.ip_addrs().iter().all(std::net::IpAddr::is_loopback)
         }
-        assert!(is_loopback_present);
+
+        assert! {
+            session.replies().any(|reply: &Response| {
+                is_loopback(&reply.interface)
+            })
+        }
     }
 }
