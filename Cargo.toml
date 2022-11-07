@@ -45,6 +45,7 @@ fuse = { version = "0.3.1", optional = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = { version = "0.7.0", optional = true }
 windows-sys = { version = "0.42.0", features = ["Win32_NetworkManagement_IpHelper", "Win32_Foundation", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
+windows = { version = "0.43.0", features = ["Win32_Foundation", "Win32_System_Registry"], optional = true }
 
 [dev-dependencies]
 rand = { version = "0.8.5" }
@@ -64,7 +65,7 @@ default = [
     "action-timeline",
 ]
 
-action-insttime = ["dep:chrono", "dep:proc-mounts", "dep:winreg"]
+action-insttime = ["dep:chrono", "dep:proc-mounts", "dep:windows"]
 action-interfaces = []
 action-filesystems = ["dep:proc-mounts"]
 action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
