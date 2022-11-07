@@ -43,6 +43,7 @@ impl From<[u8; 6]> for MacAddr {
 }
 
 /// A network interface information.
+#[derive(Clone, Debug)]
 pub struct Interface {
     /// A name of this interface as reported by the system.
     name: std::ffi::OsString,
