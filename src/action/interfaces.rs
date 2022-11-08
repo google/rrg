@@ -21,8 +21,10 @@ pub struct Response {
 
 /// Handles requests for the interfaces action.
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
-    // TODO(panhania@): Fix error handling.
-    for interface in crate::net::interfaces().unwrap() {
+    let interfaces = crate::net::interfaces()
+        .map_err(crate::session::Error::action)?;
+
+    for interface in interfaces {
         session.reply(Response {
             interface: interface,
         })?;
