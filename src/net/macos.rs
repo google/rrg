@@ -132,12 +132,9 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
                     *(addr.ifa_addr as *const libc::sockaddr_dl)
                 };
 
-                // Like on Linux, MAC address should always have 6 8-bit octets.
-                // It is not clear whether the `sdl_alen` value can be different
-                // but we check just to be sure and skip if the assumption does
-                // not hold.
+                // Unfortunatelly, it is not uncommon to have some other non-MAC
+                // addresses with the `AF_LINK` family. We simply ignore such.
                 if sockaddr.sdl_alen != 6 {
-                    // TODO: Consider logging an error.
                     continue;
                 }
 
@@ -195,9 +192,9 @@ mod tests {
     fn loopback_exists() {
         let mut ifaces = interfaces().unwrap();
 
-        // TODO: Check whether we can make more assumptions. For example, on
-        // Linux we can assume that the loopback device is named `lo` and that
-        // it has a MAC address that consists only of zeros.
+        // On macOS the loopback interface seems to be always named `lo0` but it
+        // does not appear to be documented anywhere, so to be on the safe side
+        // we do not make such specific assertions.
         assert! {
             ifaces.any(|iface| {
                 iface.ip_addrs().iter().any(|ip_addr| {
