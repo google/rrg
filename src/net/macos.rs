@@ -52,6 +52,10 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     while let Some(addr) = unsafe { addr_iter.as_ref() } {
         use std::os::unix::ffi::OsStrExt as _;
 
+        // We advance the iterator immediately to avoid getting stuck because of
+        // the `continue` statements in the code below.
+        addr_iter = addr.ifa_next;
+
         // SAFETY: `ifa_ddr` is not guaranteed to be not null, so we have to
         // verify it. But if it is not null, it is guaranteed to point to valid
         // address instance.
@@ -169,8 +173,6 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
             }
             _ => continue,
         }
-
-        addr_iter = addr.ifa_next;
     }
 
     // We need to collect the interfaces to free the addresses below. Otherwise,
