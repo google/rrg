@@ -3,12 +3,15 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+// TODO: Hide irrelevant modules.
+
 pub mod action;
 pub mod fs;
 pub mod io;
 pub mod log;
 pub mod message;
 pub mod metadata;
+pub mod net;
 pub mod args;
 pub mod session;
 pub mod startup;

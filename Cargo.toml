@@ -16,7 +16,7 @@ argh = { version = "0.1.8" }
 fleetspeak = { version = "0.3.1" }
 humantime = { version = "2.1.0" }
 libc = { version = "0.2.126" }
-log = { version = "0.4.17" }
+log = { version = "0.4.17", features = ["std"] }
 protobuf = { version = "2.27.1" }
 byteorder = { version = "1.3.4" }
 regex = { version = "1.5.5" }
@@ -31,9 +31,6 @@ sha1 = { version = "0.10.5", optional = true }
 sha2 = { version = "0.10.6", optional = true }
 sysinfo = { version = "0.14.1", optional = true }
 
-[target.'cfg(target_family = "unix")'.dependencies]
-pnet = { version = "0.26.0", optional = true }
-
 [target.'cfg(target_os = "linux")'.dependencies]
 ioctls = { version = "0.6.1" }
 
@@ -47,6 +44,7 @@ fuse = { version = "0.3.1", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = { version = "0.7.0", optional = true }
+windows-sys = { version = "0.42.0", features = ["Win32_NetworkManagement_IpHelper", "Win32_Foundation", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
 
 [dev-dependencies]
 rand = { version = "0.8.5" }
@@ -67,7 +65,7 @@ default = [
 ]
 
 action-insttime = ["dep:chrono", "dep:proc-mounts", "dep:winreg"]
-action-interfaces = ["dep:pnet"]
+action-interfaces = []
 action-filesystems = ["dep:proc-mounts"]
 action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
 action-listdir = []
