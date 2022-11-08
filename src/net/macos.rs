@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn loopback_exists() {
-        let mut ifaces = super::interfaces().unwrap();
+        let mut ifaces = interfaces().unwrap();
 
         // TODO: Check whether we can make more assumptions. For example, on
         // Linux we can assume that the loopback device is named `lo` and that
