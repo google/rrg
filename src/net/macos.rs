@@ -121,8 +121,6 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
                 entry.ip_addrs.push(ipv6_addr.into());
             }
             libc::AF_LINK => {
-                use std::convert::TryFrom as _;
-
                 // SAFETY: For `AF_LINK` family the `ifa_addr` field is an
                 // instance of a link-level address [1, 2] (whatever that means
                 // exactly). Again, the comment on the `sdl_family` field seems
@@ -143,27 +141,23 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
                     continue;
                 }
 
-                // `sdl_data` is shared between interface name and address, so
-                // we have to take `sdl_nlen` offset into account.
-                let nlen = usize::from(sockaddr.sdl_nlen);
+                // SAFETY: The original `sdl_data` is typed as `i8` (because it
+                // contains the name) but the actual address bytes should be in-
+                // terpreted as normal bytes (verified empirically). Validity of
+                // indexing is ensured by the `sdl_alen` check above.
+                let mac_addr = unsafe {
+                    let data = sockaddr.sdl_data.as_ptr()
+                        .offset(isize::from(sockaddr.sdl_nlen))
+                        .cast::<u8>();
 
-                let mac_addr = (|| -> Result<_, std::num::TryFromIntError> {
-                    Ok(MacAddr::from([
-                        u8::try_from(sockaddr.sdl_data[nlen + 0])?,
-                        u8::try_from(sockaddr.sdl_data[nlen + 1])?,
-                        u8::try_from(sockaddr.sdl_data[nlen + 2])?,
-                        u8::try_from(sockaddr.sdl_data[nlen + 3])?,
-                        u8::try_from(sockaddr.sdl_data[nlen + 4])?,
-                        u8::try_from(sockaddr.sdl_data[nlen + 5])?,
-                    ]))
-                })();
-
-                let mac_addr = match mac_addr {
-                    Ok(mac_addr) => mac_addr,
-                    Err(_) => {
-                        // TODO: Consider logging an error message.
-                        continue
-                    },
+                    MacAddr::from([
+                        *data.offset(0),
+                        *data.offset(1),
+                        *data.offset(2),
+                        *data.offset(3),
+                        *data.offset(4),
+                        *data.offset(5),
+                    ])
                 };
 
                 // TODO: There should only be one MAC address associated with
