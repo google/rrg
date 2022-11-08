@@ -10,8 +10,6 @@
 
 use rrg_macro::warn;
 
-use crate::session::{self, Session};
-
 /// A response type for the interfaces action.
 #[derive(Debug)]
 pub struct Response {
@@ -20,7 +18,10 @@ pub struct Response {
 }
 
 /// Handles requests for the interfaces action.
-pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
+pub fn handle<S>(session: &mut S, _: ()) -> crate::session::Result<()>
+where
+    S: crate::session::Session,
+{
     let interfaces = crate::net::interfaces()
         .map_err(crate::session::Error::action)?;
 
@@ -82,7 +83,7 @@ mod tests {
 
     #[test]
     fn loopback_exists() {
-        let mut session = session::FakeSession::new();
+        let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
         // We have a choice: either require any of the addresses to be the loop-
