@@ -242,7 +242,8 @@ fn get_install_time() -> Option<SystemTime> {
 fn get_install_time() -> Option<SystemTime> {
     use std::ffi::c_void;
     use std::mem::{size_of, MaybeUninit};
-    use windows::{
+    use std::ptr::null_mut;
+    use windows_sys::{
         w,
         Win32::{
             Foundation::NO_ERROR,
@@ -258,21 +259,22 @@ fn get_install_time() -> Option<SystemTime> {
             w!("Software\\Microsoft\\Windows NT\\CurrentVersion"),
             w!("InstallDate"),
             RRF_RT_REG_DWORD,
-            None,
-            Some(install_date_data.as_mut_ptr() as *mut c_void),
-            Some(&mut install_date_size),
+            null_mut(),
+            install_date_data.as_mut_ptr() as *mut c_void,
+            &mut install_date_size,
         )
     };
-
-    if result == NO_ERROR {
-        let install_date = unsafe { install_date_data.assume_init() };
-
-        if install_date > 0 {
-            return Some(SystemTime::UNIX_EPOCH + Duration::from_secs(install_date as u64))
-        }
+    if result != NO_ERROR {
+        return None;
     }
 
-    None
+    let install_date = unsafe { install_date_data.assume_init() };
+
+    if install_date == 0 {
+        None
+    } else {
+        Some(SystemTime::UNIX_EPOCH + Duration::from_secs(u64::from(install_date)))
+    }
 }
 
 /// Handles requests for the install date action.
