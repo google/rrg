@@ -43,8 +43,7 @@ proc-mounts = { version = "0.2.4", optional = true }
 fuse = { version = "0.3.1", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.43.0", features = ["Win32_Foundation", "Win32_System_SystemInformation"], optional = true }
-windows-sys = { version = "0.42.0", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Registry"] }
+windows-sys = { version = "0.42.0", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_System_WindowsProgramming"] }
 
 [dev-dependencies]
 rand = { version = "0.8.5" }
@@ -69,7 +68,7 @@ action-insttime = ["dep:chrono", "dep:proc-mounts"]
 action-interfaces = []
 action-filesystems = ["dep:proc-mounts"]
 action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
-action-hostname = ["dep:windows"]
+action-hostname = []
 action-listdir = []
 action-memsize = ["dep:sysinfo"]
 action-metadata = []
