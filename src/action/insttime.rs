@@ -240,14 +240,41 @@ fn get_install_time() -> Option<SystemTime> {
 /// This function returns `None` in case of errors.
 #[cfg(target_os = "windows")]
 fn get_install_time() -> Option<SystemTime> {
-    use winreg::RegKey;
+    use std::ffi::c_void;
+    use std::mem::{size_of, MaybeUninit};
+    use std::ptr::null_mut;
+    use windows_sys::{
+        w,
+        Win32::{
+            Foundation::NO_ERROR,
+            System::Registry::{RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD},
+        },
+    };
 
-    // Don't use winreg::enums::KEY_WOW64_64KEY since it breaks on Windows 2000.
-    let hklm = RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
-    let install_time = hklm
-        .open_subkey("Software\\Microsoft\\Windows NT\\CurrentVersion").ok()?
-        .get_value::<u32, _>("InstallDate").ok()?;
-    Some(SystemTime::UNIX_EPOCH + Duration::from_secs(install_time.into()))
+    let mut install_date_data = MaybeUninit::<u32>::uninit();
+    let mut install_date_size = size_of::<u32>() as u32;
+    let result = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            w!("Software\\Microsoft\\Windows NT\\CurrentVersion"),
+            w!("InstallDate"),
+            RRF_RT_REG_DWORD,
+            null_mut(),
+            install_date_data.as_mut_ptr() as *mut c_void,
+            &mut install_date_size,
+        )
+    };
+    if result != NO_ERROR {
+        return None;
+    }
+
+    let install_date = unsafe { install_date_data.assume_init() };
+
+    if install_date == 0 {
+        None
+    } else {
+        Some(SystemTime::UNIX_EPOCH + Duration::from_secs(u64::from(install_date)))
+    }
 }
 
 /// Handles requests for the install date action.
