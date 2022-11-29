@@ -160,6 +160,117 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     Ok(ifaces.into_iter())
 }
 
+/// Parses an IPv4 socket address in the procfs format.
+fn parse_socket_addr_v4(string: &str) -> Result<std::net::SocketAddrV4, ParseSocketAddrError> {
+    let mut parts = string.split(':');
+
+    let ip_addr_str = parts.next()
+        .ok_or(ParseSocketAddrErrorKind::InvalidFormat)?;
+    let port_str = parts.next()
+        .ok_or(ParseSocketAddrErrorKind::InvalidFormat)?;
+
+    // There should be only one colon, so the iterator should yield two items.
+    if parts.next().is_some() {
+        return Err(ParseSocketAddrErrorKind::InvalidFormat.into());
+    }
+
+    let ip_addr_octets = u32::from_str_radix(ip_addr_str, 16)
+        .map_err(|_| ParseSocketAddrErrorKind::InvalidIp)?;
+    let ip_addr = std::net::Ipv4Addr::from(u32::from_be(ip_addr_octets));
+
+    let port = u16::from_str_radix(port_str, 16)
+        .map_err(|_| ParseSocketAddrErrorKind::InvalidPort)?;
+
+    Ok(std::net::SocketAddrV4::new(ip_addr, port))
+}
+
+/// Parses an IPv6 socket address in the procfs format.
+fn parse_socket_addr_v6(string: &str) -> Result<std::net::SocketAddrV6, ParseSocketAddrError> {
+    let mut parts = string.split(':');
+
+    let ip_addr_str = parts.next()
+        .ok_or(ParseSocketAddrErrorKind::InvalidFormat)?;
+    let port_str = parts.next()
+        .ok_or(ParseSocketAddrErrorKind::InvalidFormat)?;
+
+    // There should be only one colon, so the iterator should yield two items.
+    if parts.next().is_some() {
+        return Err(ParseSocketAddrErrorKind::InvalidFormat.into());
+    }
+
+    let ip_addr_octets = u128::from_str_radix(ip_addr_str, 16)
+        .map_err(|_| ParseSocketAddrErrorKind::InvalidIp)?;
+    let ip_addr = std::net::Ipv6Addr::from(u128::from_be(ip_addr_octets));
+
+    let port = u16::from_str_radix(port_str, 16)
+        .map_err(|_| ParseSocketAddrErrorKind::InvalidPort)?;
+
+    // Socket data provided by procfs does not include flow and scope info. We
+    // don't really care about them either, so constructing them filled with
+    // zeros is fine.
+    Ok(std::net::SocketAddrV6::new(ip_addr, port, 0, 0))
+}
+
+/// An error that might be returned when parsing procfs socket addresses.
+#[derive(Clone, Debug)]
+pub struct ParseSocketAddrError(ParseSocketAddrErrorKind);
+
+/// A list of cases that can happen when parsing of procfs socket addresses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ParseSocketAddrErrorKind {
+    /// The format of the string is not as it should be.
+    InvalidFormat,
+    /// The IP address is malformed.
+    InvalidIp,
+    /// The port number is malformed.
+    InvalidPort,
+}
+
+impl ParseSocketAddrError {
+
+    /// Returns the details of what caused the error to be raised.
+    pub fn kind(&self) -> ParseSocketAddrErrorKind {
+        self.0
+    }
+}
+
+impl ParseSocketAddrErrorKind {
+
+    /// Returns a human-friendly string representation of the error kind.
+    fn as_str(&self) -> &'static str {
+        use ParseSocketAddrErrorKind::*;
+        match *self {
+            InvalidFormat => "invalid socket address format",
+            InvalidIp => "invalid IP address",
+            InvalidPort => "invalid port number",
+        }
+    }
+}
+
+impl std::fmt::Display for ParseSocketAddrErrorKind {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}", self.as_str())
+    }
+}
+
+impl From<ParseSocketAddrErrorKind> for ParseSocketAddrError {
+
+    fn from(kind: ParseSocketAddrErrorKind) -> ParseSocketAddrError {
+        ParseSocketAddrError(kind)
+    }
+}
+
+impl std::fmt::Display for ParseSocketAddrError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}", self.0)
+    }
+}
+
+impl std::error::Error for ParseSocketAddrError {
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -177,5 +288,122 @@ mod tests {
         assert_eq! {
             loopback.mac_addr(), Some(&MacAddr::from([0, 0, 0, 0, 0, 0]))
         };
+    }
+
+    #[test]
+    fn parse_socket_addr_v4_zeros() {
+        let addr = parse_socket_addr_v4("00000000:0000")
+            .unwrap();
+
+        assert_eq!(addr.ip(), &std::net::Ipv4Addr::from([0, 0, 0, 0]));
+        assert_eq!(addr.port(), 0);
+    }
+
+    #[test]
+    fn parse_socket_addr_v4_ok() {
+        let addr = parse_socket_addr_v4("0100007F:098C")
+            .unwrap();
+
+        assert_eq!(addr.ip(), &std::net::Ipv4Addr::from([127, 0, 0, 1]));
+        assert_eq!(addr.port(), 2444);
+    }
+
+    #[test]
+    fn parse_socket_addr_v6_zeros() {
+        let addr = parse_socket_addr_v6("00000000000000000000000000000000:0000")
+            .unwrap();
+
+        assert_eq!(addr.ip(), &"::".parse::<std::net::Ipv6Addr>().unwrap());
+        assert_eq!(addr.port(), 0);
+    }
+
+    #[test]
+    fn parse_socket_addr_v6_ok() {
+        let addr = parse_socket_addr_v6("00000000000000000000000001000000:BBF6")
+            .unwrap();
+
+        assert_eq!(addr.ip(), &"0:1::".parse::<std::net::Ipv6Addr>().unwrap());
+        assert_eq!(addr.port(), 48118);
+    }
+
+
+    #[test]
+    fn parse_socket_addr_v4_invalid_ip() {
+        let error = parse_socket_addr_v4("foobar:0000")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidIp);
+    }
+
+    #[test]
+    fn parse_socket_addr_v6_invalid_ip() {
+        let error = parse_socket_addr_v6("foobar:0000")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidIp);
+    }
+
+    #[test]
+    fn parse_socket_addr_v4_invalid_port() {
+        let error = parse_socket_addr_v4("00000000:foobar")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidPort);
+    }
+
+    #[test]
+    fn parse_socket_addr_v6_invalid_port() {
+        let error = parse_socket_addr_v6("00000000000000000000000000000000:xyz")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidPort);
+    }
+
+    #[test]
+    fn parse_socket_addr_v4_empty() {
+        let error = parse_socket_addr_v4("")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_socket_addr_v4_missing_port() {
+        let error = parse_socket_addr_v4("00000000")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_socket_addr_v4_extra_col() {
+        let error = parse_socket_addr_v4("00000000:0000:0000")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_socket_addr_v6_empty() {
+        let error = parse_socket_addr_v6("")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_socket_addr_v6_missing_port() {
+        let error = parse_socket_addr_v6("00000000000000000000000000000000")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_socket_addr_v6_extra_col() {
+        let error = parse_socket_addr_v6("00000000000000000000000000000000:0000:0000")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
     }
 }
