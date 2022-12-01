@@ -211,6 +211,31 @@ fn parse_socket_addr_v6(string: &str) -> Result<std::net::SocketAddrV6, ParseSoc
     Ok(std::net::SocketAddrV6::new(ip_addr, port, 0, 0))
 }
 
+/// Parses a TCP connection state in the procfs format.
+fn parse_tcp_state(string: &str) -> Result<TcpState, ParseTcpStateError> {
+    let value = u8::from_str_radix(string, 16)
+        .map_err(|_| ParseTcpStateErrorKind::UnexpectedInput)?;
+
+    // https://github.com/torvalds/linux/blob/ca57f02295f188d6c65ec02202402979880fa6d8/include/net/tcp_states.h#L12-L27
+    let state = match value {
+        0x01 => TcpState::Established,
+	    0x02 => TcpState::SynSent,
+	    0x03 => TcpState::SynReceived,
+	    0x04 => TcpState::FinWait1,
+	    0x05 => TcpState::FinWait2,
+	    0x06 => TcpState::TimeWait,
+	    0x07 => TcpState::Closed,
+	    0x08 => TcpState::CloseWait,
+	    0x09 => TcpState::LastAck,
+	    0x0A => TcpState::Listen,
+	    0x0B => TcpState::Closing,
+	    0x0C => TcpState::SynReceived,
+        _ => return Err(ParseTcpStateErrorKind::UnknownState.into()),
+    };
+
+    Ok(state)
+}
+
 /// An error that might be returned when parsing procfs socket addresses.
 #[derive(Clone, Debug)]
 pub struct ParseSocketAddrError(ParseSocketAddrErrorKind);
@@ -269,6 +294,63 @@ impl std::fmt::Display for ParseSocketAddrError {
 }
 
 impl std::error::Error for ParseSocketAddrError {
+}
+
+/// An error that might be returned when parsing procfs TCP connection state.
+#[derive(Clone, Debug)]
+pub struct ParseTcpStateError(ParseTcpStateErrorKind);
+
+/// A list of cases that can happen when parsing procfs TCP connection state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ParseTcpStateErrorKind {
+    /// The input string contained unexpected data.
+    UnexpectedInput,
+    /// The parsed state identifier is not a known TCP state.
+    UnknownState,
+}
+
+impl ParseTcpStateErrorKind {
+
+    /// Returns a human-friendly string representation of the error kind.
+    fn as_str(&self) -> &'static str {
+        use ParseTcpStateErrorKind::*;
+        match *self {
+            UnexpectedInput => "unexpected input",
+            UnknownState => "unknown TCP state",
+        }
+    }
+}
+
+impl std::fmt::Display for ParseTcpStateErrorKind {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}", self.as_str())
+    }
+}
+
+impl ParseTcpStateError {
+
+    /// Returns the details of what caused the error to be raised.
+    fn kind(&self) -> ParseTcpStateErrorKind {
+        self.0
+    }
+}
+
+impl From<ParseTcpStateErrorKind> for ParseTcpStateError {
+
+    fn from(error: ParseTcpStateErrorKind) -> ParseTcpStateError {
+        ParseTcpStateError(error)
+    }
+}
+
+impl std::fmt::Display for ParseTcpStateError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}", self.0)
+    }
+}
+
+impl std::error::Error for ParseTcpStateError {
 }
 
 #[cfg(test)]
@@ -405,5 +487,29 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_tcp_state_ok() {
+        let state = parse_tcp_state("0A")
+            .unwrap();
+
+        assert_eq!(state, TcpState::Listen);
+    }
+
+    #[test]
+    fn parse_tcp_state_unexpected_input() {
+        let error = parse_tcp_state("foobar")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseTcpStateErrorKind::UnexpectedInput);
+    }
+
+    #[test]
+    fn parse_tcp_state_unknown_state() {
+        let error = parse_tcp_state("42")
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ParseTcpStateErrorKind::UnknownState);
     }
 }
