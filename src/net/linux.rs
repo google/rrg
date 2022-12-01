@@ -165,21 +165,21 @@ fn parse_socket_addr_v4(string: &str) -> Result<std::net::SocketAddrV4, ParseSoc
     let mut parts = string.split(':');
 
     let ip_addr_str = parts.next()
-        .ok_or(ParseSocketAddrErrorKind::InvalidFormat)?;
+        .ok_or(ParseSocketAddrError::InvalidFormat)?;
     let port_str = parts.next()
-        .ok_or(ParseSocketAddrErrorKind::InvalidFormat)?;
+        .ok_or(ParseSocketAddrError::InvalidFormat)?;
 
     // There should be only one colon, so the iterator should yield two items.
     if parts.next().is_some() {
-        return Err(ParseSocketAddrErrorKind::InvalidFormat.into());
+        return Err(ParseSocketAddrError::InvalidFormat.into());
     }
 
     let ip_addr_octets = u32::from_str_radix(ip_addr_str, 16)
-        .map_err(|_| ParseSocketAddrErrorKind::InvalidIp)?;
+        .map_err(|_| ParseSocketAddrError::InvalidIp)?;
     let ip_addr = std::net::Ipv4Addr::from(u32::from_be(ip_addr_octets));
 
     let port = u16::from_str_radix(port_str, 16)
-        .map_err(|_| ParseSocketAddrErrorKind::InvalidPort)?;
+        .map_err(|_| ParseSocketAddrError::InvalidPort)?;
 
     Ok(std::net::SocketAddrV4::new(ip_addr, port))
 }
@@ -189,21 +189,21 @@ fn parse_socket_addr_v6(string: &str) -> Result<std::net::SocketAddrV6, ParseSoc
     let mut parts = string.split(':');
 
     let ip_addr_str = parts.next()
-        .ok_or(ParseSocketAddrErrorKind::InvalidFormat)?;
+        .ok_or(ParseSocketAddrError::InvalidFormat)?;
     let port_str = parts.next()
-        .ok_or(ParseSocketAddrErrorKind::InvalidFormat)?;
+        .ok_or(ParseSocketAddrError::InvalidFormat)?;
 
     // There should be only one colon, so the iterator should yield two items.
     if parts.next().is_some() {
-        return Err(ParseSocketAddrErrorKind::InvalidFormat.into());
+        return Err(ParseSocketAddrError::InvalidFormat.into());
     }
 
     let ip_addr_octets = u128::from_str_radix(ip_addr_str, 16)
-        .map_err(|_| ParseSocketAddrErrorKind::InvalidIp)?;
+        .map_err(|_| ParseSocketAddrError::InvalidIp)?;
     let ip_addr = std::net::Ipv6Addr::from(u128::from_be(ip_addr_octets));
 
     let port = u16::from_str_radix(port_str, 16)
-        .map_err(|_| ParseSocketAddrErrorKind::InvalidPort)?;
+        .map_err(|_| ParseSocketAddrError::InvalidPort)?;
 
     // Socket data provided by procfs does not include flow and scope info. We
     // don't really care about them either, so constructing them filled with
@@ -214,7 +214,7 @@ fn parse_socket_addr_v6(string: &str) -> Result<std::net::SocketAddrV6, ParseSoc
 /// Parses a TCP connection state in the procfs format.
 fn parse_tcp_state(string: &str) -> Result<TcpState, ParseTcpStateError> {
     let value = u8::from_str_radix(string, 16)
-        .map_err(|_| ParseTcpStateErrorKind::UnexpectedInput)?;
+        .map_err(|_| ParseTcpStateError::UnexpectedInput)?;
 
     // https://github.com/torvalds/linux/blob/ca57f02295f188d6c65ec02202402979880fa6d8/include/net/tcp_states.h#L12-L27
     let state = match value {
@@ -230,19 +230,15 @@ fn parse_tcp_state(string: &str) -> Result<TcpState, ParseTcpStateError> {
 	    0x0A => TcpState::Listen,
 	    0x0B => TcpState::Closing,
 	    0x0C => TcpState::SynReceived,
-        _ => return Err(ParseTcpStateErrorKind::UnknownState.into()),
+        _ => return Err(ParseTcpStateError::UnknownState.into()),
     };
 
     Ok(state)
 }
 
 /// An error that might be returned when parsing procfs socket addresses.
-#[derive(Clone, Debug)]
-pub struct ParseSocketAddrError(ParseSocketAddrErrorKind);
-
-/// A list of cases that can happen when parsing of procfs socket addresses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ParseSocketAddrErrorKind {
+pub enum ParseSocketAddrError {
     /// The format of the string is not as it should be.
     InvalidFormat,
     /// The IP address is malformed.
@@ -253,17 +249,9 @@ pub enum ParseSocketAddrErrorKind {
 
 impl ParseSocketAddrError {
 
-    /// Returns the details of what caused the error to be raised.
-    pub fn kind(&self) -> ParseSocketAddrErrorKind {
-        self.0
-    }
-}
-
-impl ParseSocketAddrErrorKind {
-
-    /// Returns a human-friendly string representation of the error kind.
+    /// Returns a human-friendly string representation of the error.
     fn as_str(&self) -> &'static str {
-        use ParseSocketAddrErrorKind::*;
+        use ParseSocketAddrError::*;
         match *self {
             InvalidFormat => "invalid socket address format",
             InvalidIp => "invalid IP address",
@@ -272,24 +260,10 @@ impl ParseSocketAddrErrorKind {
     }
 }
 
-impl std::fmt::Display for ParseSocketAddrErrorKind {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}", self.as_str())
-    }
-}
-
-impl From<ParseSocketAddrErrorKind> for ParseSocketAddrError {
-
-    fn from(kind: ParseSocketAddrErrorKind) -> ParseSocketAddrError {
-        ParseSocketAddrError(kind)
-    }
-}
-
 impl std::fmt::Display for ParseSocketAddrError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}", self.0)
+        write!(fmt, "{}", self.as_str())
     }
 }
 
@@ -297,23 +271,19 @@ impl std::error::Error for ParseSocketAddrError {
 }
 
 /// An error that might be returned when parsing procfs TCP connection state.
-#[derive(Clone, Debug)]
-pub struct ParseTcpStateError(ParseTcpStateErrorKind);
-
-/// A list of cases that can happen when parsing procfs TCP connection state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ParseTcpStateErrorKind {
+pub enum ParseTcpStateError {
     /// The input string contained unexpected data.
     UnexpectedInput,
     /// The parsed state identifier is not a known TCP state.
     UnknownState,
 }
 
-impl ParseTcpStateErrorKind {
+impl ParseTcpStateError {
 
-    /// Returns a human-friendly string representation of the error kind.
+    /// Returns a human-friendly string representation of the error.
     fn as_str(&self) -> &'static str {
-        use ParseTcpStateErrorKind::*;
+        use ParseTcpStateError::*;
         match *self {
             UnexpectedInput => "unexpected input",
             UnknownState => "unknown TCP state",
@@ -321,32 +291,10 @@ impl ParseTcpStateErrorKind {
     }
 }
 
-impl std::fmt::Display for ParseTcpStateErrorKind {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}", self.as_str())
-    }
-}
-
-impl ParseTcpStateError {
-
-    /// Returns the details of what caused the error to be raised.
-    fn kind(&self) -> ParseTcpStateErrorKind {
-        self.0
-    }
-}
-
-impl From<ParseTcpStateErrorKind> for ParseTcpStateError {
-
-    fn from(error: ParseTcpStateErrorKind) -> ParseTcpStateError {
-        ParseTcpStateError(error)
-    }
-}
-
 impl std::fmt::Display for ParseTcpStateError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}", self.0)
+        write!(fmt, "{}", self.as_str())
     }
 }
 
@@ -414,7 +362,7 @@ mod tests {
         let error = parse_socket_addr_v4("foobar:0000")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidIp);
+        assert_eq!(error, ParseSocketAddrError::InvalidIp);
     }
 
     #[test]
@@ -422,7 +370,7 @@ mod tests {
         let error = parse_socket_addr_v6("foobar:0000")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidIp);
+        assert_eq!(error, ParseSocketAddrError::InvalidIp);
     }
 
     #[test]
@@ -430,7 +378,7 @@ mod tests {
         let error = parse_socket_addr_v4("00000000:foobar")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidPort);
+        assert_eq!(error, ParseSocketAddrError::InvalidPort);
     }
 
     #[test]
@@ -438,7 +386,7 @@ mod tests {
         let error = parse_socket_addr_v6("00000000000000000000000000000000:xyz")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidPort);
+        assert_eq!(error, ParseSocketAddrError::InvalidPort);
     }
 
     #[test]
@@ -446,7 +394,7 @@ mod tests {
         let error = parse_socket_addr_v4("")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+        assert_eq!(error, ParseSocketAddrError::InvalidFormat);
     }
 
     #[test]
@@ -454,7 +402,7 @@ mod tests {
         let error = parse_socket_addr_v4("00000000")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+        assert_eq!(error, ParseSocketAddrError::InvalidFormat);
     }
 
     #[test]
@@ -462,7 +410,7 @@ mod tests {
         let error = parse_socket_addr_v4("00000000:0000:0000")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+        assert_eq!(error, ParseSocketAddrError::InvalidFormat);
     }
 
     #[test]
@@ -470,7 +418,7 @@ mod tests {
         let error = parse_socket_addr_v6("")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+        assert_eq!(error, ParseSocketAddrError::InvalidFormat);
     }
 
     #[test]
@@ -478,7 +426,7 @@ mod tests {
         let error = parse_socket_addr_v6("00000000000000000000000000000000")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+        assert_eq!(error, ParseSocketAddrError::InvalidFormat);
     }
 
     #[test]
@@ -486,7 +434,7 @@ mod tests {
         let error = parse_socket_addr_v6("00000000000000000000000000000000:0000:0000")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseSocketAddrErrorKind::InvalidFormat);
+        assert_eq!(error, ParseSocketAddrError::InvalidFormat);
     }
 
     #[test]
@@ -502,7 +450,7 @@ mod tests {
         let error = parse_tcp_state("foobar")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseTcpStateErrorKind::UnexpectedInput);
+        assert_eq!(error, ParseTcpStateError::UnexpectedInput);
     }
 
     #[test]
@@ -510,6 +458,6 @@ mod tests {
         let error = parse_tcp_state("42")
             .unwrap_err();
 
-        assert_eq!(error.kind(), ParseTcpStateErrorKind::UnknownState);
+        assert_eq!(error, ParseTcpStateError::UnknownState);
     }
 }
