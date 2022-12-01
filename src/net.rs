@@ -102,3 +102,45 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 
     interfaces()
 }
+
+/// A list of possible states of the TCP connection.
+///
+/// [1]: https://www.ietf.org/rfc/rfc793.txt
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TcpState {
+    Listen,
+    SynSent,
+    SynReceived,
+    Established,
+    FinWait1,
+    FinWait2,
+    CloseWait,
+    Closing,
+    LastAck,
+    TimeWait,
+    Closed,
+}
+
+/// Information about a TCP connection.
+struct TcpConnection {
+    /// A local address of the connection.
+    local_addr: std::net::SocketAddr,
+    /// A remote address of the connection.
+    remote_addr: std::net::SocketAddr,
+    /// A state of the connection.
+    state: TcpState,
+}
+
+/// Information about a UDP connection.
+struct UdpConnection {
+    /// A local address of the connection.
+    local_addr: std::net::SocketAddr,
+}
+
+/// Information about an Internet connection.
+enum Connection {
+    /// A TCP connection.
+    Tcp(TcpConnection),
+    /// A UDP connection.
+    Udp(UdpConnection),
+}
