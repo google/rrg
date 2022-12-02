@@ -160,6 +160,43 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     Ok(ifaces.into_iter())
 }
 
+/// Parses a TCP IPv4 connection information in the procfs format.
+fn parse_tcp_connection_v4(string: &str) -> Result<TcpConnection, ParseTcpConnectionError> {
+    let mut parts = string.split(char::is_whitespace);
+
+    // `sl` column (whathever that means but it is just a line number), we don't
+    // care about it but expect it to be there.
+    if parts.next().is_none() {
+        return Err(ParseTcpConnectionError::InvalidFormat);
+    }
+
+    let local_addr_str = parts.next()
+        .ok_or(ParseTcpConnectionError::InvalidFormat)?;
+    let local_addr = parse_socket_addr_v4(local_addr_str)
+        .map_err(ParseTcpConnectionError::InvalidLocalAddr)?;
+
+    let remote_addr_str = parts.next()
+        .ok_or(ParseTcpConnectionError::InvalidFormat)?;
+    let remote_addr = parse_socket_addr_v4(remote_addr_str)
+        .map_err(ParseTcpConnectionError::InvalidRemoteAddr)?;
+
+    let state_str = parts.next()
+        .ok_or(ParseTcpConnectionError::InvalidFormat)?;
+    let state = parse_tcp_state(state_str)
+        .map_err(ParseTcpConnectionError::InvalidState)?;
+
+    // The line afterwards may contain some ill-formed data and we could raise
+    // an error if we detect it. However, we choose to be generous and not to do
+    // that to keep things simple. It also makes the code slightly more resilent
+    // to potential format changes.
+
+    Ok(TcpConnection {
+        local_addr: std::net::SocketAddr::V4(local_addr),
+        remote_addr: std::net::SocketAddr::V4(remote_addr),
+        state,
+    })
+}
+
 /// Parses an IPv4 socket address in the procfs format.
 fn parse_socket_addr_v4(string: &str) -> Result<std::net::SocketAddrV4, ParseSocketAddrError> {
     let mut parts = string.split(':');
@@ -234,6 +271,45 @@ fn parse_tcp_state(string: &str) -> Result<TcpState, ParseTcpStateError> {
     };
 
     Ok(state)
+}
+
+/// An error that might be returned when parsing procfs TCP connection line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ParseTcpConnectionError {
+    /// The format of the string is not as it should be.
+    InvalidFormat,
+    /// It was not possible to parse the local address part.
+    InvalidLocalAddr(ParseSocketAddrError),
+    /// It was not possible to parse the remote address part.
+    InvalidRemoteAddr(ParseSocketAddrError),
+    /// It was not possible to parse the connection state part.
+    InvalidState(ParseTcpStateError),
+}
+
+impl std::fmt::Display for ParseTcpConnectionError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ParseTcpConnectionError::*;
+        match *self {
+            InvalidFormat => {
+                write!(fmt, "invalid TCP connection description format")
+            }
+            InvalidLocalAddr(error) => {
+                write!(fmt, "invalid local address: {}", error)
+            }
+            InvalidRemoteAddr(error) => {
+                write!(fmt, "invalid remote address: {}", error)
+            }
+            InvalidState(error) => {
+                write!(fmt, "invalid state: {}", error)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParseTcpConnectionError {
+    // We could implement `source` for this error type but since it is not
+    // exposed, there is no need to do so.
 }
 
 /// An error that might be returned when parsing procfs socket addresses.
@@ -318,6 +394,82 @@ mod tests {
         assert_eq! {
             loopback.mac_addr(), Some(&MacAddr::from([0, 0, 0, 0, 0, 0]))
         };
+    }
+
+    #[test]
+    fn parse_tcp_connection_v4_ok() {
+        let conn = parse_tcp_connection_v4(
+            "0: 0400007F:1A29 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
+        ).unwrap();
+
+        let local_addr = conn.local_addr;
+        assert_eq!(local_addr.ip(), std::net::IpAddr::from([127, 0, 0, 4]));
+        assert_eq!(local_addr.port(), 6697);
+
+        let remote_addr = conn.remote_addr;
+        assert_eq!(remote_addr.ip(), std::net::IpAddr::from([0, 0, 0, 0]));
+        assert_eq!(remote_addr.port(), 0);
+
+        assert_eq!(conn.state, TcpState::Listen);
+    }
+
+    #[test]
+    fn parse_tcp_connection_v4_empty() {
+        let error = parse_tcp_connection_v4("")
+            .unwrap_err();
+
+        assert_eq!(error, ParseTcpConnectionError::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_tcp_connection_v4_missing_local_addr() {
+        let error = parse_tcp_connection_v4("0:")
+            .unwrap_err();
+
+        assert_eq!(error, ParseTcpConnectionError::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_tcp_connection_v4_missing_remote_addr() {
+        let error = parse_tcp_connection_v4("0: 00000000:0000")
+            .unwrap_err();
+
+        assert_eq!(error, ParseTcpConnectionError::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_tcp_connection_v4_missing_state() {
+        let error = parse_tcp_connection_v4("0: 00000000:0000 00000000:0000")
+            .unwrap_err();
+
+        assert_eq!(error, ParseTcpConnectionError::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_tcp_connection_v4_invalid_local_addr() {
+        let error = parse_tcp_connection_v4(
+            "0: foobar 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
+        ).unwrap_err();
+
+        assert!(matches!(error, ParseTcpConnectionError::InvalidLocalAddr(_)));
+    }
+
+    #[test]
+    fn parse_tcp_connection_v4_invalid_remote_addr() {
+        let error = parse_tcp_connection_v4(
+            "0: 00000000:0000 foobar 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
+        ).unwrap_err();
+
+        assert!(matches!(error, ParseTcpConnectionError::InvalidRemoteAddr(_)));
+    }
+
+    #[test]
+    fn parse_tcp_connection_v4_invalid_state() {
+        let error = parse_tcp_connection_v4(
+            "0: 00000000:0000 00000000:0000 XY 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
+        ).unwrap_err();
+
+        assert!(matches!(error, ParseTcpConnectionError::InvalidState(_)));
     }
 
     #[test]
