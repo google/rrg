@@ -122,6 +122,7 @@ pub enum TcpState {
 }
 
 /// Information about a TCP connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct TcpConnection {
     /// A local address of the connection.
     local_addr: std::net::SocketAddr,
@@ -132,12 +133,14 @@ struct TcpConnection {
 }
 
 /// Information about a UDP connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct UdpConnection {
     /// A local address of the connection.
     local_addr: std::net::SocketAddr,
 }
 
 /// Information about an Internet connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Connection {
     /// A TCP connection.
     Tcp(TcpConnection),
