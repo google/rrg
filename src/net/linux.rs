@@ -162,6 +162,22 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 
 /// Parses a TCP IPv4 connection information in the procfs format.
 fn parse_tcp_connection_v4(string: &str) -> Result<TcpConnection, ParseTcpConnectionError> {
+    parse_tcp_connection(string, parse_socket_addr_v4)
+}
+
+/// Parses a TCP IPv6 connection information in the procfs format.
+fn parse_tcp_connection_v6(string: &str) -> Result<TcpConnection, ParseTcpConnectionError> {
+    parse_tcp_connection(string, parse_socket_addr_v6)
+}
+
+/// Parses a TCP connection information in the procfs format.
+fn parse_tcp_connection<A>(
+    string: &str,
+    parse_socket_addr: fn(&str) -> Result<A, ParseSocketAddrError>,
+) -> Result<TcpConnection, ParseTcpConnectionError>
+where
+    A: Into<std::net::SocketAddr>,
+{
     let mut parts = string.split(char::is_whitespace);
 
     // `sl` column (whathever that means but it is just a line number), we don't
@@ -172,12 +188,12 @@ fn parse_tcp_connection_v4(string: &str) -> Result<TcpConnection, ParseTcpConnec
 
     let local_addr_str = parts.next()
         .ok_or(ParseTcpConnectionError::InvalidFormat)?;
-    let local_addr = parse_socket_addr_v4(local_addr_str)
+    let local_addr = parse_socket_addr(local_addr_str)
         .map_err(ParseTcpConnectionError::InvalidLocalAddr)?;
 
     let remote_addr_str = parts.next()
         .ok_or(ParseTcpConnectionError::InvalidFormat)?;
-    let remote_addr = parse_socket_addr_v4(remote_addr_str)
+    let remote_addr = parse_socket_addr(remote_addr_str)
         .map_err(ParseTcpConnectionError::InvalidRemoteAddr)?;
 
     let state_str = parts.next()
@@ -191,8 +207,8 @@ fn parse_tcp_connection_v4(string: &str) -> Result<TcpConnection, ParseTcpConnec
     // to potential format changes.
 
     Ok(TcpConnection {
-        local_addr: std::net::SocketAddr::V4(local_addr),
-        remote_addr: std::net::SocketAddr::V4(remote_addr),
+        local_addr: local_addr.into(),
+        remote_addr: remote_addr.into(),
         state,
     })
 }
@@ -408,6 +424,25 @@ mod tests {
 
         let remote_addr = conn.remote_addr;
         assert_eq!(remote_addr.ip(), std::net::IpAddr::from([0, 0, 0, 0]));
+        assert_eq!(remote_addr.port(), 0);
+
+        assert_eq!(conn.state, TcpState::Listen);
+    }
+
+    #[test]
+    fn parse_tcp_connection_v6_ok() {
+        use std::net::IpAddr;
+
+        let conn = parse_tcp_connection_v6(
+            "0: 00000000000000000000000001000000:2555 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
+        ).unwrap();
+
+        let local_addr = conn.local_addr;
+        assert_eq!(local_addr.ip(), "0:1::".parse::<IpAddr>().unwrap());
+        assert_eq!(local_addr.port(), 0x2555);
+
+        let remote_addr = conn.remote_addr;
+        assert_eq!(remote_addr.ip(), "::".parse::<IpAddr>().unwrap());
         assert_eq!(remote_addr.port(), 0);
 
         assert_eq!(conn.state, TcpState::Listen);
