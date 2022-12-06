@@ -251,9 +251,46 @@ fn parse_socket_addr_v6(string: &str) -> Result<std::net::SocketAddrV6, ParseSoc
         return Err(ParseSocketAddrError::InvalidFormat.into());
     }
 
-    let ip_addr_octets = u128::from_str_radix(ip_addr_str, 16)
-        .map_err(|_| ParseSocketAddrError::InvalidIp)?;
-    let ip_addr = std::net::Ipv6Addr::from(u128::from_be(ip_addr_octets));
+    // procfs uses pretty awkward representation of IPv6 address [1, 2]. It is
+    // grouped to 4 32-bit integers. Within each integer, each byte is displayed
+    // as a 2-digit hexadecimal number. Invidual bytes of the integer (so, two
+    // hex digit substrings) are in the host-endian order whereas the integers
+    // itself are ordered from the most significant to the least significant.
+    //
+    // Consider the address: `d3d2:d1d0:c3c2:c1c0:b3b2:b1b0:a3a2:a1a0`. Because
+    // of the reasons stated above, the procfs representation of this address
+    // changes depending on the endianness of the system:
+    //
+    //   * little-endian: `D0D1D2D3C0C1C2C3B0B1B2B3A0A1A2A3`
+    //   * big-endian: `D3D2D1D0C3C2C1C0B3B2B1B0A3A2A1A0`
+    //
+    // [1]: https://unix.stackexchange.com/questions/719440/binary-format-of-ipv6-loopback-address
+    // [2]: https://github.com/torvalds/linux/blob/bce9332220bd677d83b19d21502776ad555a0e73/net/ipv6/tcp_ipv6.c#L2041-L2066
+
+    fn parse_octets(string: &str) -> Result<[u8; 4], ParseSocketAddrError> {
+        assert_eq!(string.len(), 8);
+
+        let octets = u32::from_str_radix(string, 16)
+            .map_err(|_| ParseSocketAddrError::InvalidIp)?;
+
+        Ok(u32::from_be(octets).to_be_bytes())
+    }
+
+    if ip_addr_str.len() != 32 {
+        return Err(ParseSocketAddrError::InvalidIp.into());
+    }
+
+    let octets_a = parse_octets(&ip_addr_str[00..08])?;
+    let octets_b = parse_octets(&ip_addr_str[08..16])?;
+    let octets_c = parse_octets(&ip_addr_str[16..24])?;
+    let octets_d = parse_octets(&ip_addr_str[24..32])?;
+
+    let ip_addr = std::net::Ipv6Addr::from([
+        octets_a[0], octets_a[1], octets_a[2], octets_a[3],
+        octets_b[0], octets_b[1], octets_b[2], octets_b[3],
+        octets_c[0], octets_c[1], octets_c[2], octets_c[3],
+        octets_d[0], octets_d[1], octets_d[2], octets_d[3],
+    ]);
 
     let port = u16::from_str_radix(port_str, 16)
         .map_err(|_| ParseSocketAddrError::InvalidPort)?;
@@ -434,11 +471,11 @@ mod tests {
         use std::net::IpAddr;
 
         let conn = parse_tcp_connection_v6(
-            "0: 00000000000000000000000001000000:2555 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
+            "0: 00000000000000000000000000000000:2555 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
         ).unwrap();
 
         let local_addr = conn.local_addr;
-        assert_eq!(local_addr.ip(), "0:1::".parse::<IpAddr>().unwrap());
+        assert_eq!(local_addr.ip(), "::".parse::<IpAddr>().unwrap());
         assert_eq!(local_addr.port(), 0x2555);
 
         let remote_addr = conn.remote_addr;
@@ -517,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_socket_addr_v4_ok() {
+    fn parse_socket_addr_v4_octets() {
         let addr = parse_socket_addr_v4("0100007F:098C")
             .unwrap();
 
@@ -535,14 +572,38 @@ mod tests {
     }
 
     #[test]
-    fn parse_socket_addr_v6_ok() {
-        let addr = parse_socket_addr_v6("00000000000000000000000001000000:BBF6")
+    fn parse_socket_addr_v6_localhost() {
+        #[cfg(target_endian = "little")]
+        const PROCFS_ADDR_STR: &str = "00000000000000000000000001000000";
+
+        #[cfg(target_endian = "big")]
+        const PROCFS_ADDR_STR: &str = "00000000000000000000000000000001";
+
+        let addr = parse_socket_addr_v6(&format!("{PROCFS_ADDR_STR}:BBF6"))
             .unwrap();
 
-        assert_eq!(addr.ip(), &"0:1::".parse::<std::net::Ipv6Addr>().unwrap());
+        assert_eq!(addr.ip(), &"::1".parse::<std::net::Ipv6Addr>().unwrap());
         assert_eq!(addr.port(), 48118);
     }
 
+    #[test]
+    fn parse_socket_addr_v6_octets() {
+        #[cfg(target_endian = "little")]
+        const PROCFS_ADDR_STR: &str = "D0D1D2D3C0C1C2C3B0B1B2B3A0A1A2A3";
+
+        #[cfg(target_endian = "big")]
+        const PROCFS_ADDR_STR: &str = "D3D2D1D0C3C2C1C0B3B2B1B0A3A2A1A0";
+
+        let addr = parse_socket_addr_v6(&format!("{PROCFS_ADDR_STR}:0000"))
+            .unwrap();
+
+        assert_eq!(addr.ip(), &std::net::Ipv6Addr::from([
+            0xD3, 0xD2, 0xD1, 0xD0,
+            0xC3, 0xC2, 0xC1, 0xC0,
+            0xB3, 0xB2, 0xB1, 0xB0,
+            0xA3, 0xA2, 0xA1, 0xA0,
+        ]));
+    }
 
     #[test]
     fn parse_socket_addr_v4_invalid_ip() {
