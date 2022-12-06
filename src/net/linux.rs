@@ -178,7 +178,9 @@ fn parse_tcp_connection<A>(
 where
     A: Into<std::net::SocketAddr>,
 {
-    let mut parts = string.split(char::is_whitespace);
+    // There can be some leading whitespace at the beginning of the line, so
+    // in order not to get empty parts, we also trim it.
+    let mut parts = string.trim_start().split(char::is_whitespace);
 
     // `sl` column (whathever that means but it is just a line number), we don't
     // care about it but expect it to be there.
