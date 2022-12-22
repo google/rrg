@@ -392,17 +392,17 @@ fn parse_tcp_state(string: &str) -> Result<TcpState, ParseTcpStateError> {
     // https://github.com/torvalds/linux/blob/ca57f02295f188d6c65ec02202402979880fa6d8/include/net/tcp_states.h#L12-L27
     let state = match value {
         0x01 => TcpState::Established,
-	    0x02 => TcpState::SynSent,
-	    0x03 => TcpState::SynReceived,
-	    0x04 => TcpState::FinWait1,
-	    0x05 => TcpState::FinWait2,
-	    0x06 => TcpState::TimeWait,
-	    0x07 => TcpState::Closed,
-	    0x08 => TcpState::CloseWait,
-	    0x09 => TcpState::LastAck,
-	    0x0A => TcpState::Listen,
-	    0x0B => TcpState::Closing,
-	    0x0C => TcpState::SynReceived,
+        0x02 => TcpState::SynSent,
+        0x03 => TcpState::SynReceived,
+        0x04 => TcpState::FinWait1,
+        0x05 => TcpState::FinWait2,
+        0x06 => TcpState::TimeWait,
+        0x07 => TcpState::Closed,
+        0x08 => TcpState::CloseWait,
+        0x09 => TcpState::LastAck,
+        0x0A => TcpState::Listen,
+        0x0B => TcpState::Closing,
+        0x0C => TcpState::SynReceived,
         _ => return Err(ParseTcpStateError::UnknownState.into()),
     };
 
