@@ -179,28 +179,32 @@ pub fn tcp_v6_connections(pid: u32) -> std::io::Result<TcpConnections> {
 ///
 /// # Errors
 ///
-/// Each item yield by the iterator can be [`ParseTcpConnectionError`] if the
+/// Each item yield by the iterator can be [`ParseConnectionError`] if the
 /// connection information returned by the system was malformed.
-pub struct TcpConnections {
-    /// Iterator over lines of procfs TCP connections file.
+type TcpConnections = Connections<TcpConnection>;
+
+// TODO(@panhania): Unexpose this type.
+/// Iterator over connections of a particular process.
+pub struct Connections<C> {
+    /// Iterator over lines of procfs connections file.
     lines: std::io::Lines<std::io::BufReader<std::fs::File>>,
-    /// Function to use for parsing TCP connection information.
-    parse_tcp_connection: fn(&str) -> Result<TcpConnection, ParseConnectionError>,
+    /// Function to use for parsing connection information.
+    parse_connection: fn(&str) -> Result<C, ParseConnectionError>,
 }
 
-impl TcpConnections {
+impl<C> Connections<C> {
 
     /// Creates a new instance of the iterator.
     ///
-    /// `path` should point to a procfs file [1] with TCP connection information
-    /// and `parse_tcp_function` should be a function that is able to parse the
-    /// lines of that file.
+    /// `path` should point to a procfs file [1] with connection information and
+    /// `parse_connection` should be a function that can parse the lines of that
+    /// file.
     ///
     /// [1]: https://docs.kernel.org/filesystems/proc.html#networking-info-in-proc-net
     fn new<P>(
         path: P,
-        parse_tcp_connection: fn(&str) -> Result<TcpConnection, ParseConnectionError>,
-    ) -> std::io::Result<TcpConnections>
+        parse_connection: fn(&str) -> Result<C, ParseConnectionError>,
+    ) -> std::io::Result<Connections<C>>
     where
         P: AsRef<std::path::Path>,
     {
@@ -213,24 +217,24 @@ impl TcpConnections {
             return Err(std::io::ErrorKind::InvalidData.into());
         }
 
-        Ok(TcpConnections {
+        Ok(Connections {
             lines,
-            parse_tcp_connection,
+            parse_connection,
         })
     }
 }
 
-impl Iterator for TcpConnections {
-    type Item = std::io::Result<TcpConnection>;
+impl<C> Iterator for Connections<C> {
+    type Item = std::io::Result<C>;
 
-    fn next(&mut self) -> Option<std::io::Result<TcpConnection>> {
+    fn next(&mut self) -> Option<std::io::Result<C>> {
         let line = match self.lines.next() {
             None => return None,
             Some(Ok(line)) => line,
             Some(Err(error)) => return Some(Err(error)),
         };
 
-        match (self.parse_tcp_connection)(&line) {
+        match (self.parse_connection)(&line) {
             Ok(conn) => Some(Ok(conn)),
             Err(error) => Some(Err({
                 std::io::Error::new(std::io::ErrorKind::InvalidData, error)
