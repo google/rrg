@@ -172,6 +172,29 @@ pub fn tcp_v6_connections(pid: u32) -> std::io::Result<TcpConnections> {
     TcpConnections::new(path, parse_tcp_v6_connection)
 }
 
+/// Returns an iterator over IPv4 UDP connections for the specified process.
+pub fn udp_v4_connections(pid: u32) -> std::io::Result<UdpConnections> {
+    let path = format!("/proc/{pid}/net/udp");
+    UdpConnections::new(path, parse_udp_v4_connection)
+}
+
+/// Returns an iterator over IPv6 UDP connections for the specified process.
+pub fn udp_v6_connections(pid: u32) -> std::io::Result<UdpConnections> {
+    let path = format!("/proc/{pid}/net/udp6");
+    UdpConnections::new(path, parse_udp_v6_connection)
+}
+
+/// Iterator over UDP connections of a particular process.
+///
+/// Instances of this iterator can be created using the [`udp_v4_connections`]
+/// and [`udp_v6_connections`] functions.
+///
+/// # Errors
+///
+/// Each item yield by the iterator can be [`ParseConnectionError`] if the
+/// connection information returned by the system was malformed.
+type UdpConnections = Connections<UdpConnection>;
+
 /// Iterator over TCP connections of a particular process.
 ///
 /// Instances of this iterator can be created using the [`tcp_v4_connections`]
@@ -604,6 +627,38 @@ mod tests {
             .unwrap();
 
         assert_eq!(server_conn.state, TcpState::Listen);
+    }
+
+    #[test]
+    fn udp_v4_connections_local_connection() {
+        use std::net::Ipv4Addr;
+
+        let socket = std::net::UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
+            .unwrap();
+        let socket_addr = socket.local_addr()
+            .unwrap();
+
+        let mut conns = udp_v4_connections(std::process::id())
+            .unwrap()
+            .filter_map(Result::ok);
+
+        assert!(conns.find(|conn| conn.local_addr == socket_addr).is_some());
+    }
+
+    #[test]
+    fn udp_v6_connections_local_connection() {
+        use std::net::Ipv6Addr;
+
+        let socket = std::net::UdpSocket::bind((Ipv6Addr::LOCALHOST, 0))
+            .unwrap();
+        let socket_addr = socket.local_addr()
+            .unwrap();
+
+        let mut conns = udp_v6_connections(std::process::id())
+            .unwrap()
+            .filter_map(Result::ok);
+
+        assert!(conns.find(|conn| conn.local_addr == socket_addr).is_some());
     }
 
     #[test]
