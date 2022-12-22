@@ -163,27 +163,36 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 /// Returns an iterator over IPv4 TCP connections for the specified process.
 pub fn tcp_v4_connections(pid: u32) -> std::io::Result<TcpConnections> {
     let path = format!("/proc/{pid}/net/tcp");
-    TcpConnections::new(path, parse_tcp_v4_connection)
+    Ok(TcpConnections {
+        iter: Connections::new(path, parse_tcp_v4_connection)?,
+    })
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
 pub fn tcp_v6_connections(pid: u32) -> std::io::Result<TcpConnections> {
     let path = format!("/proc/{pid}/net/tcp6");
-    TcpConnections::new(path, parse_tcp_v6_connection)
+    Ok(TcpConnections {
+        iter: Connections::new(path, parse_tcp_v6_connection)?,
+    })
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
 pub fn udp_v4_connections(pid: u32) -> std::io::Result<UdpConnections> {
     let path = format!("/proc/{pid}/net/udp");
-    UdpConnections::new(path, parse_udp_v4_connection)
+    Ok(UdpConnections {
+        iter: Connections::new(path, parse_udp_v4_connection)?,
+    })
 }
 
 /// Returns an iterator over IPv6 UDP connections for the specified process.
 pub fn udp_v6_connections(pid: u32) -> std::io::Result<UdpConnections> {
     let path = format!("/proc/{pid}/net/udp6");
-    UdpConnections::new(path, parse_udp_v6_connection)
+    Ok(UdpConnections {
+        iter: Connections::new(path, parse_udp_v6_connection)?,
+    })
 }
 
+// TODO(rust-lang/rust#63063): Simplify as an alias to `impl`.
 /// Iterator over UDP connections of a particular process.
 ///
 /// Instances of this iterator can be created using the [`udp_v4_connections`]
@@ -193,8 +202,11 @@ pub fn udp_v6_connections(pid: u32) -> std::io::Result<UdpConnections> {
 ///
 /// Each item yield by the iterator can be [`ParseConnectionError`] if the
 /// connection information returned by the system was malformed.
-type UdpConnections = Connections<UdpConnection>;
+pub struct UdpConnections {
+    iter: Connections<UdpConnection>,
+}
 
+// TODO(rust-lang/rust#63063): Simplify as an alias to `impl`.
 /// Iterator over TCP connections of a particular process.
 ///
 /// Instances of this iterator can be created using the [`tcp_v4_connections`]
@@ -204,11 +216,33 @@ type UdpConnections = Connections<UdpConnection>;
 ///
 /// Each item yield by the iterator can be [`ParseConnectionError`] if the
 /// connection information returned by the system was malformed.
-type TcpConnections = Connections<TcpConnection>;
+pub struct TcpConnections {
+    iter: Connections<TcpConnection>,
+}
 
-// TODO(@panhania): Unexpose this type.
-/// Iterator over connections of a particular process.
-pub struct Connections<C> {
+impl Iterator for TcpConnections {
+    type Item = std::io::Result<TcpConnection>;
+
+    fn next(&mut self) -> Option<std::io::Result<TcpConnection>> {
+        self.iter.next()
+    }
+}
+
+impl Iterator for UdpConnections {
+    type Item = std::io::Result<UdpConnection>;
+
+    fn next(&mut self) -> Option<std::io::Result<UdpConnection>> {
+        self.iter.next()
+    }
+}
+
+/// Abstract iterator over connections of a particular process.
+///
+/// # Errors
+///
+/// Each item yield by the iterator can be [`ParseConnectionError`] if the
+/// connection information returned by the system was malformed.
+struct Connections<C> {
     /// Iterator over lines of procfs connections file.
     lines: std::io::Lines<std::io::BufReader<std::fs::File>>,
     /// Function to use for parsing connection information.
