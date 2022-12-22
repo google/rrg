@@ -160,11 +160,92 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     Ok(ifaces.into_iter())
 }
 
+/// Returns an iterator over IPv4 TCP connections for the specified process.
+pub fn tcp_v4_connections(pid: u32) -> std::io::Result<TcpConnections> {
+    let path = format!("/proc/{pid}/net/tcp");
+    TcpConnections::new(path, parse_tcp_connection_v4)
+}
+
+/// Returns an iterator over IPv6 TCP connections for the specified process.
+pub fn tcp_v6_connections(pid: u32) -> std::io::Result<TcpConnections> {
+    let path = format!("/proc/{pid}/net/tcp6");
+    TcpConnections::new(path, parse_tcp_connection_v6)
+}
+
+/// Iterator over TCP connections of a particular process.
+///
+/// Instances of this iterator can be created using the [`tcp_v4_connections`]
+/// and [`tcp_v6_connections`] functions.
+///
+/// # Errors
+///
+/// Each item yield by the iterator can be [`ParseTcpConnectionError`] if the
+/// connection information returned by the system was malformed.
+pub struct TcpConnections {
+    /// Iterator over lines of procfs TCP connections file.
+    lines: std::io::Lines<std::io::BufReader<std::fs::File>>,
+    /// Function to use for parsing TCP connection information.
+    parse_tcp_connection: fn(&str) -> Result<TcpConnection, ParseTcpConnectionError>,
+}
+
+impl TcpConnections {
+
+    /// Creates a new instance of the iterator.
+    ///
+    /// `path` should point to a procfs file [1] with TCP connection information
+    /// and `parse_tcp_function` should be a function that is able to parse the
+    /// lines of that file.
+    ///
+    /// [1]: https://docs.kernel.org/filesystems/proc.html#networking-info-in-proc-net
+    fn new<P>(
+        path: P,
+        parse_tcp_connection: fn(&str) -> Result<TcpConnection, ParseTcpConnectionError>,
+    ) -> std::io::Result<TcpConnections>
+    where
+        P: AsRef<std::path::Path>,
+    {
+        use std::io::BufRead as _;
+
+        let file = std::fs::File::open(path)?;
+        let mut lines = std::io::BufReader::new(file).lines();
+        if lines.next().is_none() {
+            // TODO(@panhania): Raise more specific error about missing header.
+            return Err(std::io::ErrorKind::InvalidData.into());
+        }
+
+        Ok(TcpConnections {
+            lines,
+            parse_tcp_connection,
+        })
+    }
+}
+
+impl Iterator for TcpConnections {
+    type Item = std::io::Result<TcpConnection>;
+
+    fn next(&mut self) -> Option<std::io::Result<TcpConnection>> {
+        let line = match self.lines.next() {
+            None => return None,
+            Some(Ok(line)) => line,
+            Some(Err(error)) => return Some(Err(error)),
+        };
+
+        match (self.parse_tcp_connection)(&line) {
+            Ok(conn) => Some(Ok(conn)),
+            Err(error) => Some(Err({
+                std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+            })),
+        }
+    }
+}
+
+// TODO(@panhania): Rename to `parse_tcp_v4_connection` (and associated tests).
 /// Parses a TCP IPv4 connection information in the procfs format.
 fn parse_tcp_connection_v4(string: &str) -> Result<TcpConnection, ParseTcpConnectionError> {
     parse_tcp_connection(string, parse_socket_addr_v4)
 }
 
+// TODO(@panhania): Rename to `parse_tcp_v6_connection` (and associated tests).
 /// Parses a TCP IPv6 connection information in the procfs format.
 fn parse_tcp_connection_v6(string: &str) -> Result<TcpConnection, ParseTcpConnectionError> {
     parse_tcp_connection(string, parse_socket_addr_v6)
@@ -449,6 +530,44 @@ mod tests {
         assert_eq! {
             loopback.mac_addr(), Some(&MacAddr::from([0, 0, 0, 0, 0, 0]))
         };
+    }
+
+    #[test]
+    fn tcp_v4_connections_local_connection() {
+        use std::net::Ipv4Addr;
+
+        let server = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .unwrap();
+        let server_addr = server.local_addr()
+            .unwrap();
+
+        let mut conns = tcp_v4_connections(std::process::id())
+            .unwrap()
+            .filter_map(Result::ok);
+
+        let server_conn = conns.find(|conn| conn.local_addr == server_addr)
+            .unwrap();
+
+        assert_eq!(server_conn.state, TcpState::Listen);
+    }
+
+    #[test]
+    fn tcp_v6_connections_local_connection() {
+        use std::net::Ipv6Addr;
+
+        let server = std::net::TcpListener::bind((Ipv6Addr::LOCALHOST, 0))
+            .unwrap();
+        let server_addr = server.local_addr()
+            .unwrap();
+
+        let mut conns = tcp_v6_connections(std::process::id())
+            .unwrap()
+            .filter_map(Result::ok);
+
+        let server_conn = conns.find(|conn| conn.local_addr == server_addr)
+            .unwrap();
+
+        assert_eq!(server_conn.state, TcpState::Listen);
     }
 
     #[test]
