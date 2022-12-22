@@ -249,6 +249,16 @@ fn parse_tcp_v6_connection(string: &str) -> Result<TcpConnection, ParseConnectio
     parse_tcp_connection(string, parse_socket_addr_v6)
 }
 
+/// Parses a UDP IPv4 connection information in the procfs format.
+fn parse_udp_v4_connection(string: &str) -> Result<UdpConnection, ParseConnectionError> {
+    parse_udp_connection(string, parse_socket_addr_v4)
+}
+
+/// Parses a UDP IPv6 connection information in the procfs format.
+fn parse_udp_v6_connection(string: &str) -> Result<UdpConnection, ParseConnectionError> {
+    parse_udp_connection(string, parse_socket_addr_v6)
+}
+
 /// Parses a TCP connection information in the procfs format.
 fn parse_tcp_connection<A>(
     string: &str,
@@ -291,6 +301,30 @@ where
         local_addr: local_addr.into(),
         remote_addr: remote_addr.into(),
         state,
+    })
+}
+
+/// Parses a UDP connection information in the procfs format.
+fn parse_udp_connection<A>(
+    string: &str,
+    parse_socket_addr: fn(&str) -> Result<A, ParseSocketAddrError>,
+) -> Result<UdpConnection, ParseConnectionError>
+where
+    A: Into<std::net::SocketAddr>,
+{
+    // We take advantage of the fact that TCP and UDP use the same format (but
+    // with remote address and state columns having dummy values).
+    let conn = parse_tcp_connection(string, parse_socket_addr)?;
+
+    if !conn.remote_addr.ip().is_unspecified() || conn.remote_addr.port() != 0 {
+        return Err(ParseConnectionError::InvalidFormat);
+    }
+    if conn.state != TcpState::Closed {
+        return Err(ParseConnectionError::InvalidFormat);
+    }
+
+    Ok(UdpConnection {
+        local_addr: conn.local_addr,
     })
 }
 
@@ -605,6 +639,30 @@ mod tests {
     }
 
     #[test]
+    fn parse_udp_v4_connection_ok() {
+        let conn = parse_udp_v4_connection(
+            "2645: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000 0 0 6663330 2 0000000000000000 0"
+        ).unwrap();
+
+        let local_addr = conn.local_addr;
+        assert_eq!(local_addr.ip(), std::net::IpAddr::from([127, 0, 0, 1]));
+        assert_eq!(local_addr.port(), 0x0035);
+    }
+
+    #[test]
+    fn parse_udp_v6_connection_ok() {
+        use std::net::IpAddr;
+
+        let conn = parse_udp_v6_connection(
+            "7945: 00000000000000000000000000000000:14E9 00000000000000000000000000000000:0000 07 00000000:00000000 00:00000000 00000000 111 0 66333 2 0000000000000000 0"
+        ).unwrap();
+
+        let local_addr = conn.local_addr;
+        assert_eq!(local_addr.ip(), "::".parse::<IpAddr>().unwrap());
+        assert_eq!(local_addr.port(), 0x14E9);
+    }
+
+    #[test]
     fn parse_tcp_v4_connection_empty() {
         let error = parse_tcp_v4_connection("")
             .unwrap_err();
@@ -661,6 +719,24 @@ mod tests {
         ).unwrap_err();
 
         assert!(matches!(error, ParseConnectionError::InvalidState(_)));
+    }
+
+    #[test]
+    fn parse_udp_v4_connection_unexpected_remote_addr() {
+        let error = parse_udp_v4_connection(
+            "2645: 0100007F:0035 0100007F:0000 07 00000000:00000000 00:00000000 00000000 0 0 6663330 2 0000000000000000 0"
+        ).unwrap_err();
+
+        assert_eq!(error, ParseConnectionError::InvalidFormat);
+    }
+
+    #[test]
+    fn parse_udp_v4_connection_unexpected_state() {
+        let error = parse_udp_v4_connection(
+            "2645: 0100007F:0035 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 6663330 2 0000000000000000 0"
+        ).unwrap_err();
+
+        assert_eq!(error, ParseConnectionError::InvalidFormat);
     }
 
     #[test]
