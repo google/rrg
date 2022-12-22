@@ -163,13 +163,13 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 /// Returns an iterator over IPv4 TCP connections for the specified process.
 pub fn tcp_v4_connections(pid: u32) -> std::io::Result<TcpConnections> {
     let path = format!("/proc/{pid}/net/tcp");
-    TcpConnections::new(path, parse_tcp_connection_v4)
+    TcpConnections::new(path, parse_tcp_v4_connection)
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
 pub fn tcp_v6_connections(pid: u32) -> std::io::Result<TcpConnections> {
     let path = format!("/proc/{pid}/net/tcp6");
-    TcpConnections::new(path, parse_tcp_connection_v6)
+    TcpConnections::new(path, parse_tcp_v6_connection)
 }
 
 /// Iterator over TCP connections of a particular process.
@@ -239,15 +239,13 @@ impl Iterator for TcpConnections {
     }
 }
 
-// TODO(@panhania): Rename to `parse_tcp_v4_connection` (and associated tests).
 /// Parses a TCP IPv4 connection information in the procfs format.
-fn parse_tcp_connection_v4(string: &str) -> Result<TcpConnection, ParseTcpConnectionError> {
+fn parse_tcp_v4_connection(string: &str) -> Result<TcpConnection, ParseTcpConnectionError> {
     parse_tcp_connection(string, parse_socket_addr_v4)
 }
 
-// TODO(@panhania): Rename to `parse_tcp_v6_connection` (and associated tests).
 /// Parses a TCP IPv6 connection information in the procfs format.
-fn parse_tcp_connection_v6(string: &str) -> Result<TcpConnection, ParseTcpConnectionError> {
+fn parse_tcp_v6_connection(string: &str) -> Result<TcpConnection, ParseTcpConnectionError> {
     parse_tcp_connection(string, parse_socket_addr_v6)
 }
 
@@ -571,8 +569,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_tcp_connection_v4_ok() {
-        let conn = parse_tcp_connection_v4(
+    fn parse_tcp_v4_connection_ok() {
+        let conn = parse_tcp_v4_connection(
             "0: 0400007F:1A29 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
         ).unwrap();
 
@@ -588,10 +586,10 @@ mod tests {
     }
 
     #[test]
-    fn parse_tcp_connection_v6_ok() {
+    fn parse_tcp_v6_connection_ok() {
         use std::net::IpAddr;
 
-        let conn = parse_tcp_connection_v6(
+        let conn = parse_tcp_v6_connection(
             "0: 00000000000000000000000000000000:2555 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
         ).unwrap();
 
@@ -607,40 +605,40 @@ mod tests {
     }
 
     #[test]
-    fn parse_tcp_connection_v4_empty() {
-        let error = parse_tcp_connection_v4("")
+    fn parse_tcp_v4_connection_empty() {
+        let error = parse_tcp_v4_connection("")
             .unwrap_err();
 
         assert_eq!(error, ParseTcpConnectionError::InvalidFormat);
     }
 
     #[test]
-    fn parse_tcp_connection_v4_missing_local_addr() {
-        let error = parse_tcp_connection_v4("0:")
+    fn parse_tcp_v4_connection_missing_local_addr() {
+        let error = parse_tcp_v4_connection("0:")
             .unwrap_err();
 
         assert_eq!(error, ParseTcpConnectionError::InvalidFormat);
     }
 
     #[test]
-    fn parse_tcp_connection_v4_missing_remote_addr() {
-        let error = parse_tcp_connection_v4("0: 00000000:0000")
+    fn parse_tcp_v4_connection_missing_remote_addr() {
+        let error = parse_tcp_v4_connection("0: 00000000:0000")
             .unwrap_err();
 
         assert_eq!(error, ParseTcpConnectionError::InvalidFormat);
     }
 
     #[test]
-    fn parse_tcp_connection_v4_missing_state() {
-        let error = parse_tcp_connection_v4("0: 00000000:0000 00000000:0000")
+    fn parse_tcp_v4_connection_missing_state() {
+        let error = parse_tcp_v4_connection("0: 00000000:0000 00000000:0000")
             .unwrap_err();
 
         assert_eq!(error, ParseTcpConnectionError::InvalidFormat);
     }
 
     #[test]
-    fn parse_tcp_connection_v4_invalid_local_addr() {
-        let error = parse_tcp_connection_v4(
+    fn parse_tcp_v4_connection_invalid_local_addr() {
+        let error = parse_tcp_v4_connection(
             "0: foobar 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
         ).unwrap_err();
 
@@ -648,8 +646,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_tcp_connection_v4_invalid_remote_addr() {
-        let error = parse_tcp_connection_v4(
+    fn parse_tcp_v4_connection_invalid_remote_addr() {
+        let error = parse_tcp_v4_connection(
             "0: 00000000:0000 foobar 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
         ).unwrap_err();
 
@@ -657,8 +655,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_tcp_connection_v4_invalid_state() {
-        let error = parse_tcp_connection_v4(
+    fn parse_tcp_v4_connection_invalid_state() {
+        let error = parse_tcp_v4_connection(
             "0: 00000000:0000 00000000:0000 XY 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
         ).unwrap_err();
 
