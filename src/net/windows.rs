@@ -264,6 +264,19 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     Ok(ifaces.into_values())
 }
 
+/// Iterator over TCP connections.
+pub struct TcpConnections {
+    iter: std::vec::IntoIter<TcpConnection>,
+}
+
+impl Iterator for TcpConnections {
+    type Item = std::io::Result<TcpConnection>;
+
+    fn next(&mut self) -> Option<std::io::Result<TcpConnection>> {
+        self.iter.next().map(Result::Ok)
+    }
+}
+
 /// Returns an iterator over IPv4 TCP connections of all processes.
 pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
     use std::convert::TryFrom as _;
@@ -611,19 +624,6 @@ fn parse_tcp_state(val: u32) -> Result<TcpState, ParseTcpStateError> {
     };
 
     Ok(state)
-}
-
-/// Iterator over TCP connections.
-pub struct TcpConnections {
-    iter: std::vec::IntoIter<TcpConnection>,
-}
-
-impl Iterator for TcpConnections {
-    type Item = std::io::Result<TcpConnection>;
-
-    fn next(&mut self) -> Option<std::io::Result<TcpConnection>> {
-        self.iter.next().map(Result::Ok)
-    }
 }
 
 /// An error that might be returned when interpreting Windows TCP state value.
