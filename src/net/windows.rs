@@ -277,6 +277,19 @@ impl Iterator for TcpConnections {
     }
 }
 
+/// Iterator over UDP connections.
+pub struct UdpConnections {
+    iter: std::vec::IntoIter<UdpConnection>,
+}
+
+impl Iterator for UdpConnections {
+    type Item = std::io::Result<UdpConnection>;
+
+    fn next(&mut self) -> Option<std::io::Result<UdpConnection>> {
+        self.iter.next().map(Result::Ok)
+    }
+}
+
 /// Returns an iterator over IPv4 TCP connections of all processes.
 pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
     use std::convert::TryFrom as _;
@@ -553,6 +566,282 @@ pub fn all_tcp_v6_connections() -> std::io::Result<TcpConnections> {
     })
 }
 
+/// Returns an iterator over IPv4 UDP connections of all processes.
+pub fn all_udp_v4_connections() -> std::io::Result<UdpConnections> {
+    use std::convert::TryFrom as _;
+
+    use windows_sys::Win32::NetworkManagement::IpHelper::*;
+
+    let mut buf_size = u32::try_from(DEFAULT_BUF_SIZE)
+        .expect("default buffer size too big");
+
+    let buf_layout = std::alloc::Layout::from_size_align(
+        buf_size as usize,
+        std::mem::align_of::<MIB_UDPTABLE_OWNER_PID>(),
+    ).expect("invalid layout for adapter addresses table");
+
+    // SAFETY: The layout is constructed above from known parameters and it is
+    // garanteed to be non-zero. The memory does not have to be initialized as
+    // we are using this buffer an an output parameter.
+    let mut buf = unsafe {
+        std::alloc::alloc(buf_layout)
+    };
+
+    // Since we generally don't expect to be out of memory, we could abort. But
+    // running this operation is not-critical and maybe we really requested a
+    // lot of memory that we should not have (for whathever reason), so we just
+    // return an error and continue to roll.
+    if buf.is_null() {
+        return Err(std::io::ErrorKind::OutOfMemory.into());
+    }
+
+    // SAFETY: We call the function as described in the official docs [1]. In
+    // case the allocated buffer is too small, we handle this case below.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable
+    let mut code = unsafe {
+        GetExtendedUdpTable(
+            buf as *mut libc::c_void,
+            &mut buf_size,
+            false.into(),
+            windows_sys::Win32::Networking::WinSock::AF_INET,
+            UDP_TABLE_OWNER_PID,
+            0,
+        )
+    };
+
+    if code == windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW {
+        // Just a sanity check. Since the default buffer was too small, a "good"
+        // one should be strictly bigger.
+        assert!(DEFAULT_BUF_SIZE < (buf_size as usize));
+
+        // SAFETY: We reallocate the buffer with the same layout as it was init-
+        // ially created. The assertion above guarantees that the buffer size is
+        // valid.
+        let new_buf = unsafe {
+            std::alloc::realloc(buf, buf_layout, buf_size as usize)
+        };
+
+        // See a similar comment when the intial allocation fails explaining why
+        // we do not panic here.
+        if new_buf.is_null() {
+            // SAFETY: We need to deallocate the original buffer since changing
+            // the allocation failed and did not transfer the ownership. Since
+            // we use the original layout, this operation is safe.
+            unsafe {
+                std::alloc::dealloc(buf, buf_layout);
+            }
+
+            return Err(std::io::ErrorKind::OutOfMemory.into());
+        }
+
+        buf = new_buf;
+
+        // SAFETY: We call the function the same as above but with larger result
+        // buffer. Note that this can still fail in an unlikely case where a new
+        // device was added between the previous call and this one. However, we
+        // do not do another attempt and fail if this is the case.
+        code = unsafe {
+            GetExtendedUdpTable(
+                buf as *mut libc::c_void,
+                &mut buf_size,
+                false.into(),
+                windows_sys::Win32::Networking::WinSock::AF_INET,
+                UDP_TABLE_OWNER_PID,
+                0,
+            )
+        };
+    }
+
+    if code != windows_sys::Win32::Foundation::NO_ERROR {
+        // SAFETY: We still own the buffer and have to free it in case of an
+        // early return. We never modify the layout, so this is safe.
+        unsafe {
+            std::alloc::dealloc(buf, buf_layout);
+        }
+
+        let code = i32::try_from(code)
+            .expect("invalid error code");
+
+        return Err(std::io::Error::from_raw_os_error(code));
+    }
+
+    // SAFETY: The buffer was allocated with layout specific to the table type
+    // and was verified to be non-null.
+    let table = unsafe {
+        buf.cast::<MIB_UDPTABLE_OWNER_PID>().as_ref()
+    }.expect("null connection table pointer");
+
+    // SAFETY: The `table` field is guaranteed to contain as many elements as
+    // given in the `dwNumEntries` table [1]. We simply cast a single-element
+    // array to a one with runtime-known size.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/udpmib/ns-udpmib-mib_udptable#members
+    let rows = unsafe {
+        std::slice::from_raw_parts(
+            table.table.as_ref().as_ptr(),
+            table.dwNumEntries as usize,
+        )
+    };
+
+    let conns = rows
+        .into_iter()
+        .map(|row| parse_udp_v4_row(*row))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+        })?;
+
+    // SAFETY: We never modify the layout. The `GetExtendedUdpTable` call does
+    // not affect buffer ownership and it is not released beforehand. Everything
+    // that is returned contains it's own copy of the data from the table.
+    unsafe {
+        std::alloc::dealloc(buf, buf_layout);
+    }
+
+    Ok(UdpConnections {
+        iter: conns.into_iter(),
+    })
+}
+
+/// Returns an iterator over IPv6 UDP connections of all processes.
+pub fn all_udp_v6_connections() -> std::io::Result<UdpConnections> {
+    use std::convert::TryFrom as _;
+
+    use windows_sys::Win32::NetworkManagement::IpHelper::*;
+
+    let mut buf_size = u32::try_from(DEFAULT_BUF_SIZE)
+        .expect("default buffer size too big");
+
+    let buf_layout = std::alloc::Layout::from_size_align(
+        buf_size as usize,
+        std::mem::align_of::<MIB_UDP6TABLE_OWNER_PID>(),
+    ).expect("invalid layout for adapter addresses table");
+
+    // SAFETY: The layout is constructed above from known parameters and it is
+    // garanteed to be non-zero. The memory does not have to be initialized as
+    // we are using this buffer an an output parameter.
+    let mut buf = unsafe {
+        std::alloc::alloc(buf_layout)
+    };
+
+    // Since we generally don't expect to be out of memory, we could abort. But
+    // running this operation is not-critical and maybe we really requested a
+    // lot of memory that we should not have (for whathever reason), so we just
+    // return an error and continue to roll.
+    if buf.is_null() {
+        return Err(std::io::ErrorKind::OutOfMemory.into());
+    }
+
+    // SAFETY: We call the function as described in the official docs [1]. In
+    // case the allocated buffer is too small, we handle this case below.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable
+    let mut code = unsafe {
+        GetExtendedUdpTable(
+            buf as *mut libc::c_void,
+            &mut buf_size,
+            false.into(),
+            windows_sys::Win32::Networking::WinSock::AF_INET6,
+            UDP_TABLE_OWNER_PID,
+            0,
+        )
+    };
+
+    if code == windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW {
+        // Just a sanity check. Since the default buffer was too small, a "good"
+        // one should be strictly bigger.
+        assert!(DEFAULT_BUF_SIZE < (buf_size as usize));
+
+        // SAFETY: We reallocate the buffer with the same layout as it was init-
+        // ially created. The assertion above guarantees that the buffer size is
+        // valid.
+        let new_buf = unsafe {
+            std::alloc::realloc(buf, buf_layout, buf_size as usize)
+        };
+
+        // See a similar comment when the intial allocation fails explaining why
+        // we do not panic here.
+        if new_buf.is_null() {
+            // SAFETY: We need to deallocate the original buffer since changing
+            // the allocation failed and did not transfer the ownership. Since
+            // we use the original layout, this operation is safe.
+            unsafe {
+                std::alloc::dealloc(buf, buf_layout);
+            }
+
+            return Err(std::io::ErrorKind::OutOfMemory.into());
+        }
+
+        buf = new_buf;
+
+        // SAFETY: We call the function the same as above but with larger result
+        // buffer. Note that this can still fail in an unlikely case where a new
+        // device was added between the previous call and this one. However, we
+        // do not do another attempt and fail if this is the case.
+        code = unsafe {
+            GetExtendedUdpTable(
+                buf as *mut libc::c_void,
+                &mut buf_size,
+                false.into(),
+                windows_sys::Win32::Networking::WinSock::AF_INET6,
+                UDP_TABLE_OWNER_PID,
+                0,
+            )
+        };
+    }
+
+    if code != windows_sys::Win32::Foundation::NO_ERROR {
+        // SAFETY: We still own the buffer and have to free it in case of an
+        // early return. We never modify the layout, so this is safe.
+        unsafe {
+            std::alloc::dealloc(buf, buf_layout);
+        }
+
+        let code = i32::try_from(code)
+            .expect("invalid error code");
+
+        return Err(std::io::Error::from_raw_os_error(code));
+    }
+
+    // SAFETY: The buffer was allocated with layout specific to the table type
+    // and was verified to be non-null.
+    let table = unsafe {
+        buf.cast::<MIB_UDP6TABLE_OWNER_PID>().as_ref()
+    }.expect("null connection table pointer");
+
+    // SAFETY: The `table` field is guaranteed to contain as many elements as
+    // given in the `dwNumEntries` table [1]. We simply cast a single-element
+    // array to a one with runtime-known size.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/udpmib/ns-udpmib-mib_udp6table_owner_pid#members
+    let rows = unsafe {
+        std::slice::from_raw_parts(
+            table.table.as_ref().as_ptr(),
+            table.dwNumEntries as usize,
+        )
+    };
+
+    let conns = rows
+        .into_iter()
+        .map(|row| parse_udp_v6_row(*row))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+        })?;
+
+    // SAFETY: We never modify the layout. The `GetExtendedUdpTable` call does
+    // not affect buffer ownership and it is not released beforehand. Everything
+    // that is returned contains it's own copy of the data from the table.
+    unsafe {
+        std::alloc::dealloc(buf, buf_layout);
+    }
+
+    Ok(UdpConnections {
+        iter: conns.into_iter(),
+    })
+}
+
 /// Parses a connection row of a TCP IPv4 table.
 fn parse_tcp_v4_row(
     row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_TCPROW_OWNER_PID,
@@ -604,6 +893,42 @@ fn parse_tcp_v6_row(
         local_addr: (local_addr, local_port).into(),
         remote_addr: (remote_addr, remote_port).into(),
         state,
+    })
+}
+
+/// Parses a connection row of a UDP IPv4 table.
+fn parse_udp_v4_row(
+    row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_UDPROW_OWNER_PID,
+) -> Result<UdpConnection, ParseConnectionError>
+{
+    use std::convert::TryFrom as _;
+
+    let local_addr = std::net::Ipv4Addr::from(row.dwLocalAddr);
+    let local_port = u16::try_from(row.dwLocalPort)
+        .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+
+    // TODO(@panhania): Extend with PID information.
+
+    Ok(UdpConnection {
+        local_addr: (local_addr, local_port).into(),
+    })
+}
+
+/// Parses a connection row of a UDP IPv6 table.
+fn parse_udp_v6_row(
+    row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_UDP6ROW_OWNER_PID,
+) -> Result<UdpConnection, ParseConnectionError>
+{
+    use std::convert::TryFrom as _;
+
+    let local_addr = std::net::Ipv6Addr::from(row.ucLocalAddr);
+    let local_port = u16::try_from(row.dwLocalPort)
+        .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+
+    // TODO(@panhania): Extend with PID information.
+
+    Ok(UdpConnection {
+        local_addr: (local_addr, local_port).into(),
     })
 }
 
