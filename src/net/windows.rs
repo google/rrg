@@ -382,29 +382,10 @@ pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
         )
     };
 
-    let mut conns = Vec::new();
-    for row in rows {
-        let local_addr = std::net::Ipv4Addr::from(row.dwLocalAddr);
-        let local_port = row.dwLocalPort as u16;
-
-        let remote_addr = std::net::Ipv4Addr::from(row.dwRemoteAddr);
-        let remote_port = row.dwRemotePort as u16;
-
-        let state = parse_tcp_state(row.dwState)
-            .map_err(|error| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-            })?;
-
-        // TODO(@panhania): Extend with PID information.
-
-        conns.push(TcpConnection {
-            local_addr: std::net::SocketAddrV4::new(local_addr, local_port)
-                .into(),
-            remote_addr: std::net::SocketAddrV4::new(remote_addr, remote_port)
-                .into(),
-            state,
-        });
-    }
+    let mut conns = rows
+        .into_iter()
+        .map(|row| parse_tcp_v4_row(*row))
+        .collect::<std::io::Result<Vec<_>>>()?;
 
     // SAFETY: We never modify the layout. The `GetExtendedTcpTable` call does
     // not affect buffer ownership and it is not released beforehand. Everything
@@ -415,6 +396,34 @@ pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
 
     Ok(TcpConnections {
         iter: conns.into_iter(),
+    })
+}
+
+// TODO(@panhania): This should return a custom error type instead.
+/// Parses a connection row of a TCP IPv4 table.
+fn parse_tcp_v4_row(
+    row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_TCPROW_OWNER_PID,
+) -> std::io::Result<TcpConnection>
+{
+    let local_addr = std::net::Ipv4Addr::from(row.dwLocalAddr);
+    let local_port = row.dwLocalPort as u16;
+
+    let remote_addr = std::net::Ipv4Addr::from(row.dwRemoteAddr);
+    let remote_port = row.dwRemotePort as u16;
+
+    let state = parse_tcp_state(row.dwState)
+        .map_err(|error| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+        })?;
+
+    // TODO(@panhania): Extend with PID information.
+
+    Ok(TcpConnection {
+        local_addr: std::net::SocketAddrV4::new(local_addr, local_port)
+            .into(),
+        remote_addr: std::net::SocketAddrV4::new(remote_addr, remote_port)
+            .into(),
+        state,
     })
 }
 
