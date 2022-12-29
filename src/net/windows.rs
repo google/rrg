@@ -399,6 +399,141 @@ pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
     })
 }
 
+/// Returns an iterator over IPv6 TCP connections of all processes.
+pub fn all_tcp_v6_connections() -> std::io::Result<TcpConnections> {
+    use std::convert::TryFrom as _;
+
+    use windows_sys::Win32::NetworkManagement::IpHelper::*;
+
+    let mut buf_size = u32::try_from(DEFAULT_BUF_SIZE)
+        .expect("default buffer size too big");
+
+    let buf_layout = std::alloc::Layout::from_size_align(
+        buf_size as usize,
+        std::mem::align_of::<MIB_TCP6TABLE_OWNER_PID>(),
+    ).expect("invalid layout for adapter addresses table");
+
+    // SAFETY: The layout is constructed above from known parameters and it is
+    // garanteed to be non-zero. The memory does not have to be initialized as
+    // we are using this buffer an an output parameter.
+    let mut buf = unsafe {
+        std::alloc::alloc(buf_layout)
+    };
+
+    // Since we generally don't expect to be out of memory, we could abort. But
+    // running this operation is not-critical and maybe we really requested a
+    // lot of memory that we should not have (for whathever reason), so we just
+    // return an error and continue to roll.
+    if buf.is_null() {
+        return Err(std::io::ErrorKind::OutOfMemory.into());
+    }
+
+    // SAFETY: We call the function as described in the official docs [1]. In
+    // case the allocated buffer is too small, we handle this case below.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable#parameters
+    let mut code = unsafe {
+        GetExtendedTcpTable(
+            buf as *mut libc::c_void,
+            &mut buf_size,
+            false.into(),
+            windows_sys::Win32::Networking::WinSock::AF_INET6,
+            TCP_TABLE_OWNER_PID_ALL,
+            0,
+        )
+    };
+
+    if code == windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW {
+        // Just a sanity check. Since the default buffer was too small, a "good"
+        // one should be strictly bigger.
+        assert!(DEFAULT_BUF_SIZE < (buf_size as usize));
+
+        // SAFETY: We reallocate the buffer with the same layout as it was init-
+        // ially created. The assertion above guarantees that the buffer size is
+        // valid.
+        let new_buf = unsafe {
+            std::alloc::realloc(buf, buf_layout, buf_size as usize)
+        };
+
+        // See a similar comment when the intial allocation fails explaining why
+        // we do not panic here.
+        if new_buf.is_null() {
+            // SAFETY: We need to deallocate the original buffer since changing
+            // the allocation failed and did not transfer the ownership. Since
+            // we use the original layout, this operation is safe.
+            unsafe {
+                std::alloc::dealloc(buf, buf_layout);
+            }
+
+            return Err(std::io::ErrorKind::OutOfMemory.into());
+        }
+
+        buf = new_buf;
+
+        // SAFETY: We call the function the same as above but with larger result
+        // buffer. Note that this can still fail in an unlikely case where a new
+        // device was added between the previous call and this one. However, we
+        // do not do another attempt and fail if this is the case.
+        code = unsafe {
+            GetExtendedTcpTable(
+                buf as *mut libc::c_void,
+                &mut buf_size,
+                false.into(),
+                windows_sys::Win32::Networking::WinSock::AF_INET6,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            )
+        };
+    }
+
+    if code != windows_sys::Win32::Foundation::NO_ERROR {
+        // SAFETY: We still own the buffer and have to free it in case of an
+        // early return. We never modify the layout, so this is safe.
+        unsafe {
+            std::alloc::dealloc(buf, buf_layout);
+        }
+
+        let code = i32::try_from(code)
+            .expect("invalid error code");
+
+        return Err(std::io::Error::from_raw_os_error(code));
+    }
+
+    // SAFETY: The buffer was allocated with layout specific to the table type
+    // and was verified to be non-null.
+    let table = unsafe {
+        buf.cast::<MIB_TCP6TABLE_OWNER_PID>().as_ref()
+    }.expect("null connection table pointer");
+
+    // SAFETY: The `table` field is guaranteed to contain as many elements as
+    // given in the `dwNumEntries` table [1]. We simply cast a single-element
+    // array to a one with runtime-known size.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcp6table_owner_pid#members
+    let rows = unsafe {
+        std::slice::from_raw_parts(
+            table.table.as_ref().as_ptr(),
+            table.dwNumEntries as usize,
+        )
+    };
+
+    let mut conns = rows
+        .into_iter()
+        .map(|row| parse_tcp_v6_row(*row))
+        .collect::<std::io::Result<Vec<_>>>()?;
+
+    // SAFETY: We never modify the layout. The `GetExtendedTcpTable` call does
+    // not affect buffer ownership and it is not released beforehand. Everything
+    // that is returned contains it's own copy of the data from the table.
+    unsafe {
+        std::alloc::dealloc(buf, buf_layout);
+    }
+
+    Ok(TcpConnections {
+        iter: conns.into_iter(),
+    })
+}
+
 // TODO(@panhania): This should return a custom error type instead.
 /// Parses a connection row of a TCP IPv4 table.
 fn parse_tcp_v4_row(
@@ -422,6 +557,34 @@ fn parse_tcp_v4_row(
         local_addr: std::net::SocketAddrV4::new(local_addr, local_port)
             .into(),
         remote_addr: std::net::SocketAddrV4::new(remote_addr, remote_port)
+            .into(),
+        state,
+    })
+}
+
+// TODO(@panhania): This should return a custom error type instead.
+/// Parses a connection row of a TCP IPv6 table.
+fn parse_tcp_v6_row(
+    row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_TCP6ROW_OWNER_PID,
+) -> std::io::Result<TcpConnection>
+{
+    let local_addr = std::net::Ipv6Addr::from(row.ucLocalAddr);
+    let local_port = row.dwLocalPort as u16;
+
+    let remote_addr = std::net::Ipv6Addr::from(row.ucRemoteAddr);
+    let remote_port = row.dwRemotePort as u16;
+
+    let state = parse_tcp_state(row.dwState)
+        .map_err(|error| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+        })?;
+
+    // TODO(@panhania): Extend with PID information.
+
+    Ok(TcpConnection {
+        local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0)
+            .into(),
+        remote_addr: std::net::SocketAddrV6::new(remote_addr, remote_port, 0, 0)
             .into(),
         state,
     })
