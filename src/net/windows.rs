@@ -382,7 +382,7 @@ pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
         )
     };
 
-    let mut conns = rows
+    let conns = rows
         .into_iter()
         .map(|row| parse_tcp_v4_row(*row))
         .collect::<std::io::Result<Vec<_>>>()?;
@@ -517,7 +517,7 @@ pub fn all_tcp_v6_connections() -> std::io::Result<TcpConnections> {
         )
     };
 
-    let mut conns = rows
+    let conns = rows
         .into_iter()
         .map(|row| parse_tcp_v6_row(*row))
         .collect::<std::io::Result<Vec<_>>>()?;
