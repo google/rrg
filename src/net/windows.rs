@@ -390,6 +390,11 @@ pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
         let remote_addr = std::net::Ipv4Addr::from(row.dwRemoteAddr);
         let remote_port = row.dwRemotePort as u16;
 
+        let state = parse_tcp_state(row.dwState)
+            .map_err(|error| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+            })?;
+
         // TODO(@panhania): Extend with PID information.
 
         conns.push(TcpConnection {
@@ -397,8 +402,7 @@ pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
                 .into(),
             remote_addr: std::net::SocketAddrV4::new(remote_addr, remote_port)
                 .into(),
-            state: parse_tcp_state(row.dwState)
-                .unwrap(), // TODO(@panhania): Improve error handling.
+            state,
         });
     }
 
@@ -414,11 +418,11 @@ pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
     })
 }
 
-/// Parses a TCP connection state integer returned by the system.
-fn parse_tcp_state(int: u32) -> Result<TcpState, ()> {
+/// Parses a TCP connection state value returned by the system.
+fn parse_tcp_state(val: u32) -> Result<TcpState, ParseTcpStateError> {
     use windows_sys::Win32::NetworkManagement::IpHelper::*;
 
-    let state = match int as i32 {
+    let state = match val as i32 {
         MIB_TCP_STATE_CLOSED => TcpState::Closed,
         MIB_TCP_STATE_LISTEN => TcpState::Listen,
         MIB_TCP_STATE_SYN_SENT => TcpState::SynSent,
@@ -435,8 +439,7 @@ fn parse_tcp_state(int: u32) -> Result<TcpState, ()> {
         //
         // [1]: https://www.ietf.org/rfc/rfc793.txt
         MIB_TCP_STATE_DELETE_TCB => TcpState::Closed,
-        // TODO(@panhania): Add proper error handling.
-        _ => return Err(()),
+        _ => return Err(ParseTcpStateError::UnknownState(val)),
     };
 
     Ok(state)
@@ -453,6 +456,28 @@ impl Iterator for TcpConnections {
     fn next(&mut self) -> Option<std::io::Result<TcpConnection>> {
         self.iter.next().map(Result::Ok)
     }
+}
+
+/// An error that might be returned when interpreting Windows TCP state value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ParseTcpStateError {
+    /// The state value is not a known.
+    UnknownState(u32),
+}
+
+impl std::fmt::Display for ParseTcpStateError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ParseTcpStateError::*;
+        match *self {
+            UnknownState(val) => {
+                write!(fmt, "unknown TPC state value: {}", val)
+            },
+        }
+    }
+}
+
+impl std::error::Error for ParseTcpStateError {
 }
 
 // The official Microsoft documentation recommends "15KB" [1] as the default

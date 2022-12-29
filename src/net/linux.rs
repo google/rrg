@@ -575,6 +575,7 @@ impl std::fmt::Display for ParseSocketAddrError {
 impl std::error::Error for ParseSocketAddrError {
 }
 
+// TODO(@panhania): This does not have to be public.
 /// An error that might be returned when parsing procfs TCP connection state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParseTcpStateError {
