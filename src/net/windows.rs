@@ -398,7 +398,10 @@ pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
     let conns = rows
         .into_iter()
         .map(|row| parse_tcp_v4_row(*row))
-        .collect::<std::io::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+        })?;
 
     // SAFETY: We never modify the layout. The `GetExtendedTcpTable` call does
     // not affect buffer ownership and it is not released beforehand. Everything
@@ -533,7 +536,10 @@ pub fn all_tcp_v6_connections() -> std::io::Result<TcpConnections> {
     let conns = rows
         .into_iter()
         .map(|row| parse_tcp_v6_row(*row))
-        .collect::<std::io::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+        })?;
 
     // SAFETY: We never modify the layout. The `GetExtendedTcpTable` call does
     // not affect buffer ownership and it is not released beforehand. Everything
@@ -547,22 +553,23 @@ pub fn all_tcp_v6_connections() -> std::io::Result<TcpConnections> {
     })
 }
 
-// TODO(@panhania): This should return a custom error type instead.
 /// Parses a connection row of a TCP IPv4 table.
 fn parse_tcp_v4_row(
     row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_TCPROW_OWNER_PID,
-) -> std::io::Result<TcpConnection>
+) -> Result<TcpConnection, ParseConnectionError>
 {
+    use std::convert::TryFrom as _;
+
     let local_addr = std::net::Ipv4Addr::from(row.dwLocalAddr);
-    let local_port = row.dwLocalPort as u16;
+    let local_port = u16::try_from(row.dwLocalPort)
+        .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
 
     let remote_addr = std::net::Ipv4Addr::from(row.dwRemoteAddr);
-    let remote_port = row.dwRemotePort as u16;
+    let remote_port = u16::try_from(row.dwRemotePort)
+        .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
 
     let state = parse_tcp_state(row.dwState)
-        .map_err(|error| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-        })?;
+        .map_err(ParseConnectionError::InvalidState)?;
 
     // TODO(@panhania): Extend with PID information.
 
@@ -573,22 +580,23 @@ fn parse_tcp_v4_row(
     })
 }
 
-// TODO(@panhania): This should return a custom error type instead.
 /// Parses a connection row of a TCP IPv6 table.
 fn parse_tcp_v6_row(
     row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_TCP6ROW_OWNER_PID,
-) -> std::io::Result<TcpConnection>
+) -> Result<TcpConnection, ParseConnectionError>
 {
+    use std::convert::TryFrom as _;
+
     let local_addr = std::net::Ipv6Addr::from(row.ucLocalAddr);
-    let local_port = row.dwLocalPort as u16;
+    let local_port = u16::try_from(row.dwLocalPort)
+        .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
 
     let remote_addr = std::net::Ipv6Addr::from(row.ucRemoteAddr);
-    let remote_port = row.dwRemotePort as u16;
+    let remote_port = u16::try_from(row.dwRemotePort)
+        .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
 
     let state = parse_tcp_state(row.dwState)
-        .map_err(|error| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-        })?;
+        .map_err(ParseConnectionError::InvalidState)?;
 
     // TODO(@panhania): Extend with PID information.
 
@@ -597,6 +605,40 @@ fn parse_tcp_v6_row(
         remote_addr: (remote_addr, remote_port).into(),
         state,
     })
+}
+
+/// An error that might be returned when parsing Windows connection table row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ParseConnectionError {
+    /// It was not possible to parse the local address port.
+    InvalidLocalPort,
+    /// It was not possible to parse the remote address port.
+    InvalidRemotePort,
+    /// It was not possible to interpret the connection state.
+    InvalidState(ParseTcpStateError),
+}
+
+impl std::fmt::Display for ParseConnectionError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ParseConnectionError::*;
+        match *self {
+            InvalidLocalPort => {
+                write!(fmt, "invalid local port")
+            }
+            InvalidRemotePort => {
+                write!(fmt, "invalid remote port")
+            }
+            InvalidState(error) => {
+                write!(fmt, "invalid state: {}", error)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParseConnectionError {
+    // We could implement `source` for this error type but since it is not
+    // exposed, there is no need to do so.
 }
 
 /// Parses a TCP connection state value returned by the system.
