@@ -554,10 +554,8 @@ fn parse_tcp_v4_row(
     // TODO(@panhania): Extend with PID information.
 
     Ok(TcpConnection {
-        local_addr: std::net::SocketAddrV4::new(local_addr, local_port)
-            .into(),
-        remote_addr: std::net::SocketAddrV4::new(remote_addr, remote_port)
-            .into(),
+        local_addr: (local_addr, local_port).into(),
+        remote_addr: (remote_addr, remote_port).into(),
         state,
     })
 }
@@ -582,10 +580,8 @@ fn parse_tcp_v6_row(
     // TODO(@panhania): Extend with PID information.
 
     Ok(TcpConnection {
-        local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0)
-            .into(),
-        remote_addr: std::net::SocketAddrV6::new(remote_addr, remote_port, 0, 0)
-            .into(),
+        local_addr: (local_addr, local_port).into(),
+        remote_addr: (remote_addr, remote_port).into(),
         state,
     })
 }
