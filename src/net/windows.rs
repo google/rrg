@@ -28,22 +28,8 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
         std::mem::align_of::<IP_ADAPTER_ADDRESSES_LH>(),
     ).expect("invalid layout for adapter addresses table");
 
-    // SAFETY: The layout is constructer above from known parameters and it is
-    // garanteed to be non-zero. The memory does not have to be initialized as
-    // we are using this buffer an an output parameter.
-    let mut buf = unsafe {
-        std::alloc::alloc(buf_layout)
-    };
-
-    // Since we generally don't expect to be out of memory, we could abort. But
-    // running this operation is not-critical and maybe we really requested a
-    // lot of memory that we should not have (for whathever reason), so we just
-    // return an error and continue to roll.
-    if buf.is_null() {
-        return Err(std::io::ErrorKind::OutOfMemory.into());
-    }
-
-    let addrs = buf.cast::<IP_ADAPTER_ADDRESSES_LH>();
+    let mut buf = crate::alloc::Allocation::new(buf_layout)
+        .ok_or_else(|| std::io::ErrorKind::OutOfMemory)?;
 
     // SAFETY: We call the function as described in the official docs [1]. In
     // case the allocated buffer is too small, we handle this case below.
@@ -56,7 +42,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
             // Probably we don't need any extra information.
             0,
             std::ptr::null_mut(),
-            addrs,
+            buf.as_ptr().cast().as_ptr(),
             &mut buf_size,
         )
     };
@@ -66,29 +52,8 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
         // one should be strictly bigger.
         assert!(DEFAULT_BUF_SIZE < (buf_size as usize));
 
-        // SAFETY: We reallocate the buffer with the same layout as it was init-
-        // ially created. The assertion above guarantees that the buffer size is
-        // valid.
-        let new_buf = unsafe {
-            std::alloc::realloc(buf, buf_layout, buf_size as usize)
-        };
-
-        // See a similar comment when the intial allocation fails explaining why
-        // we do not panic here.
-        if new_buf.is_null() {
-            // SAFETY: We need to deallocate the original buffer since changing
-            // the allocation failed and did not transfer the ownership. Since
-            // we use the original layout, this operation is safe.
-            unsafe {
-                std::alloc::dealloc(buf, buf_layout);
-            }
-
-            return Err(std::io::ErrorKind::OutOfMemory.into());
-        }
-
-        buf = new_buf;
-        // TODO(@panhania): We still use old `addr` (that might even be a dang-
-        // ling pointer at this point!).
+        buf = buf.resize(buf_size as usize)
+            .map_err(|_| std::io::ErrorKind::OutOfMemory)?;
 
         // SAFETY: We call the function the same as above but with larger result
         // buffer. Note that this can still fail in an unlikely case where a new
@@ -101,19 +66,13 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
                 // Probably we don't need any extra information.
                 0,
                 std::ptr::null_mut(),
-                addrs,
+                buf.as_ptr().cast().as_ptr(),
                 &mut buf_size,
             )
         };
     }
 
     if code != windows_sys::Win32::Foundation::NO_ERROR {
-        // SAFETY: We still own the buffer and have to free it in case of an
-        // early return. We never modify the layout, so this is safe.
-        unsafe {
-            std::alloc::dealloc(buf, buf_layout);
-        }
-
         let code = i32::try_from(code)
             .expect("invalid error code");
 
@@ -122,7 +81,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 
     let mut ifaces = std::collections::HashMap::new();
 
-    let mut addr_iter = addrs;
+    let mut addr_iter = buf.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>().as_ptr();
     // SAFETY: We validate that the `GetAdaptersAddresses` call above did not
     // fail. Thus, the buffer was filled with valid data and now we can iterate
     // over the list using the `Next` pointers [1, 2].
@@ -251,14 +210,6 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
         }
 
         addr_iter = addr.Next;
-    }
-
-    // SAFETY: We never modify the layout. The `GetAdaptersAddresses` call does
-    // not affect buffer ownership and it is not released beforehand. Note that
-    // none of the data we collected references values of the list (as we make
-    // explicit copies).
-    unsafe {
-        std::alloc::dealloc(buf, buf_layout);
     }
 
     Ok(ifaces.into_values())
