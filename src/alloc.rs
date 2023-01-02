@@ -130,3 +130,64 @@ impl Drop for Allocation {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn allocation_new() {
+        let layout = std::alloc::Layout::new::<u32>();
+        assert!(crate::alloc::Allocation::new(layout).is_some());
+    }
+
+    #[test]
+    #[should_panic]
+    fn allocation_new_zero_size() {
+        // SAFETY: Layouts are allowed to have size of 0 (it is just not allowed
+        // to use them). Alignment value is guaranteed to be correct as we use
+        // the `std::mem::align_of` function to obtain it.
+        let layout = unsafe {
+            std::alloc::Layout::from_size_align_unchecked(
+                0,
+                std::mem::align_of::<u32>(),
+            )
+        };
+
+        let _ = crate::alloc::Allocation::new(layout);
+    }
+
+    #[test]
+    fn allocation_resize() {
+        let layout = std::alloc::Layout::new::<[u32; 2]>();
+
+        let alloc = crate::alloc::Allocation::new(layout)
+            .unwrap();
+        assert!(alloc.resize(std::mem::size_of::<[u32; 4]>()).is_ok());
+    }
+
+    #[test]
+    #[should_panic]
+    fn allocation_resize_zero_size() {
+        let layout = std::alloc::Layout::new::<u32>();
+
+        let alloc = crate::alloc::Allocation::new(layout)
+            .unwrap();
+        let _ = alloc.resize(0);
+    }
+
+    #[test]
+    fn allocation_write_and_read() {
+        let layout = std::alloc::Layout::new::<u32>();
+
+        let alloc = crate::alloc::Allocation::new(layout)
+            .unwrap();
+
+        // SAFETY: We allocated a buffer for `u32` and now we just use it.
+        let val = unsafe {
+            alloc.as_ptr().cast::<u32>().as_mut()
+        };
+
+        *val = 1337;
+        assert_eq!(*val, 1337);
+    }
+}
