@@ -61,6 +61,8 @@ impl Allocation {
     /// overflows when rounded to the original alignment.
     #[inline]
     pub fn resize(mut self, new_size: usize) -> Result<Allocation, Allocation> {
+        assert!(new_size > 0);
+
         let new_layout = std::alloc::Layout::from_size_align(
             new_size,
             self.layout.align(),
@@ -78,9 +80,10 @@ impl Allocation {
         // layout around in the struct.
         //
         // Finally, we need to ensure that `new_size` is greater than zero and
-        // that it does not overflow when rounded up to the alignment. This is
-        // ensured by the `from_size_align` call above that returns an error if
-        // the two conditions are not met.
+        // that it does not overflow when rounded up to the alignment. The first
+        // part is ensured by our assertion whereas the second part is ensured
+        // by the `from_size_align` call which returns an error if the condition
+        // is not met.
         let ptr = unsafe {
             std::alloc::realloc(self.ptr.as_ptr(), self.layout, new_size)
         };
