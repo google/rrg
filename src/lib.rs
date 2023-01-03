@@ -5,6 +5,7 @@
 
 // TODO: Hide irrelevant modules.
 
+pub mod alloc;
 pub mod action;
 pub mod fs;
 pub mod io;
