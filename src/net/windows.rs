@@ -590,22 +590,22 @@ mod connection {
     use super::*;
 
     /// Returns an iterator over all system TCP IPv4 connections.
-    pub fn all_tcp_v4() -> std::io::Result<impl Iterator<Item = TcpConnection>> {
+    pub fn all_tcp_v4() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
         all::<MIB_TCPTABLE_OWNER_PID>()
     }
 
     /// Returns an iterator over all system TCP IPv6 connections.
-    pub fn all_tcp_v6() -> std::io::Result<impl Iterator<Item = TcpConnection>> {
+    pub fn all_tcp_v6() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
         all::<MIB_TCP6TABLE_OWNER_PID>()
     }
 
     /// Returns an iterator over all system UDP IPv4 connections.
-    pub fn all_udp_v4() -> std::io::Result<impl Iterator<Item = UdpConnection>> {
+    pub fn all_udp_v4() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
         all::<MIB_UDPTABLE_OWNER_PID>()
     }
 
     /// Returns an iterator over all system UDP IPv6 connections.
-    pub fn all_udp_v6() -> std::io::Result<impl Iterator<Item = UdpConnection>> {
+    pub fn all_udp_v6() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
         all::<MIB_UDP6TABLE_OWNER_PID>()
     }
 
@@ -809,7 +809,7 @@ mod connection {
     }
 
     /// Returns an iterator over all system connections of a specific type.
-    fn all<T>() -> std::io::Result<impl Iterator<Item = T::Connection>>
+    fn all<T>() -> std::io::Result<impl Iterator<Item = std::io::Result<T::Connection>>>
     where
         T: Table,
     {
@@ -872,12 +872,11 @@ mod connection {
 
         let conns = rows
             .iter()
-            .map(T::parse_row)
-            // TODO(@panhania): Eliminate vector collection.
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| {
+            // TODO(@panhania): Simplify the following lines.
+            .map(|row| T::parse_row(row).map_err(|error| {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-            })?;
+            }))
+            .collect::<Vec<_>>();
 
         Ok(conns.into_iter())
     }
