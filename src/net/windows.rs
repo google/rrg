@@ -216,7 +216,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 }
 
 /// Iterator over TCP connections.
-pub struct TcpConnections {
+struct TcpConnections {
     iter: std::vec::IntoIter<TcpConnection>,
 }
 
@@ -229,7 +229,7 @@ impl Iterator for TcpConnections {
 }
 
 /// Iterator over UDP connections.
-pub struct UdpConnections {
+struct UdpConnections {
     iter: std::vec::IntoIter<UdpConnection>,
 }
 
@@ -242,7 +242,7 @@ impl Iterator for UdpConnections {
 }
 
 /// Returns an iterator over IPv4 TCP connections of all processes.
-pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
+pub fn all_tcp_v4_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
     use std::convert::TryFrom as _;
 
     use windows_sys::Win32::NetworkManagement::IpHelper::*;
@@ -336,7 +336,7 @@ pub fn all_tcp_v4_connections() -> std::io::Result<TcpConnections> {
 }
 
 /// Returns an iterator over IPv6 TCP connections of all processes.
-pub fn all_tcp_v6_connections() -> std::io::Result<TcpConnections> {
+pub fn all_tcp_v6_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
     use std::convert::TryFrom as _;
 
     use windows_sys::Win32::NetworkManagement::IpHelper::*;
@@ -430,7 +430,7 @@ pub fn all_tcp_v6_connections() -> std::io::Result<TcpConnections> {
 }
 
 /// Returns an iterator over IPv4 UDP connections of all processes.
-pub fn all_udp_v4_connections() -> std::io::Result<UdpConnections> {
+pub fn all_udp_v4_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
     use std::convert::TryFrom as _;
 
     use windows_sys::Win32::NetworkManagement::IpHelper::*;
@@ -524,7 +524,7 @@ pub fn all_udp_v4_connections() -> std::io::Result<UdpConnections> {
 }
 
 /// Returns an iterator over IPv6 UDP connections of all processes.
-pub fn all_udp_v6_connections() -> std::io::Result<UdpConnections> {
+pub fn all_udp_v6_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
     use std::convert::TryFrom as _;
 
     use windows_sys::Win32::NetworkManagement::IpHelper::*;
