@@ -215,32 +215,6 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     Ok(ifaces.into_values())
 }
 
-/// Iterator over TCP connections.
-struct TcpConnections {
-    iter: std::vec::IntoIter<TcpConnection>,
-}
-
-impl Iterator for TcpConnections {
-    type Item = std::io::Result<TcpConnection>;
-
-    fn next(&mut self) -> Option<std::io::Result<TcpConnection>> {
-        self.iter.next().map(Result::Ok)
-    }
-}
-
-/// Iterator over UDP connections.
-struct UdpConnections {
-    iter: std::vec::IntoIter<UdpConnection>,
-}
-
-impl Iterator for UdpConnections {
-    type Item = std::io::Result<UdpConnection>;
-
-    fn next(&mut self) -> Option<std::io::Result<UdpConnection>> {
-        self.iter.next().map(Result::Ok)
-    }
-}
-
 /// Returns an iterator over IPv4 TCP connections of all processes.
 pub fn all_tcp_v4_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
     use std::convert::TryFrom as _;
@@ -330,9 +304,7 @@ pub fn all_tcp_v4_connections() -> std::io::Result<impl Iterator<Item = std::io:
             std::io::Error::new(std::io::ErrorKind::InvalidData, error)
         })?;
 
-    Ok(TcpConnections {
-        iter: conns.into_iter(),
-    })
+    Ok(conns.into_iter().map(Result::Ok))
 }
 
 /// Returns an iterator over IPv6 TCP connections of all processes.
@@ -424,9 +396,7 @@ pub fn all_tcp_v6_connections() -> std::io::Result<impl Iterator<Item = std::io:
             std::io::Error::new(std::io::ErrorKind::InvalidData, error)
         })?;
 
-    Ok(TcpConnections {
-        iter: conns.into_iter(),
-    })
+    Ok(conns.into_iter().map(Result::Ok))
 }
 
 /// Returns an iterator over IPv4 UDP connections of all processes.
@@ -518,9 +488,7 @@ pub fn all_udp_v4_connections() -> std::io::Result<impl Iterator<Item = std::io:
             std::io::Error::new(std::io::ErrorKind::InvalidData, error)
         })?;
 
-    Ok(UdpConnections {
-        iter: conns.into_iter(),
-    })
+    Ok(conns.into_iter().map(Result::Ok))
 }
 
 /// Returns an iterator over IPv6 UDP connections of all processes.
@@ -612,9 +580,7 @@ pub fn all_udp_v6_connections() -> std::io::Result<impl Iterator<Item = std::io:
             std::io::Error::new(std::io::ErrorKind::InvalidData, error)
         })?;
 
-    Ok(UdpConnections {
-        iter: conns.into_iter(),
-    })
+    Ok(conns.into_iter().map(Result::Ok))
 }
 
 mod connection {
