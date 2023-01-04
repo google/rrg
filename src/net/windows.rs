@@ -353,8 +353,26 @@ mod connection {
         fn parse_row(
             row: &MIB_TCPROW_OWNER_PID,
         ) -> Result<TcpConnection, ParseConnectionError> {
-            // TODO(@panhania): Pass by reference.
-            super::parse_tcp_v4_row(*row)
+            use std::convert::TryFrom as _;
+
+            let local_addr = std::net::Ipv4Addr::from(row.dwLocalAddr);
+            let local_port = u16::try_from(row.dwLocalPort)
+                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+
+            let remote_addr = std::net::Ipv4Addr::from(row.dwRemoteAddr);
+            let remote_port = u16::try_from(row.dwRemotePort)
+                .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
+
+            let state = parse_tcp_state(row.dwState)
+                .map_err(ParseConnectionError::InvalidState)?;
+
+            // TODO(@panhania): Extend with PID information.
+
+            Ok(TcpConnection {
+                local_addr: (local_addr, local_port).into(),
+                remote_addr: (remote_addr, remote_port).into(),
+                state,
+            })
         }
     }
 
@@ -387,8 +405,26 @@ mod connection {
         fn parse_row(
             row: &MIB_TCP6ROW_OWNER_PID,
         ) -> Result<TcpConnection, ParseConnectionError> {
-            // TODO(@panhania): Pass by reference.
-            super::parse_tcp_v6_row(*row)
+            use std::convert::TryFrom as _;
+
+            let local_addr = std::net::Ipv6Addr::from(row.ucLocalAddr);
+            let local_port = u16::try_from(row.dwLocalPort)
+                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+
+            let remote_addr = std::net::Ipv6Addr::from(row.ucRemoteAddr);
+            let remote_port = u16::try_from(row.dwRemotePort)
+                .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
+
+            let state = parse_tcp_state(row.dwState)
+                .map_err(ParseConnectionError::InvalidState)?;
+
+            // TODO(@panhania): Extend with PID information.
+
+            Ok(TcpConnection {
+                local_addr: (local_addr, local_port).into(),
+                remote_addr: (remote_addr, remote_port).into(),
+                state,
+            })
         }
     }
 
@@ -421,8 +457,17 @@ mod connection {
         fn parse_row(
             row: &MIB_UDPROW_OWNER_PID,
         ) -> Result<UdpConnection, ParseConnectionError> {
-            // TODO(@panhania): Pass by reference.
-            super::parse_udp_v4_row(*row)
+            use std::convert::TryFrom as _;
+
+            let local_addr = std::net::Ipv4Addr::from(row.dwLocalAddr);
+            let local_port = u16::try_from(row.dwLocalPort)
+                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+
+            // TODO(@panhania): Extend with PID information.
+
+            Ok(UdpConnection {
+                local_addr: (local_addr, local_port).into(),
+            })
         }
     }
 
@@ -455,8 +500,17 @@ mod connection {
         fn parse_row(
             row: &MIB_UDP6ROW_OWNER_PID,
         ) -> Result<UdpConnection, ParseConnectionError> {
-            // TODO(@panhania): Pass by reference.
-            super::parse_udp_v6_row(*row)
+            use std::convert::TryFrom as _;
+
+            let local_addr = std::net::Ipv6Addr::from(row.ucLocalAddr);
+            let local_port = u16::try_from(row.dwLocalPort)
+                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+
+            // TODO(@panhania): Extend with PID information.
+
+            Ok(UdpConnection {
+                local_addr: (local_addr, local_port).into(),
+            })
         }
     }
 
@@ -532,96 +586,6 @@ mod connection {
 
         Ok(conns.into_iter())
     }
-}
-
-/// Parses a connection row of a TCP IPv4 table.
-fn parse_tcp_v4_row(
-    row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_TCPROW_OWNER_PID,
-) -> Result<TcpConnection, ParseConnectionError>
-{
-    use std::convert::TryFrom as _;
-
-    let local_addr = std::net::Ipv4Addr::from(row.dwLocalAddr);
-    let local_port = u16::try_from(row.dwLocalPort)
-        .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-
-    let remote_addr = std::net::Ipv4Addr::from(row.dwRemoteAddr);
-    let remote_port = u16::try_from(row.dwRemotePort)
-        .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
-
-    let state = parse_tcp_state(row.dwState)
-        .map_err(ParseConnectionError::InvalidState)?;
-
-    // TODO(@panhania): Extend with PID information.
-
-    Ok(TcpConnection {
-        local_addr: (local_addr, local_port).into(),
-        remote_addr: (remote_addr, remote_port).into(),
-        state,
-    })
-}
-
-/// Parses a connection row of a TCP IPv6 table.
-fn parse_tcp_v6_row(
-    row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_TCP6ROW_OWNER_PID,
-) -> Result<TcpConnection, ParseConnectionError>
-{
-    use std::convert::TryFrom as _;
-
-    let local_addr = std::net::Ipv6Addr::from(row.ucLocalAddr);
-    let local_port = u16::try_from(row.dwLocalPort)
-        .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-
-    let remote_addr = std::net::Ipv6Addr::from(row.ucRemoteAddr);
-    let remote_port = u16::try_from(row.dwRemotePort)
-        .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
-
-    let state = parse_tcp_state(row.dwState)
-        .map_err(ParseConnectionError::InvalidState)?;
-
-    // TODO(@panhania): Extend with PID information.
-
-    Ok(TcpConnection {
-        local_addr: (local_addr, local_port).into(),
-        remote_addr: (remote_addr, remote_port).into(),
-        state,
-    })
-}
-
-/// Parses a connection row of a UDP IPv4 table.
-fn parse_udp_v4_row(
-    row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_UDPROW_OWNER_PID,
-) -> Result<UdpConnection, ParseConnectionError>
-{
-    use std::convert::TryFrom as _;
-
-    let local_addr = std::net::Ipv4Addr::from(row.dwLocalAddr);
-    let local_port = u16::try_from(row.dwLocalPort)
-        .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-
-    // TODO(@panhania): Extend with PID information.
-
-    Ok(UdpConnection {
-        local_addr: (local_addr, local_port).into(),
-    })
-}
-
-/// Parses a connection row of a UDP IPv6 table.
-fn parse_udp_v6_row(
-    row: windows_sys::Win32::NetworkManagement::IpHelper::MIB_UDP6ROW_OWNER_PID,
-) -> Result<UdpConnection, ParseConnectionError>
-{
-    use std::convert::TryFrom as _;
-
-    let local_addr = std::net::Ipv6Addr::from(row.ucLocalAddr);
-    let local_port = u16::try_from(row.dwLocalPort)
-        .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-
-    // TODO(@panhania): Extend with PID information.
-
-    Ok(UdpConnection {
-        local_addr: (local_addr, local_port).into(),
-    })
 }
 
 /// An error that might be returned when parsing Windows connection table row.
