@@ -261,6 +261,131 @@ mod connection {
         all::<MIB_UDP6TABLE_OWNER_PID>()
     }
 
+    /// An abstraction over Windows TCP and UDP connection table row.
+    ///
+    /// This trait makes it possible to work with TCP and UDP tables returned
+    /// by the Windows API in a generic way. It should be only implemented for
+    /// the following four types:
+    ///
+    ///   * [`MIB_TCPTABLE_OWNER_PID`]
+    ///   * [`MIB_TCP6TABLE_OWNER_PID`]
+    ///   * [`MIB_UDPTABLE_OWNER_PID`]
+    ///   * [`MIB_UDP6TABLE_OWNER_PID`]
+    ///
+    /// It is not intended to ever be exposed and should be used only to avoid
+    /// code duplication in concrete implementations that care about specific
+    /// portocol and version combinations.
+    trait Row {
+        /// An idiomatic Rust type that the row type corresponds to.
+        type Connection;
+
+        /// Transforms a low-level row structore to an idiomatic Rust type.
+        ///
+        /// # Errors
+        ///
+        /// The function returns an error if the row table contains malformed or
+        /// uninterpretable data.
+        fn parse(&self) -> Result<Self::Connection, ParseConnectionError>;
+    }
+
+    impl Row for MIB_TCPROW_OWNER_PID {
+
+        type Connection = TcpConnection;
+
+        // https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcprow_owner_pid
+        fn parse(&self) -> Result<TcpConnection, ParseConnectionError> {
+            use std::convert::TryFrom as _;
+
+            let local_addr = std::net::Ipv4Addr::from(self.dwLocalAddr);
+            let local_port = u16::try_from(self.dwLocalPort)
+                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+
+            let remote_addr = std::net::Ipv4Addr::from(self.dwRemoteAddr);
+            let remote_port = u16::try_from(self.dwRemotePort)
+                .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
+
+            let state = parse_tcp_state(self.dwState)
+                .map_err(ParseConnectionError::InvalidState)?;
+
+            // TODO(@panhania): Extend with PID information.
+
+            Ok(TcpConnection {
+                local_addr: (local_addr, local_port).into(),
+                remote_addr: (remote_addr, remote_port).into(),
+                state,
+            })
+        }
+    }
+
+    impl Row for MIB_TCP6ROW_OWNER_PID {
+
+        type Connection = TcpConnection;
+
+        // https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcp6row_owner_pid
+        fn parse(&self) -> Result<TcpConnection, ParseConnectionError> {
+            use std::convert::TryFrom as _;
+
+            let local_addr = std::net::Ipv6Addr::from(self.ucLocalAddr);
+            let local_port = u16::try_from(self.dwLocalPort)
+                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+
+            let remote_addr = std::net::Ipv6Addr::from(self.ucRemoteAddr);
+            let remote_port = u16::try_from(self.dwRemotePort)
+                .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
+
+            let state = parse_tcp_state(self.dwState)
+                .map_err(ParseConnectionError::InvalidState)?;
+
+            // TODO(@panhania): Extend with PID information.
+
+            Ok(TcpConnection {
+                local_addr: (local_addr, local_port).into(),
+                remote_addr: (remote_addr, remote_port).into(),
+                state,
+            })
+        }
+    }
+
+    impl Row for MIB_UDPROW_OWNER_PID {
+
+        type Connection = UdpConnection;
+
+        // https://learn.microsoft.com/en-us/windows/win32/api/udpmib/ns-udpmib-mib_udprow_owner_pid
+        fn parse(&self) -> Result<UdpConnection, ParseConnectionError> {
+            use std::convert::TryFrom as _;
+
+            let local_addr = std::net::Ipv4Addr::from(self.dwLocalAddr);
+            let local_port = u16::try_from(self.dwLocalPort)
+                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+
+            // TODO(@panhania): Extend with PID information.
+
+            Ok(UdpConnection {
+                local_addr: (local_addr, local_port).into(),
+            })
+        }
+    }
+
+    impl Row for MIB_UDP6ROW_OWNER_PID {
+
+        type Connection = UdpConnection;
+
+        // https://learn.microsoft.com/en-us/windows/win32/api/udpmib/ns-udpmib-mib_udp6row_owner_pid
+        fn parse(&self) -> Result<UdpConnection, ParseConnectionError> {
+            use std::convert::TryFrom as _;
+
+            let local_addr = std::net::Ipv6Addr::from(self.ucLocalAddr);
+            let local_port = u16::try_from(self.dwLocalPort)
+                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+
+            // TODO(@panhania): Extend with PID information.
+
+            Ok(UdpConnection {
+                local_addr: (local_addr, local_port).into(),
+            })
+        }
+    }
+
     /// An abstraction over Windows TCP and UDP connection tables.
     ///
     /// This trait makes it possible to work with TCP and UDP tables returned
@@ -277,10 +402,7 @@ mod connection {
     /// portocol and version combinations.
     trait Table {
         /// The Windows type of the table rows.
-        type Row;
-
-        /// An idiomatic Rust type that the table contains information for.
-        type Connection;
+        type Row: Row;
 
         /// Calls the native `GetExtended*Table` system function.
         ///
@@ -317,18 +439,11 @@ mod connection {
         /// function (and thus `table` and `dwNumEntries` fields uphold to the
         /// invariants specified in the Windows documentation).
         unsafe fn rows(&self) -> &[Self::Row];
-
-        /// Transforms a low-level row structore to an idiomatic Rust type.
-        fn parse_row(
-            row: &Self::Row,
-        ) -> Result<Self::Connection, ParseConnectionError>;
     }
 
     impl Table for MIB_TCPTABLE_OWNER_PID {
 
         type Row = MIB_TCPROW_OWNER_PID;
-
-        type Connection = TcpConnection;
 
         // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable#parameters
         unsafe fn get(buf: *mut std::ffi::c_void, buf_size: &mut u32) -> u32 {
@@ -349,38 +464,11 @@ mod connection {
                 self.dwNumEntries as usize,
             )
         }
-
-        fn parse_row(
-            row: &MIB_TCPROW_OWNER_PID,
-        ) -> Result<TcpConnection, ParseConnectionError> {
-            use std::convert::TryFrom as _;
-
-            let local_addr = std::net::Ipv4Addr::from(row.dwLocalAddr);
-            let local_port = u16::try_from(row.dwLocalPort)
-                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-
-            let remote_addr = std::net::Ipv4Addr::from(row.dwRemoteAddr);
-            let remote_port = u16::try_from(row.dwRemotePort)
-                .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
-
-            let state = parse_tcp_state(row.dwState)
-                .map_err(ParseConnectionError::InvalidState)?;
-
-            // TODO(@panhania): Extend with PID information.
-
-            Ok(TcpConnection {
-                local_addr: (local_addr, local_port).into(),
-                remote_addr: (remote_addr, remote_port).into(),
-                state,
-            })
-        }
     }
 
     impl Table for MIB_TCP6TABLE_OWNER_PID {
 
         type Row = MIB_TCP6ROW_OWNER_PID;
-
-        type Connection = TcpConnection;
 
         // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable#parameters
         unsafe fn get(buf: *mut std::ffi::c_void, buf_size: &mut u32) -> u32 {
@@ -401,38 +489,11 @@ mod connection {
                 self.dwNumEntries as usize,
             )
         }
-
-        fn parse_row(
-            row: &MIB_TCP6ROW_OWNER_PID,
-        ) -> Result<TcpConnection, ParseConnectionError> {
-            use std::convert::TryFrom as _;
-
-            let local_addr = std::net::Ipv6Addr::from(row.ucLocalAddr);
-            let local_port = u16::try_from(row.dwLocalPort)
-                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-
-            let remote_addr = std::net::Ipv6Addr::from(row.ucRemoteAddr);
-            let remote_port = u16::try_from(row.dwRemotePort)
-                .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
-
-            let state = parse_tcp_state(row.dwState)
-                .map_err(ParseConnectionError::InvalidState)?;
-
-            // TODO(@panhania): Extend with PID information.
-
-            Ok(TcpConnection {
-                local_addr: (local_addr, local_port).into(),
-                remote_addr: (remote_addr, remote_port).into(),
-                state,
-            })
-        }
     }
 
     impl Table for MIB_UDPTABLE_OWNER_PID {
 
         type Row = MIB_UDPROW_OWNER_PID;
-
-        type Connection = UdpConnection;
 
         // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable
         unsafe fn get(buf: *mut std::ffi::c_void, buf_size: &mut u32) -> u32 {
@@ -453,29 +514,11 @@ mod connection {
                 self.dwNumEntries as usize,
             )
         }
-
-        fn parse_row(
-            row: &MIB_UDPROW_OWNER_PID,
-        ) -> Result<UdpConnection, ParseConnectionError> {
-            use std::convert::TryFrom as _;
-
-            let local_addr = std::net::Ipv4Addr::from(row.dwLocalAddr);
-            let local_port = u16::try_from(row.dwLocalPort)
-                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-
-            // TODO(@panhania): Extend with PID information.
-
-            Ok(UdpConnection {
-                local_addr: (local_addr, local_port).into(),
-            })
-        }
     }
 
     impl Table for MIB_UDP6TABLE_OWNER_PID {
 
         type Row = MIB_UDP6ROW_OWNER_PID;
-
-        type Connection = UdpConnection;
 
         // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable
         unsafe fn get(buf: *mut std::ffi::c_void, buf_size: &mut u32) -> u32 {
@@ -496,26 +539,10 @@ mod connection {
                 self.dwNumEntries as usize,
             )
         }
-
-        fn parse_row(
-            row: &MIB_UDP6ROW_OWNER_PID,
-        ) -> Result<UdpConnection, ParseConnectionError> {
-            use std::convert::TryFrom as _;
-
-            let local_addr = std::net::Ipv6Addr::from(row.ucLocalAddr);
-            let local_port = u16::try_from(row.dwLocalPort)
-                .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-
-            // TODO(@panhania): Extend with PID information.
-
-            Ok(UdpConnection {
-                local_addr: (local_addr, local_port).into(),
-            })
-        }
     }
 
     /// Returns an iterator over all system connections of a specific type.
-    fn all<T>() -> std::io::Result<impl Iterator<Item = std::io::Result<T::Connection>>>
+    fn all<T>() -> std::io::Result<impl Iterator<Item = std::io::Result<<<T as Table>::Row as Row>::Connection>>>
     where
         T: Table,
     {
@@ -579,7 +606,7 @@ mod connection {
         let conns = rows
             .iter()
             // TODO(@panhania): Simplify the following lines.
-            .map(|row| T::parse_row(row).map_err(|error| {
+            .map(|row| row.parse().map_err(|error| {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, error)
             }))
             .collect::<Vec<_>>();
