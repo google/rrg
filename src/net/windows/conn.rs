@@ -179,6 +179,9 @@ trait Table {
     /// success and to the number of bytes needed to fill the buffer in case
     /// of an error due to insufficiently large buffer.
     ///
+    /// In case `buf` is a null pointer, the function should return an overflow
+    /// error (while still preserving the correct `buf_size` behaviour).
+    ///
     /// The function should return the error code as returned by the system
     /// function.
     ///
@@ -194,7 +197,7 @@ trait Table {
     ///
     /// Implementers can assume that `buf` has length of at least `buf_size`
     /// bytes but should not assume anything about memory being initialized.
-    unsafe fn get(buf: *mut std::ffi::c_void, buf_size: &mut u32) -> u32;
+    unsafe fn get(buf: *mut std::ffi::c_void, buf_size: *mut u32) -> u32;
 
     /// Returns array of rows contained in the table.
     ///
@@ -212,7 +215,7 @@ impl Table for MIB_TCPTABLE_OWNER_PID {
     type Row = MIB_TCPROW_OWNER_PID;
 
     // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable#parameters
-    unsafe fn get(buf: *mut std::ffi::c_void, buf_size: &mut u32) -> u32 {
+    unsafe fn get(buf: *mut std::ffi::c_void, buf_size: *mut u32) -> u32 {
         GetExtendedTcpTable(
             buf,
             buf_size,
@@ -237,7 +240,7 @@ impl Table for MIB_TCP6TABLE_OWNER_PID {
     type Row = MIB_TCP6ROW_OWNER_PID;
 
     // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable#parameters
-    unsafe fn get(buf: *mut std::ffi::c_void, buf_size: &mut u32) -> u32 {
+    unsafe fn get(buf: *mut std::ffi::c_void, buf_size: *mut u32) -> u32 {
         GetExtendedTcpTable(
             buf,
             buf_size,
@@ -262,7 +265,7 @@ impl Table for MIB_UDPTABLE_OWNER_PID {
     type Row = MIB_UDPROW_OWNER_PID;
 
     // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable
-    unsafe fn get(buf: *mut std::ffi::c_void, buf_size: &mut u32) -> u32 {
+    unsafe fn get(buf: *mut std::ffi::c_void, buf_size: *mut u32) -> u32 {
         GetExtendedUdpTable(
             buf,
             buf_size,
@@ -287,7 +290,7 @@ impl Table for MIB_UDP6TABLE_OWNER_PID {
     type Row = MIB_UDP6ROW_OWNER_PID;
 
     // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable
-    unsafe fn get(buf: *mut std::ffi::c_void, buf_size: &mut u32) -> u32 {
+    unsafe fn get(buf: *mut std::ffi::c_void, buf_size: *mut u32) -> u32 {
         GetExtendedUdpTable(
             buf,
             buf_size,
@@ -314,39 +317,42 @@ where
 {
     use std::convert::TryFrom as _;
 
-    let mut buf_size = u32::try_from(DEFAULT_BUF_SIZE)
-        .expect("default buffer size too big");
+    let mut buf_size = std::mem::MaybeUninit::uninit();
+
+    // SAFETY: We pass a null pointer as the buffer and expect the size to be
+    // set accordingly. We handle errors below.
+    let code = unsafe {
+        T::get(std::ptr::null_mut(), buf_size.as_mut_ptr())
+    };
+
+    // We passed a null pointer, so everything that is *not* a buffer overflow
+    // error is unexpected.
+    if code != windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW {
+        let code = i32::try_from(code)
+            .expect("invalid error code");
+
+        return Err(std::io::Error::from_raw_os_error(code));
+    }
+
+    // SAFETY: The call "succeeded" (returned the expected error, it means that
+    // the buffer size variable has been set to the required size value).
+    let mut buf_size = unsafe { buf_size.assume_init() };
 
     let buf_layout = std::alloc::Layout::from_size_align(
         buf_size as usize,
         std::mem::align_of::<T>(),
     ).expect("invalid layout for adapter addresses table");
 
-    let mut buf = crate::alloc::Allocation::new(buf_layout)
+    let buf = crate::alloc::Allocation::new(buf_layout)
         .ok_or_else(|| std::io::ErrorKind::OutOfMemory)?;
 
-    // SAFETY: As required, we allocated a buffer and pass its size with it. In
-    // case the allocated buffer is too small, we handle this case below.
-    let mut code = unsafe {
+    // SAFETY: We allocated a buffer of the requested size and pass it along
+    // with the unchanged size. Note that this can still fail in an unlikely
+    // case where a new device was added between the previous call and this one.
+    // We do not retry if that is the case.
+    let code = unsafe {
         T::get(buf.as_ptr().cast().as_ptr(), &mut buf_size)
     };
-
-    if code == windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW {
-        // Just a sanity check. Since the default buffer was too small, a "good"
-        // one should be strictly bigger.
-        assert!(DEFAULT_BUF_SIZE < (buf_size as usize));
-
-        buf = buf.resize(buf_size as usize)
-            .map_err(|_| std::io::ErrorKind::OutOfMemory)?;
-
-        // SAFETY: We call the function the same way as above but with larger
-        // buffer. Note that this can still fail in an unlikely case where a new
-        // device was added between the previous call and this one. We do not do
-        // another attempt and fail if this is the case.
-        code = unsafe {
-            T::get(buf.as_ptr().cast().as_ptr(), &mut buf_size)
-        };
-    }
 
     if code != windows_sys::Win32::Foundation::NO_ERROR {
         let code = i32::try_from(code)
