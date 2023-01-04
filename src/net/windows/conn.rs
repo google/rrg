@@ -5,7 +5,7 @@
 
 use windows_sys::Win32::NetworkManagement::IpHelper::*;
 
-use super::*;
+use crate::net::*;
 
 /// Returns an iterator over all system TCP IPv4 connections.
 pub fn all_tcp_v4() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
