@@ -6,7 +6,7 @@
 use crate::net::*;
 
 /// Returns an iterator over IPv4 TCP connections for the specified process.
-pub fn tcp_v4_connections(pid: u32) -> std::io::Result<TcpConnections> {
+pub fn tcp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
     let path = format!("/proc/{pid}/net/tcp");
     Ok(TcpConnections {
         pid,
@@ -15,7 +15,7 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<TcpConnections> {
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
-pub fn tcp_v6_connections(pid: u32) -> std::io::Result<TcpConnections> {
+pub fn tcp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
     let path = format!("/proc/{pid}/net/tcp6");
     Ok(TcpConnections {
         pid,
@@ -24,7 +24,7 @@ pub fn tcp_v6_connections(pid: u32) -> std::io::Result<TcpConnections> {
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
-pub fn udp_v4_connections(pid: u32) -> std::io::Result<UdpConnections> {
+pub fn udp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
     let path = format!("/proc/{pid}/net/udp");
     Ok(UdpConnections {
         pid,
@@ -33,7 +33,7 @@ pub fn udp_v4_connections(pid: u32) -> std::io::Result<UdpConnections> {
 }
 
 /// Returns an iterator over IPv6 UDP connections for the specified process.
-pub fn udp_v6_connections(pid: u32) -> std::io::Result<UdpConnections> {
+pub fn udp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
     let path = format!("/proc/{pid}/net/udp6");
     Ok(UdpConnections {
         pid,

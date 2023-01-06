@@ -164,22 +164,22 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 
 /// Returns an iterator over IPv4 TCP connections for the specified process.
 pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
-    self::conn::tcp_v4_connections(pid)
+    self::conn::tcp_v4(pid)
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
 pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
-    self::conn::tcp_v6_connections(pid)
+    self::conn::tcp_v6(pid)
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
 pub fn udp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
-    self::conn::udp_v4_connections(pid)
+    self::conn::udp_v4(pid)
 }
 
 /// Returns an iterator over IPv6 UDP connections for the specified process.
 pub fn udp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
-    self::conn::udp_v6_connections(pid)
+    self::conn::udp_v6(pid)
 }
 
 #[cfg(test)]
