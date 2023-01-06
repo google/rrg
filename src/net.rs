@@ -130,6 +130,8 @@ pub struct TcpConnection {
     remote_addr: std::net::SocketAddr,
     /// A state of the connection.
     state: TcpState,
+    /// An identifier of the process that owns the connection.
+    pid: u32,
 }
 
 /// Information about a UDP connection.
@@ -137,6 +139,8 @@ pub struct TcpConnection {
 pub struct UdpConnection {
     /// A local address of the connection.
     local_addr: std::net::SocketAddr,
+    /// An identifier of the process that owns the connection.
+    pid: u32,
 }
 
 /// Information about an Internet connection.

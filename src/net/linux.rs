@@ -164,6 +164,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 pub fn tcp_v4_connections(pid: u32) -> std::io::Result<TcpConnections> {
     let path = format!("/proc/{pid}/net/tcp");
     Ok(TcpConnections {
+        pid,
         iter: Connections::new(path, parse_tcp_v4_connection)?,
     })
 }
@@ -172,6 +173,7 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<TcpConnections> {
 pub fn tcp_v6_connections(pid: u32) -> std::io::Result<TcpConnections> {
     let path = format!("/proc/{pid}/net/tcp6");
     Ok(TcpConnections {
+        pid,
         iter: Connections::new(path, parse_tcp_v6_connection)?,
     })
 }
@@ -180,6 +182,7 @@ pub fn tcp_v6_connections(pid: u32) -> std::io::Result<TcpConnections> {
 pub fn udp_v4_connections(pid: u32) -> std::io::Result<UdpConnections> {
     let path = format!("/proc/{pid}/net/udp");
     Ok(UdpConnections {
+        pid,
         iter: Connections::new(path, parse_udp_v4_connection)?,
     })
 }
@@ -188,6 +191,7 @@ pub fn udp_v4_connections(pid: u32) -> std::io::Result<UdpConnections> {
 pub fn udp_v6_connections(pid: u32) -> std::io::Result<UdpConnections> {
     let path = format!("/proc/{pid}/net/udp6");
     Ok(UdpConnections {
+        pid,
         iter: Connections::new(path, parse_udp_v6_connection)?,
     })
 }
@@ -203,6 +207,9 @@ pub fn udp_v6_connections(pid: u32) -> std::io::Result<UdpConnections> {
 /// Each item yield by the iterator can be [`ParseConnectionError`] if the
 /// connection information returned by the system was malformed.
 pub struct UdpConnections {
+    /// Identifier of the process that owns the yielded connections.
+    pid: u32,
+    /// Underlying iterator over UDP connections.
     iter: Connections<UdpConnection>,
 }
 
@@ -217,6 +224,9 @@ pub struct UdpConnections {
 /// Each item yield by the iterator can be [`ParseConnectionError`] if the
 /// connection information returned by the system was malformed.
 pub struct TcpConnections {
+    /// Identifier of the process that owns the yielded connections.
+    pid: u32,
+    /// Underlying iterator over TCP connections.
     iter: Connections<TcpConnection>,
 }
 
@@ -224,7 +234,12 @@ impl Iterator for TcpConnections {
     type Item = std::io::Result<TcpConnection>;
 
     fn next(&mut self) -> Option<std::io::Result<TcpConnection>> {
-        self.iter.next()
+        let mut conn = self.iter.next()?;
+        if let Ok(conn) =  conn.as_mut() {
+            conn.pid = self.pid;
+        }
+
+        Some(conn)
     }
 }
 
@@ -232,7 +247,12 @@ impl Iterator for UdpConnections {
     type Item = std::io::Result<UdpConnection>;
 
     fn next(&mut self) -> Option<std::io::Result<UdpConnection>> {
-        self.iter.next()
+        let mut conn = self.iter.next()?;
+        if let Ok(conn) =  conn.as_mut() {
+            conn.pid = self.pid;
+        }
+
+        Some(conn)
     }
 }
 
@@ -362,6 +382,7 @@ where
         local_addr: local_addr.into(),
         remote_addr: remote_addr.into(),
         state,
+        pid: 0, // Set at the iterator level where PID is available.
     })
 }
 
@@ -386,6 +407,7 @@ where
 
     Ok(UdpConnection {
         local_addr: conn.local_addr,
+        pid: 0, // Set at the iterator level where PID is available.
     })
 }
 
@@ -642,6 +664,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(server_conn.state, TcpState::Listen);
+        assert_eq!(server_conn.pid, std::process::id());
     }
 
     #[test]
@@ -661,6 +684,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(server_conn.state, TcpState::Listen);
+        assert_eq!(server_conn.pid, std::process::id());
     }
 
     #[test]
@@ -676,7 +700,10 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok);
 
-        assert!(conns.find(|conn| conn.local_addr == socket_addr).is_some());
+        let server_conn = conns.find(|conn| conn.local_addr == socket_addr)
+            .unwrap();
+
+        assert_eq!(server_conn.pid, std::process::id());
     }
 
     #[test]
@@ -692,7 +719,10 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok);
 
-        assert!(conns.find(|conn| conn.local_addr == socket_addr).is_some());
+        let server_conn = conns.find(|conn| conn.local_addr == socket_addr)
+            .unwrap();
+
+        assert_eq!(server_conn.pid, std::process::id());
     }
 
     #[test]

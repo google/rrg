@@ -73,12 +73,11 @@ impl Row for MIB_TCPROW_OWNER_PID {
         let state = parse_tcp_state(self.dwState)
             .map_err(ParseConnectionError::InvalidState)?;
 
-        // TODO(@panhania): Extend with PID information.
-
         Ok(TcpConnection {
             local_addr: (local_addr, local_port).into(),
             remote_addr: (remote_addr, remote_port).into(),
             state,
+            pid: self.dwOwningPid,
         })
     }
 }
@@ -102,12 +101,11 @@ impl Row for MIB_TCP6ROW_OWNER_PID {
         let state = parse_tcp_state(self.dwState)
             .map_err(ParseConnectionError::InvalidState)?;
 
-        // TODO(@panhania): Extend with PID information.
-
         Ok(TcpConnection {
             local_addr: (local_addr, local_port).into(),
             remote_addr: (remote_addr, remote_port).into(),
             state,
+            pid: self.dwOwningPid,
         })
     }
 }
@@ -124,10 +122,9 @@ impl Row for MIB_UDPROW_OWNER_PID {
         let local_port = u16::try_from(self.dwLocalPort)
             .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
 
-        // TODO(@panhania): Extend with PID information.
-
         Ok(UdpConnection {
             local_addr: (local_addr, local_port).into(),
+            pid: self.dwOwningPid,
         })
     }
 }
@@ -144,10 +141,9 @@ impl Row for MIB_UDP6ROW_OWNER_PID {
         let local_port = u16::try_from(self.dwLocalPort)
             .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
 
-        // TODO(@panhania): Extend with PID information.
-
         Ok(UdpConnection {
             local_addr: (local_addr, local_port).into(),
+            pid: self.dwOwningPid,
         })
     }
 }
