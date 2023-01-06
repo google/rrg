@@ -207,3 +207,95 @@ pub fn udp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
 
     udp_v6_connections(pid)
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    // TODO(@panhania): Enable on macOS once the function is supported there.
+    #[cfg_attr(target_os = "macos", ignore)]
+    #[test]
+    fn tcp_v4_connections_local_connection() {
+        use std::net::Ipv4Addr;
+
+        let server = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .unwrap();
+        let server_addr = server.local_addr()
+            .unwrap();
+
+        let mut conns = tcp_v4_connections(std::process::id())
+            .unwrap()
+            .filter_map(Result::ok);
+
+        let server_conn = conns.find(|conn| conn.local_addr == server_addr)
+            .unwrap();
+
+        assert_eq!(server_conn.state, TcpState::Listen);
+        assert_eq!(server_conn.pid, std::process::id());
+    }
+
+    // TODO(@panhania): Enable on macOS once the function is supported there.
+    #[cfg_attr(target_os = "macos", ignore)]
+    #[test]
+    fn tcp_v6_connections_local_connection() {
+        use std::net::Ipv6Addr;
+
+        let server = std::net::TcpListener::bind((Ipv6Addr::LOCALHOST, 0))
+            .unwrap();
+        let server_addr = server.local_addr()
+            .unwrap();
+
+        let mut conns = tcp_v6_connections(std::process::id())
+            .unwrap()
+            .filter_map(Result::ok);
+
+        let server_conn = conns.find(|conn| conn.local_addr == server_addr)
+            .unwrap();
+
+        assert_eq!(server_conn.state, TcpState::Listen);
+        assert_eq!(server_conn.pid, std::process::id());
+    }
+
+    // TODO(@panhania): Enable on macOS once the function is supported there.
+    #[cfg_attr(target_os = "macos", ignore)]
+    #[test]
+    fn udp_v4_connections_local_connection() {
+        use std::net::Ipv4Addr;
+
+        let socket = std::net::UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
+            .unwrap();
+        let socket_addr = socket.local_addr()
+            .unwrap();
+
+        let mut conns = udp_v4_connections(std::process::id())
+            .unwrap()
+            .filter_map(Result::ok);
+
+        let server_conn = conns.find(|conn| conn.local_addr == socket_addr)
+            .unwrap();
+
+        assert_eq!(server_conn.pid, std::process::id());
+    }
+
+    // TODO(@panhania): Enable on macOS once the function is supported there.
+    #[cfg_attr(target_os = "macos", ignore)]
+    #[test]
+    fn udp_v6_connections_local_connection() {
+        use std::net::Ipv6Addr;
+
+        let socket = std::net::UdpSocket::bind((Ipv6Addr::LOCALHOST, 0))
+            .unwrap();
+        let socket_addr = socket.local_addr()
+            .unwrap();
+
+        let mut conns = udp_v6_connections(std::process::id())
+            .unwrap()
+            .filter_map(Result::ok);
+
+        let server_conn = conns.find(|conn| conn.local_addr == socket_addr)
+            .unwrap();
+
+        assert_eq!(server_conn.pid, std::process::id());
+    }
+}
