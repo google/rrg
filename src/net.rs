@@ -155,21 +155,41 @@ pub enum Connection {
 }
 
 /// Returns an iterator over IPv4 TCP connections for the specified process.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
 pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
     self::sys::tcp_v4_connections(pid)
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
 pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
     self::sys::tcp_v6_connections(pid)
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
 pub fn udp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
     self::sys::udp_v4_connections(pid)
 }
 
 /// Returns an iterator over IPv6 UDP connections for the specified process.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
 pub fn udp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
     self::sys::udp_v6_connections(pid)
 }
