@@ -151,3 +151,59 @@ pub enum Connection {
     /// A UDP connection.
     Udp(UdpConnection),
 }
+
+/// Returns an iterator over IPv4 TCP connections for the specified process.
+pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+    #[cfg(target_os = "linux")]
+    use self::linux::tcp_v4_connections;
+
+    #[cfg(target_os = "macos")]
+    use self::macos::tcp_v4_connections;
+
+    #[cfg(target_os = "windows")]
+    use self::windows::tcp_v4_connections;
+
+    tcp_v4_connections(pid)
+}
+
+/// Returns an iterator over IPv6 TCP connections for the specified process.
+pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+    #[cfg(target_os = "linux")]
+    use self::linux::tcp_v6_connections;
+
+    #[cfg(target_os = "macos")]
+    use self::macos::tcp_v6_connections;
+
+    #[cfg(target_os = "windows")]
+    use self::windows::tcp_v6_connections;
+
+    tcp_v6_connections(pid)
+}
+
+/// Returns an iterator over IPv4 UDP connections for the specified process.
+pub fn udp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+    #[cfg(target_os = "linux")]
+    use self::linux::udp_v4_connections;
+
+    #[cfg(target_os = "macos")]
+    use self::macos::udp_v4_connections;
+
+    #[cfg(target_os = "windows")]
+    use self::windows::udp_v4_connections;
+
+    udp_v4_connections(pid)
+}
+
+/// Returns an iterator over IPv6 UDP connections for the specified process.
+pub fn udp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+    #[cfg(target_os = "linux")]
+    use self::linux::udp_v6_connections;
+
+    #[cfg(target_os = "macos")]
+    use self::macos::udp_v6_connections;
+
+    #[cfg(target_os = "windows")]
+    use self::windows::udp_v6_connections;
+
+    udp_v6_connections(pid)
+}
