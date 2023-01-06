@@ -25,8 +25,6 @@ mod sys {
     pub use crate::net::windows::*;
 }
 
-// TODO(panhania@): Add support for Windows.
-
 /// A MAC address.
 ///
 /// MAC addresses are defined as 48-bit numbers in a IEEE 802 standard [1].
