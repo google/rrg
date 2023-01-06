@@ -70,13 +70,10 @@ impl Row for MIB_TCPROW_OWNER_PID {
         let remote_port = u16::try_from(self.dwRemotePort)
             .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
 
-        let state = parse_tcp_state(self.dwState)
-            .map_err(ParseConnectionError::InvalidState)?;
-
         Ok(TcpConnection {
             local_addr: (local_addr, local_port).into(),
             remote_addr: (remote_addr, remote_port).into(),
-            state,
+            state: parse_tcp_state(self.dwState)?,
             pid: self.dwOwningPid,
         })
     }
@@ -98,13 +95,10 @@ impl Row for MIB_TCP6ROW_OWNER_PID {
         let remote_port = u16::try_from(self.dwRemotePort)
             .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
 
-        let state = parse_tcp_state(self.dwState)
-            .map_err(ParseConnectionError::InvalidState)?;
-
         Ok(TcpConnection {
             local_addr: (local_addr, local_port).into(),
             remote_addr: (remote_addr, remote_port).into(),
-            state,
+            state: parse_tcp_state(self.dwState)?,
             pid: self.dwOwningPid,
         })
     }
@@ -373,10 +367,7 @@ where
 
     let conns = rows
         .iter()
-        // TODO(@panhania): Simplify the following lines.
-        .map(|row| row.parse().map_err(|error| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-        }))
+        .map(|row| row.parse().map_err(|error| error.into()))
         .collect::<Vec<_>>();
 
     Ok(conns.into_iter())
@@ -414,6 +405,13 @@ impl std::fmt::Display for ParseConnectionError {
 impl std::error::Error for ParseConnectionError {
     // We could implement `source` for this error type but since it is not
     // exposed, there is no need to do so.
+}
+
+impl From<ParseConnectionError> for std::io::Error {
+
+    fn from(error: ParseConnectionError) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+    }
 }
 
 /// Parses a TCP connection state value returned by the system.
@@ -463,4 +461,11 @@ impl std::fmt::Display for ParseTcpStateError {
 }
 
 impl std::error::Error for ParseTcpStateError {
+}
+
+impl From<ParseTcpStateError> for ParseConnectionError {
+
+    fn from(error: ParseTcpStateError) -> ParseConnectionError {
+        ParseConnectionError::InvalidState(error)
+    }
 }
