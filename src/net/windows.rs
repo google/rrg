@@ -294,7 +294,7 @@ mod tests {
 
     // TODO: Create more meaningful tests.
     #[test]
-    fn something_exists() {
+    fn interfaces_something_exists() {
         let mut ifaces = super::interfaces().unwrap();
 
         assert!(ifaces.next().is_some());

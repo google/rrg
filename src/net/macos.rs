@@ -213,7 +213,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn loopback_exists() {
+    fn interfaces_loopback_exists() {
         let mut ifaces = interfaces().unwrap();
 
         // On macOS the loopback interface seems to be always named `lo0` but it

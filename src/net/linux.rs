@@ -634,7 +634,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn loopback_exists() {
+    fn interfaces_loopback_exists() {
         let loopback = interfaces().unwrap()
             .find(|iface| iface.name() == "lo")
             .unwrap();
