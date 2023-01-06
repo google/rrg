@@ -292,8 +292,6 @@ const DEFAULT_BUF_SIZE: usize = 15_000;
 #[cfg(test)]
 mod tests {
 
-    use super::*;
-
     // TODO: Create more meaningful tests.
     #[test]
     fn something_exists() {
