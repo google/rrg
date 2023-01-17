@@ -184,9 +184,182 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 }
 
 /// Returns an iterator over IPv4 TCP connections for the specified process.
-pub fn tcp_v4_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
-    // TODO: Implement this function.
-    Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
+pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+    use std::convert::TryFrom as _;
+
+    let pid_i32 = i32::try_from(pid)
+        .map_err(|_| std::io::ErrorKind::InvalidInput)?;
+
+    // SAFETY: We call the function with null buffer. This should return the
+    // size for the buffer that we need or 0 in case of an error.
+    let buf_size = unsafe {
+        libc::proc_pidinfo(pid_i32, crate::libc::PROC_PIDLISTFDS, 0, std::ptr::null_mut(), 0)
+    };
+    if buf_size == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    let buf_layout = std::alloc::Layout::from_size_align(
+        buf_size as usize,
+        std::mem::align_of::<crate::libc::proc_fdinfo>(),
+    ).expect("invalid layout for `proc_fdinfo` struct");
+
+    let buf = crate::alloc::Allocation::new(buf_layout)
+        .ok_or_else(|| std::io::ErrorKind::OutOfMemory)?;
+
+    let buf_ptr = buf.as_ptr().cast::<libc::c_void>().as_ptr();
+
+    // SAFETY: We call the function as above but with allocated buffer. Both the
+    // buffer and the passed size are correct with respect to each other. Again,
+    // the fucntion will return 0 in case of an error.
+    let buf_size = unsafe {
+        libc::proc_pidinfo(pid_i32, crate::libc::PROC_PIDLISTFDS, 0, buf_ptr, buf_size)
+    };
+    if buf_size == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    // Note that we calculate the number of records after the second call since
+    // the number of records estimated by the first call may no longer be valid
+    // at the time we do the second call.
+    let fdinfos_len = buf_size as usize / std::mem::size_of::<crate::libc::proc_fdinfo>();
+
+    // SAFETY: The call to `proc_pidinfo` succeeded, so the buffer should be
+    // filled with the amount of records as calculated above.
+    let fdinfos = unsafe {
+        std::slice::from_raw_parts(buf_ptr.cast::<crate::libc::proc_fdinfo>(), fdinfos_len)
+    };
+
+    let mut conns = Vec::new();
+
+    for fdinfo in fdinfos {
+        if fdinfo.proc_fdtype != crate::libc::PROX_FDTYPE_SOCKET as u32 {
+            continue;
+        }
+
+        let mut sock_fdinfo = std::mem::MaybeUninit::<crate::libc::socket_fdinfo>::uninit();
+
+        // SAFETY: We verify that the file descriptor corresponds to a socket
+        // above and then we just pass a pointer to `sock_fdinfo` along with its
+        // size. In case something goes wrong, the function should report an
+        // error (which we verify below) but the call itself should be safe.
+        let size = unsafe {
+            libc::proc_pidfdinfo(
+                pid_i32,
+                fdinfo.proc_fd,
+                crate::libc::PROC_PIDFDSOCKETINFO,
+                sock_fdinfo.as_mut_ptr().cast::<libc::c_void>(),
+                std::mem::size_of::<crate::libc::socket_fdinfo>() as i32,
+            )
+        };
+
+        if size == 0 || size < std::mem::size_of::<crate::libc::socket_fdinfo>() as i32 {
+            return Err(std::io::Error::last_os_error());
+        }
+
+        // SAFETY: We verified that the call prod `proc_pidfdinfo` succeeded,
+        // so `sock_fdinfo` should be filled with valid data now.
+        let sock_fdinfo = unsafe {
+            sock_fdinfo.assume_init()
+        };
+
+        // TODO(@panhania): Move to the top-level.
+        // TODO(@panhania): Add proper error handling.
+        /// Parses a TCP connection state value returned by the system.
+        fn parse_tcp_state(val: libc::c_int) -> Result<TcpState, ()> {
+            let state = match val {
+                crate::libc::TSI_S_CLOSED => TcpState::Closed,
+                crate::libc::TSI_S_LISTEN => TcpState::Listen,
+                crate::libc::TSI_S_SYN_SENT => TcpState::SynSent,
+                crate::libc::TSI_S_SYN_RECEIVED => TcpState::SynReceived,
+                crate::libc::TSI_S_ESTABLISHED => TcpState::Established,
+                crate::libc::TSI_S__CLOSE_WAIT => TcpState::CloseWait,
+                crate::libc::TSI_S_FIN_WAIT_1 => TcpState::FinWait1,
+                crate::libc::TSI_S_CLOSING => TcpState::Closing,
+                crate::libc::TSI_S_LAST_ACK => TcpState::LastAck,
+                crate::libc::TSI_S_FIN_WAIT_2 => TcpState::FinWait2,
+                crate::libc::TSI_S_TIME_WAIT => TcpState::TimeWait,
+                _ => return Err(()),
+            };
+
+            Ok(state)
+        }
+
+        match sock_fdinfo.psi.soi_family {
+            libc::AF_INET => {
+                // SAFETY: We verified that we have a TCP IPv4 socket, so we can
+                // safely access the `pri_tcp` field.
+                let sock_info = unsafe {
+                    sock_fdinfo.psi.soi_proto.pri_tcp
+                };
+
+                // Just a sanity check that. We don't want to use hard `assert!`
+                // here in case operating system returns something weird.
+                if sock_info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV4 as u8 {
+                    return Err(std::io::ErrorKind::InvalidData.into());
+                }
+
+                use std::convert::TryFrom as _;
+
+                // SAFETY: We verified that we have a TCP IPv4 socket (and even
+                // double-checked it above), so accessing the IPv4 address is
+                // safe.
+                // TODO(@panhania): Verify whether we need to change endianness
+                // like it is done in Linux case.
+                let remote_addr_u32 = unsafe {
+                    sock_info.tcpsi_ini.insi_faddr.ina_46.i46a_addr4
+                }.s_addr;
+
+                // Unlike on Linux, Apple documentation does not say anything
+                // whatsoever about the endianness of the address value [1, 2].
+                // We give them the benefit of a doubt and assume that they do
+                // a sane thing and follow the Linux convention here.
+                //
+                // Hence, we have to convert from network endian (big endian)
+                // order to what the Rust IPv4 type constructor expects (host
+                // endian).
+                //
+                // [1]: https://developer.apple.com/documentation/kernel/in_addr_t
+                // [2]: https://github.com/apple/darwin-xnu/blob/2ff845c2e033bd0ff64b5b6aa6063a1f8f65aa32/bsd/sys/_types/_in_addr_t.h#L31
+                let remote_addr_u32 = u32::from_be(remote_addr_u32);
+                let remote_addr = std::net::Ipv4Addr::from(remote_addr_u32);
+
+                let remote_port = u16::try_from(sock_info.tcpsi_ini.insi_fport)
+                    // TODO(@panhania): Improve error handling.
+                    .map_err(|_| std::io::ErrorKind::InvalidData)?;
+
+                // SAFETY: Same as with `remote_addr`.
+                // TODO(@panhania): Verify whether we need to change endianness
+                // like it is done in Linux case.
+                let local_addr_u32 = unsafe {
+                    sock_info.tcpsi_ini.insi_laddr.ina_46.i46a_addr4
+                }.s_addr;
+
+                // See the comment above about we have to perform the endianness
+                // correction.
+                let local_addr_u32 = u32::from_be(local_addr_u32);
+                let local_addr = std::net::Ipv4Addr::from(local_addr_u32);
+
+                let local_port = u16::try_from(sock_info.tcpsi_ini.insi_lport)
+                    // TODO(@panhania): Improve error handling.
+                    .map_err(|_| std::io::ErrorKind::InvalidData)?;
+
+                let state = parse_tcp_state(sock_info.tcpsi_state)
+                    // TODO(@panhania): Improve error handling.
+                    .map_err(|_| std::io::ErrorKind::InvalidData)?;
+
+                conns.push(TcpConnection {
+                    local_addr: (local_addr, local_port).into(),
+                    remote_addr: (remote_addr, remote_port).into(),
+                    state,
+                    pid,
+                });
+            }
+            _ => continue,
+        }
+    }
+
+    Ok(conns.into_iter().map(Result::Ok))
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
