@@ -263,28 +263,6 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
             sock_fdinfo.assume_init()
         };
 
-        // TODO(@panhania): Move to the top-level.
-        // TODO(@panhania): Add proper error handling.
-        /// Parses a TCP connection state value returned by the system.
-        fn parse_tcp_state(val: libc::c_int) -> Result<TcpState, ()> {
-            let state = match val {
-                crate::libc::TSI_S_CLOSED => TcpState::Closed,
-                crate::libc::TSI_S_LISTEN => TcpState::Listen,
-                crate::libc::TSI_S_SYN_SENT => TcpState::SynSent,
-                crate::libc::TSI_S_SYN_RECEIVED => TcpState::SynReceived,
-                crate::libc::TSI_S_ESTABLISHED => TcpState::Established,
-                crate::libc::TSI_S__CLOSE_WAIT => TcpState::CloseWait,
-                crate::libc::TSI_S_FIN_WAIT_1 => TcpState::FinWait1,
-                crate::libc::TSI_S_CLOSING => TcpState::Closing,
-                crate::libc::TSI_S_LAST_ACK => TcpState::LastAck,
-                crate::libc::TSI_S_FIN_WAIT_2 => TcpState::FinWait2,
-                crate::libc::TSI_S_TIME_WAIT => TcpState::TimeWait,
-                _ => return Err(()),
-            };
-
-            Ok(state)
-        }
-
         match sock_fdinfo.psi.soi_family {
             libc::AF_INET => {
                 // SAFETY: We verified that we have a TCP IPv4 socket, so we can
@@ -378,6 +356,27 @@ pub fn udp_v4_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std
 pub fn udp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
     // TODO: Implement this function.
     Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
+}
+
+// TODO(@panhania): Add proper error handling.
+/// Parses a TCP connection state value returned by the system.
+fn parse_tcp_state(val: libc::c_int) -> Result<TcpState, ()> {
+    let state = match val {
+        crate::libc::TSI_S_CLOSED => TcpState::Closed,
+        crate::libc::TSI_S_LISTEN => TcpState::Listen,
+        crate::libc::TSI_S_SYN_SENT => TcpState::SynSent,
+        crate::libc::TSI_S_SYN_RECEIVED => TcpState::SynReceived,
+        crate::libc::TSI_S_ESTABLISHED => TcpState::Established,
+        crate::libc::TSI_S__CLOSE_WAIT => TcpState::CloseWait,
+        crate::libc::TSI_S_FIN_WAIT_1 => TcpState::FinWait1,
+        crate::libc::TSI_S_CLOSING => TcpState::Closing,
+        crate::libc::TSI_S_LAST_ACK => TcpState::LastAck,
+        crate::libc::TSI_S_FIN_WAIT_2 => TcpState::FinWait2,
+        crate::libc::TSI_S_TIME_WAIT => TcpState::TimeWait,
+        _ => return Err(()),
+    };
+
+    Ok(state)
 }
 
 #[cfg(test)]
