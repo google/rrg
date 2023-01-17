@@ -9,6 +9,7 @@ pub mod alloc;
 pub mod action;
 pub mod fs;
 pub mod io;
+pub mod libc;
 pub mod log;
 pub mod message;
 pub mod metadata;
