@@ -269,17 +269,14 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
                 // safely access the `pri_tcp` field.
                 let conn = unsafe {
                     parse_tcp_v4_sockinfo(pid, sock_fdinfo.psi.soi_proto.pri_tcp)
-                }
-                // TODO(@panhania): Improve error handling.
-                .map_err(|_| std::io::ErrorKind::InvalidData)?;
-
+                }.map_err(|error| error.into());
                 conns.push(conn);
             }
             _ => continue,
         }
     }
 
-    Ok(conns.into_iter().map(Result::Ok))
+    Ok(conns.into_iter())
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
@@ -306,11 +303,15 @@ pub fn udp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std
 ///
 /// The caller must ensure that the `info` was constructed by an appropriate
 /// call to `proc_pidfdinfo`.
-unsafe fn parse_tcp_v4_sockinfo(pid: u32, info: crate::libc::tcp_sockinfo) -> Result<TcpConnection, ()> {
+unsafe fn parse_tcp_v4_sockinfo(
+    pid: u32,
+    info: crate::libc::tcp_sockinfo,
+) -> Result<TcpConnection, ParseConnectionError> {
     use std::convert::TryFrom as _;
+    use ParseConnectionError::*;
 
     if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV4 as u8 {
-        return Err(());
+        return Err(InvalidProtocolFlag(info.tcpsi_ini.insi_vflag));
     }
 
     // SAFETY: We verified that we are dealing with a TCP IPv4 socket above, so
@@ -335,8 +336,7 @@ unsafe fn parse_tcp_v4_sockinfo(pid: u32, info: crate::libc::tcp_sockinfo) -> Re
     let remote_addr = std::net::Ipv4Addr::from(remote_addr_u32);
 
     let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
-        // TODO(@panhania): Improve error handling.
-        .map_err(|_| ())?;
+        .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
 
     // SAFETY: Same as with `remote_addr`.
     // TODO(@panhania): Verify whether we need to change endianness
@@ -351,19 +351,60 @@ unsafe fn parse_tcp_v4_sockinfo(pid: u32, info: crate::libc::tcp_sockinfo) -> Re
     let local_addr = std::net::Ipv4Addr::from(local_addr_u32);
 
     let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
-        // TODO(@panhania): Improve error handling.
-        .map_err(|_| ())?;
-
-    let state = parse_tcp_state(info.tcpsi_state)
-        // TODO(@panhania): Improve error handling.
-        .map_err(|_| ())?;
+        .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
 
     Ok(TcpConnection {
         local_addr: (local_addr, local_port).into(),
         remote_addr: (remote_addr, remote_port).into(),
-        state,
+        state: parse_tcp_state(info.tcpsi_state)?,
         pid,
     })
+}
+
+/// An error that might be returned when interpreting macOS TCP socket metadata.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ParseConnectionError {
+    /// The protocol type flag was not correct for the connection type.
+    InvalidProtocolFlag(u8),
+    /// It was not possible to parse the local address port.
+    InvalidLocalPort(libc::c_int),
+    /// It was not possible to parse the remote address port.
+    InvalidRemotePort(libc::c_int),
+    /// It was not possible to interpret the connection state.
+    InvalidState(ParseTcpStateError),
+}
+
+impl std::fmt::Display for ParseConnectionError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ParseConnectionError::*;
+        match *self {
+            InvalidProtocolFlag(flag) => {
+                write!(fmt, "invalid protocol type flag: {}", flag)
+            }
+            InvalidLocalPort(port) => {
+                write!(fmt, "invalid local port: {}", port)
+            }
+            InvalidRemotePort(port) => {
+                write!(fmt, "invalid remote port: {}", port)
+            }
+            InvalidState(error) => {
+                write!(fmt, "invalid state: {}", error)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParseConnectionError {
+    // We could implement `source` for this error type but since it is not
+    // exposed, there is no need to do so.
+}
+
+impl From<ParseConnectionError> for std::io::Error {
+
+    fn from(error: ParseConnectionError) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+    }
 }
 
 /// Parses a TCP connection state value returned by the system.
@@ -406,6 +447,13 @@ impl std::fmt::Display for ParseTcpStateError {
 }
 
 impl std::error::Error for ParseTcpStateError {
+}
+
+impl From<ParseTcpStateError> for ParseConnectionError {
+
+    fn from(error: ParseTcpStateError) -> ParseConnectionError {
+        ParseConnectionError::InvalidState(error)
+    }
 }
 
 #[cfg(test)]
