@@ -267,71 +267,13 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
             libc::AF_INET => {
                 // SAFETY: We verified that we have a TCP IPv4 socket, so we can
                 // safely access the `pri_tcp` field.
-                let sock_info = unsafe {
-                    sock_fdinfo.psi.soi_proto.pri_tcp
-                };
-
-                // Just a sanity check that. We don't want to use hard `assert!`
-                // here in case operating system returns something weird.
-                if sock_info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV4 as u8 {
-                    return Err(std::io::ErrorKind::InvalidData.into());
+                let conn = unsafe {
+                    parse_tcp_v4_sockinfo(pid, sock_fdinfo.psi.soi_proto.pri_tcp)
                 }
+                // TODO(@panhania): Improve error handling.
+                .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
-                use std::convert::TryFrom as _;
-
-                // SAFETY: We verified that we have a TCP IPv4 socket (and even
-                // double-checked it above), so accessing the IPv4 address is
-                // safe.
-                // TODO(@panhania): Verify whether we need to change endianness
-                // like it is done in Linux case.
-                let remote_addr_u32 = unsafe {
-                    sock_info.tcpsi_ini.insi_faddr.ina_46.i46a_addr4
-                }.s_addr;
-
-                // Unlike on Linux, Apple documentation does not say anything
-                // whatsoever about the endianness of the address value [1, 2].
-                // We give them the benefit of a doubt and assume that they do
-                // a sane thing and follow the Linux convention here.
-                //
-                // Hence, we have to convert from network endian (big endian)
-                // order to what the Rust IPv4 type constructor expects (host
-                // endian).
-                //
-                // [1]: https://developer.apple.com/documentation/kernel/in_addr_t
-                // [2]: https://github.com/apple/darwin-xnu/blob/2ff845c2e033bd0ff64b5b6aa6063a1f8f65aa32/bsd/sys/_types/_in_addr_t.h#L31
-                let remote_addr_u32 = u32::from_be(remote_addr_u32);
-                let remote_addr = std::net::Ipv4Addr::from(remote_addr_u32);
-
-                let remote_port = u16::try_from(sock_info.tcpsi_ini.insi_fport)
-                    // TODO(@panhania): Improve error handling.
-                    .map_err(|_| std::io::ErrorKind::InvalidData)?;
-
-                // SAFETY: Same as with `remote_addr`.
-                // TODO(@panhania): Verify whether we need to change endianness
-                // like it is done in Linux case.
-                let local_addr_u32 = unsafe {
-                    sock_info.tcpsi_ini.insi_laddr.ina_46.i46a_addr4
-                }.s_addr;
-
-                // See the comment above about we have to perform the endianness
-                // correction.
-                let local_addr_u32 = u32::from_be(local_addr_u32);
-                let local_addr = std::net::Ipv4Addr::from(local_addr_u32);
-
-                let local_port = u16::try_from(sock_info.tcpsi_ini.insi_lport)
-                    // TODO(@panhania): Improve error handling.
-                    .map_err(|_| std::io::ErrorKind::InvalidData)?;
-
-                let state = parse_tcp_state(sock_info.tcpsi_state)
-                    // TODO(@panhania): Improve error handling.
-                    .map_err(|_| std::io::ErrorKind::InvalidData)?;
-
-                conns.push(TcpConnection {
-                    local_addr: (local_addr, local_port).into(),
-                    remote_addr: (remote_addr, remote_port).into(),
-                    state,
-                    pid,
-                });
+                conns.push(conn);
             }
             _ => continue,
         }
@@ -356,6 +298,72 @@ pub fn udp_v4_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std
 pub fn udp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
     // TODO: Implement this function.
     Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
+}
+
+/// Parses a macOS TCP socket metadata into platform-agnostic type.
+///
+/// # Safety
+///
+/// The caller must ensure that the `info` was constructed by an appropriate
+/// call to `proc_pidfdinfo`.
+unsafe fn parse_tcp_v4_sockinfo(pid: u32, info: crate::libc::tcp_sockinfo) -> Result<TcpConnection, ()> {
+    use std::convert::TryFrom as _;
+
+    if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV4 as u8 {
+        return Err(());
+    }
+
+    // SAFETY: We verified that we are dealing with a TCP IPv4 socket above, so
+    // we are allowed to access the IPv4 address. Note that the function is
+    // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
+    let remote_addr_u32 = unsafe {
+        info.tcpsi_ini.insi_faddr.ina_46.i46a_addr4
+    }.s_addr;
+
+    // Unlike on Linux, Apple documentation does not say anything
+    // whatsoever about the endianness of the address value [1, 2].
+    // We give them the benefit of a doubt and assume that they do
+    // a sane thing and follow the Linux convention here.
+    //
+    // Hence, we have to convert from network endian (big endian)
+    // order to what the Rust IPv4 type constructor expects (host
+    // endian).
+    //
+    // [1]: https://developer.apple.com/documentation/kernel/in_addr_t
+    // [2]: https://github.com/apple/darwin-xnu/blob/2ff845c2e033bd0ff64b5b6aa6063a1f8f65aa32/bsd/sys/_types/_in_addr_t.h#L31
+    let remote_addr_u32 = u32::from_be(remote_addr_u32);
+    let remote_addr = std::net::Ipv4Addr::from(remote_addr_u32);
+
+    let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
+        // TODO(@panhania): Improve error handling.
+        .map_err(|_| ())?;
+
+    // SAFETY: Same as with `remote_addr`.
+    // TODO(@panhania): Verify whether we need to change endianness
+    // like it is done in Linux case.
+    let local_addr_u32 = unsafe {
+        info.tcpsi_ini.insi_laddr.ina_46.i46a_addr4
+    }.s_addr;
+
+    // See the comment above about we have to perform the endianness
+    // correction.
+    let local_addr_u32 = u32::from_be(local_addr_u32);
+    let local_addr = std::net::Ipv4Addr::from(local_addr_u32);
+
+    let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
+        // TODO(@panhania): Improve error handling.
+        .map_err(|_| ())?;
+
+    let state = parse_tcp_state(info.tcpsi_state)
+        // TODO(@panhania): Improve error handling.
+        .map_err(|_| ())?;
+
+    Ok(TcpConnection {
+        local_addr: (local_addr, local_port).into(),
+        remote_addr: (remote_addr, remote_port).into(),
+        state,
+        pid,
+    })
 }
 
 /// Parses a TCP connection state value returned by the system.
