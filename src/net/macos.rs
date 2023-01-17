@@ -390,7 +390,7 @@ fn parse_tcp_state(val: libc::c_int) -> Result<TcpState, ParseTcpStateError> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum ParseTcpStateError {
     /// The state value is not a known.
-    UnknownState(i32),
+    UnknownState(libc::c_int),
 }
 
 impl std::fmt::Display for ParseTcpStateError {
