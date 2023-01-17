@@ -358,9 +358,8 @@ pub fn udp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std
     Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
 }
 
-// TODO(@panhania): Add proper error handling.
 /// Parses a TCP connection state value returned by the system.
-fn parse_tcp_state(val: libc::c_int) -> Result<TcpState, ()> {
+fn parse_tcp_state(val: libc::c_int) -> Result<TcpState, ParseTcpStateError> {
     let state = match val {
         crate::libc::TSI_S_CLOSED => TcpState::Closed,
         crate::libc::TSI_S_LISTEN => TcpState::Listen,
@@ -373,10 +372,32 @@ fn parse_tcp_state(val: libc::c_int) -> Result<TcpState, ()> {
         crate::libc::TSI_S_LAST_ACK => TcpState::LastAck,
         crate::libc::TSI_S_FIN_WAIT_2 => TcpState::FinWait2,
         crate::libc::TSI_S_TIME_WAIT => TcpState::TimeWait,
-        _ => return Err(()),
+        _ => return Err(ParseTcpStateError::UnknownState(val)),
     };
 
     Ok(state)
+}
+
+/// An error that might be returned when interpreting macOS TCP state value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ParseTcpStateError {
+    /// The state value is not a known.
+    UnknownState(i32),
+}
+
+impl std::fmt::Display for ParseTcpStateError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ParseTcpStateError::*;
+        match *self {
+            UnknownState(val) => {
+                write!(fmt, "unknown TPC state value: {}", val)
+            },
+        }
+    }
+}
+
+impl std::error::Error for ParseTcpStateError {
 }
 
 #[cfg(test)]
