@@ -263,8 +263,8 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
             sock_fdinfo.assume_init()
         };
 
-        match sock_fdinfo.psi.soi_family {
-            libc::AF_INET => {
+        match (sock_fdinfo.psi.soi_protocol, sock_fdinfo.psi.soi_family) {
+            (libc::IPPROTO_TCP, libc::AF_INET) => {
                 // SAFETY: We verified that we have a TCP IPv4 socket, so we can
                 // safely access the `pri_tcp` field.
                 let conn = unsafe {
