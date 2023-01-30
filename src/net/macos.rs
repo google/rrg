@@ -297,12 +297,12 @@ pub fn udp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std
     Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
 }
 
-/// Parses a macOS TCP socket metadata into platform-agnostic type.
+/// Parses a macOS TCP IPv4 socket metadata into platform-agnostic type.
 ///
 /// # Safety
 ///
-/// The caller must ensure that the `info` was constructed by an appropriate
-/// call to `proc_pidfdinfo`.
+/// The caller must ensure that `info` was constructed by an appropriate call
+/// to `proc_pidfdinfo`.
 unsafe fn parse_tcp_v4_sockinfo(
     pid: u32,
     info: crate::libc::tcp_sockinfo,
@@ -350,6 +350,51 @@ unsafe fn parse_tcp_v4_sockinfo(
     let local_addr_u32 = u32::from_be(local_addr_u32);
     let local_addr = std::net::Ipv4Addr::from(local_addr_u32);
 
+    let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
+        .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
+
+    Ok(TcpConnection {
+        local_addr: (local_addr, local_port).into(),
+        remote_addr: (remote_addr, remote_port).into(),
+        state: parse_tcp_state(info.tcpsi_state)?,
+        pid,
+    })
+}
+
+/// Parses a macOS TCP IPv6 socket metadata into platform-agnostic type.
+///
+/// # Safety
+///
+/// The caller must ensure that `info` was constructed by an appropriate call
+/// to `proc_pidfdinfo`.
+unsafe fn parse_tcp_v6_sockinfo(
+    pid: u32,
+    info: crate::libc::tcp_sockinfo,
+) -> Result<TcpConnection, ParseConnectionError> {
+    use std::convert::TryFrom as _;
+    use ParseConnectionError::*;
+
+    if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV6 as u8 {
+        return Err(InvalidProtocolFlag(info.tcpsi_ini.insi_vflag));
+    }
+
+    // SAFETY: We verified that we are dealing with a TCP IPv6 socket above, so
+    // we are allowed to access the IPv6 address. Note that the function is
+    // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
+    let remote_addr_octets = unsafe {
+        info.tcpsi_ini.insi_faddr.ina_6
+    }.s6_addr;
+
+    let remote_addr = std::net::Ipv6Addr::from(remote_addr_octets);
+    let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
+        .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
+
+    // SAFETY: Same as with `local_addr`.
+    let local_addr_octets = unsafe {
+        info.tcpsi_ini.insi_laddr.ina_6
+    }.s6_addr;
+
+    let local_addr = std::net::Ipv6Addr::from(local_addr_octets);
     let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
         .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
 
