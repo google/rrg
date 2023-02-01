@@ -222,7 +222,7 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
     let iter = all_tcp_v4_connections()?
         // TODO: Consider logging a warning before discarding the record.
         .filter_map(|conn| conn.ok())
-        .filter(move |conn| conn.pid == pid)
+        .filter(move |conn| conn.pid() == pid)
         .map(Ok);
 
     Ok(iter)
@@ -233,7 +233,7 @@ pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
     let iter = all_tcp_v6_connections()?
         // TODO: Consider logging a warning before discarding the record.
         .filter_map(|conn| conn.ok())
-        .filter(move |conn| conn.pid == pid)
+        .filter(move |conn| conn.pid() == pid)
         .map(Ok);
 
     Ok(iter)

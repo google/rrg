@@ -70,12 +70,12 @@ impl Row for MIB_TCPROW_OWNER_PID {
         let remote_port = u16::try_from(self.dwRemotePort)
             .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
 
-        Ok(TcpConnection {
-            local_addr: (local_addr, local_port).into(),
-            remote_addr: (remote_addr, remote_port).into(),
+        Ok(TcpConnectionV4::from_inner(TcpConnectionInner {
+            local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
+            remote_addr: std::net::SocketAddrV4::new(remote_addr, remote_port),
             state: parse_tcp_state(self.dwState)?,
             pid: self.dwOwningPid,
-        })
+        }).into())
     }
 }
 
@@ -95,12 +95,12 @@ impl Row for MIB_TCP6ROW_OWNER_PID {
         let remote_port = u16::try_from(self.dwRemotePort)
             .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
 
-        Ok(TcpConnection {
-            local_addr: (local_addr, local_port).into(),
-            remote_addr: (remote_addr, remote_port).into(),
+        Ok(TcpConnectionV6::from_inner(TcpConnectionInner {
+            local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
+            remote_addr: std::net::SocketAddrV6::new(remote_addr, remote_port, 0, 0),
             state: parse_tcp_state(self.dwState)?,
             pid: self.dwOwningPid,
-        })
+        }).into())
     }
 }
 

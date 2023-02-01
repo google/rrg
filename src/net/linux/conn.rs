@@ -81,7 +81,7 @@ impl Iterator for TcpConnections {
     fn next(&mut self) -> Option<std::io::Result<TcpConnection>> {
         let mut conn = self.iter.next()?;
         if let Ok(conn) =  conn.as_mut() {
-            conn.pid = self.pid;
+            conn.set_pid(self.pid);
         }
 
         Some(conn)
@@ -167,12 +167,14 @@ impl<C> Iterator for Connections<C> {
 
 /// Parses a TCP IPv4 connection information in the procfs format.
 fn parse_tcp_v4_connection(string: &str) -> Result<TcpConnection, ParseConnectionError> {
-    parse_tcp_connection(string, parse_socket_addr_v4)
+    let conn = parse_tcp_connection(string, parse_socket_addr_v4)?;
+    Ok(TcpConnection::V4(TcpConnectionV4::from_inner(conn)))
 }
 
 /// Parses a TCP IPv6 connection information in the procfs format.
 fn parse_tcp_v6_connection(string: &str) -> Result<TcpConnection, ParseConnectionError> {
-    parse_tcp_connection(string, parse_socket_addr_v6)
+    let conn = parse_tcp_connection(string, parse_socket_addr_v6)?;
+    Ok(TcpConnection::V6(TcpConnectionV6::from_inner(conn)))
 }
 
 /// Parses a UDP IPv4 connection information in the procfs format.
@@ -189,10 +191,7 @@ fn parse_udp_v6_connection(string: &str) -> Result<UdpConnection, ParseConnectio
 fn parse_tcp_connection<A>(
     string: &str,
     parse_socket_addr: fn(&str) -> Result<A, ParseSocketAddrError>,
-) -> Result<TcpConnection, ParseConnectionError>
-where
-    A: Into<std::net::SocketAddr>,
-{
+) -> Result<TcpConnectionInner<A>, ParseConnectionError> {
     // There can be some leading whitespace at the beginning of the line, so
     // in order not to get empty parts, we also trim it.
     let mut parts = string.trim_start().split(char::is_whitespace);
@@ -223,9 +222,9 @@ where
     // that to keep things simple. It also makes the code slightly more resilent
     // to potential format changes.
 
-    Ok(TcpConnection {
-        local_addr: local_addr.into(),
-        remote_addr: remote_addr.into(),
+    Ok(TcpConnectionInner {
+        local_addr: local_addr,
+        remote_addr: remote_addr,
         state,
         pid: 0, // Set at the iterator level where PID is available.
     })
@@ -243,7 +242,8 @@ where
     // with remote address and state columns having dummy values).
     let conn = parse_tcp_connection(string, parse_socket_addr)?;
 
-    if !conn.remote_addr.ip().is_unspecified() || conn.remote_addr.port() != 0 {
+    let remote_addr: std::net::SocketAddr = conn.remote_addr.into();
+    if !(remote_addr.ip().is_unspecified() && remote_addr.port() == 0) {
         return Err(ParseConnectionError::InvalidFormat);
     }
     if conn.state != TcpState::Closed {
@@ -251,7 +251,7 @@ where
     }
 
     Ok(UdpConnection {
-        local_addr: conn.local_addr,
+        local_addr: conn.local_addr.into(),
         pid: 0, // Set at the iterator level where PID is available.
     })
 }
@@ -484,15 +484,15 @@ mod tests {
             "0: 0400007F:1A29 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
         ).unwrap();
 
-        let local_addr = conn.local_addr;
+        let local_addr = conn.local_addr();
         assert_eq!(local_addr.ip(), std::net::IpAddr::from([127, 0, 0, 4]));
         assert_eq!(local_addr.port(), 6697);
 
-        let remote_addr = conn.remote_addr;
+        let remote_addr = conn.remote_addr();
         assert_eq!(remote_addr.ip(), std::net::IpAddr::from([0, 0, 0, 0]));
         assert_eq!(remote_addr.port(), 0);
 
-        assert_eq!(conn.state, TcpState::Listen);
+        assert_eq!(conn.state(), TcpState::Listen);
     }
 
     #[test]
@@ -503,15 +503,15 @@ mod tests {
             "0: 00000000000000000000000000000000:2555 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
         ).unwrap();
 
-        let local_addr = conn.local_addr;
+        let local_addr = conn.local_addr();
         assert_eq!(local_addr.ip(), "::".parse::<IpAddr>().unwrap());
         assert_eq!(local_addr.port(), 0x2555);
 
-        let remote_addr = conn.remote_addr;
+        let remote_addr = conn.remote_addr();
         assert_eq!(remote_addr.ip(), "::".parse::<IpAddr>().unwrap());
         assert_eq!(remote_addr.port(), 0);
 
-        assert_eq!(conn.state, TcpState::Listen);
+        assert_eq!(conn.state(), TcpState::Listen);
     }
 
     #[test]

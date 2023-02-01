@@ -121,17 +121,167 @@ pub enum TcpState {
     Closed,
 }
 
-/// Information about a TCP connection.
+/// Internal generic type for information about a TCP connection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TcpConnection {
+struct TcpConnectionInner<A> {
     /// A local address of the connection.
-    local_addr: std::net::SocketAddr,
+    local_addr: A,
     /// A remote address of the connection.
-    remote_addr: std::net::SocketAddr,
+    remote_addr: A,
     /// A state of the connection.
     state: TcpState,
     /// An identifier of the process that owns the connection.
     pid: u32,
+}
+
+/// Information about a TCP IPv4 connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TcpConnectionV4 {
+    inner: TcpConnectionInner<std::net::SocketAddrV4>,
+}
+
+impl TcpConnectionV4 {
+
+    /// Promotes an inner instance into `TcpConnectionV4` type.
+    fn from_inner(conn: TcpConnectionInner<std::net::SocketAddrV4>) -> TcpConnectionV4 {
+        TcpConnectionV4 {
+            inner: conn,
+        }
+    }
+
+    /// Returns the local address of the connection metadata.
+    pub fn local_addr(&self) -> std::net::SocketAddrV4 {
+        self.inner.local_addr
+    }
+
+    /// Returns the remote address of the connection metadata.
+    pub fn remote_addr(&self) -> std::net::SocketAddrV4 {
+        self.inner.remote_addr
+    }
+
+    /// Returns the state of the connection metadata.
+    pub fn state(&self) -> TcpState {
+        self.inner.state
+    }
+
+    /// Returns the identifier of the process that owns the connection metadata.
+    pub fn pid(&self) -> u32 {
+        self.inner.pid
+    }
+
+    /// Changes the process identifier associated with this connection metadata.
+    pub fn set_pid(&mut self, pid: u32) {
+        self.inner.pid = pid;
+    }
+}
+
+/// Information about a TCP IPv6 connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TcpConnectionV6 {
+    inner: TcpConnectionInner<std::net::SocketAddrV6>,
+}
+
+impl TcpConnectionV6 {
+
+    /// Promotes an inner instance into `TcpConnectionV4` type.
+    fn from_inner(conn: TcpConnectionInner<std::net::SocketAddrV6>) -> TcpConnectionV6 {
+        TcpConnectionV6 {
+            inner: conn,
+        }
+    }
+
+    /// Returns the local address of the connection metadata.
+    pub fn local_addr(&self) -> std::net::SocketAddrV6 {
+        self.inner.local_addr
+    }
+
+    /// Returns the remote address of the connection metadata.
+    pub fn remote_addr(&self) -> std::net::SocketAddrV6 {
+        self.inner.remote_addr
+    }
+
+    /// Returns the state of the connection metadata.
+    pub fn state(&self) -> TcpState {
+        self.inner.state
+    }
+
+    /// Returns the identifier of the process that owns the connection metadata.
+    pub fn pid(&self) -> u32 {
+        self.inner.pid
+    }
+
+    /// Changes the process identifier associated with this connection metadata.
+    pub fn set_pid(&mut self, pid: u32) {
+        self.inner.pid = pid;
+    }
+}
+
+/// Information about a TCP connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TcpConnection {
+    /// An IPv4 TCP connection information.
+    V4(TcpConnectionV4),
+    /// An IPv6 TCP connection information.
+    V6(TcpConnectionV6),
+}
+
+impl TcpConnection {
+
+    /// Returns the local address of the connection metadata.
+    pub fn local_addr(&self) -> std::net::SocketAddr {
+        use TcpConnection::*;
+        match self {
+            V4(conn) => std::net::SocketAddr::V4(conn.local_addr()),
+            V6(conn) => std::net::SocketAddr::V6(conn.local_addr()),
+        }
+    }
+
+    /// Returns the remote address of the connection metadata.
+    pub fn remote_addr(&self) -> std::net::SocketAddr {
+        use TcpConnection::*;
+        match self {
+            V4(conn) => std::net::SocketAddr::V4(conn.remote_addr()),
+            V6(conn) => std::net::SocketAddr::V6(conn.remote_addr()),
+        }
+    }
+
+    /// Returns the state of the connection metadata.
+    pub fn state(&self) -> TcpState {
+        match self {
+            TcpConnection::V4(conn) => conn.state(),
+            TcpConnection::V6(conn) => conn.state(),
+        }
+    }
+
+    /// Returns the identifier of the process that owns the connection metadata.
+    pub fn pid(&self) -> u32 {
+        match self {
+            TcpConnection::V4(conn) => conn.pid(),
+            TcpConnection::V6(conn) => conn.pid(),
+        }
+    }
+
+    /// Changes the process identifier associated with this connection metadata.
+    fn set_pid(&mut self, pid: u32) {
+        match self {
+            TcpConnection::V4(ref mut conn) => conn.set_pid(pid),
+            TcpConnection::V6(ref mut conn) => conn.set_pid(pid),
+        }
+    }
+}
+
+impl From<TcpConnectionV4> for TcpConnection {
+
+    fn from(conn: TcpConnectionV4) -> TcpConnection {
+        TcpConnection::V4(conn)
+    }
+}
+
+impl From<TcpConnectionV6> for TcpConnection {
+
+    fn from(conn: TcpConnectionV6) -> TcpConnection {
+        TcpConnection::V6(conn)
+    }
 }
 
 /// Information about a UDP connection.
@@ -212,11 +362,11 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok);
 
-        let server_conn = conns.find(|conn| conn.local_addr == server_addr)
+        let server_conn = conns.find(|conn| conn.local_addr() == server_addr)
             .unwrap();
 
-        assert_eq!(server_conn.state, TcpState::Listen);
-        assert_eq!(server_conn.pid, std::process::id());
+        assert_eq!(server_conn.state(), TcpState::Listen);
+        assert_eq!(server_conn.pid(), std::process::id());
     }
 
     // TODO(@panhania): Enable on macOS once the function is supported there.
@@ -234,11 +384,11 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok);
 
-        let server_conn = conns.find(|conn| conn.local_addr == server_addr)
+        let server_conn = conns.find(|conn| conn.local_addr() == server_addr)
             .unwrap();
 
-        assert_eq!(server_conn.state, TcpState::Listen);
-        assert_eq!(server_conn.pid, std::process::id());
+        assert_eq!(server_conn.state(), TcpState::Listen);
+        assert_eq!(server_conn.pid(), std::process::id());
     }
 
     // TODO(@panhania): Enable on macOS once the function is supported there.

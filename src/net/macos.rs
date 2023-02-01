@@ -293,7 +293,7 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
     Ok(conns.filter(|conn| match conn {
         // The choice between local and remote address is somewhat arbitrary,
         // both should use the same IP version.
-        Ok(conn) => conn.local_addr.is_ipv4(),
+        Ok(conn) => conn.local_addr().is_ipv4(),
         // TODO(@panhania): We want to retain errors. However, if we do it like
         // this we are not sure if the error was meant for parsing an IPv4 data.
         // The `tcp_connections` function should discriminate between versions
@@ -309,7 +309,7 @@ pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
     Ok(conns.filter(|conn| match conn {
         // The choice between local and remote address is somewhat arbitrary,
         // both should use the same IP version.
-        Ok(conn) => conn.local_addr.is_ipv6(),
+        Ok(conn) => conn.local_addr().is_ipv6(),
         // TODO(@panhania): See the commant about retaining errors in the
         // `tcp_v4_connections` function.
         Err(_) => true,
@@ -384,12 +384,12 @@ unsafe fn parse_tcp_v4_sockinfo(
     let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
         .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
 
-    Ok(TcpConnection {
-        local_addr: (local_addr, local_port).into(),
-        remote_addr: (remote_addr, remote_port).into(),
+    Ok(TcpConnectionV4::from_inner(TcpConnectionInner {
+        local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
+        remote_addr: std::net::SocketAddrV4::new(remote_addr, remote_port),
         state: parse_tcp_state(info.tcpsi_state)?,
         pid,
-    })
+    }).into())
 }
 
 /// Parses a macOS TCP IPv6 socket metadata into platform-agnostic type.
@@ -429,12 +429,12 @@ unsafe fn parse_tcp_v6_sockinfo(
     let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
         .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
 
-    Ok(TcpConnection {
-        local_addr: (local_addr, local_port).into(),
-        remote_addr: (remote_addr, remote_port).into(),
+    Ok(TcpConnectionV6::from_inner(TcpConnectionInner {
+        local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
+        remote_addr: std::net::SocketAddrV6::new(remote_addr, remote_port, 0, 0),
         state: parse_tcp_state(info.tcpsi_state)?,
         pid,
-    })
+    }).into())
 }
 
 /// An error that might be returned when interpreting macOS TCP socket metadata.
