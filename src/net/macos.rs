@@ -183,8 +183,8 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     Ok(ifaces.into_iter())
 }
 
-/// Returns an iterator over IPv4 TCP connections for the specified process.
-pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+/// Returns an iterator over all TCP connections for the specified process.
+pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
     use std::convert::TryFrom as _;
 
     let pid_i32 = i32::try_from(pid)
@@ -277,6 +277,22 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
     }
 
     Ok(conns.into_iter())
+}
+
+/// Returns an iterator over IPv4 TCP connections for the specified process.
+pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+    let conns = tcp_connections(pid)?;
+    Ok(conns.filter(|conn| match conn {
+        // The choice between local and remote address is somewhat arbitrary,
+        // both should use the same IP version.
+        Ok(conn) => conn.local_addr.is_ipv4(),
+        // TODO(@panhania): We want to retain errors. However, if we do it like
+        // this we are not sure if the error was meant for parsing an IPv4 data.
+        // The `tcp_connections` function should discriminate between versions
+        // of the returned entries. Ideally, the `TcpConnection` type should be
+        // split into `TcpConnectionV4` and `TcpConnectionV6` types.
+        Err(_) => true,
+    }))
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
