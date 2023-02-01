@@ -272,6 +272,14 @@ pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io
                 }.map_err(|error| error.into());
                 conns.push(conn);
             }
+            (libc::IPPROTO_TCP, libc::AF_INET6) => {
+                // SAFETY: We verified that we have a TCP IPv6 socket, so we can
+                // safely access the `pri_tcp` field.
+                let conn = unsafe {
+                    parse_tcp_v6_sockinfo(pid, sock_fdinfo.psi.soi_proto.pri_tcp)
+                }.map_err(|error| error.into());
+                conns.push(conn);
+            }
             _ => continue,
         }
     }
@@ -296,9 +304,16 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
-pub fn tcp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
-    // TODO: Implement this function.
-    Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
+pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+    let conns = tcp_connections(pid)?;
+    Ok(conns.filter(|conn| match conn {
+        // The choice between local and remote address is somewhat arbitrary,
+        // both should use the same IP version.
+        Ok(conn) => conn.local_addr.is_ipv6(),
+        // TODO(@panhania): See the commant about retaining errors in the
+        // `tcp_v4_connections` function.
+        Err(_) => true,
+    }))
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
