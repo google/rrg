@@ -308,7 +308,7 @@ pub enum Connection {
 ///
 /// This function will fail if there was some kind of issue (e.g. insufficient
 /// permissions to make certain system calls) during information collection.
-pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV4>>> {
     self::sys::tcp_v4_connections(pid)
 }
 
@@ -318,7 +318,7 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
 ///
 /// This function will fail if there was some kind of issue (e.g. insufficient
 /// permissions to make certain system calls) during information collection.
-pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV6>>> {
     self::sys::tcp_v6_connections(pid)
 }
 
@@ -362,7 +362,8 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok);
 
-        let server_conn = conns.find(|conn| conn.local_addr() == server_addr)
+        let server_conn = conns
+            .find(|conn| server_addr == conn.local_addr().into())
             .unwrap();
 
         assert_eq!(server_conn.state(), TcpState::Listen);
@@ -384,7 +385,8 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok);
 
-        let server_conn = conns.find(|conn| conn.local_addr() == server_addr)
+        let server_conn = conns
+            .find(|conn| server_addr == conn.local_addr().into())
             .unwrap();
 
         assert_eq!(server_conn.state(), TcpState::Listen);

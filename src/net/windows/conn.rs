@@ -8,12 +8,12 @@ use windows_sys::Win32::NetworkManagement::IpHelper::*;
 use crate::net::*;
 
 /// Returns an iterator over all system TCP IPv4 connections.
-pub fn all_tcp_v4() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+pub fn all_tcp_v4() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV4>>> {
     all::<MIB_TCPTABLE_OWNER_PID>()
 }
 
 /// Returns an iterator over all system TCP IPv6 connections.
-pub fn all_tcp_v6() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+pub fn all_tcp_v6() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV6>>> {
     all::<MIB_TCP6TABLE_OWNER_PID>()
 }
 
@@ -56,10 +56,10 @@ trait Row {
 
 impl Row for MIB_TCPROW_OWNER_PID {
 
-    type Connection = TcpConnection;
+    type Connection = TcpConnectionV4;
 
     // https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcprow_owner_pid
-    fn parse(&self) -> Result<TcpConnection, ParseConnectionError> {
+    fn parse(&self) -> Result<TcpConnectionV4, ParseConnectionError> {
         use std::convert::TryFrom as _;
 
         let local_addr = std::net::Ipv4Addr::from(self.dwLocalAddr);
@@ -81,10 +81,10 @@ impl Row for MIB_TCPROW_OWNER_PID {
 
 impl Row for MIB_TCP6ROW_OWNER_PID {
 
-    type Connection = TcpConnection;
+    type Connection = TcpConnectionV6;
 
     // https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcp6row_owner_pid
-    fn parse(&self) -> Result<TcpConnection, ParseConnectionError> {
+    fn parse(&self) -> Result<TcpConnectionV6, ParseConnectionError> {
         use std::convert::TryFrom as _;
 
         let local_addr = std::net::Ipv6Addr::from(self.ucLocalAddr);

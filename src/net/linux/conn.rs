@@ -6,21 +6,21 @@
 use crate::net::*;
 
 /// Returns an iterator over IPv4 TCP connections for the specified process.
-pub fn tcp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+pub fn tcp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV4>>> {
     let path = format!("/proc/{pid}/net/tcp");
     Ok(TcpConnections {
         pid,
         iter: Connections::new(path, parse_tcp_v4_connection)?,
-    })
+    }.map(|conn| Ok(TcpConnectionV4::from_inner(conn?))))
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
-pub fn tcp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+pub fn tcp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV6>>> {
     let path = format!("/proc/{pid}/net/tcp6");
     Ok(TcpConnections {
         pid,
         iter: Connections::new(path, parse_tcp_v6_connection)?,
-    })
+    }.map(|conn| Ok(TcpConnectionV6::from_inner(conn?))))
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
@@ -68,20 +68,20 @@ pub struct UdpConnections {
 ///
 /// Each item yield by the iterator can be [`ParseConnectionError`] if the
 /// connection information returned by the system was malformed.
-pub struct TcpConnections {
+struct TcpConnections<A> {
     /// Identifier of the process that owns the yielded connections.
     pid: u32,
     /// Underlying iterator over TCP connections.
-    iter: Connections<TcpConnection>,
+    iter: Connections<TcpConnectionInner<A>>,
 }
 
-impl Iterator for TcpConnections {
-    type Item = std::io::Result<TcpConnection>;
+impl<A> Iterator for TcpConnections<A> {
+    type Item = std::io::Result<TcpConnectionInner<A>>;
 
-    fn next(&mut self) -> Option<std::io::Result<TcpConnection>> {
+    fn next(&mut self) -> Option<std::io::Result<TcpConnectionInner<A>>> {
         let mut conn = self.iter.next()?;
         if let Ok(conn) =  conn.as_mut() {
-            conn.set_pid(self.pid);
+            conn.pid = self.pid;
         }
 
         Some(conn)
@@ -166,15 +166,13 @@ impl<C> Iterator for Connections<C> {
 }
 
 /// Parses a TCP IPv4 connection information in the procfs format.
-fn parse_tcp_v4_connection(string: &str) -> Result<TcpConnection, ParseConnectionError> {
-    let conn = parse_tcp_connection(string, parse_socket_addr_v4)?;
-    Ok(TcpConnection::V4(TcpConnectionV4::from_inner(conn)))
+fn parse_tcp_v4_connection(string: &str) -> Result<TcpConnectionInner<std::net::SocketAddrV4>, ParseConnectionError> {
+    parse_tcp_connection(string, parse_socket_addr_v4)
 }
 
 /// Parses a TCP IPv6 connection information in the procfs format.
-fn parse_tcp_v6_connection(string: &str) -> Result<TcpConnection, ParseConnectionError> {
-    let conn = parse_tcp_connection(string, parse_socket_addr_v6)?;
-    Ok(TcpConnection::V6(TcpConnectionV6::from_inner(conn)))
+fn parse_tcp_v6_connection(string: &str) -> Result<TcpConnectionInner<std::net::SocketAddrV6>, ParseConnectionError> {
+    parse_tcp_connection(string, parse_socket_addr_v6)
 }
 
 /// Parses a UDP IPv4 connection information in the procfs format.
@@ -484,34 +482,34 @@ mod tests {
             "0: 0400007F:1A29 00000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
         ).unwrap();
 
-        let local_addr = conn.local_addr();
-        assert_eq!(local_addr.ip(), std::net::IpAddr::from([127, 0, 0, 4]));
+        let local_addr = conn.local_addr;
+        assert_eq!(local_addr.ip(), &std::net::Ipv4Addr::from([127, 0, 0, 4]));
         assert_eq!(local_addr.port(), 6697);
 
-        let remote_addr = conn.remote_addr();
-        assert_eq!(remote_addr.ip(), std::net::IpAddr::from([0, 0, 0, 0]));
+        let remote_addr = conn.remote_addr;
+        assert_eq!(remote_addr.ip(), &std::net::Ipv4Addr::from([0, 0, 0, 0]));
         assert_eq!(remote_addr.port(), 0);
 
-        assert_eq!(conn.state(), TcpState::Listen);
+        assert_eq!(conn.state, TcpState::Listen);
     }
 
     #[test]
     fn parse_tcp_v6_connection_ok() {
-        use std::net::IpAddr;
+        use std::net::Ipv6Addr;
 
         let conn = parse_tcp_v6_connection(
             "0: 00000000000000000000000000000000:2555 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000 0 0 666333 1 0000000000000000 100 0 0 10 0"
         ).unwrap();
 
-        let local_addr = conn.local_addr();
-        assert_eq!(local_addr.ip(), "::".parse::<IpAddr>().unwrap());
+        let local_addr = conn.local_addr;
+        assert_eq!(local_addr.ip(), &"::".parse::<Ipv6Addr>().unwrap());
         assert_eq!(local_addr.port(), 0x2555);
 
-        let remote_addr = conn.remote_addr();
-        assert_eq!(remote_addr.ip(), "::".parse::<IpAddr>().unwrap());
+        let remote_addr = conn.remote_addr;
+        assert_eq!(remote_addr.ip(), &"::".parse::<Ipv6Addr>().unwrap());
         assert_eq!(remote_addr.port(), 0);
 
-        assert_eq!(conn.state(), TcpState::Listen);
+        assert_eq!(conn.state, TcpState::Listen);
     }
 
     #[test]
