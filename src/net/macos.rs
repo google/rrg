@@ -315,13 +315,13 @@ pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
-pub fn udp_v4_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+pub fn udp_v4_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV4>>> {
     // TODO: Implement this function.
     Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
 }
 
 /// Returns an iterator over IPv6 UDP connections for the specified process.
-pub fn udp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+pub fn udp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
     // TODO: Implement this function.
     Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
 }

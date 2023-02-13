@@ -173,12 +173,12 @@ pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
-pub fn udp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+pub fn udp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV4>>> {
     self::conn::udp_v4(pid)
 }
 
 /// Returns an iterator over IPv6 UDP connections for the specified process.
-pub fn udp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+pub fn udp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
     self::conn::udp_v6(pid)
 }
 

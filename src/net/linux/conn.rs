@@ -24,21 +24,21 @@ pub fn tcp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
-pub fn udp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+pub fn udp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV4>>> {
     let path = format!("/proc/{pid}/net/udp");
     Ok(UdpConnections {
         pid,
         iter: Connections::new(path, parse_udp_v4_connection)?,
-    }.map(|conn| Ok(UdpConnectionV4::from_inner(conn?).into())))
+    }.map(|conn| Ok(UdpConnectionV4::from_inner(conn?))))
 }
 
 /// Returns an iterator over IPv6 UDP connections for the specified process.
-pub fn udp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+pub fn udp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
     let path = format!("/proc/{pid}/net/udp6");
     Ok(UdpConnections {
         pid,
         iter: Connections::new(path, parse_udp_v6_connection)?,
-    }.map(|conn| Ok(UdpConnectionV6::from_inner(conn?).into())))
+    }.map(|conn| Ok(UdpConnectionV6::from_inner(conn?))))
 }
 
 // TODO(rust-lang/rust#63063): Simplify as an alias to `impl`.

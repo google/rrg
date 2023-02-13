@@ -18,12 +18,12 @@ pub fn all_tcp_v6() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpC
 }
 
 /// Returns an iterator over all system UDP IPv4 connections.
-pub fn all_udp_v4() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+pub fn all_udp_v4() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV4>>> {
     all::<MIB_UDPTABLE_OWNER_PID>()
 }
 
 /// Returns an iterator over all system UDP IPv6 connections.
-pub fn all_udp_v6() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+pub fn all_udp_v6() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
     all::<MIB_UDP6TABLE_OWNER_PID>()
 }
 
@@ -106,10 +106,10 @@ impl Row for MIB_TCP6ROW_OWNER_PID {
 
 impl Row for MIB_UDPROW_OWNER_PID {
 
-    type Connection = UdpConnection;
+    type Connection = UdpConnectionV4;
 
     // https://learn.microsoft.com/en-us/windows/win32/api/udpmib/ns-udpmib-mib_udprow_owner_pid
-    fn parse(&self) -> Result<UdpConnection, ParseConnectionError> {
+    fn parse(&self) -> Result<UdpConnectionV4, ParseConnectionError> {
         use std::convert::TryFrom as _;
 
         let local_addr = std::net::Ipv4Addr::from(self.dwLocalAddr);
@@ -119,16 +119,16 @@ impl Row for MIB_UDPROW_OWNER_PID {
         Ok(UdpConnectionV4::from_inner(UdpConnectionInner {
             local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
             pid: self.dwOwningPid,
-        }).into())
+        }))
     }
 }
 
 impl Row for MIB_UDP6ROW_OWNER_PID {
 
-    type Connection = UdpConnection;
+    type Connection = UdpConnectionV6;
 
     // https://learn.microsoft.com/en-us/windows/win32/api/udpmib/ns-udpmib-mib_udp6row_owner_pid
-    fn parse(&self) -> Result<UdpConnection, ParseConnectionError> {
+    fn parse(&self) -> Result<UdpConnectionV6, ParseConnectionError> {
         use std::convert::TryFrom as _;
 
         let local_addr = std::net::Ipv6Addr::from(self.ucLocalAddr);
@@ -138,7 +138,7 @@ impl Row for MIB_UDP6ROW_OWNER_PID {
         Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
             local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
             pid: self.dwOwningPid,
-        }).into())
+        }))
     }
 }
 
