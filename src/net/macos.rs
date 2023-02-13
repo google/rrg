@@ -263,25 +263,36 @@ pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io
             sock_fdinfo.assume_init()
         };
 
-        match (sock_fdinfo.psi.soi_protocol, sock_fdinfo.psi.soi_family) {
-            (libc::IPPROTO_TCP, libc::AF_INET) => {
-                // SAFETY: We verified that we have a TCP IPv4 socket, so we can
+        let conn = match sock_fdinfo.psi.soi_kind {
+            crate::libc::SOCKINFO_TCP => {
+                if sock_fdinfo.psi.soi_protocol != libc::IPPROTO_TCP {
+                    // TODO: Log or return an error about an unexpected protocol
+                    // value.
+                    todo!();
+                }
+
+                // SAFETY: We verified that we have a TCP socket, so we can
                 // safely access the `pri_tcp` field.
-                let conn = unsafe {
-                    parse_tcp_v4_sockinfo(pid, sock_fdinfo.psi.soi_proto.pri_tcp)
-                }.map_err(|error| error.into());
-                conns.push(conn);
-            }
-            (libc::IPPROTO_TCP, libc::AF_INET6) => {
-                // SAFETY: We verified that we have a TCP IPv6 socket, so we can
-                // safely access the `pri_tcp` field.
-                let conn = unsafe {
-                    parse_tcp_v6_sockinfo(pid, sock_fdinfo.psi.soi_proto.pri_tcp)
-                }.map_err(|error| error.into());
-                conns.push(conn);
+                let info = unsafe { sock_fdinfo.psi.soi_proto.pri_tcp };
+                match sock_fdinfo.psi.soi_family {
+                    libc::AF_INET => {
+                        // SAFETY: We verified that it is an IPv4 connection.
+                        unsafe { parse_tcp_v4_sockinfo(pid, info) }
+                    }
+                    libc::AF_INET6 => {
+                        // SAFETY: We verified that it is an IPv6 connection.
+                        unsafe { parse_tcp_v6_sockinfo(pid, info) }
+                    }
+                    _ => {
+                        // TODO: Log or return an error about incorrect family.
+                        todo!()
+                    }
+                }.map_err(|error| error.into())
             }
             _ => continue,
-        }
+        };
+
+        conns.push(conn)
     }
 
     Ok(conns.into_iter())
