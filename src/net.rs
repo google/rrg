@@ -284,13 +284,108 @@ impl From<TcpConnectionV6> for TcpConnection {
     }
 }
 
-/// Information about a UDP connection.
+/// Internal generic type for information about a TCP connection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct UdpConnection {
+pub struct UdpConnectionInner<A> {
     /// A local address of the connection.
-    local_addr: std::net::SocketAddr,
+    local_addr: A,
     /// An identifier of the process that owns the connection.
     pid: u32,
+}
+
+/// Information about a UDP IPv4 connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct UdpConnectionV4 {
+    inner: UdpConnectionInner<std::net::SocketAddrV4>,
+}
+
+impl UdpConnectionV4 {
+
+    /// Promotes an inner instance into `UdpConnectionV4` type.
+    fn from_inner(conn: UdpConnectionInner<std::net::SocketAddrV4>) -> UdpConnectionV4 {
+        UdpConnectionV4 {
+            inner: conn,
+        }
+    }
+
+    /// Returns the local address of the connection metadata.
+    pub fn local_addr(&self) -> std::net::SocketAddrV4 {
+        self.inner.local_addr
+    }
+
+    /// Returns the identifier of the process that owns the connection.
+    pub fn pid(&self) -> u32 {
+        self.inner.pid
+    }
+}
+
+/// Information about a UDP IPv6 connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct UdpConnectionV6 {
+    inner: UdpConnectionInner<std::net::SocketAddrV6>,
+}
+
+impl UdpConnectionV6 {
+
+    /// Promotes an inner instance into `UdpConnectionV4` type.
+    fn from_inner(conn: UdpConnectionInner<std::net::SocketAddrV6>) -> UdpConnectionV6 {
+        UdpConnectionV6 {
+            inner: conn,
+        }
+    }
+
+    /// Returns the local address of the connection metadata.
+    pub fn local_addr(&self) -> std::net::SocketAddrV6 {
+        self.inner.local_addr
+    }
+
+    /// Returns the identifier of the process that owns the connection.
+    pub fn pid(&self) -> u32 {
+        self.inner.pid
+    }
+}
+
+/// Information about a UDP connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UdpConnection {
+    /// An IPv4 UDP connection information.
+    V4(UdpConnectionV4),
+    /// An IPv6 UDP connection information.
+    V6(UdpConnectionV6),
+}
+
+impl UdpConnection {
+
+    /// Returns the local address of the connection metadata.
+    pub fn local_addr(&self) -> std::net::SocketAddr {
+        use UdpConnection::*;
+        match self {
+            V4(conn) => std::net::SocketAddr::V4(conn.local_addr()),
+            V6(conn) => std::net::SocketAddr::V6(conn.local_addr()),
+        }
+    }
+
+    /// Returns the identifier of the process that owns the connection.
+    pub fn pid(&self) -> u32 {
+        match self {
+            UdpConnection::V4(conn) => conn.pid(),
+            UdpConnection::V6(conn) => conn.pid(),
+        }
+    }
+}
+
+impl From<UdpConnectionV4> for UdpConnection {
+
+    fn from(conn: UdpConnectionV4) -> UdpConnection {
+        UdpConnection::V4(conn)
+    }
+}
+
+impl From<UdpConnectionV6> for UdpConnection {
+
+    fn from(conn: UdpConnectionV6) -> UdpConnection {
+        UdpConnection::V6(conn)
+    }
 }
 
 /// Information about an Internet connection.
@@ -408,10 +503,10 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok);
 
-        let server_conn = conns.find(|conn| conn.local_addr == socket_addr)
+        let server_conn = conns.find(|conn| conn.local_addr() == socket_addr)
             .unwrap();
 
-        assert_eq!(server_conn.pid, std::process::id());
+        assert_eq!(server_conn.pid(), std::process::id());
     }
 
     // TODO(@panhania): Enable on macOS once the function is supported there.
@@ -429,9 +524,9 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok);
 
-        let server_conn = conns.find(|conn| conn.local_addr == socket_addr)
+        let server_conn = conns.find(|conn| conn.local_addr() == socket_addr)
             .unwrap();
 
-        assert_eq!(server_conn.pid, std::process::id());
+        assert_eq!(server_conn.pid(), std::process::id());
     }
 }

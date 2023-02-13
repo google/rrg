@@ -116,10 +116,10 @@ impl Row for MIB_UDPROW_OWNER_PID {
         let local_port = u16::try_from(self.dwLocalPort)
             .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
 
-        Ok(UdpConnection {
-            local_addr: (local_addr, local_port).into(),
+        Ok(UdpConnectionV4::from_inner(UdpConnectionInner {
+            local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
             pid: self.dwOwningPid,
-        })
+        }).into())
     }
 }
 
@@ -135,10 +135,10 @@ impl Row for MIB_UDP6ROW_OWNER_PID {
         let local_port = u16::try_from(self.dwLocalPort)
             .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
 
-        Ok(UdpConnection {
-            local_addr: (local_addr, local_port).into(),
+        Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
+            local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
             pid: self.dwOwningPid,
-        })
+        }).into())
     }
 }
 

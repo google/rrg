@@ -29,7 +29,7 @@ pub fn udp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<
     Ok(UdpConnections {
         pid,
         iter: Connections::new(path, parse_udp_v4_connection)?,
-    })
+    }.map(|conn| Ok(UdpConnectionV4::from_inner(conn?).into())))
 }
 
 /// Returns an iterator over IPv6 UDP connections for the specified process.
@@ -38,7 +38,7 @@ pub fn udp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<
     Ok(UdpConnections {
         pid,
         iter: Connections::new(path, parse_udp_v6_connection)?,
-    })
+    }.map(|conn| Ok(UdpConnectionV6::from_inner(conn?).into())))
 }
 
 // TODO(rust-lang/rust#63063): Simplify as an alias to `impl`.
@@ -51,11 +51,11 @@ pub fn udp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<
 ///
 /// Each item yield by the iterator can be [`ParseConnectionError`] if the
 /// connection information returned by the system was malformed.
-pub struct UdpConnections {
+pub struct UdpConnections<A> {
     /// Identifier of the process that owns the yielded connections.
     pid: u32,
     /// Underlying iterator over UDP connections.
-    iter: Connections<UdpConnection>,
+    iter: Connections<UdpConnectionInner<A>>,
 }
 
 // TODO(rust-lang/rust#63063): Simplify as an alias to `impl`.
@@ -88,10 +88,10 @@ impl<A> Iterator for TcpConnections<A> {
     }
 }
 
-impl Iterator for UdpConnections {
-    type Item = std::io::Result<UdpConnection>;
+impl<A> Iterator for UdpConnections<A> {
+    type Item = std::io::Result<UdpConnectionInner<A>>;
 
-    fn next(&mut self) -> Option<std::io::Result<UdpConnection>> {
+    fn next(&mut self) -> Option<std::io::Result<UdpConnectionInner<A>>> {
         let mut conn = self.iter.next()?;
         if let Ok(conn) =  conn.as_mut() {
             conn.pid = self.pid;
@@ -176,12 +176,12 @@ fn parse_tcp_v6_connection(string: &str) -> Result<TcpConnectionInner<std::net::
 }
 
 /// Parses a UDP IPv4 connection information in the procfs format.
-fn parse_udp_v4_connection(string: &str) -> Result<UdpConnection, ParseConnectionError> {
+fn parse_udp_v4_connection(string: &str) -> Result<UdpConnectionInner<std::net::SocketAddrV4>, ParseConnectionError> {
     parse_udp_connection(string, parse_socket_addr_v4)
 }
 
 /// Parses a UDP IPv6 connection information in the procfs format.
-fn parse_udp_v6_connection(string: &str) -> Result<UdpConnection, ParseConnectionError> {
+fn parse_udp_v6_connection(string: &str) -> Result<UdpConnectionInner<std::net::SocketAddrV6>, ParseConnectionError> {
     parse_udp_connection(string, parse_socket_addr_v6)
 }
 
@@ -232,7 +232,7 @@ fn parse_tcp_connection<A>(
 fn parse_udp_connection<A>(
     string: &str,
     parse_socket_addr: fn(&str) -> Result<A, ParseSocketAddrError>,
-) -> Result<UdpConnection, ParseConnectionError>
+) -> Result<UdpConnectionInner<A>, ParseConnectionError>
 where
     A: Into<std::net::SocketAddr>,
 {
@@ -248,8 +248,8 @@ where
         return Err(ParseConnectionError::InvalidFormat);
     }
 
-    Ok(UdpConnection {
-        local_addr: conn.local_addr.into(),
+    Ok(UdpConnectionInner {
+        local_addr: conn.local_addr,
         pid: 0, // Set at the iterator level where PID is available.
     })
 }
@@ -519,20 +519,20 @@ mod tests {
         ).unwrap();
 
         let local_addr = conn.local_addr;
-        assert_eq!(local_addr.ip(), std::net::IpAddr::from([127, 0, 0, 1]));
+        assert_eq!(local_addr.ip(), &std::net::Ipv4Addr::from([127, 0, 0, 1]));
         assert_eq!(local_addr.port(), 0x0035);
     }
 
     #[test]
     fn parse_udp_v6_connection_ok() {
-        use std::net::IpAddr;
+        use std::net::Ipv6Addr;
 
         let conn = parse_udp_v6_connection(
             "7945: 00000000000000000000000000000000:14E9 00000000000000000000000000000000:0000 07 00000000:00000000 00:00000000 00000000 111 0 66333 2 0000000000000000 0"
         ).unwrap();
 
         let local_addr = conn.local_addr;
-        assert_eq!(local_addr.ip(), "::".parse::<IpAddr>().unwrap());
+        assert_eq!(local_addr.ip(), &"::".parse::<Ipv6Addr>().unwrap());
         assert_eq!(local_addr.port(), 0x14E9);
     }
 
