@@ -263,10 +263,10 @@ pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io
             sock_fdinfo.assume_init()
         };
 
+        use ParseConnectionError::*;
+
         let conn = match sock_fdinfo.psi.soi_kind {
             crate::libc::SOCKINFO_TCP => (|| -> _ {
-                use ParseConnectionError::*;
-
                 if sock_fdinfo.psi.soi_protocol != libc::IPPROTO_TCP {
                     return Err(InvalidProtocol(sock_fdinfo.psi.soi_protocol));
                 }
@@ -282,6 +282,36 @@ pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io
                     libc::AF_INET6 => {
                         // SAFETY: We verified that it is an IPv6 connection.
                         unsafe { parse_tcp_v6_sockinfo(pid, info) }
+                    }
+                    _ => {
+                        Err(InvalidAddressFamily(sock_fdinfo.psi.soi_family))
+                    }
+                }
+            })().map_err(|error| error.into()),
+            crate::libc::SOCKINFO_IN => (|| -> _ {
+                if sock_fdinfo.psi.soi_protocol != libc::IPPROTO_UDP {
+                    return Err(InvalidProtocol(sock_fdinfo.psi.soi_protocol));
+                }
+
+                // SAFETY: We verified that we have a generic socket, so we can
+                // safely access the `pri_in` field.
+                let info = unsafe { sock_fdinfo.psi.soi_proto.pri_in };
+                match sock_fdinfo.psi.soi_family {
+                    libc::AF_INET => {
+                        // SAFETY: We verified that it is an IPv4 connection.
+                        unsafe {
+                            // TODO(@panhania): Fix the return type.
+                            let _ = parse_udp_v4_sockinfo(pid, info);
+                            todo!()
+                        }
+                    }
+                    libc::AF_INET6 => {
+                        // SAFETY: We verified that it is an IPv6 connection.
+                        unsafe {
+                            // TODO(@panhania): Fix the return type.
+                            let _ = parse_udp_v6_sockinfo(pid, info);
+                            todo!()
+                        }
                     }
                     _ => {
                         Err(InvalidAddressFamily(sock_fdinfo.psi.soi_family))
@@ -441,6 +471,78 @@ unsafe fn parse_tcp_v6_sockinfo(
         local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
         remote_addr: std::net::SocketAddrV6::new(remote_addr, remote_port, 0, 0),
         state: parse_tcp_state(info.tcpsi_state)?,
+        pid,
+    }).into())
+}
+
+/// Parses a macOS UDP IPv4 socket metadata into platform-agnostic type.
+///
+/// # Safety
+///
+/// The caller must ensure that `info` was constructed by an appropriate call
+/// to `proc_pidfdinfo`.
+unsafe fn parse_udp_v4_sockinfo(
+    pid: u32,
+    info: crate::libc::in_sockinfo,
+) -> Result<UdpConnection, ParseConnectionError> {
+    use std::convert::TryFrom as _;
+    use ParseConnectionError::*;
+
+    if info.insi_vflag != crate::libc::INI_IPV4 as u8 {
+        return Err(InvalidProtocolFlag(info.insi_vflag));
+    }
+
+    // SAFETY: We verified that we are dealing with a UDP IPv4 socket above, so
+    // we are allowed to access the IPv4 address. Note that the function is
+    // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
+    let local_addr_u32 = unsafe {
+        info.insi_laddr.ina_46.i46a_addr4
+    }.s_addr;
+
+    // See comments about similar conversions when parsing the TCP addresses.
+    let local_addr_u32 = u32::from_be(local_addr_u32);
+    let local_addr = std::net::Ipv4Addr::from(local_addr_u32);
+
+    let local_port = u16::try_from(info.insi_lport)
+        .map_err(|_| InvalidLocalPort(info.insi_lport))?;
+
+    Ok(UdpConnectionV4::from_inner(UdpConnectionInner {
+        local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
+        pid,
+    }).into())
+}
+
+/// Parses a macOS UDP IPv6 socket metadata into platform-agnostic type.
+///
+/// # Safety
+///
+/// The caller must ensure that `info` was constructed by an appropriate call
+/// to `proc_pidfdinfo`.
+unsafe fn parse_udp_v6_sockinfo(
+    pid: u32,
+    info: crate::libc::in_sockinfo,
+) -> Result<UdpConnection, ParseConnectionError> {
+    use std::convert::TryFrom as _;
+    use ParseConnectionError::*;
+
+    if info.insi_vflag != crate::libc::INI_IPV6 as u8 {
+        return Err(InvalidProtocolFlag(info.insi_vflag));
+    }
+
+    // SAFETY: We verified that we are dealing with a UDP IPv6 socket above, so
+    // we are allowed to access the IPv6 address. Note that the function is
+    // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
+    let local_addr_octets = unsafe {
+        info.insi_laddr.ina_6
+    }.s6_addr;
+
+    // See comments about similar conversions when parsing the TCP addresses.
+    let local_addr = std::net::Ipv6Addr::from(local_addr_octets);
+    let local_port = u16::try_from(info.insi_lport)
+        .map_err(|_| InvalidLocalPort(info.insi_lport))?;
+
+    Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
+        local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
         pid,
     }).into())
 }
