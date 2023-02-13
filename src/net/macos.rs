@@ -264,11 +264,11 @@ pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io
         };
 
         let conn = match sock_fdinfo.psi.soi_kind {
-            crate::libc::SOCKINFO_TCP => {
+            crate::libc::SOCKINFO_TCP => (|| -> _ {
+                use ParseConnectionError::*;
+
                 if sock_fdinfo.psi.soi_protocol != libc::IPPROTO_TCP {
-                    // TODO: Log or return an error about an unexpected protocol
-                    // value.
-                    todo!();
+                    return Err(InvalidProtocol(sock_fdinfo.psi.soi_protocol));
                 }
 
                 // SAFETY: We verified that we have a TCP socket, so we can
@@ -284,11 +284,10 @@ pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io
                         unsafe { parse_tcp_v6_sockinfo(pid, info) }
                     }
                     _ => {
-                        // TODO: Log or return an error about incorrect family.
-                        todo!()
+                        Err(InvalidAddressFamily(sock_fdinfo.psi.soi_family))
                     }
-                }.map_err(|error| error.into())
-            }
+                }
+            })().map_err(|error| error.into()),
             _ => continue,
         };
 
@@ -449,6 +448,10 @@ unsafe fn parse_tcp_v6_sockinfo(
 /// An error that might be returned when interpreting macOS TCP socket metadata.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum ParseConnectionError {
+    /// The socket address family is invalid.
+    InvalidAddressFamily(libc::c_int),
+    /// The protocol type was not correct for the connection type.
+    InvalidProtocol(libc::c_int),
     /// The protocol type flag was not correct for the connection type.
     InvalidProtocolFlag(u8),
     /// It was not possible to parse the local address port.
@@ -464,6 +467,12 @@ impl std::fmt::Display for ParseConnectionError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use ParseConnectionError::*;
         match *self {
+            InvalidAddressFamily(family) => {
+                write!(fmt, "invalid address family: {}", family)
+            }
+            InvalidProtocol(proto) => {
+                write!(fmt, "invalid protocol type: {}", proto)
+            }
             InvalidProtocolFlag(flag) => {
                 write!(fmt, "invalid protocol type flag: {}", flag)
             }
