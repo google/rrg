@@ -386,38 +386,17 @@ unsafe fn parse_tcp_v4_sockinfo(
     // SAFETY: We verified that we are dealing with a TCP IPv4 socket above, so
     // we are allowed to access the IPv4 address. Note that the function is
     // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
-    let remote_addr_u32 = unsafe {
-        info.tcpsi_ini.insi_faddr.ina_46.i46a_addr4
-    }.s_addr;
-
-    // Unlike on Linux, Apple documentation does not say anything
-    // whatsoever about the endianness of the address value [1, 2].
-    // We give them the benefit of a doubt and assume that they do
-    // a sane thing and follow the Linux convention here.
-    //
-    // Hence, we have to convert from network endian (big endian)
-    // order to what the Rust IPv4 type constructor expects (host
-    // endian).
-    //
-    // [1]: https://developer.apple.com/documentation/kernel/in_addr_t
-    // [2]: https://github.com/apple/darwin-xnu/blob/2ff845c2e033bd0ff64b5b6aa6063a1f8f65aa32/bsd/sys/_types/_in_addr_t.h#L31
-    let remote_addr_u32 = u32::from_be(remote_addr_u32);
-    let remote_addr = std::net::Ipv4Addr::from(remote_addr_u32);
+    let remote_addr = parse_ipv4_addr(unsafe {
+        info.tcpsi_ini.insi_faddr.ina_46
+    });
 
     let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
         .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
 
     // SAFETY: Same as with `remote_addr`.
-    // TODO(@panhania): Verify whether we need to change endianness
-    // like it is done in Linux case.
-    let local_addr_u32 = unsafe {
-        info.tcpsi_ini.insi_laddr.ina_46.i46a_addr4
-    }.s_addr;
-
-    // See the comment above about we have to perform the endianness
-    // correction.
-    let local_addr_u32 = u32::from_be(local_addr_u32);
-    let local_addr = std::net::Ipv4Addr::from(local_addr_u32);
+    let local_addr = parse_ipv4_addr(unsafe {
+        info.tcpsi_ini.insi_laddr.ina_46
+    });
 
     let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
         .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
@@ -450,20 +429,18 @@ unsafe fn parse_tcp_v6_sockinfo(
     // SAFETY: We verified that we are dealing with a TCP IPv6 socket above, so
     // we are allowed to access the IPv6 address. Note that the function is
     // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
-    let remote_addr_octets = unsafe {
+    let remote_addr = parse_ipv6_addr(unsafe {
         info.tcpsi_ini.insi_faddr.ina_6
-    }.s6_addr;
+    });
 
-    let remote_addr = std::net::Ipv6Addr::from(remote_addr_octets);
     let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
         .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
 
     // SAFETY: Same as with `local_addr`.
-    let local_addr_octets = unsafe {
+    let local_addr = parse_ipv6_addr(unsafe {
         info.tcpsi_ini.insi_laddr.ina_6
-    }.s6_addr;
+    });
 
-    let local_addr = std::net::Ipv6Addr::from(local_addr_octets);
     let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
         .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
 
@@ -495,13 +472,9 @@ unsafe fn parse_udp_v4_sockinfo(
     // SAFETY: We verified that we are dealing with a UDP IPv4 socket above, so
     // we are allowed to access the IPv4 address. Note that the function is
     // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
-    let local_addr_u32 = unsafe {
-        info.insi_laddr.ina_46.i46a_addr4
-    }.s_addr;
-
-    // See comments about similar conversions when parsing the TCP addresses.
-    let local_addr_u32 = u32::from_be(local_addr_u32);
-    let local_addr = std::net::Ipv4Addr::from(local_addr_u32);
+    let local_addr = parse_ipv4_addr(unsafe {
+        info.insi_laddr.ina_46
+    });
 
     let local_port = u16::try_from(info.insi_lport)
         .map_err(|_| InvalidLocalPort(info.insi_lport))?;
@@ -532,12 +505,10 @@ unsafe fn parse_udp_v6_sockinfo(
     // SAFETY: We verified that we are dealing with a UDP IPv6 socket above, so
     // we are allowed to access the IPv6 address. Note that the function is
     // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
-    let local_addr_octets = unsafe {
+    let local_addr = parse_ipv6_addr(unsafe {
         info.insi_laddr.ina_6
-    }.s6_addr;
+    });
 
-    // See comments about similar conversions when parsing the TCP addresses.
-    let local_addr = std::net::Ipv6Addr::from(local_addr_octets);
     let local_port = u16::try_from(info.insi_lport)
         .map_err(|_| InvalidLocalPort(info.insi_lport))?;
 
@@ -545,6 +516,27 @@ unsafe fn parse_udp_v6_sockinfo(
         local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
         pid,
     }).into())
+}
+
+/// Parses a macOS IPv4 socket information into the standard type.
+fn parse_ipv4_addr(addr: crate::libc::in4in6_addr) -> std::net::Ipv4Addr {
+    // Unlike on Linux, Apple documentation does not say anything whatsoever
+    // about the endianness of the address value [1, 2]. We give them the
+    // benefit of a doubt and assume that they do a sane thing and follow the
+    // Linux convention here.
+    //
+    // Hence, we have to convert from network endian (big endian) order to what
+    // the Rust IPv4 type constructor expects (host endian).
+    //
+    // [1]: https://developer.apple.com/documentation/kernel/in_addr_t
+    // [2]: https://github.com/apple/darwin-xnu/blob/2ff845c2e033bd0ff64b5b6aa6063a1f8f65aa32/bsd/sys/_types/_in_addr_t.h#L31
+    let local_addr_u32 = u32::from_be(addr.i46a_addr4.s_addr);
+    std::net::Ipv4Addr::from(local_addr_u32)
+}
+
+/// Parses a macOS IPv6 socket information into the standard type.
+fn parse_ipv6_addr(addr: libc::in6_addr) -> std::net::Ipv6Addr {
+    std::net::Ipv6Addr::from(addr.s6_addr)
 }
 
 /// An error that might be returned when interpreting macOS TCP socket metadata.
