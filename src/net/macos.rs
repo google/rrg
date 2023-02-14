@@ -184,7 +184,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 }
 
 /// Returns an iterator over all TCP connections for the specified process.
-pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<Connection>>> {
     use std::convert::TryFrom as _;
 
     let pid_i32 = i32::try_from(pid)
@@ -278,11 +278,11 @@ pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io
                     libc::AF_INET => {
                         // SAFETY: We verified that it is an IPv4 connection.
                         unsafe { parse_tcp_v4_sockinfo(pid, info) }
-                    }
+                    }.map(|conn| conn.into()),
                     libc::AF_INET6 => {
                         // SAFETY: We verified that it is an IPv6 connection.
                         unsafe { parse_tcp_v6_sockinfo(pid, info) }
-                    }
+                    }.map(|conn| conn.into()),
                     _ => {
                         Err(InvalidAddressFamily(sock_fdinfo.psi.soi_family))
                     }
@@ -299,20 +299,12 @@ pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io
                 match sock_fdinfo.psi.soi_family {
                     libc::AF_INET => {
                         // SAFETY: We verified that it is an IPv4 connection.
-                        unsafe {
-                            // TODO(@panhania): Fix the return type.
-                            let _ = parse_udp_v4_sockinfo(pid, info);
-                            todo!()
-                        }
-                    }
+                        unsafe { parse_udp_v4_sockinfo(pid, info) }
+                    }.map(|conn| conn.into()),
                     libc::AF_INET6 => {
                         // SAFETY: We verified that it is an IPv6 connection.
-                        unsafe {
-                            // TODO(@panhania): Fix the return type.
-                            let _ = parse_udp_v6_sockinfo(pid, info);
-                            todo!()
-                        }
-                    }
+                        unsafe { parse_udp_v6_sockinfo(pid, info) }
+                    }.map(|conn| conn.into()),
                     _ => {
                         Err(InvalidAddressFamily(sock_fdinfo.psi.soi_family))
                     }
@@ -331,8 +323,8 @@ pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io
 pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV4>>> {
     let conns = tcp_connections(pid)?;
     Ok(conns.filter_map(|conn| match conn {
-        Ok(TcpConnection::V4(conn)) => Some(Ok(conn)),
-        Ok(TcpConnection::V6(_)) => None,
+        Ok(Connection::Tcp(TcpConnection::V4(conn))) => Some(Ok(conn)),
+        Ok(_) => None,
         // TODO(@panhania): We want to retain errors. However, if we do it like
         // this we are not sure if the error was meant for parsing an IPv4 data.
         // The `tcp_connections` function should discriminate between versions
@@ -346,8 +338,8 @@ pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
 pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV6>>> {
     let conns = tcp_connections(pid)?;
     Ok(conns.filter_map(|conn| match conn {
-        Ok(TcpConnection::V6(conn)) => Some(Ok(conn)),
-        Ok(TcpConnection::V4(_)) => None,
+        Ok(Connection::Tcp(TcpConnection::V6(conn))) => Some(Ok(conn)),
+        Ok(_) => None,
         // TODO(@panhania): See the commant about retaining errors in the
         // `tcp_v4_connections` function.
         Err(error) => Some(Err(error)),
@@ -375,7 +367,7 @@ pub fn udp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std
 unsafe fn parse_tcp_v4_sockinfo(
     pid: u32,
     info: crate::libc::tcp_sockinfo,
-) -> Result<TcpConnection, ParseConnectionError> {
+) -> Result<TcpConnectionV4, ParseConnectionError> {
     use std::convert::TryFrom as _;
     use ParseConnectionError::*;
 
@@ -406,7 +398,7 @@ unsafe fn parse_tcp_v4_sockinfo(
         remote_addr: std::net::SocketAddrV4::new(remote_addr, remote_port),
         state: parse_tcp_state(info.tcpsi_state)?,
         pid,
-    }).into())
+    }))
 }
 
 /// Parses a macOS TCP IPv6 socket metadata into platform-agnostic type.
@@ -418,7 +410,7 @@ unsafe fn parse_tcp_v4_sockinfo(
 unsafe fn parse_tcp_v6_sockinfo(
     pid: u32,
     info: crate::libc::tcp_sockinfo,
-) -> Result<TcpConnection, ParseConnectionError> {
+) -> Result<TcpConnectionV6, ParseConnectionError> {
     use std::convert::TryFrom as _;
     use ParseConnectionError::*;
 
@@ -449,7 +441,7 @@ unsafe fn parse_tcp_v6_sockinfo(
         remote_addr: std::net::SocketAddrV6::new(remote_addr, remote_port, 0, 0),
         state: parse_tcp_state(info.tcpsi_state)?,
         pid,
-    }).into())
+    }))
 }
 
 /// Parses a macOS UDP IPv4 socket metadata into platform-agnostic type.
@@ -461,7 +453,7 @@ unsafe fn parse_tcp_v6_sockinfo(
 unsafe fn parse_udp_v4_sockinfo(
     pid: u32,
     info: crate::libc::in_sockinfo,
-) -> Result<UdpConnection, ParseConnectionError> {
+) -> Result<UdpConnectionV4, ParseConnectionError> {
     use std::convert::TryFrom as _;
     use ParseConnectionError::*;
 
@@ -482,7 +474,7 @@ unsafe fn parse_udp_v4_sockinfo(
     Ok(UdpConnectionV4::from_inner(UdpConnectionInner {
         local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
         pid,
-    }).into())
+    }))
 }
 
 /// Parses a macOS UDP IPv6 socket metadata into platform-agnostic type.
@@ -494,7 +486,7 @@ unsafe fn parse_udp_v4_sockinfo(
 unsafe fn parse_udp_v6_sockinfo(
     pid: u32,
     info: crate::libc::in_sockinfo,
-) -> Result<UdpConnection, ParseConnectionError> {
+) -> Result<UdpConnectionV6, ParseConnectionError> {
     use std::convert::TryFrom as _;
     use ParseConnectionError::*;
 
@@ -515,7 +507,7 @@ unsafe fn parse_udp_v6_sockinfo(
     Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
         local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
         pid,
-    }).into())
+    }))
 }
 
 /// Parses a macOS IPv4 socket information into the standard type.
