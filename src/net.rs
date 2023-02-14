@@ -260,14 +260,6 @@ impl TcpConnection {
             TcpConnection::V6(conn) => conn.pid(),
         }
     }
-
-    /// Changes the process identifier associated with this connection metadata.
-    fn set_pid(&mut self, pid: u32) {
-        match self {
-            TcpConnection::V4(ref mut conn) => conn.set_pid(pid),
-            TcpConnection::V6(ref mut conn) => conn.set_pid(pid),
-        }
-    }
 }
 
 impl From<TcpConnectionV4> for TcpConnection {

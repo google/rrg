@@ -286,15 +286,11 @@ impl Connections {
         let tcp_info = unsafe { info.psi.soi_proto.pri_tcp };
 
         match info.psi.soi_family {
-            // SAFETY: We verify that it is an IPv4 connection.
-            libc::AF_INET => unsafe {
-                self.parse_tcp_v4_sockinfo(tcp_info)
-            }.map(|conn| conn.into()),
-            // SAFETY: We verified that it is an IPv6 connection.
-            libc::AF_INET6 => unsafe {
-                self.parse_tcp_v6_sockinfo(tcp_info)
-            }.map(|conn| conn.into()),
-            _ => Err(InvalidAddressFamily(info.psi.soi_family))
+            libc::AF_INET => self.parse_tcp_v4_sockinfo(tcp_info)
+                .map(|conn| conn.into()),
+            libc::AF_INET6 => self.parse_tcp_v6_sockinfo(tcp_info)
+                .map(|conn| conn.into()),
+            _ => Err(InvalidAddressFamily(info.psi.soi_family)),
         }
     }
 
@@ -317,17 +313,11 @@ impl Connections {
         let udp_info = unsafe { info.psi.soi_proto.pri_in };
 
         match info.psi.soi_family {
-            // SAFETY: We verified that it is an IPv4 connection.
-            libc::AF_INET => unsafe {
-                self.parse_udp_v4_sockinfo(udp_info)
-            }.map(|conn| conn.into()),
-            // SAFETY: We verified that it is an IPv6 connection.
-            libc::AF_INET6 => unsafe {
-                self.parse_udp_v6_sockinfo(udp_info)
-            }.map(|conn| conn.into()),
-            _ => {
-                Err(InvalidAddressFamily(info.psi.soi_family))
-            }
+            libc::AF_INET => self.parse_udp_v4_sockinfo(udp_info)
+                .map(|conn| conn.into()),
+            libc::AF_INET6 => self.parse_udp_v6_sockinfo(udp_info)
+                .map(|conn| conn.into()),
+            _ => Err(InvalidAddressFamily(info.psi.soi_family)),
         }
     }
 
@@ -490,7 +480,7 @@ impl Iterator for Connections {
             // the function should report an error (which we verify below).
             let size = unsafe {
                 libc::proc_pidfdinfo(
-                    self.pid as i32,
+                    pid_i32 as i32,
                     fdinfo.proc_fd,
                     crate::libc::PROC_PIDFDSOCKETINFO,
                     info.as_mut_ptr().cast::<libc::c_void>(),
