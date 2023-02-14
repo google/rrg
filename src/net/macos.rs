@@ -266,9 +266,6 @@ impl Connections {
             iter: buf.into_iter(),
         })
     }
-}
-
-impl Connections {
 
     /// Parses a macOS TCP socket metadata into platform-agnostic type.
     fn parse_tcp_sockinfo(
@@ -291,11 +288,11 @@ impl Connections {
         match info.psi.soi_family {
             // SAFETY: We verify that it is an IPv4 connection.
             libc::AF_INET => unsafe {
-                parse_tcp_v4_sockinfo(self.pid, tcp_info)
+                self.parse_tcp_v4_sockinfo(tcp_info)
             }.map(|conn| conn.into()),
             // SAFETY: We verified that it is an IPv6 connection.
             libc::AF_INET6 => unsafe {
-                parse_tcp_v6_sockinfo(self.pid, tcp_info)
+                self.parse_tcp_v6_sockinfo(tcp_info)
             }.map(|conn| conn.into()),
             _ => Err(InvalidAddressFamily(info.psi.soi_family))
         }
@@ -322,16 +319,144 @@ impl Connections {
         match info.psi.soi_family {
             // SAFETY: We verified that it is an IPv4 connection.
             libc::AF_INET => unsafe {
-                parse_udp_v4_sockinfo(self.pid, udp_info)
+                self.parse_udp_v4_sockinfo(udp_info)
             }.map(|conn| conn.into()),
             // SAFETY: We verified that it is an IPv6 connection.
             libc::AF_INET6 => unsafe {
-                parse_udp_v6_sockinfo(self.pid, udp_info)
+                self.parse_udp_v6_sockinfo(udp_info)
             }.map(|conn| conn.into()),
             _ => {
                 Err(InvalidAddressFamily(info.psi.soi_family))
             }
         }
+    }
+
+    /// Parses a macOS TCP IPv4 socket metadata into platform-agnostic type.
+    fn parse_tcp_v4_sockinfo(
+        &self,
+        info: crate::libc::tcp_sockinfo,
+    ) -> Result<TcpConnectionV4, ParseConnectionError> {
+        use std::convert::TryFrom as _;
+        use ParseConnectionError::*;
+
+        if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV4 as u8 {
+            return Err(InvalidProtocolFlag(info.tcpsi_ini.insi_vflag));
+        }
+
+        // SAFETY: We verified that we are dealing with a TCP IPv4 socket above,
+        // so we are allowed to access the IPv4 address.
+        let remote_addr = parse_ipv4_addr(unsafe {
+            info.tcpsi_ini.insi_faddr.ina_46
+        });
+
+        let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
+            .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
+
+        // SAFETY: Same as with `remote_addr`.
+        let local_addr = parse_ipv4_addr(unsafe {
+            info.tcpsi_ini.insi_laddr.ina_46
+        });
+
+        let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
+            .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
+
+        Ok(TcpConnectionV4::from_inner(TcpConnectionInner {
+            local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
+            remote_addr: std::net::SocketAddrV4::new(remote_addr, remote_port),
+            state: parse_tcp_state(info.tcpsi_state)?,
+            pid: self.pid,
+        }))
+    }
+
+    /// Parses a macOS TCP IPv6 socket metadata into platform-agnostic type.
+    fn parse_tcp_v6_sockinfo(
+        &self,
+        info: crate::libc::tcp_sockinfo,
+    ) -> Result<TcpConnectionV6, ParseConnectionError> {
+        use std::convert::TryFrom as _;
+        use ParseConnectionError::*;
+
+        if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV6 as u8 {
+            return Err(InvalidProtocolFlag(info.tcpsi_ini.insi_vflag));
+        }
+
+        // SAFETY: We verified that we are dealing with a TCP IPv6 socket above,
+        // so we are allowed to access the IPv6 address.
+        let remote_addr = parse_ipv6_addr(unsafe {
+            info.tcpsi_ini.insi_faddr.ina_6
+        });
+
+        let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
+            .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
+
+        // SAFETY: Same as with `local_addr`.
+        let local_addr = parse_ipv6_addr(unsafe {
+            info.tcpsi_ini.insi_laddr.ina_6
+        });
+
+        let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
+            .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
+
+        Ok(TcpConnectionV6::from_inner(TcpConnectionInner {
+            local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
+            remote_addr: std::net::SocketAddrV6::new(remote_addr, remote_port, 0, 0),
+            state: parse_tcp_state(info.tcpsi_state)?,
+            pid: self.pid,
+        }))
+    }
+
+    /// Parses a macOS UDP IPv4 socket metadata into platform-agnostic type.
+    fn parse_udp_v4_sockinfo(
+        &self,
+        info: crate::libc::in_sockinfo,
+    ) -> Result<UdpConnectionV4, ParseConnectionError> {
+        use std::convert::TryFrom as _;
+        use ParseConnectionError::*;
+
+        if info.insi_vflag != crate::libc::INI_IPV4 as u8 {
+            return Err(InvalidProtocolFlag(info.insi_vflag));
+        }
+
+        // SAFETY: We verified that we are dealing with a UDP IPv4 socket above,
+        // so we are allowed to access the IPv4 address.
+        let local_addr = parse_ipv4_addr(unsafe {
+            info.insi_laddr.ina_46
+        });
+
+        let local_port = u16::try_from(info.insi_lport)
+            .map_err(|_| InvalidLocalPort(info.insi_lport))?;
+
+        Ok(UdpConnectionV4::from_inner(UdpConnectionInner {
+            local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
+            pid: self.pid,
+        }))
+    }
+
+    /// Parses a macOS UDP IPv6 socket metadata into platform-agnostic type.
+    fn parse_udp_v6_sockinfo(
+        &self,
+        info: crate::libc::in_sockinfo,
+    ) -> Result<UdpConnectionV6, ParseConnectionError> {
+        use std::convert::TryFrom as _;
+        use ParseConnectionError::*;
+
+        if info.insi_vflag != crate::libc::INI_IPV6 as u8 {
+            return Err(InvalidProtocolFlag(info.insi_vflag));
+        }
+
+        // SAFETY: We verified that we are dealing with a UDP IPv6 socket above,
+        // so we are allowed to access the IPv6 address.
+        let local_addr = parse_ipv6_addr(unsafe {
+            info.insi_laddr.ina_6
+        });
+
+        let local_port = u16::try_from(info.insi_lport)
+            .map_err(|_| InvalidLocalPort(info.insi_lport))?;
+
+        Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
+            local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
+            pid: self.pid,
+        }))
     }
 }
 
@@ -436,158 +561,6 @@ pub fn udp_v4_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std
 pub fn udp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
     // TODO: Implement this function.
     Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
-}
-
-/// Parses a macOS TCP IPv4 socket metadata into platform-agnostic type.
-///
-/// # Safety
-///
-/// The caller must ensure that `info` was constructed by an appropriate call
-/// to `proc_pidfdinfo`.
-unsafe fn parse_tcp_v4_sockinfo(
-    pid: u32,
-    info: crate::libc::tcp_sockinfo,
-) -> Result<TcpConnectionV4, ParseConnectionError> {
-    use std::convert::TryFrom as _;
-    use ParseConnectionError::*;
-
-    if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV4 as u8 {
-        return Err(InvalidProtocolFlag(info.tcpsi_ini.insi_vflag));
-    }
-
-    // SAFETY: We verified that we are dealing with a TCP IPv4 socket above, so
-    // we are allowed to access the IPv4 address. Note that the function is
-    // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
-    let remote_addr = parse_ipv4_addr(unsafe {
-        info.tcpsi_ini.insi_faddr.ina_46
-    });
-
-    let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
-        .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
-
-    // SAFETY: Same as with `remote_addr`.
-    let local_addr = parse_ipv4_addr(unsafe {
-        info.tcpsi_ini.insi_laddr.ina_46
-    });
-
-    let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
-        .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
-
-    Ok(TcpConnectionV4::from_inner(TcpConnectionInner {
-        local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
-        remote_addr: std::net::SocketAddrV4::new(remote_addr, remote_port),
-        state: parse_tcp_state(info.tcpsi_state)?,
-        pid,
-    }))
-}
-
-/// Parses a macOS TCP IPv6 socket metadata into platform-agnostic type.
-///
-/// # Safety
-///
-/// The caller must ensure that `info` was constructed by an appropriate call
-/// to `proc_pidfdinfo`.
-unsafe fn parse_tcp_v6_sockinfo(
-    pid: u32,
-    info: crate::libc::tcp_sockinfo,
-) -> Result<TcpConnectionV6, ParseConnectionError> {
-    use std::convert::TryFrom as _;
-    use ParseConnectionError::*;
-
-    if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV6 as u8 {
-        return Err(InvalidProtocolFlag(info.tcpsi_ini.insi_vflag));
-    }
-
-    // SAFETY: We verified that we are dealing with a TCP IPv6 socket above, so
-    // we are allowed to access the IPv6 address. Note that the function is
-    // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
-    let remote_addr = parse_ipv6_addr(unsafe {
-        info.tcpsi_ini.insi_faddr.ina_6
-    });
-
-    let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
-        .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
-
-    // SAFETY: Same as with `local_addr`.
-    let local_addr = parse_ipv6_addr(unsafe {
-        info.tcpsi_ini.insi_laddr.ina_6
-    });
-
-    let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
-        .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
-
-    Ok(TcpConnectionV6::from_inner(TcpConnectionInner {
-        local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
-        remote_addr: std::net::SocketAddrV6::new(remote_addr, remote_port, 0, 0),
-        state: parse_tcp_state(info.tcpsi_state)?,
-        pid,
-    }))
-}
-
-/// Parses a macOS UDP IPv4 socket metadata into platform-agnostic type.
-///
-/// # Safety
-///
-/// The caller must ensure that `info` was constructed by an appropriate call
-/// to `proc_pidfdinfo`.
-unsafe fn parse_udp_v4_sockinfo(
-    pid: u32,
-    info: crate::libc::in_sockinfo,
-) -> Result<UdpConnectionV4, ParseConnectionError> {
-    use std::convert::TryFrom as _;
-    use ParseConnectionError::*;
-
-    if info.insi_vflag != crate::libc::INI_IPV4 as u8 {
-        return Err(InvalidProtocolFlag(info.insi_vflag));
-    }
-
-    // SAFETY: We verified that we are dealing with a UDP IPv4 socket above, so
-    // we are allowed to access the IPv4 address. Note that the function is
-    // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
-    let local_addr = parse_ipv4_addr(unsafe {
-        info.insi_laddr.ina_46
-    });
-
-    let local_port = u16::try_from(info.insi_lport)
-        .map_err(|_| InvalidLocalPort(info.insi_lport))?;
-
-    Ok(UdpConnectionV4::from_inner(UdpConnectionInner {
-        local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
-        pid,
-    }))
-}
-
-/// Parses a macOS UDP IPv6 socket metadata into platform-agnostic type.
-///
-/// # Safety
-///
-/// The caller must ensure that `info` was constructed by an appropriate call
-/// to `proc_pidfdinfo`.
-unsafe fn parse_udp_v6_sockinfo(
-    pid: u32,
-    info: crate::libc::in_sockinfo,
-) -> Result<UdpConnectionV6, ParseConnectionError> {
-    use std::convert::TryFrom as _;
-    use ParseConnectionError::*;
-
-    if info.insi_vflag != crate::libc::INI_IPV6 as u8 {
-        return Err(InvalidProtocolFlag(info.insi_vflag));
-    }
-
-    // SAFETY: We verified that we are dealing with a UDP IPv6 socket above, so
-    // we are allowed to access the IPv6 address. Note that the function is
-    // nevertheless marked "unsafe" in case somebody passes ill-formed metadata.
-    let local_addr = parse_ipv6_addr(unsafe {
-        info.insi_laddr.ina_6
-    });
-
-    let local_port = u16::try_from(info.insi_lport)
-        .map_err(|_| InvalidLocalPort(info.insi_lport))?;
-
-    Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
-        local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
-        pid,
-    }))
 }
 
 /// Parses a macOS IPv4 socket information into the standard type.
