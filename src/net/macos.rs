@@ -374,6 +374,7 @@ impl Connections {
         info: crate::libc::tcp_sockinfo,
     ) -> Result<TcpConnectionV6, ParseConnectionError> {
         use std::convert::TryFrom as _;
+        use std::net::SocketAddrV6;
         use ParseConnectionError::*;
 
         if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV6 as u8 {
@@ -398,8 +399,8 @@ impl Connections {
             .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
 
         Ok(TcpConnectionV6::from_inner(TcpConnectionInner {
-            local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
-            remote_addr: std::net::SocketAddrV6::new(remote_addr, remote_port, 0, 0),
+            local_addr: SocketAddrV6::new(local_addr, local_port, 0, 0),
+            remote_addr: SocketAddrV6::new(remote_addr, remote_port, 0, 0),
             state: parse_tcp_state(info.tcpsi_state)?,
             pid: self.pid,
         }))
@@ -438,6 +439,7 @@ impl Connections {
         info: crate::libc::in_sockinfo,
     ) -> Result<UdpConnectionV6, ParseConnectionError> {
         use std::convert::TryFrom as _;
+        use std::net::SocketAddrV6;
         use ParseConnectionError::*;
 
         if info.insi_vflag != crate::libc::INI_IPV6 as u8 {
@@ -454,7 +456,7 @@ impl Connections {
             .map_err(|_| InvalidLocalPort(info.insi_lport))?;
 
         Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
-            local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
+            local_addr: SocketAddrV6::new(local_addr, local_port, 0, 0),
             pid: self.pid,
         }))
     }
