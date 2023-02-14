@@ -397,6 +397,48 @@ pub enum Connection {
     Udp(UdpConnection),
 }
 
+impl From<TcpConnection> for Connection {
+
+    fn from(conn: TcpConnection) -> Connection {
+        Connection::Tcp(conn)
+    }
+}
+
+impl From<TcpConnectionV4> for Connection {
+
+    fn from(conn: TcpConnectionV4) -> Connection {
+        TcpConnection::from(conn).into()
+    }
+}
+
+impl From<TcpConnectionV6> for Connection {
+
+    fn from(conn: TcpConnectionV6) -> Connection {
+        TcpConnection::from(conn).into()
+    }
+}
+
+impl From<UdpConnection> for Connection {
+
+    fn from(conn: UdpConnection) -> Connection {
+        Connection::Udp(conn)
+    }
+}
+
+impl From<UdpConnectionV4> for Connection {
+
+    fn from(conn: UdpConnectionV4) -> Connection {
+        UdpConnection::from(conn).into()
+    }
+}
+
+impl From<UdpConnectionV6> for Connection {
+
+    fn from(conn: UdpConnectionV6) -> Connection {
+        UdpConnection::from(conn).into()
+    }
+}
+
 /// Returns an iterator over IPv4 TCP connections for the specified process.
 ///
 /// # Errors
