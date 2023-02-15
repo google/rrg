@@ -574,15 +574,23 @@ pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
-pub fn udp_v4_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV4>>> {
-    // TODO: Implement this function.
-    Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
+pub fn udp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV4>>> {
+    let conns = Connections::new(pid, ProtocolFilter::Udp)?;
+    Ok(conns.filter_map(|conn| match conn {
+        Ok(Connection::Udp(UdpConnection::V4(conn))) => Some(Ok(conn)),
+        Ok(_) => None,
+        Err(error) => Some(Err(error)),
+    }))
 }
 
 /// Returns an iterator over IPv6 UDP connections for the specified process.
-pub fn udp_v6_connections(_pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
-    // TODO: Implement this function.
-    Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
+pub fn udp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
+    let conns = Connections::new(pid, ProtocolFilter::Udp)?;
+    Ok(conns.filter_map(|conn| match conn {
+        Ok(Connection::Udp(UdpConnection::V6(conn))) => Some(Ok(conn)),
+        Ok(_) => None,
+        Err(error) => Some(Err(error)),
+    }))
 }
 
 /// Parses a macOS IPv4 socket information into the standard type.
