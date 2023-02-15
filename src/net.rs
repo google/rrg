@@ -121,6 +121,10 @@ pub enum TcpState {
     Closed,
 }
 
+// TODO(@panhania): There are structs named `*ConnectionV*` but functions that
+// return iterators over them are named `*_v*_connections`. This is not very
+// consistent and should be fixed.
+
 /// Internal generic type for information about a TCP connection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct TcpConnectionInner<A> {
