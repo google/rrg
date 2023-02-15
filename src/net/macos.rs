@@ -528,8 +528,6 @@ impl Iterator for Connections {
 /// An enum with possible values for filtering connections by the protocol type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum ProtocolFilter {
-    /// Allow everything.
-    All,
     /// Allow only TCP connections.
     Tcp,
     /// Allow only UDP connections.
@@ -542,14 +540,14 @@ impl ProtocolFilter {
     fn is_tcp(&self) -> bool {
         use ProtocolFilter::*;
 
-        matches!(self, All | Tcp)
+        matches!(self, Tcp)
     }
 
     /// Returns `true` if the filter allows UDP.
     fn is_udp(&self) -> bool {
         use ProtocolFilter::*;
 
-        matches!(self, All | Udp)
+        matches!(self, Udp)
     }
 }
 
