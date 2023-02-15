@@ -476,8 +476,6 @@ mod tests {
 
     use super::*;
 
-    // TODO(@panhania): Enable on macOS once the function is supported there.
-    #[cfg_attr(target_os = "macos", ignore)]
     #[test]
     fn tcp_v4_connections_local_connection() {
         use std::net::Ipv4Addr;
@@ -499,8 +497,6 @@ mod tests {
         assert_eq!(server_conn.pid(), std::process::id());
     }
 
-    // TODO(@panhania): Enable on macOS once the function is supported there.
-    #[cfg_attr(target_os = "macos", ignore)]
     #[test]
     fn tcp_v6_connections_local_connection() {
         use std::net::Ipv6Addr;
@@ -522,8 +518,6 @@ mod tests {
         assert_eq!(server_conn.pid(), std::process::id());
     }
 
-    // TODO(@panhania): Enable on macOS once the function is supported there.
-    #[cfg_attr(target_os = "macos", ignore)]
     #[test]
     fn udp_v4_connections_local_connection() {
         use std::net::Ipv4Addr;
@@ -544,8 +538,6 @@ mod tests {
         assert_eq!(server_conn.pid(), std::process::id());
     }
 
-    // TODO(@panhania): Enable on macOS once the function is supported there.
-    #[cfg_attr(target_os = "macos", ignore)]
     #[test]
     fn udp_v6_connections_local_connection() {
         use std::net::Ipv6Addr;
