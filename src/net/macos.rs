@@ -187,6 +187,8 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 struct Connections {
     /// An identifier of the process for which this iterator yields items.
     pid: u32,
+    /// A filter of protocol type to apply to the yielded connections.
+    protocol: ProtocolFilter,
     /// An iterator over low-level macOS file descriptor metadata.
     iter: std::vec::IntoIter<crate::libc::proc_fdinfo>,
 }
@@ -195,11 +197,17 @@ impl Connections {
 
     /// Creates a new iterator over connections for the specified process.
     ///
+    /// The iterator will yield only connections that match the given `protocol`
+    /// filter.
+    ///
     /// # Errors
     ///
     /// This function will yield an error if metadata cannot be obtained for the
     /// specified process.
-    pub fn new(pid: u32) -> std::io::Result<Connections> {
+    pub fn new(
+        pid: u32,
+        protocol: ProtocolFilter,
+    ) -> std::io::Result<Connections> {
         use std::convert::TryFrom as _;
 
         const PROC_FDINFO_SIZE: i32 = {
@@ -263,6 +271,7 @@ impl Connections {
 
         Ok(Connections {
             pid,
+            protocol,
             iter: buf.into_iter(),
         })
     }
@@ -496,13 +505,13 @@ impl Iterator for Connections {
             let info = unsafe { info.assume_init() };
 
             match info.psi.soi_kind {
-                crate::libc::SOCKINFO_TCP => {
+                crate::libc::SOCKINFO_TCP if self.protocol.is_tcp() => {
                     match self.parse_tcp_sockinfo(&info) {
                         Ok(conn) => return Some(Ok(conn.into())),
                         Err(error) => return Some(Err(error.into())),
                     }
                 }
-                crate::libc::SOCKINFO_IN => {
+                crate::libc::SOCKINFO_IN if self.protocol.is_udp() => {
                     match self.parse_udp_sockinfo(&info) {
                         Ok(conn) => return Some(Ok(conn.into())),
                         Err(error) => return Some(Err(error.into())),
@@ -516,29 +525,50 @@ impl Iterator for Connections {
     }
 }
 
+/// An enum with possible values for filtering connections by the protocol type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ProtocolFilter {
+    /// Allow everything.
+    All,
+    /// Allow only TCP connections.
+    Tcp,
+    /// Allow only UDP connections.
+    Udp,
+}
+
+impl ProtocolFilter {
+
+    /// Returns `true` if the filter allows TCP.
+    fn is_tcp(&self) -> bool {
+        use ProtocolFilter::*;
+
+        matches!(self, All | Tcp)
+    }
+
+    /// Returns `true` if the filter allows UDP.
+    fn is_udp(&self) -> bool {
+        use ProtocolFilter::*;
+
+        matches!(self, All | Udp)
+    }
+}
+
 /// Returns an iterator over IPv4 TCP connections for the specified process.
 pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV4>>> {
-    let conns = Connections::new(pid)?;
+    let conns = Connections::new(pid, ProtocolFilter::Tcp)?;
     Ok(conns.filter_map(|conn| match conn {
         Ok(Connection::Tcp(TcpConnection::V4(conn))) => Some(Ok(conn)),
         Ok(_) => None,
-        // TODO(@panhania): We want to retain errors. However, if we do it like
-        // this we are not sure if the error was meant for parsing an IPv4 data.
-        // The `tcp_connections` function should discriminate between versions
-        // of the returned entries. Ideally, the `TcpConnection` type should be
-        // split into `TcpConnectionV4` and `TcpConnectionV6` types.
         Err(error) => Some(Err(error)),
     }))
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
 pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV6>>> {
-    let conns = Connections::new(pid)?;
+    let conns = Connections::new(pid, ProtocolFilter::Tcp)?;
     Ok(conns.filter_map(|conn| match conn {
         Ok(Connection::Tcp(TcpConnection::V6(conn))) => Some(Ok(conn)),
         Ok(_) => None,
-        // TODO(@panhania): See the commant about retaining errors in the
-        // `tcp_v4_connections` function.
         Err(error) => Some(Err(error)),
     }))
 }
