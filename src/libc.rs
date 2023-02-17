@@ -2,6 +2,58 @@
 // crate.
 #[cfg(target_os = "macos")]
 mod macos {
+
+    // TODO(@panhania): Check whether `vst_*timensec` fields correspond to only
+    // the nanoseconds part or it is more precise representation of the time.
+    //
+    // TODO(@panhania): Document the unit of time of `vst_*time` fields.
+    #[derive(Clone, Copy)]
+    #[repr(C)]
+    pub struct vinfo_stat {
+        /// Identifier of the device containing the file.
+        pub vst_dev: u32,
+        /// Mode of the file.
+        pub vst_mode: u16,
+        /// Number of hard links.
+        pub vst_nlink: u16,
+        /// Serial number.
+        pub vst_ino: u64,
+        /// Identifier of the user that owns the file.
+        pub vst_uid: libc::uid_t,
+        /// Identifier of the group that owns the file.
+        pub vst_gid: libc::gid_t,
+        /// Last access time.
+        pub vst_atime: i64,
+        /// Nanoseconds of last access time.
+        pub vst_atimensec: i64,
+        /// Last data modification time.
+        pub vst_mtime: i64,
+        /// Nanoseconds of last data modification time.
+        pub vst_mtimensec: i64,
+        /// Last status change time.
+        pub vst_ctime: i64,
+        /// Nanoseconds of last status change time.
+        pub vst_ctimensec: i64,
+        /// Creation time.
+        pub vst_birthtime: i64,
+        /// Nanoseconds of creation time.
+        pub vst_birthtimensec: i64,
+        /// Size of the file (in bytes).
+        pub vst_size: libc::off_t,
+        /// Number of allocated blocks.
+        pub vst_blocks: i64,
+        /// Optimal block size.
+        pub vst_blksize: i32,
+        /// User-defined flags.
+        pub vst_flags: u32,
+        /// Generation number.
+        pub vst_gen: u32,
+        /// Identifier of the device this file represents.
+        pub vst_rdev: u32,
+        /// Reserved, should not be used.
+        pub vst_qspare: [i64; 2],
+    }
+
     // https://opensource.apple.com/source/xnu/xnu-1228.0.2/bsd/sys/proc_info.h.auto.html
     pub const PROX_FDTYPE_ATALK: libc::c_int = 0;
     pub const PROX_FDTYPE_VNODE: libc::c_int = 1;
@@ -272,7 +324,7 @@ mod macos {
     #[derive(Clone, Copy)]
     #[repr(C)]
     pub struct socket_info {
-        pub soi_stat: libc::stat,
+        pub soi_stat: vinfo_stat,
         /// Opaque handle of socket.
         pub soi_so: u64,
         /// Opaque handle of protocol control block.
