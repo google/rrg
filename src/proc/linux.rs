@@ -58,10 +58,12 @@ impl Iterator for Ids {
             // All directories under `/proc` that are integers should correspond
             // to a process, so they are valid pids. Everything else we can just
             // discard.
-            match u32::from_str(file_name_str) {
-                Ok(pid) => return Some(Ok(pid)),
+            let pid = match u32::from_str(file_name_str) {
+                Ok(pid) => pid,
                 Err(_) => continue,
-            }
+            };
+
+            return Some(Ok(pid));
         }
 
         None
