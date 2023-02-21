@@ -5,8 +5,7 @@
 
 /// Returns an iterator yielding identifiers of all processes on the system.
 pub fn ids() -> std::io::Result<impl Iterator<Item = std::io::Result<u32>>> {
-    // TOOD(@panhania): Implement this method.
-    Err::<std::iter::Empty<_>, _>(std::io::ErrorKind::Unsupported.into())
+    Ids::new()
 }
 
 /// A macOS-specific implementation of the iterator over process identifiers.
@@ -94,6 +93,27 @@ impl Ids {
         Ok(Ids {
             iter: buf.into_iter(),
         })
+    }
+}
+
+impl Iterator for Ids {
+
+    type Item = std::io::Result<u32>;
+
+    fn next(&mut self) -> Option<std::io::Result<u32>> {
+        use std::convert::TryFrom as _;
+
+        let proc = self.iter.next()?;
+
+        let pid = match u32::try_from(proc.kp_proc.p_pid) {
+            Ok(pid) => pid,
+            Err(error) => {
+                use std::io::{Error, ErrorKind};
+                return Some(Err(Error::new(ErrorKind::InvalidData, error)));
+            },
+        };
+
+        Some(Ok(pid))
     }
 }
 
