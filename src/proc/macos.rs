@@ -97,13 +97,167 @@ impl Ids {
     }
 }
 
-// TODO(@panhania): Move to the `libc` module (or ideally: to the `libc` crate).
-#[repr(C)]
+// TODO(@panhania): Move the following definitions to the `libc` module (or
+// ideally: to the `libc` crate).
+
 #[derive(Clone, Copy)]
+#[repr(C)]
+struct __c_anonymous_p_st1 {
+    __p_forw: *mut libc::c_void,
+    __p_back: *mut libc::c_void,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+union __c_anonymous_p_un {
+    p_st1: __c_anonymous_p_st1,
+    __p_starttime: libc::timeval,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct extern_proc {
+    p_un: __c_anonymous_p_un,
+    p_vmspace: *mut vmspace,
+	p_sigacts: *mut libc::c_void,
+	p_flag: libc::c_int,
+	p_stat: libc::c_char,
+	p_pid: libc::pid_t,
+	p_oppid: libc::pid_t,
+	p_dupfd: libc::c_int,
+	user_stack: caddr_t,
+	exit_thread: *mut libc::c_void,
+	p_debugger: libc::c_int,
+	sigwait: libc::boolean_t,
+	p_estcpu: libc::c_uint,
+	p_cpticks: libc::c_int,
+	p_pctcpu: fixpt_t,
+	p_wchan: *mut libc::c_void,
+	p_wmesg: *mut libc::c_char,
+	p_swtime: libc::c_uint,
+	p_slptime: libc::c_uint,
+	p_realtimer: libc::itimerval,
+	p_rtime: libc::timeval,
+	p_uticks: u_quad_t,
+	p_sticks: u_quad_t,
+	p_iticks: u_quad_t,
+	p_traceflag: libc::c_int,
+	p_tracep: *mut libc::c_void,
+	p_siglist: libc::c_int,
+	p_textvp: *mut libc::c_void,
+	p_holdcnt: libc::c_int,
+	p_sigmask: libc::sigset_t,
+	p_sigignore: libc::sigset_t,
+	p_sigcatch: libc::sigset_t,
+	p_priority: libc::c_uchar,
+	p_usrpri: libc::c_uchar,
+	p_nice: libc::c_char,
+	p_comm: [libc::c_char; libc::MAXCOMLEN + 1],
+	p_pgrp: *mut libc::c_void,
+	p_addr: *mut libc::c_void,
+	p_xstat: libc::c_ushort,
+	p_acflag: libc::c_ushort,
+	p_ru: *mut libc::c_void,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct _pcred {
+    /// Opaque content.
+	pc_lock: [libc::c_char; 72],
+    /// Current credentials.
+	pc_ucred: *mut libc::c_void,
+    /// Real user identifier.
+	p_ruid: libc::uid_t,
+    /// Saved effective user identifier.
+	p_svuid: libc::uid_t,
+    /// Real group identifier.
+	p_rgid: libc::gid_t,
+    /// Saved effective group identifier.
+	p_svgid: libc::gid_t,
+    /// Reference count.
+	p_refcnt: libc::c_int,
+}
+
+const NGROUPS_MAX: libc::c_int = 16;
+const NGROUPS: libc::c_int = NGROUPS_MAX;
+
+const WMESGLEN: libc::c_int = 7;
+
+const COMAPT_MAXLOGNAME: libc::c_int = 12;
+
+type caddr_t = *mut libc::c_void;
+type segsz_t = i32;
+type fixpt_t = u32;
+type u_quad_t = u64;
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct _ucred {
+    /// Reference count.
+	cr_ref: i32,
+    /// Effective user identifier.
+	cr_uid: libc::uid_t,
+    /// Group count.
+	cr_ngroups: libc::c_short,
+    /// Group identifiers.
+	cr_groups: [libc::gid_t; NGROUPS as usize],
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct vmspace {
+    // `dummy*` is literally what is used in the original header.
+	dummy: i32,
+	dummy2: caddr_t,
+	dummy3: [i32; 5],
+	dummy4: [caddr_t; 3],
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct eproc {
+    /// Process address.
+    e_paddr: *mut libc::c_void,
+    /// Session pointer.
+    e_sess: *mut libc::c_void,
+    /// Process credentials.
+    e_pcred: _pcred,
+    /// Current credentials.
+    e_ucred: _ucred,
+    /// Address space.
+    e_vm: vmspace,
+    /// Parent process identifier.
+    e_ppid: libc::pid_t,
+    /// Process group identifier.
+    e_pgid: libc::pid_t,
+    /// Job control counter.
+    e_jobc: libc::c_short,
+    /// Controlling TTY device identifier.
+    e_tdev: libc::dev_t,
+    /// Controlling TTY process group identifier.
+    e_tpgid: libc::pid_t,
+    /// Controlling TTY session pointer.
+    e_tsess: *mut libc::c_void,
+    /// Waiting channel message.
+    e_wmesg: [libc::c_char; WMESGLEN as usize + 1],
+    /// Text size.
+    e_xsize: segsz_t,
+    /// Text resident set size.
+    e_xrssize: libc::c_short,
+    /// Text reference count.
+    e_xccount: libc::c_short,
+    e_xswrss: libc::c_short,
+    e_flag: i32,
+    e_login: [libc::c_char; COMAPT_MAXLOGNAME as usize],
+    e_spare: [i32; 4],
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
 struct kinfo_proc {
-    // TODO(@panhania): Fill with the actual definition.
-    __padding: [u8; 40],
-    k_pid: libc::pid_t,
+	pub kp_proc: extern_proc,
+    pub kp_eproc: eproc,
 }
 
 const KINFO_PROC_SIZE: usize = std::mem::size_of::<kinfo_proc>();
