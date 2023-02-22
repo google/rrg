@@ -212,6 +212,7 @@ impl Connections {
 
         let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
             .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
+        let remote_port = u16::from_be(remote_port);
 
         // SAFETY: Same as with `remote_addr`.
         let local_addr = parse_ipv4_addr(unsafe {
@@ -220,6 +221,7 @@ impl Connections {
 
         let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
             .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
+        let local_port = u16::from_be(local_port);
 
         Ok(TcpConnectionV4::from_inner(TcpConnectionInner {
             local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
@@ -250,6 +252,7 @@ impl Connections {
 
         let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
             .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
+        let remote_port = u16::from_be(remote_port);
 
         // SAFETY: Same as with `local_addr`.
         let local_addr = parse_ipv6_addr(unsafe {
@@ -258,6 +261,7 @@ impl Connections {
 
         let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
             .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
+        let local_port = u16::from_be(local_port);
 
         Ok(TcpConnectionV6::from_inner(TcpConnectionInner {
             local_addr: SocketAddrV6::new(local_addr, local_port, 0, 0),
@@ -287,6 +291,7 @@ impl Connections {
 
         let local_port = u16::try_from(info.insi_lport)
             .map_err(|_| InvalidLocalPort(info.insi_lport))?;
+        let local_port = u16::from_be(local_port);
 
         Ok(UdpConnectionV4::from_inner(UdpConnectionInner {
             local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
@@ -315,6 +320,7 @@ impl Connections {
 
         let local_port = u16::try_from(info.insi_lport)
             .map_err(|_| InvalidLocalPort(info.insi_lport))?;
+        let local_port = u16::from_be(local_port);
 
         Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
             local_addr: SocketAddrV6::new(local_addr, local_port, 0, 0),
