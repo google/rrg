@@ -60,8 +60,6 @@ impl Row for MIB_TCPROW_OWNER_PID {
 
     // https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcprow_owner_pid
     fn parse(&self) -> Result<TcpConnectionV4, ParseConnectionError> {
-        use std::convert::TryFrom as _;
-
         let local_addr = parse_ipv4_addr(self.dwLocalAddr);
         let local_port = parse_port(self.dwLocalPort)
             .ok_or(ParseConnectionError::InvalidLocalPort)?;
@@ -85,8 +83,6 @@ impl Row for MIB_TCP6ROW_OWNER_PID {
 
     // https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcp6row_owner_pid
     fn parse(&self) -> Result<TcpConnectionV6, ParseConnectionError> {
-        use std::convert::TryFrom as _;
-
         let local_addr = std::net::Ipv6Addr::from(self.ucLocalAddr);
         let local_port = parse_port(self.dwLocalPort)
             .ok_or(ParseConnectionError::InvalidLocalPort)?;
@@ -110,8 +106,6 @@ impl Row for MIB_UDPROW_OWNER_PID {
 
     // https://learn.microsoft.com/en-us/windows/win32/api/udpmib/ns-udpmib-mib_udprow_owner_pid
     fn parse(&self) -> Result<UdpConnectionV4, ParseConnectionError> {
-        use std::convert::TryFrom as _;
-
         let local_addr = parse_ipv4_addr(self.dwLocalAddr);
         let local_port = parse_port(self.dwLocalPort)
             .ok_or(ParseConnectionError::InvalidLocalPort)?;
@@ -129,8 +123,6 @@ impl Row for MIB_UDP6ROW_OWNER_PID {
 
     // https://learn.microsoft.com/en-us/windows/win32/api/udpmib/ns-udpmib-mib_udp6row_owner_pid
     fn parse(&self) -> Result<UdpConnectionV6, ParseConnectionError> {
-        use std::convert::TryFrom as _;
-
         let local_addr = std::net::Ipv6Addr::from(self.ucLocalAddr);
         let local_port = parse_port(self.dwLocalPort)
             .ok_or(ParseConnectionError::InvalidLocalPort)?;
@@ -382,10 +374,10 @@ where
 fn parse_port(val: u32) -> Option<u16> {
     use std::convert::TryFrom as _;
 
-    /// Note that the documentation says: "This member is stored in network byte
-    /// order.". However, this is not entirely true: we have to interpret this
-    /// as a 16-bit long value and only then convert it from the network byte
-    /// order (as opposed to converting all 32-bit value).
+    // Note that the documentation says: "This member is stored in network byte
+    // order.". However, this is not entirely true: we have to interpret this as
+    // a 16-bit long value and only then convert it from the network byte order
+    // (as opposed to converting all 32-bit value).
     Some(u16::from_be(u16::try_from(val).ok()?))
 }
 
@@ -400,7 +392,7 @@ fn parse_ipv4_addr(val: u32) -> std::net::Ipv4Addr {
     // expectsa native-endian order.
     //
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winsock2/ns-winsock2-in_addr
-    std::net::Ipv4::from(u32::from_be(val))
+    std::net::Ipv4Addr::from(u32::from_be(val))
 }
 
 /// An error that might be returned when parsing Windows connection table row.
