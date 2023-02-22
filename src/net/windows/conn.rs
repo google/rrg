@@ -323,7 +323,7 @@ where
 
     // We passed a null pointer, so everything that is *not* a buffer overflow
     // error is unexpected.
-    if code != windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW {
+    if code != windows_sys::Win32::Foundation::ERROR_INSUFFICIENT_BUFFER {
         let code = i32::try_from(code)
             .expect("invalid error code");
 
