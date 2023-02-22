@@ -25,6 +25,7 @@ use crate::session::{self, Session};
 pub struct Request {
     /// A path to the file to stat.
     path: PathBuf,
+    // TODO(@panhania): Constrain existence of this field to UNIX-only systems.
     /// Whether to collect extended file attributes.
     collect_ext_attrs: bool,
     /// Whether, in case of a symlink, to collect data about the linked file.

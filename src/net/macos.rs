@@ -3,6 +3,8 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+mod conn;
+
 use super::*;
 
 /// Collects information about available network interfaces.
@@ -183,13 +185,33 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     Ok(ifaces.into_iter())
 }
 
+/// Returns an iterator over IPv4 TCP connections for the specified process.
+pub fn tcp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV4>>> {
+    conn::tcp_v4(pid)
+}
+
+/// Returns an iterator over IPv6 TCP connections for the specified process.
+pub fn tcp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV6>>> {
+    conn::tcp_v6(pid)
+}
+
+/// Returns an iterator over IPv4 UDP connections for the specified process.
+pub fn udp_v4_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV4>>> {
+    conn::udp_v4(pid)
+}
+
+/// Returns an iterator over IPv6 UDP connections for the specified process.
+pub fn udp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
+    conn::udp_v6(pid)
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
 
     #[test]
-    fn loopback_exists() {
+    fn interfaces_loopback_exists() {
         let mut ifaces = interfaces().unwrap();
 
         // On macOS the loopback interface seems to be always named `lo0` but it
