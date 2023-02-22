@@ -313,12 +313,15 @@ where
 {
     use std::convert::TryFrom as _;
 
-    let mut buf_size = std::mem::MaybeUninit::uninit();
+    // The documentation does not mention it explicitly, but if we pass a not
+    // initialized `buf_size`, even with null buffer, for TCPv6 the call will
+    // crash with an access violation.
+    let mut buf_size = 0;
 
     // SAFETY: We pass a null pointer as the buffer and expect the size to be
     // set accordingly. We handle errors below.
     let code = unsafe {
-        T::get(std::ptr::null_mut(), buf_size.as_mut_ptr())
+        T::get(std::ptr::null_mut(), &mut buf_size)
     };
 
     // We passed a null pointer, so everything that is *not* a buffer overflow
@@ -332,7 +335,6 @@ where
 
     // SAFETY: The call "succeeded" (returned the expected error, it means that
     // the buffer size variable has been set to the required size value).
-    let mut buf_size = unsafe { buf_size.assume_init() };
 
     let buf_layout = std::alloc::Layout::from_size_align(
         buf_size as usize,
