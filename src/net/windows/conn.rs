@@ -322,6 +322,11 @@ where
     // SAFETY: The call "succeeded" (returned the expected error, it means that
     // the buffer size variable has been set to the required size value).
 
+    // TODO(@panhania): Migrate the code away from using the `std::alloc` module
+    // to plain `Vec` (the approach taken e.g. on macOS). This way we don't have
+    // to collect at the end of the function but have a consuming iterator that
+    // yields new items on demand, avoiding one big unnecessary allocation.
+
     let buf_layout = std::alloc::Layout::from_size_align(
         buf_size as usize,
         std::mem::align_of::<T>(),
