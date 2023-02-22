@@ -145,6 +145,7 @@ mod macos {
         pub insi_vflag: u8,
         /// Time to live.
         pub insi_ip_ttl: u8,
+        pub rfu_1: u32,
         /// Foreign host table entry.
         pub insi_faddr: __c_anonymous_insi_faddr,
         /// Local host table entry.
