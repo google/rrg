@@ -62,15 +62,13 @@ impl Row for MIB_TCPROW_OWNER_PID {
     fn parse(&self) -> Result<TcpConnectionV4, ParseConnectionError> {
         use std::convert::TryFrom as _;
 
-        let local_addr = std::net::Ipv4Addr::from(u32::from_be(self.dwLocalAddr));
-        let local_port = u16::try_from(self.dwLocalPort)
-            .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-        let local_port = u16::from_be(local_port);
+        let local_addr = parse_ipv4_addr(self.dwLocalAddr);
+        let local_port = parse_port(self.dwLocalPort)
+            .ok_or(ParseConnectionError::InvalidLocalPort)?;
 
-        let remote_addr = std::net::Ipv4Addr::from(u32::from_be(self.dwRemoteAddr));
-        let remote_port = u16::try_from(self.dwRemotePort)
-            .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
-        let remote_port = u16::from_be(remote_port);
+        let remote_addr = parse_ipv4_addr(self.dwRemoteAddr);
+        let remote_port = parse_port(self.dwRemotePort)
+            .ok_or(ParseConnectionError::InvalidRemotePort)?;
 
         Ok(TcpConnectionV4::from_inner(TcpConnectionInner {
             local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
@@ -90,14 +88,12 @@ impl Row for MIB_TCP6ROW_OWNER_PID {
         use std::convert::TryFrom as _;
 
         let local_addr = std::net::Ipv6Addr::from(self.ucLocalAddr);
-        let local_port = u16::try_from(self.dwLocalPort)
-            .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-        let local_port = u16::from_be(local_port);
+        let local_port = parse_port(self.dwLocalPort)
+            .ok_or(ParseConnectionError::InvalidLocalPort)?;
 
         let remote_addr = std::net::Ipv6Addr::from(self.ucRemoteAddr);
-        let remote_port = u16::try_from(self.dwRemotePort)
-            .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
-        let remote_port = u16::from_be(remote_port);
+        let remote_port = parse_port(self.dwRemotePort)
+            .ok_or(ParseConnectionError::InvalidRemotePort)?;
 
         Ok(TcpConnectionV6::from_inner(TcpConnectionInner {
             local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
@@ -116,10 +112,9 @@ impl Row for MIB_UDPROW_OWNER_PID {
     fn parse(&self) -> Result<UdpConnectionV4, ParseConnectionError> {
         use std::convert::TryFrom as _;
 
-        let local_addr = std::net::Ipv4Addr::from(u32::from_be(self.dwLocalAddr));
-        let local_port = u16::try_from(self.dwLocalPort)
-            .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-        let local_port = u16::from_be(local_port);
+        let local_addr = parse_ipv4_addr(self.dwLocalAddr);
+        let local_port = parse_port(self.dwLocalPort)
+            .ok_or(ParseConnectionError::InvalidLocalPort)?;
 
         Ok(UdpConnectionV4::from_inner(UdpConnectionInner {
             local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
@@ -137,9 +132,8 @@ impl Row for MIB_UDP6ROW_OWNER_PID {
         use std::convert::TryFrom as _;
 
         let local_addr = std::net::Ipv6Addr::from(self.ucLocalAddr);
-        let local_port = u16::try_from(self.dwLocalPort)
-            .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
-        let local_port = u16::from_be(local_port);
+        let local_port = parse_port(self.dwLocalPort)
+            .ok_or(ParseConnectionError::InvalidLocalPort)?;
 
         Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
             local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
@@ -379,6 +373,34 @@ where
         .collect::<Vec<_>>();
 
     Ok(conns.into_iter())
+}
+
+/// Parses a connection port value returned by the system.
+///
+/// This will convert a value as returned by the system (a `u32` value) to a one
+/// the fits the model used by Rust.
+fn parse_port(val: u32) -> Option<u16> {
+    use std::convert::TryFrom as _;
+
+    /// Note that the documentation says: "This member is stored in network byte
+    /// order.". However, this is not entirely true: we have to interpret this
+    /// as a 16-bit long value and only then convert it from the network byte
+    /// order (as opposed to converting all 32-bit value).
+    Some(u16::from_be(u16::try_from(val).ok()?))
+}
+
+/// Parses a connection IPv4 value returned by the system.
+///
+/// This will convert a value as returned by the system (a `u32` value) to a one
+/// the fits the model used by Rust.
+fn parse_ipv4_addr(val: u32) -> std::net::Ipv4Addr {
+    // The documentation mentions that the value is in the same format as one
+    // in the `in_addr` [1] structure. While it is not stated explictly, it
+    // means that the value is stored in big-endian order and `Ipv4` constructor
+    // expectsa native-endian order.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winsock2/ns-winsock2-in_addr
+    std::net::Ipv4::from(u32::from_be(val))
 }
 
 /// An error that might be returned when parsing Windows connection table row.
