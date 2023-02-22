@@ -197,7 +197,6 @@ impl Connections {
         &self,
         info: crate::libc::tcp_sockinfo,
     ) -> Result<TcpConnectionV4, ParseConnectionError> {
-        use std::convert::TryFrom as _;
         use ParseConnectionError::*;
 
         if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV4 as u8 {
@@ -209,19 +208,15 @@ impl Connections {
         let remote_addr = parse_ipv4_addr(unsafe {
             info.tcpsi_ini.insi_faddr.ina_46
         });
-
-        let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
-            .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
-        let remote_port = u16::from_be(remote_port);
+        let remote_port = parse_port(info.tcpsi_ini.insi_fport)
+            .map_err(InvalidRemotePort)?;
 
         // SAFETY: Same as with `remote_addr`.
         let local_addr = parse_ipv4_addr(unsafe {
             info.tcpsi_ini.insi_laddr.ina_46
         });
-
-        let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
-            .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
-        let local_port = u16::from_be(local_port);
+        let local_port = parse_port(info.tcpsi_ini.insi_lport)
+            .map_err(InvalidLocalPort)?;
 
         Ok(TcpConnectionV4::from_inner(TcpConnectionInner {
             local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
@@ -236,7 +231,6 @@ impl Connections {
         &self,
         info: crate::libc::tcp_sockinfo,
     ) -> Result<TcpConnectionV6, ParseConnectionError> {
-        use std::convert::TryFrom as _;
         use std::net::SocketAddrV6;
         use ParseConnectionError::*;
 
@@ -249,19 +243,15 @@ impl Connections {
         let remote_addr = parse_ipv6_addr(unsafe {
             info.tcpsi_ini.insi_faddr.ina_6
         });
-
-        let remote_port = u16::try_from(info.tcpsi_ini.insi_fport)
-            .map_err(|_| InvalidRemotePort(info.tcpsi_ini.insi_fport))?;
-        let remote_port = u16::from_be(remote_port);
+        let remote_port = parse_port(info.tcpsi_ini.insi_fport)
+            .map_err(InvalidRemotePort)?;
 
         // SAFETY: Same as with `local_addr`.
         let local_addr = parse_ipv6_addr(unsafe {
             info.tcpsi_ini.insi_laddr.ina_6
         });
-
-        let local_port = u16::try_from(info.tcpsi_ini.insi_lport)
-            .map_err(|_| InvalidLocalPort(info.tcpsi_ini.insi_lport))?;
-        let local_port = u16::from_be(local_port);
+        let local_port = parse_port(info.tcpsi_ini.insi_lport)
+            .map_err(InvalidLocalPort)?;
 
         Ok(TcpConnectionV6::from_inner(TcpConnectionInner {
             local_addr: SocketAddrV6::new(local_addr, local_port, 0, 0),
@@ -276,7 +266,6 @@ impl Connections {
         &self,
         info: crate::libc::in_sockinfo,
     ) -> Result<UdpConnectionV4, ParseConnectionError> {
-        use std::convert::TryFrom as _;
         use ParseConnectionError::*;
 
         if info.insi_vflag != crate::libc::INI_IPV4 as u8 {
@@ -288,10 +277,8 @@ impl Connections {
         let local_addr = parse_ipv4_addr(unsafe {
             info.insi_laddr.ina_46
         });
-
-        let local_port = u16::try_from(info.insi_lport)
-            .map_err(|_| InvalidLocalPort(info.insi_lport))?;
-        let local_port = u16::from_be(local_port);
+        let local_port = parse_port(info.insi_lport)
+            .map_err(InvalidLocalPort)?;
 
         Ok(UdpConnectionV4::from_inner(UdpConnectionInner {
             local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
@@ -304,7 +291,6 @@ impl Connections {
         &self,
         info: crate::libc::in_sockinfo,
     ) -> Result<UdpConnectionV6, ParseConnectionError> {
-        use std::convert::TryFrom as _;
         use std::net::SocketAddrV6;
         use ParseConnectionError::*;
 
@@ -317,10 +303,8 @@ impl Connections {
         let local_addr = parse_ipv6_addr(unsafe {
             info.insi_laddr.ina_6
         });
-
-        let local_port = u16::try_from(info.insi_lport)
-            .map_err(|_| InvalidLocalPort(info.insi_lport))?;
-        let local_port = u16::from_be(local_port);
+        let local_port = parse_port(info.insi_lport)
+            .map_err(ParseConnectionError::InvalidLocalPort)?;
 
         Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
             local_addr: SocketAddrV6::new(local_addr, local_port, 0, 0),
@@ -438,6 +422,25 @@ fn parse_ipv4_addr(addr: crate::libc::in4in6_addr) -> std::net::Ipv4Addr {
 /// Parses a macOS IPv6 socket information into the standard type.
 fn parse_ipv6_addr(addr: libc::in6_addr) -> std::net::Ipv6Addr {
     std::net::Ipv6Addr::from(addr.s6_addr)
+}
+
+/// Parses a macOS value representing a port into a standard type.
+///
+/// # Errors
+///
+/// If the value cannot be parsed an error is reported. The error contains the
+/// original value.
+fn parse_port(port: libc::c_int) -> Result<u16, libc::c_int> {
+    use std::convert::TryFrom as _;
+
+    let port = u16::try_from(port)
+        .map_err(|_| port)?;
+
+    // No documention mentions it (well, it would have to exist in the first
+    // place), but from manual experimentation it is clear that port is also
+    // stored using network-endian byte order and so we have to convert it to
+    // something that Rust expects.
+    Ok(u16::from_be(port))
 }
 
 /// An error that might be returned when interpreting macOS TCP socket metadata.
