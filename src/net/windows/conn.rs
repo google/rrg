@@ -62,13 +62,15 @@ impl Row for MIB_TCPROW_OWNER_PID {
     fn parse(&self) -> Result<TcpConnectionV4, ParseConnectionError> {
         use std::convert::TryFrom as _;
 
-        let local_addr = std::net::Ipv4Addr::from(self.dwLocalAddr);
+        let local_addr = std::net::Ipv4Addr::from(u32::from_be(self.dwLocalAddr));
         let local_port = u16::try_from(self.dwLocalPort)
             .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+        let local_port = u16::from_be(local_port);
 
-        let remote_addr = std::net::Ipv4Addr::from(self.dwRemoteAddr);
+        let remote_addr = std::net::Ipv4Addr::from(u32::from_be(self.dwRemoteAddr));
         let remote_port = u16::try_from(self.dwRemotePort)
             .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
+        let remote_port = u16::from_be(remote_port);
 
         Ok(TcpConnectionV4::from_inner(TcpConnectionInner {
             local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
@@ -90,10 +92,12 @@ impl Row for MIB_TCP6ROW_OWNER_PID {
         let local_addr = std::net::Ipv6Addr::from(self.ucLocalAddr);
         let local_port = u16::try_from(self.dwLocalPort)
             .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+        let local_port = u16::from_be(local_port);
 
         let remote_addr = std::net::Ipv6Addr::from(self.ucRemoteAddr);
         let remote_port = u16::try_from(self.dwRemotePort)
             .map_err(|_| ParseConnectionError::InvalidRemotePort)?;
+        let remote_port = u16::from_be(remote_port);
 
         Ok(TcpConnectionV6::from_inner(TcpConnectionInner {
             local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
@@ -112,9 +116,10 @@ impl Row for MIB_UDPROW_OWNER_PID {
     fn parse(&self) -> Result<UdpConnectionV4, ParseConnectionError> {
         use std::convert::TryFrom as _;
 
-        let local_addr = std::net::Ipv4Addr::from(self.dwLocalAddr);
+        let local_addr = std::net::Ipv4Addr::from(u32::from_be(self.dwLocalAddr));
         let local_port = u16::try_from(self.dwLocalPort)
             .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+        let local_port = u16::from_be(local_port);
 
         Ok(UdpConnectionV4::from_inner(UdpConnectionInner {
             local_addr: std::net::SocketAddrV4::new(local_addr, local_port),
@@ -134,6 +139,7 @@ impl Row for MIB_UDP6ROW_OWNER_PID {
         let local_addr = std::net::Ipv6Addr::from(self.ucLocalAddr);
         let local_port = u16::try_from(self.dwLocalPort)
             .map_err(|_| ParseConnectionError::InvalidLocalPort)?;
+        let local_port = u16::from_be(local_port);
 
         Ok(UdpConnectionV6::from_inner(UdpConnectionInner {
             local_addr: std::net::SocketAddrV6::new(local_addr, local_port, 0, 0),
