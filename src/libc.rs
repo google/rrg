@@ -145,7 +145,7 @@ mod macos {
         pub insi_vflag: u8,
         /// Time to live.
         pub insi_ip_ttl: u8,
-		/// Foreign host table entry.
+        /// Foreign host table entry.
         pub insi_faddr: __c_anonymous_insi_faddr,
         /// Local host table entry.
         pub insi_laddr: __c_anonymous_insi_laddr,
@@ -159,7 +159,7 @@ mod macos {
     pub const TSI_T_REXMT: libc::c_int = 0;
     /// Retransmit persistence.
     pub const TSI_T_PERSIST: libc::c_int = 1;
-	/// Keep alive.
+    /// Keep alive.
     pub const TSI_T_KEEP: libc::c_int = 2;
     /// _2 * MSL_ quiet time timer
     pub const TSI_T_2MSL: libc::c_int = 3;
@@ -230,7 +230,7 @@ mod macos {
         pub unsi_conn_pcb: u64,
         /// Bound address.
         pub unsi_addr: __c_anonymous_unsi_addr,
-		/// Address of socket connected to.
+        /// Address of socket connected to.
         pub unsi_caddr: __c_anonymous_unsi_cddr,
     }
 
@@ -309,15 +309,15 @@ mod macos {
         /// For [`SOCKINFO_IN`].
         pub pri_in: in_sockinfo,
         /// For [`SOCKINFO_TCP`].
-		pub pri_tcp: tcp_sockinfo,
+        pub pri_tcp: tcp_sockinfo,
         /// For [`SOCKINFO_UN`].
-		pub pri_un: un_sockinfo,
+        pub pri_un: un_sockinfo,
         /// For [`SOCKINFO_NDRV`].
-		pub pri_ndrv: ndrv_info,
+        pub pri_ndrv: ndrv_info,
         /// For [`SOCKINFO_KERN_EVENT`].
-		pub pri_kern_event: kern_event_info,
+        pub pri_kern_event: kern_event_info,
         /// For [`SOCKINFO_KERN_CTL`].
-		pub pri_kern_ctl: kern_ctl_info,
+        pub pri_kern_ctl: kern_ctl_info,
     }
 
     // https://opensource.apple.com/source/xnu/xnu-1228.0.2/bsd/sys/proc_info.h.auto.html
