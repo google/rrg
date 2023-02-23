@@ -393,6 +393,17 @@ pub enum Connection {
     Udp(UdpConnection),
 }
 
+impl Connection {
+
+    /// Returns the identifier of the process that owns the connection.
+    pub fn pid(&self) -> u32 {
+        match self {
+            Connection::Tcp(conn) => conn.pid(),
+            Connection::Udp(conn) => conn.pid(),
+        }
+    }
+}
+
 impl From<TcpConnection> for Connection {
 
     fn from(conn: TcpConnection) -> Connection {
@@ -475,10 +486,53 @@ pub fn udp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
     self::sys::udp_v6_connections(pid)
 }
 
+/// Returns an iterator over TCP connections for the specified process.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+pub fn tcp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+    let v4 = tcp_v4_connections(pid)?.map(|conn| conn.map(TcpConnection::V4));
+    let v6 = tcp_v6_connections(pid)?.map(|conn| conn.map(TcpConnection::V6));
+
+    Ok(v4.chain(v6))
+}
+
+/// Returns an iterator over UDP connections for the specified process.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+pub fn udp_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+    let v4 = udp_v4_connections(pid)?.map(|conn| conn.map(UdpConnection::V4));
+    let v6 = udp_v6_connections(pid)?.map(|conn| conn.map(UdpConnection::V6));
+
+    Ok(v4.chain(v6))
+}
+
+/// Returns an iterator over network connections for the specified process.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+pub fn connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<Connection>>> {
+    let tcp = tcp_connections(pid)?.map(|conn| conn.map(Connection::Tcp));
+    let udp = udp_connections(pid)?.map(|conn| conn.map(Connection::Udp));
+
+    Ok(tcp.chain(udp))
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
+
+    // TODO(@panhania): Add tests where we connect to the TCP listener to check
+    // TCP for an established collection state (not only for "listening" as we
+    // do now).
 
     #[test]
     fn tcp_v4_connections_local_connection() {
