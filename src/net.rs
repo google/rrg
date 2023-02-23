@@ -530,6 +530,10 @@ mod tests {
 
     use super::*;
 
+    // TODO(@panhania): Add tests where we connect to the TCP listener to check
+    // TCP for an established collection state (not only for "listening" as we
+    // do now).
+
     #[test]
     fn tcp_v4_connections_local_connection() {
         use std::net::Ipv4Addr;
