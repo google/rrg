@@ -55,7 +55,6 @@ default = [
     "action-filesystems",
     "action-finder",
     "action-listdir",
-    "action-memsize",
     "action-metadata",
     "action-network",
     "action-stat",
@@ -67,7 +66,6 @@ action-interfaces = []
 action-filesystems = ["dep:proc-mounts"]
 action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
 action-listdir = []
-action-memsize = ["dep:sysinfo"]
 action-metadata = []
 action-network = []
 action-stat = []

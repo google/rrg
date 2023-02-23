@@ -43,9 +43,6 @@ pub mod stat;
 #[cfg(feature = "action-insttime")]
 pub mod insttime;
 
-#[cfg(feature = "action-memsize")]
-pub mod memsize;
-
 #[cfg(feature = "action-finder")]
 pub mod finder;
 
@@ -108,11 +105,6 @@ where
         #[cfg(target_os = "linux")]
         "EnumerateFilesystems" => {
             handle(session, request, self::filesystems::handle)
-        }
-
-        #[cfg(feature = "action-memsize")]
-        "GetMemorySize" => {
-            handle(session, request, self::memsize::handle)
         }
 
         action_name => {
