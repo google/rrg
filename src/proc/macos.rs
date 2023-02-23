@@ -22,7 +22,7 @@ impl Ids {
             std::mem::size_of::<crate::libc::kinfo_proc>()
         };
 
-        let mut mib = [libc::CTL_KERN, libc::KERN_PROC_ALL];
+        let mut mib = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_ALL];
 
         let mut buf_size = std::mem::MaybeUninit::uninit();
 
