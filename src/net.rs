@@ -393,6 +393,17 @@ pub enum Connection {
     Udp(UdpConnection),
 }
 
+impl Connection {
+
+    /// Returns the identifier of the process that owns the connection.
+    pub fn pid(&self) -> u32 {
+        match self {
+            Connection::Tcp(conn) => conn.pid(),
+            Connection::Udp(conn) => conn.pid(),
+        }
+    }
+}
+
 impl From<TcpConnection> for Connection {
 
     fn from(conn: TcpConnection) -> Connection {
