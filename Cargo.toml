@@ -1,5 +1,9 @@
 [workspace]
-members = ["./crates/rrg", "./crates/rrg-macro", "./crates/rrg-proto"]
+members = [
+    "./crates/rrg",
+    "./crates/rrg-macro",
+    "./crates/rrg-proto",
+]
 
 [workspace.package]
 version = "0.1.0"
