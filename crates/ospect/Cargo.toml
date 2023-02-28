@@ -1,0 +1,8 @@
+[package]
+name = "ospect"
+version = "0.0.0"
+authors.workspace = true
+edition.workspace = true
+
+description = "A small library for inspecting the operating system."
+categories = ["os", "filesystem"]

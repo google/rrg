@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "./crates/ospect",
     "./crates/rrg",
     "./crates/rrg-macro",
     "./crates/rrg-proto",
