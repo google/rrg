@@ -105,8 +105,6 @@ impl Iterator for Ids {
     type Item = std::io::Result<u32>;
 
     fn next(&mut self) -> Option<std::io::Result<u32>> {
-        use std::convert::TryFrom as _;
-
         let proc = self.iter.next()?;
 
         let pid = match u32::try_from(proc.kp_proc.p_pid) {

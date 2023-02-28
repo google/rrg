@@ -180,7 +180,6 @@ impl crate::convert::FromLossy<std::fs::Metadata> for jobs::StatEntry {
 
         #[cfg(target_family = "unix")]
         {
-            use std::convert::TryFrom as _;
             use std::os::unix::fs::MetadataExt as _;
 
             let ctime_secs = ack! {
@@ -206,7 +205,7 @@ impl crate::convert::FromLossy<std::fs::Metadata> for jobs::StatEntry {
     }
 }
 
-impl std::convert::TryFrom<jobs::PathSpec> for std::path::PathBuf {
+impl TryFrom<jobs::PathSpec> for std::path::PathBuf {
 
     type Error = ParsePathSpecError;
 
@@ -346,8 +345,6 @@ impl From<std::time::SystemTimeError> for TimeConversionError {
 /// assert_eq!(nanos(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
 pub fn nanos(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
-    use std::convert::TryInto as _;
-
     let duration = time.duration_since(std::time::UNIX_EPOCH)?;
     duration.as_nanos().try_into().map_err(TimeConversionError::overflow)
 }
@@ -365,8 +362,6 @@ pub fn nanos(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
 /// assert_eq!(micros(std::time::UNIX_EPOCH).unwrap(), 0);
 /// ```
 pub fn micros(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
-    use std::convert::TryInto as _;
-
     let duration = std::time::Duration::from_nanos(nanos(time)?);
     duration.as_micros().try_into().map_err(TimeConversionError::overflow)
 }

@@ -70,8 +70,6 @@ impl Connections {
         pid: u32,
         protocol: ProtocolFilter,
     ) -> std::io::Result<Connections> {
-        use std::convert::TryFrom as _;
-
         const PROC_FDINFO_SIZE: i32 = {
             std::mem::size_of::<crate::libc::proc_fdinfo>() as i32
         };
@@ -431,8 +429,6 @@ fn parse_ipv6_addr(addr: libc::in6_addr) -> std::net::Ipv6Addr {
 /// If the value cannot be parsed an error is reported. The error contains the
 /// original value.
 fn parse_port(port: libc::c_int) -> Result<u16, libc::c_int> {
-    use std::convert::TryFrom as _;
-
     let port = u16::try_from(port)
         .map_err(|_| port)?;
 

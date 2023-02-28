@@ -297,8 +297,6 @@ fn all<T>() -> std::io::Result<impl Iterator<Item = std::io::Result<<<T as Table
 where
     T: Table,
 {
-    use std::convert::TryFrom as _;
-
     // The documentation does not mention it explicitly, but if we pass a not
     // initialized `buf_size`, even with null buffer, for TCPv6 the call will
     // crash with an access violation.
@@ -377,8 +375,6 @@ where
 /// This will convert a value as returned by the system (a `u32` value) to a one
 /// the fits the model used by Rust.
 fn parse_port(val: u32) -> Option<u16> {
-    use std::convert::TryFrom as _;
-
     // Note that the documentation says: "This member is stored in network byte
     // order.". However, this is not entirely true: we have to interpret this as
     // a 16-bit long value and only then convert it from the network byte order

@@ -94,8 +94,6 @@ impl super::Args for Request {
     type Proto = rrg_proto::jobs::ListDirRequest;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Request, super::ParseArgsError> {
-        use std::convert::TryInto as _;
-
         let path = proto.take_pathspec().try_into()
             .map_err(crate::action::ParseArgsError::invalid_field)?;
 

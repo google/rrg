@@ -114,8 +114,6 @@ impl Chunk {
 impl FromLossy<crate::fs::Entry> for rrg_proto::timeline::TimelineEntry {
 
     fn from_lossy(entry: crate::fs::Entry) -> rrg_proto::timeline::TimelineEntry {
-        use std::convert::TryFrom as _;
-
         let mut proto = rrg_proto::timeline::TimelineEntry::new();
         proto.set_path(rrg_proto::path::into_bytes(entry.path));
         proto.set_size(entry.metadata.len());

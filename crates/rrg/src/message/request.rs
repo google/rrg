@@ -56,12 +56,11 @@ impl Request {
     /// This will suspend execution until the request is actually available.
     /// However, the process will keep heartbeating at the specified rate.
     pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ReceiveRequestError> {
-        use std::convert::TryFrom as _;
         Ok(Request::try_from(super::fleetspeak::receive_raw(heartbeat_rate)?)?)
     }
 }
 
-impl std::convert::TryFrom<rrg_proto::jobs::GrrMessage> for Request {
+impl TryFrom<rrg_proto::jobs::GrrMessage> for Request {
 
     type Error = ParseRequestError;
 

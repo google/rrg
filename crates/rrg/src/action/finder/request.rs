@@ -10,7 +10,6 @@
 use crate::session::{time_from_micros, RegexParseError};
 use log::info;
 use protobuf::ProtobufEnum;
-use std::convert::TryFrom;
 use std::fmt::Write;
 
 #[derive(Debug)]

@@ -18,8 +18,6 @@ mod conn;
 ///
 /// [`interfaces`]: super::interfaces
 pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
-    use std::convert::TryFrom as _;
-
     use windows_sys::Win32::NetworkManagement::IpHelper::*;
 
     let mut buf_size = u32::try_from(DEFAULT_BUF_SIZE)
