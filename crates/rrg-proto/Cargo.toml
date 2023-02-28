@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 log = { version = "0.4.8" }
 protobuf = { version = "2.27.1" }
-rrg-macro = { path = "../../macro/" }
+rrg-macro = { path = "../rrg-macro/" }
 
 [dev-dependencies]
 quickcheck = { version = "1.0.3" }

@@ -6,10 +6,10 @@ authors = ["Łukasz Hanuszczak <hanuszczak@google.com>"]
 edition = "2018"
 
 [workspace]
-members = [".", "./macro", "./crates/rrg-proto"]
+members = [".", "./crates/rrg-macro", "./crates/rrg-proto"]
 
 [dependencies]
-rrg-macro = { path = "macro/" }
+rrg-macro = { path = "crates/rrg-macro/" }
 rrg-proto = { path = "crates/rrg-proto/" }
 
 argh = { version = "0.1.8" }
