@@ -15,7 +15,6 @@ pub mod message;
 pub mod metadata;
 pub mod net;
 pub mod args;
-pub mod proc;
 pub mod session;
 pub mod startup;
 

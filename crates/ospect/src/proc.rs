@@ -35,7 +35,7 @@ mod sys {
 /// # Examples
 ///
 /// ```
-/// let mut pids = rrg::proc::ids()
+/// let mut pids = ospect::proc::ids()
 ///     .unwrap();
 ///
 /// assert! {

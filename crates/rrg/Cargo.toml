@@ -32,6 +32,9 @@ test-chattr = []
 test-setfattr = []
 test-fuse = ["dep:fuse"]
 
+[dependencies.ospect]
+path = "../ospect"
+
 [dependencies.rrg-macro]
 path = "../rrg-macro"
 

@@ -57,7 +57,7 @@ where
 {
     use rrg_macro::warn;
 
-    let pids = crate::proc::ids()
+    let pids = ospect::proc::ids()
         .map_err(Error)?;
 
     for pid in pids {
