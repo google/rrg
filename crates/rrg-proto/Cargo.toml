@@ -4,15 +4,23 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
-[dependencies]
-log = { version = "0.4.8" }
-protobuf = { version = "2.27.1" }
-rrg-macro = { path = "../rrg-macro/" }
+[dependencies.rrg-macro]
+path = "../rrg-macro/"
 
-[dev-dependencies]
-quickcheck = { version = "1.0.3" }
-quickcheck_macros = { version = "1.0.0" }
+[dependencies.log]
+version = "0.4.8"
 
-[build-dependencies]
-protobuf-codegen-pure = { version = "2.27.1" }
-tempfile = { version = "3.1.0" }
+[dependencies.protobuf]
+version = "2.27.1"
+
+[dev-dependencies.quickcheck]
+version = "1.0.3"
+
+[dev-dependencies.quickcheck_macros]
+version = "1.0.0"
+
+[build-dependencies.protobuf-codegen-pure]
+version = "2.27.1"
+
+[build-dependencies.tempfile]
+version = "3.1.0"
