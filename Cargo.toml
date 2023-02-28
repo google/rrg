@@ -8,4 +8,4 @@ members = [
 [workspace.package]
 version = "0.1.0"
 authors = ["Łukasz Hanuszczak <hanuszczak@google.com>"]
-edition = "2018" # TODO(@panhania): Upgrade to `2021`.
+edition = "2021"
