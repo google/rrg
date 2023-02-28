@@ -5,4 +5,5 @@
 
 pub mod alloc; // TODO(@panhania): This module should not be exposed.
 pub mod libc; // TODO(@panhania): This module should not be exposed.
+pub mod net;
 pub mod proc;

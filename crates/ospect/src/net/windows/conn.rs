@@ -330,7 +330,7 @@ where
         std::mem::align_of::<T>(),
     ).expect("invalid layout for adapter addresses table");
 
-    let buf = ospect::alloc::Allocation::new(buf_layout)
+    let buf = crate::alloc::Allocation::new(buf_layout)
         .ok_or_else(|| std::io::ErrorKind::OutOfMemory)?;
 
     // SAFETY: We allocated a buffer of the requested size and pass it along

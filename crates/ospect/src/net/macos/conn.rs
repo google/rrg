@@ -52,7 +52,7 @@ struct Connections {
     /// A filter of protocol type to apply to the yielded connections.
     protocol: ProtocolFilter,
     /// An iterator over low-level macOS file descriptor metadata.
-    iter: std::vec::IntoIter<ospect::libc::proc_fdinfo>,
+    iter: std::vec::IntoIter<crate::libc::proc_fdinfo>,
 }
 
 impl Connections {
@@ -71,7 +71,7 @@ impl Connections {
         protocol: ProtocolFilter,
     ) -> std::io::Result<Connections> {
         const PROC_FDINFO_SIZE: i32 = {
-            std::mem::size_of::<ospect::libc::proc_fdinfo>() as i32
+            std::mem::size_of::<crate::libc::proc_fdinfo>() as i32
         };
 
         let pid_i32 = i32::try_from(pid)
@@ -82,7 +82,7 @@ impl Connections {
         let buf_size = unsafe {
             libc::proc_pidinfo(
                 pid_i32,
-                ospect::libc::PROC_PIDLISTFDS,
+                crate::libc::PROC_PIDLISTFDS,
                 0,
                 std::ptr::null_mut(),
                 0,
@@ -98,7 +98,7 @@ impl Connections {
         }
 
         let mut buf = {
-            Vec::<ospect::libc::proc_fdinfo>::with_capacity(buf_len as usize)
+            Vec::<crate::libc::proc_fdinfo>::with_capacity(buf_len as usize)
         };
 
         // SAFETY: We call the function as above but with allocated buffer. The
@@ -106,7 +106,7 @@ impl Connections {
         let buf_size = unsafe {
             libc::proc_pidinfo(
                 pid_i32,
-                ospect::libc::PROC_PIDLISTFDS,
+                crate::libc::PROC_PIDLISTFDS,
                 0,
                 buf.as_mut_ptr().cast::<libc::c_void>(),
                 buf_size,
@@ -139,7 +139,7 @@ impl Connections {
     /// Parses a macOS TCP socket metadata into platform-agnostic type.
     fn parse_tcp_sockinfo(
         &self,
-        info: &ospect::libc::socket_fdinfo,
+        info: &crate::libc::socket_fdinfo,
     ) -> Result<TcpConnection, ParseConnectionError> {
         use ParseConnectionError::*;
 
@@ -148,7 +148,7 @@ impl Connections {
         }
 
         // This should be ensured by the caller.
-        assert_eq!(info.psi.soi_kind, ospect::libc::SOCKINFO_TCP);
+        assert_eq!(info.psi.soi_kind, crate::libc::SOCKINFO_TCP);
 
         // SAFETY: We verified that we have a TCP socket, so we can
         // safely access the `pri_tcp` field.
@@ -166,7 +166,7 @@ impl Connections {
     /// Parses a macOS UDP socket metadata into platform-agnostic type.
     fn parse_udp_sockinfo(
         &self,
-        info: &ospect::libc::socket_fdinfo,
+        info: &crate::libc::socket_fdinfo,
     ) -> Result<UdpConnection, ParseConnectionError> {
         use ParseConnectionError::*;
 
@@ -175,7 +175,7 @@ impl Connections {
         }
 
         // This should be ensured by the caller.
-        assert_eq!(info.psi.soi_kind, ospect::libc::SOCKINFO_IN);
+        assert_eq!(info.psi.soi_kind, crate::libc::SOCKINFO_IN);
 
         // SAFETY: We verified that we have a generic socket, so we can
         // safely access the `pri_in` field.
@@ -193,11 +193,11 @@ impl Connections {
     /// Parses a macOS TCP IPv4 socket metadata into platform-agnostic type.
     fn parse_tcp_v4_sockinfo(
         &self,
-        info: ospect::libc::tcp_sockinfo,
+        info: crate::libc::tcp_sockinfo,
     ) -> Result<TcpConnectionV4, ParseConnectionError> {
         use ParseConnectionError::*;
 
-        if info.tcpsi_ini.insi_vflag != ospect::libc::INI_IPV4 as u8 {
+        if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV4 as u8 {
             return Err(InvalidProtocolFlag(info.tcpsi_ini.insi_vflag));
         }
 
@@ -227,12 +227,12 @@ impl Connections {
     /// Parses a macOS TCP IPv6 socket metadata into platform-agnostic type.
     fn parse_tcp_v6_sockinfo(
         &self,
-        info: ospect::libc::tcp_sockinfo,
+        info: crate::libc::tcp_sockinfo,
     ) -> Result<TcpConnectionV6, ParseConnectionError> {
         use std::net::SocketAddrV6;
         use ParseConnectionError::*;
 
-        if info.tcpsi_ini.insi_vflag != ospect::libc::INI_IPV6 as u8 {
+        if info.tcpsi_ini.insi_vflag != crate::libc::INI_IPV6 as u8 {
             return Err(InvalidProtocolFlag(info.tcpsi_ini.insi_vflag));
         }
 
@@ -262,11 +262,11 @@ impl Connections {
     /// Parses a macOS UDP IPv4 socket metadata into platform-agnostic type.
     fn parse_udp_v4_sockinfo(
         &self,
-        info: ospect::libc::in_sockinfo,
+        info: crate::libc::in_sockinfo,
     ) -> Result<UdpConnectionV4, ParseConnectionError> {
         use ParseConnectionError::*;
 
-        if info.insi_vflag != ospect::libc::INI_IPV4 as u8 {
+        if info.insi_vflag != crate::libc::INI_IPV4 as u8 {
             return Err(InvalidProtocolFlag(info.insi_vflag));
         }
 
@@ -287,12 +287,12 @@ impl Connections {
     /// Parses a macOS UDP IPv6 socket metadata into platform-agnostic type.
     fn parse_udp_v6_sockinfo(
         &self,
-        info: ospect::libc::in_sockinfo,
+        info: crate::libc::in_sockinfo,
     ) -> Result<UdpConnectionV6, ParseConnectionError> {
         use std::net::SocketAddrV6;
         use ParseConnectionError::*;
 
-        if info.insi_vflag != ospect::libc::INI_IPV6 as u8 {
+        if info.insi_vflag != crate::libc::INI_IPV6 as u8 {
             return Err(InvalidProtocolFlag(info.insi_vflag));
         }
 
@@ -317,7 +317,7 @@ impl Iterator for Connections {
 
     fn next(&mut self) -> Option<std::io::Result<Connection>> {
         const SOCKET_FDINFO_SIZE: i32 = {
-            std::mem::size_of::<ospect::libc::socket_fdinfo>() as i32
+            std::mem::size_of::<crate::libc::socket_fdinfo>() as i32
         };
 
         // We verified that `self.pid` fits in `i32` in the constructor, so this
@@ -325,12 +325,12 @@ impl Iterator for Connections {
         let pid_i32 = self.pid as i32;
 
         for fdinfo in &mut self.iter {
-            if fdinfo.proc_fdtype != ospect::libc::PROX_FDTYPE_SOCKET as u32 {
+            if fdinfo.proc_fdtype != crate::libc::PROX_FDTYPE_SOCKET as u32 {
                 continue;
             }
 
             let mut info = {
-                std::mem::MaybeUninit::<ospect::libc::socket_fdinfo>::uninit()
+                std::mem::MaybeUninit::<crate::libc::socket_fdinfo>::uninit()
             };
 
             // SAFETY: We verifed that the file descriptor corresponds to a
@@ -341,7 +341,7 @@ impl Iterator for Connections {
                 libc::proc_pidfdinfo(
                     pid_i32 as i32,
                     fdinfo.proc_fd,
-                    ospect::libc::PROC_PIDFDSOCKETINFO,
+                    crate::libc::PROC_PIDFDSOCKETINFO,
                     info.as_mut_ptr().cast::<libc::c_void>(),
                     SOCKET_FDINFO_SIZE,
                 )
@@ -355,13 +355,13 @@ impl Iterator for Connections {
             let info = unsafe { info.assume_init() };
 
             match info.psi.soi_kind {
-                ospect::libc::SOCKINFO_TCP if self.protocol.is_tcp() => {
+                crate::libc::SOCKINFO_TCP if self.protocol.is_tcp() => {
                     match self.parse_tcp_sockinfo(&info) {
                         Ok(conn) => return Some(Ok(conn.into())),
                         Err(error) => return Some(Err(error.into())),
                     }
                 }
-                ospect::libc::SOCKINFO_IN if self.protocol.is_udp() => {
+                crate::libc::SOCKINFO_IN if self.protocol.is_udp() => {
                     match self.parse_udp_sockinfo(&info) {
                         Ok(conn) => return Some(Ok(conn.into())),
                         Err(error) => return Some(Err(error.into())),
@@ -402,7 +402,7 @@ impl ProtocolFilter {
 }
 
 /// Parses a macOS IPv4 socket information into the standard type.
-fn parse_ipv4_addr(addr: ospect::libc::in4in6_addr) -> std::net::Ipv4Addr {
+fn parse_ipv4_addr(addr: crate::libc::in4in6_addr) -> std::net::Ipv4Addr {
     // Unlike on Linux, Apple documentation does not say anything whatsoever
     // about the endianness of the address value [1, 2]. We give them the
     // benefit of a doubt and assume that they do a sane thing and follow the
@@ -498,17 +498,17 @@ impl From<ParseConnectionError> for std::io::Error {
 /// Parses a TCP connection state value returned by the system.
 fn parse_tcp_state(val: libc::c_int) -> Result<TcpState, ParseTcpStateError> {
     let state = match val {
-        ospect::libc::TSI_S_CLOSED => TcpState::Closed,
-        ospect::libc::TSI_S_LISTEN => TcpState::Listen,
-        ospect::libc::TSI_S_SYN_SENT => TcpState::SynSent,
-        ospect::libc::TSI_S_SYN_RECEIVED => TcpState::SynReceived,
-        ospect::libc::TSI_S_ESTABLISHED => TcpState::Established,
-        ospect::libc::TSI_S__CLOSE_WAIT => TcpState::CloseWait,
-        ospect::libc::TSI_S_FIN_WAIT_1 => TcpState::FinWait1,
-        ospect::libc::TSI_S_CLOSING => TcpState::Closing,
-        ospect::libc::TSI_S_LAST_ACK => TcpState::LastAck,
-        ospect::libc::TSI_S_FIN_WAIT_2 => TcpState::FinWait2,
-        ospect::libc::TSI_S_TIME_WAIT => TcpState::TimeWait,
+        crate::libc::TSI_S_CLOSED => TcpState::Closed,
+        crate::libc::TSI_S_LISTEN => TcpState::Listen,
+        crate::libc::TSI_S_SYN_SENT => TcpState::SynSent,
+        crate::libc::TSI_S_SYN_RECEIVED => TcpState::SynReceived,
+        crate::libc::TSI_S_ESTABLISHED => TcpState::Established,
+        crate::libc::TSI_S__CLOSE_WAIT => TcpState::CloseWait,
+        crate::libc::TSI_S_FIN_WAIT_1 => TcpState::FinWait1,
+        crate::libc::TSI_S_CLOSING => TcpState::Closing,
+        crate::libc::TSI_S_LAST_ACK => TcpState::LastAck,
+        crate::libc::TSI_S_FIN_WAIT_2 => TcpState::FinWait2,
+        crate::libc::TSI_S_TIME_WAIT => TcpState::TimeWait,
         _ => return Err(ParseTcpStateError::UnknownState(val)),
     };
 
