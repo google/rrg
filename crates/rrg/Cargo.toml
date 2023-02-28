@@ -1,9 +1,9 @@
 [package]
 name = "rrg"
 description = "Rust rewrite of GRR."
-version = "0.1.0"
-authors = ["Łukasz Hanuszczak <hanuszczak@google.com>"]
-edition = "2018"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
 rrg-macro = { path = "../rrg-macro/" }
