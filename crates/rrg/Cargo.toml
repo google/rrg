@@ -5,6 +5,33 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[features]
+default = [
+    "action-insttime",
+    "action-interfaces",
+    "action-filesystems",
+    "action-finder",
+    "action-listdir",
+    "action-metadata",
+    "action-network",
+    "action-stat",
+    "action-timeline",
+]
+
+action-insttime = ["dep:chrono", "dep:proc-mounts"]
+action-interfaces = []
+action-filesystems = ["dep:proc-mounts"]
+action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
+action-listdir = []
+action-metadata = []
+action-network = []
+action-stat = []
+action-timeline = ["dep:flate2", "dep:sha2"]
+
+test-chattr = []
+test-setfattr = []
+test-fuse = ["dep:fuse"]
+
 [dependencies]
 rrg-macro = { path = "../rrg-macro/" }
 rrg-proto = { path = "../rrg-proto/" }
@@ -43,33 +70,6 @@ windows-sys = { version = "0.42.0", features = ["Win32_Foundation", "Win32_Netwo
 [dev-dependencies]
 rand = { version = "0.8.5" }
 tempfile = { version = "3.3.0" }
-
-[features]
-default = [
-    "action-insttime",
-    "action-interfaces",
-    "action-filesystems",
-    "action-finder",
-    "action-listdir",
-    "action-metadata",
-    "action-network",
-    "action-stat",
-    "action-timeline",
-]
-
-action-insttime = ["dep:chrono", "dep:proc-mounts"]
-action-interfaces = []
-action-filesystems = ["dep:proc-mounts"]
-action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
-action-listdir = []
-action-metadata = []
-action-network = []
-action-stat = []
-action-timeline = ["dep:flate2", "dep:sha2"]
-
-test-chattr = []
-test-setfattr = []
-test-fuse = ["dep:fuse"]
 
 [[example]]
 name = "timeline"
