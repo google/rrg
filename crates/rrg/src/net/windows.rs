@@ -28,7 +28,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
         std::mem::align_of::<IP_ADAPTER_ADDRESSES_LH>(),
     ).expect("invalid layout for adapter addresses table");
 
-    let mut buf = crate::alloc::Allocation::new(buf_layout)
+    let mut buf = ospect::alloc::Allocation::new(buf_layout)
         .ok_or_else(|| std::io::ErrorKind::OutOfMemory)?;
 
     // SAFETY: We call the function as described in the official docs [1]. In
