@@ -1,0 +1,8 @@
+[package]
+name = "rrg-macro"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies.log]
+version = "0.4.8"
