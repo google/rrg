@@ -1,6 +1,6 @@
 [submodule "proto/grr"]
-	path = crates/rrg-proto/vendor/grr
+	path = vendor/grr
 	url = https://github.com/google/grr
 [submodule "proto/vendor/protobuf"]
-	path = crates/rrg-proto/vendor/protobuf
+	path = vendor/protobuf
 	url = https://github.com/protocolbuffers/protobuf
