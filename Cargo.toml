@@ -6,11 +6,11 @@ authors = ["Łukasz Hanuszczak <hanuszczak@google.com>"]
 edition = "2018"
 
 [workspace]
-members = [".", "./macro", "./proto"]
+members = [".", "./macro", "./crates/rrg-proto"]
 
 [dependencies]
 rrg-macro = { path = "macro/" }
-rrg-proto = { path = "proto/" }
+rrg-proto = { path = "crates/rrg-proto/" }
 
 argh = { version = "0.1.8" }
 fleetspeak = { version = "0.3.1" }
