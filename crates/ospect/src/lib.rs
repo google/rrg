@@ -6,5 +6,6 @@
 mod alloc;
 mod libc;
 
+pub mod fs;
 pub mod net;
 pub mod proc;

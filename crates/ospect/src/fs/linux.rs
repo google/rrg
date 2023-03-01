@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC
+// Copyright 2023 Google LLC
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
@@ -24,7 +24,7 @@ use std::path::Path;
 /// ```no_run
 /// const FS_FL_USER_VISIBLE: u32 = 0x0003DFFF;
 ///
-/// let flags = rrg::fs::linux::flags("/tmp/foo").unwrap();
+/// let flags = ospect::fs::linux::flags("/tmp/foo").unwrap();
 /// assert_eq!(flags & FS_FL_USER_VISIBLE, 0);
 /// ```
 pub fn flags<P>(path: P) -> std::io::Result<u32> where

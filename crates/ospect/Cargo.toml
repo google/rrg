@@ -10,6 +10,9 @@ categories = ["os", "filesystem"]
 [dependencies.libc]
 version = "0.2.126"
 
+[target.'cfg(target_os = "linux")'.dependencies.ioctls]
+version = "0.6.1"
+
 [target.'cfg(target_os = "windows")'.dependencies.windows-sys]
 version = "0.42.0"
 features = [
@@ -20,3 +23,6 @@ features = [
     "Win32_System_ProcessStatus",
     "Win32_System_Registry",
 ]
+
+[dev-dependencies.tempfile]
+version = "3.3.0"

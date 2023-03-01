@@ -68,7 +68,7 @@ pub struct Response {
     symlink: Option<PathBuf>,
     /// Extended attributes of the file.
     #[cfg(target_family = "unix")]
-    ext_attrs: Vec<crate::fs::unix::ExtAttr>,
+    ext_attrs: Vec<ospect::fs::unix::ExtAttr>,
     /// Additional Linux-specific file flags.
     #[cfg(target_os = "linux")]
     flags_linux: Option<u32>,
@@ -143,7 +143,7 @@ where
     #[cfg(target_os = "linux")]
     let flags_linux = if !metadata.file_type().is_symlink() {
         ack! {
-            crate::fs::linux::flags(&request.path),
+            ospect::fs::linux::flags(&request.path),
             warn: "failed to collect flags for '{}'", request.path.display()
         }
     } else {
@@ -214,7 +214,7 @@ impl super::Item for Response {
 
 /// Collects extended attributes of a file specified by the request.
 #[cfg(target_family = "unix")]
-fn ext_attrs(request: &Request) -> Vec<crate::fs::unix::ExtAttr> {
+fn ext_attrs(request: &Request) -> Vec<ospect::fs::unix::ExtAttr> {
     let path = match request.target() {
         Ok(path) => path,
         Err(error) => {
@@ -227,7 +227,7 @@ fn ext_attrs(request: &Request) -> Vec<crate::fs::unix::ExtAttr> {
         }
     };
 
-    let ext_attrs = match crate::fs::unix::ext_attrs(&path) {
+    let ext_attrs = match ospect::fs::unix::ext_attrs(&path) {
         Ok(ext_attrs) => ext_attrs,
         Err(error) => {
             rrg_macro::warn! {
