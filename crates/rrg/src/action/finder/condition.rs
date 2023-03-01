@@ -11,7 +11,7 @@ use std::fs::Metadata;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
 #[cfg(target_os = "linux")]
-use crate::fs::linux::flags;
+use ospect::fs::linux::flags;
 
 /// Returns true if all conditions were met.
 /// If the data required for checking the condition cannot be obtained then

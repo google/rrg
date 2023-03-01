@@ -22,7 +22,7 @@ pub struct Args {
 #[derive(Debug)]
 pub struct Item {
     /// Metadata about the network connection.
-    conn: crate::net::Connection,
+    conn: ospect::net::Connection,
 }
 
 /// An error type for situations when the network connection action fails.
@@ -57,7 +57,7 @@ where
 {
     use rrg_macro::warn;
 
-    let pids = crate::proc::ids()
+    let pids = ospect::proc::ids()
         .map_err(Error)?;
 
     for pid in pids {
@@ -69,7 +69,7 @@ where
             }
         };
 
-        let conns = match crate::net::connections(pid) {
+        let conns = match ospect::net::connections(pid) {
             Ok(conns) => conns,
             Err(error) => {
                 warn! {
@@ -94,7 +94,7 @@ where
 
             if args.listening_only {
                 match conn {
-                    crate::net::Connection::Tcp(conn) if conn.state() == crate::net::TcpState::Listen => (),
+                    ospect::net::Connection::Tcp(conn) if conn.state() == ospect::net::TcpState::Listen => (),
                     _ => continue,
                 }
             }
@@ -128,13 +128,13 @@ impl super::Item for Item {
         result.set_pid(self.conn.pid());
 
         match self.conn {
-            crate::net::Connection::Tcp(conn) => {
+            ospect::net::Connection::Tcp(conn) => {
                 result.set_field_type(rrg_proto::sysinfo::NetworkConnection_Type::SOCK_STREAM);
                 result.set_local_address(addr_to_proto(conn.local_addr()));
                 result.set_remote_address(addr_to_proto(conn.remote_addr()));
                 result.set_state(state_to_proto(conn.state()));
             }
-            crate::net::Connection::Udp(conn) => {
+            ospect::net::Connection::Udp(conn) => {
                 result.set_field_type(rrg_proto::sysinfo::NetworkConnection_Type::SOCK_DGRAM);
                 result.set_local_address(addr_to_proto(conn.local_addr()));
             }
@@ -153,8 +153,8 @@ fn addr_to_proto(addr: std::net::SocketAddr) -> rrg_proto::sysinfo::NetworkEndpo
 }
 
 // TOOD(@panhania): Migrate to `std::convert` implementation.
-fn state_to_proto(state: crate::net::TcpState) -> rrg_proto::sysinfo::NetworkConnection_State {
-    use crate::net::TcpState::*;
+fn state_to_proto(state: ospect::net::TcpState) -> rrg_proto::sysinfo::NetworkConnection_State {
+    use ospect::net::TcpState::*;
     use rrg_proto::sysinfo::NetworkConnection_State::*;
 
     match state {

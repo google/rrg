@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC
+// Copyright 2023 Google LLC
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
@@ -42,7 +42,7 @@ pub struct ExtAttr {
 /// ```no_run
 /// use std::path::Path;
 ///
-/// for attr in rrg::fs::unix::ext_attrs(Path::new("/tmp/foo")).unwrap() {
+/// for attr in ospect::fs::unix::ext_attrs(Path::new("/tmp/foo")).unwrap() {
 ///     let attr = attr.unwrap();
 ///     let name = attr.name.to_string_lossy();
 ///     let value = String::from_utf8_lossy(&attr.value);
@@ -100,7 +100,8 @@ impl<'p> Iterator for ExtAttrs<'p> {
 /// # Examples
 ///
 /// ```no_run
-/// let names = rrg::fs::unix::ext_attr_names("/tmp/foo").unwrap();
+/// let names = ospect::fs::unix::ext_attr_names("/tmp/foo")
+///     .unwrap();
 ///
 /// println!("{} attributes found", names.len());
 /// for name in names {
@@ -137,7 +138,9 @@ where
 /// # Examples
 ///
 /// ```no_run
-/// let value = rrg::fs::unix::ext_attr_value("/tmp/foo", "user.bar").unwrap();
+/// let value = ospect::fs::unix::ext_attr_value("/tmp/foo", "user.bar")
+///     .unwrap();
+///
 /// println!("'user.bar': '{}'", String::from_utf8_lossy(&value));
 /// ```
 pub fn ext_attr_value<P, S>(path: P, name: S) -> std::io::Result<Vec<u8>>
@@ -316,20 +319,5 @@ mod tests {
                 .unwrap()
                 .success()
         };
-    }
-}
-
-// TODO: Move this into the `rrg-proto` crate once generic purpose utilities are
-// moved to a separate crate.
-impl Into<rrg_proto::jobs::StatEntry_ExtAttr> for ExtAttr {
-
-    fn into(self) -> rrg_proto::jobs::StatEntry_ExtAttr {
-        use std::os::unix::ffi::OsStringExt as _;
-
-        let mut proto = rrg_proto::jobs::StatEntry_ExtAttr::new();
-        proto.set_name(self.name.into_vec());
-        proto.set_value(self.value);
-
-        proto
     }
 }

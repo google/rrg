@@ -205,6 +205,20 @@ impl crate::convert::FromLossy<std::fs::Metadata> for jobs::StatEntry {
     }
 }
 
+#[cfg(target_family = "unix")]
+impl Into<jobs::StatEntry_ExtAttr> for ospect::fs::unix::ExtAttr {
+
+    fn into(self) -> jobs::StatEntry_ExtAttr {
+        use std::os::unix::ffi::OsStringExt as _;
+
+        let mut proto = jobs::StatEntry_ExtAttr::new();
+        proto.set_name(self.name.into_vec());
+        proto.set_value(self.value);
+
+        proto
+    }
+}
+
 impl TryFrom<jobs::PathSpec> for std::path::PathBuf {
 
     type Error = ParsePathSpecError;

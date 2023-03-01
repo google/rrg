@@ -1,0 +1,28 @@
+[package]
+name = "ospect"
+version = "0.0.0"
+authors.workspace = true
+edition.workspace = true
+
+description = "A small library for inspecting the operating system."
+categories = ["os", "filesystem"]
+
+[dependencies.libc]
+version = "0.2.126"
+
+[target.'cfg(target_os = "linux")'.dependencies.ioctls]
+version = "0.6.1"
+
+[target.'cfg(target_os = "windows")'.dependencies.windows-sys]
+version = "0.42.0"
+features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Networking_WinSock",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Registry",
+]
+
+[dev-dependencies.tempfile]
+version = "3.3.0"

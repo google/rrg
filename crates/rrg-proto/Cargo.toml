@@ -4,6 +4,9 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[dependencies.ospect]
+path = "../ospect"
+
 [dependencies.rrg-macro]
 path = "../rrg-macro/"
 

@@ -5,17 +5,13 @@
 
 // TODO: Hide irrelevant modules.
 
-pub mod alloc;
 pub mod action;
 pub mod fs;
 pub mod io;
-pub mod libc;
 pub mod log;
 pub mod message;
 pub mod metadata;
-pub mod net;
 pub mod args;
-pub mod proc;
 pub mod session;
 pub mod startup;
 

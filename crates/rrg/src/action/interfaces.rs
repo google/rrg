@@ -14,7 +14,7 @@ use rrg_macro::warn;
 #[derive(Debug)]
 pub struct Item {
     /// Actual information about a network interface.
-    iface: crate::net::Interface,
+    iface: ospect::net::Interface,
 }
 
 /// Handles requests for the interfaces action.
@@ -22,7 +22,7 @@ pub fn handle<S>(session: &mut S, _: ()) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    let ifaces = crate::net::interfaces()
+    let ifaces = ospect::net::interfaces()
         .map_err(crate::session::Error::action)?;
 
     for iface in ifaces {
@@ -91,7 +91,7 @@ mod tests {
         // Both of these options feel equally wrong and equally right but the
         // former one will return `true` for interfaces with no known addresses.
         // Since this feels awkward, we lean towards the "all" option.
-        fn is_loopback(iface: &crate::net::Interface) -> bool {
+        fn is_loopback(iface: &ospect::net::Interface) -> bool {
             iface.ip_addrs().iter().all(std::net::IpAddr::is_loopback)
         }
 

@@ -93,7 +93,7 @@ impl Interface {
 /// # Examples
 ///
 /// ```
-/// let ifaces = rrg::net::interfaces().unwrap();
+/// let ifaces = ospect::net::interfaces().unwrap();
 /// for iface in ifaces {
 ///     let name = iface.name().to_string_lossy();
 ///     println!("{} ({} IP addresses)", name, iface.ip_addrs().len());
