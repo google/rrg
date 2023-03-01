@@ -23,13 +23,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     let mut buf_size = u32::try_from(DEFAULT_BUF_SIZE)
         .expect("default buffer size too big");
 
-    let buf_layout = std::alloc::Layout::from_size_align(
-        buf_size as usize,
-        std::mem::align_of::<IP_ADAPTER_ADDRESSES_LH>(),
-    ).expect("invalid layout for adapter addresses table");
-
-    let mut buf = crate::alloc::Allocation::new(buf_layout)
-        .ok_or_else(|| std::io::ErrorKind::OutOfMemory)?;
+    let mut buf = Vec::<u8>::with_capacity(buf_size as usize);
 
     // SAFETY: We call the function as described in the official docs [1]. In
     // case the allocated buffer is too small, we handle this case below.
@@ -42,7 +36,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
             // Probably we don't need any extra information.
             0,
             std::ptr::null_mut(),
-            buf.as_ptr().cast().as_ptr(),
+            buf.as_mut_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>(),
             &mut buf_size,
         )
     };
@@ -52,8 +46,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
         // one should be strictly bigger.
         assert!(DEFAULT_BUF_SIZE < (buf_size as usize));
 
-        buf = buf.resize(buf_size as usize)
-            .map_err(|_| std::io::ErrorKind::OutOfMemory)?;
+        buf = Vec::<u8>::with_capacity(buf_size as usize);
 
         // SAFETY: We call the function the same as above but with larger result
         // buffer. Note that this can still fail in an unlikely case where a new
@@ -66,7 +59,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
                 // Probably we don't need any extra information.
                 0,
                 std::ptr::null_mut(),
-                buf.as_ptr().cast().as_ptr(),
+                buf.as_mut_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>(),
                 &mut buf_size,
             )
         };
@@ -81,7 +74,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 
     let mut ifaces = std::collections::HashMap::new();
 
-    let mut addr_iter = buf.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>().as_ptr();
+    let mut addr_iter = buf.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>();
     // SAFETY: We validate that the `GetAdaptersAddresses` call above did not
     // fail. Thus, the buffer was filled with valid data and now we can iterate
     // over the list using the `Next` pointers [1, 2].

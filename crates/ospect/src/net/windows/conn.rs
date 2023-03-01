@@ -319,26 +319,14 @@ where
 
     // SAFETY: The call "succeeded" (returned the expected error, it means that
     // the buffer size variable has been set to the required size value).
-
-    // TODO(@panhania): Migrate the code away from using the `std::alloc` module
-    // to plain `Vec` (the approach taken e.g. on macOS). This way we don't have
-    // to collect at the end of the function but have a consuming iterator that
-    // yields new items on demand, avoiding one big unnecessary allocation.
-
-    let buf_layout = std::alloc::Layout::from_size_align(
-        buf_size as usize,
-        std::mem::align_of::<T>(),
-    ).expect("invalid layout for adapter addresses table");
-
-    let buf = crate::alloc::Allocation::new(buf_layout)
-        .ok_or_else(|| std::io::ErrorKind::OutOfMemory)?;
+    let mut buf = Vec::<u8>::with_capacity(buf_size as usize);
 
     // SAFETY: We allocated a buffer of the requested size and pass it along
     // with the unchanged size. Note that this can still fail in an unlikely
     // case where a new device was added between the previous call and this one.
     // We do not retry if that is the case.
     let code = unsafe {
-        T::get(buf.as_ptr().cast().as_ptr(), &mut buf_size)
+        T::get(buf.as_mut_ptr().cast(), &mut buf_size)
     };
 
     if code != windows_sys::Win32::Foundation::NO_ERROR {
@@ -348,12 +336,10 @@ where
         return Err(std::io::Error::from_raw_os_error(code));
     }
 
-    // SAFETY: The buffer was allocated with layout specific to the table type
-    // and the allocation is guaranteed to be correct. The buffer was filled
-    // successfully, so it is safe to assume the memory is correctly initialized
-    // now.
+    // SAFETY: The buffer was filled successfully, so it is safe to assume the
+    // memory is correctly initialized now.
     let table = unsafe {
-        buf.as_ptr().cast::<T>().as_ref()
+        &*buf.as_ptr().cast::<T>()
     };
 
     // SAFETY: The `table` is guaranteed to be initialized now and so all of the
@@ -362,6 +348,10 @@ where
         table.rows()
     };
 
+    // Unfortunately, because the API is designed the way it is, we cannot just
+    // convert the bufer at hand to a vector and then have a consuming iterator
+    // parsing the rows on-demand. We are forced to pre-parse everything and put
+    // the results to another vector.
     let conns = rows
         .iter()
         .map(|row| row.parse().map_err(|error| error.into()))
