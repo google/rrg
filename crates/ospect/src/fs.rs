@@ -31,9 +31,6 @@ mod sys {
     pub use crate::fs::windows::*;
 }
 
-#[cfg(target_family = "unix")]
-pub mod unix;
-
 /// An extended attribute of a file.
 ///
 /// On Linux, extended attributes can be obtained using [`getfattr`] and set
