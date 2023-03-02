@@ -1,6 +1,7 @@
 // TODO(@panhania): All definitions in this module should be added to the `libc`
 // crate.
 #[cfg(target_os = "macos")]
+#[allow(dead_code)]
 mod macos {
 
     // TODO(@panhania): Check whether `vst_*timensec` fields correspond to only
