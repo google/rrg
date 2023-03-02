@@ -8,9 +8,6 @@
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
-// TODO(@panhania): Define common interface for all platforms and hide these
-// modules.
-
 #[cfg(target_os = "linux")]
 pub mod linux;
 
