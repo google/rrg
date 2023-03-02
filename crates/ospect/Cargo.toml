@@ -7,6 +7,9 @@ edition.workspace = true
 description = "A small library for inspecting the operating system."
 categories = ["os", "filesystem"]
 
+[features]
+test-setfattr = []
+
 [dependencies.libc]
 version = "0.2.126"
 

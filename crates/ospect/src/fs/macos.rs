@@ -1,30 +1,22 @@
-//! macOS-specific utilities for working with the filesystem.
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style license that can be found
+// in the LICENSE file or at https://opensource.org/licenses/MIT.
+
+//! macOS-specific filesystem inspection functionalities.
+
+use std::ffi::{CStr, CString, OsStr, OsString};
+use std::path::Path;
 
 /// Collects names of all extended attributes for the specified file.
-///
-/// This function is a wrapper around the `listxattr` macOS call.
-///
-/// See [`ext_attr_names`] from the Unix module for more details.
-///
-/// [`ext_attr_names`]: super::unix::ext_attr_names
-pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<std::ffi::OsString>>
+pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<OsString>>
 where
-    P: AsRef<std::path::Path>,
+    P: AsRef<Path>,
 {
-    extern "C" {
-        // https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/listxattr.2.html
-        fn listxattr(
-            path: *const libc::c_char,
-            namebuf: *mut libc::c_char,
-            size: libc::size_t,
-            options: libc::c_int,
-        ) -> libc::ssize_t;
-    }
-
     use std::os::unix::ffi::OsStrExt as _;
 
     let os_str_path = path.as_ref().as_os_str();
-    let c_str_path = std::ffi::CString::new(os_str_path.as_bytes())
+    let c_str_path = CString::new(os_str_path.as_bytes())
         // Unlike on Linux where a null bytes in paths are not possible, HFS+
         // does allow such characters [1]. Thus, we have to handle such cases
         // gracefully.
@@ -39,7 +31,7 @@ where
     let len = unsafe {
         // First we call `listxattr` with empty buffer to get the size of the
         // buffer that will collect the actual results.
-        listxattr(
+        libc::listxattr(
             c_str_path.as_ptr(),
             std::ptr::null_mut(), 0,
             libc::XATTR_NOFOLLOW,
@@ -59,7 +51,7 @@ where
     let len = unsafe {
         // Now we can call `listxattr` with the actual buffer of the size we
         // determined by the previous call.
-        listxattr(
+        libc::listxattr(
             c_str_path.as_ptr(),
             buf.as_mut_ptr(), buf.len(),
             libc::XATTR_NOFOLLOW,
@@ -85,10 +77,10 @@ where
             // above. This holds true also for the last slice provided by the
             // iterator.
             let c_str = unsafe {
-                std::ffi::CStr::from_ptr(slice.as_ptr())
+                CStr::from_ptr(slice.as_ptr())
             };
 
-            std::ffi::OsStr::from_bytes(c_str.to_bytes()).to_os_string()
+            OsStr::from_bytes(c_str.to_bytes()).to_os_string()
         })
         .collect();
 
@@ -96,33 +88,15 @@ where
 }
 
 /// Collects value of a file extended attribute with the specified name.
-///
-/// This function is a wrapper around the `getxattr` macOS call.
-///
-/// See [`ext_attr_value`] from the Unix module for more details.
-///
-/// [`ext_attr_value`]: super::unix::ext_attr_names
 pub fn ext_attr_value<P, S>(path: P, name: S) -> std::io::Result<Vec<u8>>
 where
-    P: AsRef<std::path::Path>,
-    S: AsRef<std::ffi::OsStr>,
+    P: AsRef<Path>,
+    S: AsRef<OsStr>,
 {
-    extern "C" {
-        // https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/getxattr.2.html#//apple_ref/doc/man/2/getxattr
-        fn getxattr(
-            path: *const libc::c_char,
-            name: *const libc::c_char,
-            value: *mut libc::c_void,
-            size: libc::size_t,
-            position: u32,
-            options: libc::c_int,
-        ) -> libc::ssize_t;
-    }
-
     use std::os::unix::ffi::OsStrExt as _;
 
     let os_str_path = path.as_ref().as_os_str();
-    let c_str_path = std::ffi::CString::new(os_str_path.as_bytes())
+    let c_str_path = CString::new(os_str_path.as_bytes())
         // Unlike on Linux where a null bytes in paths are not possible, HFS+
         // does allow such characters [1]. Thus, we have to handle such cases
         // gracefully.
@@ -132,7 +106,7 @@ where
             std::io::Error::new(std::io::ErrorKind::InvalidInput, error)
         })?;
 
-    let c_str_name = std::ffi::CString::new(name.as_ref().as_bytes())
+    let c_str_name = CString::new(name.as_ref().as_bytes())
         // While `name` as returned by the `ext_attr_names` function cannot have
         // null bytes inside, we cannot guarantee that the user doesn't supply
         // a bogus string here. Thus, we have to do proper error handling here.
@@ -146,7 +120,7 @@ where
     let len = unsafe {
         // First we call `getxattr` with empty buffer to get the size of the
         // buffer that will collect the actual results.
-        getxattr(
+        libc::getxattr(
             c_str_path.as_ptr(),
             c_str_name.as_ptr(),
             std::ptr::null_mut(), 0,
@@ -169,7 +143,7 @@ where
     let len = unsafe {
         // Now we can call `getxattr` with the actual buffer of the size we
         // determined by the previous call.
-        getxattr(
+        libc::getxattr(
             c_str_path.as_ptr(),
             c_str_name.as_ptr(),
             buf_ptr, buf.len(),
@@ -189,7 +163,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
 
     use super::*;
 
@@ -262,10 +236,10 @@ mod tests {
         assert_eq!(bar_value, b"norf");
     }
 
-    fn xattr<P, S>(path: P, name: S, value: &[u8])
+    pub(crate) fn xattr<P, S>(path: P, name: S, value: &[u8])
     where
-        P: AsRef<std::path::Path>,
-        S: AsRef<std::ffi::OsStr>,
+        P: AsRef<Path>,
+        S: AsRef<OsStr>,
     {
         use std::os::unix::ffi::OsStrExt as _;
 
@@ -273,7 +247,7 @@ mod tests {
             std::process::Command::new("xattr")
                 .arg("-w")
                 .arg(name)
-                .arg(std::ffi::OsStr::from_bytes(value))
+                .arg(OsStr::from_bytes(value))
                 .arg(path.as_ref().as_os_str())
                 .status()
                 .unwrap()

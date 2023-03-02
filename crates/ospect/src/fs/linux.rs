@@ -3,8 +3,9 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-//! Linux-specific utilities for working with the filesystem.
+//! Linux-specific filesystem inspection functionalities.
 
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::path::Path;
 
 // TODO: Document behaviour for symlinks.
@@ -49,29 +50,14 @@ pub fn flags<P>(path: P) -> std::io::Result<u32> where
 }
 
 /// Collects names of all extended attributes for the specified file.
-///
-/// This function is a wrapper around the `llistxattr` Linux call.
-///
-/// See [`ext_attr_names`] from the Unix module for more details.
-///
-/// [`ext_attr_names`]: super::unix::ext_attr_names
-pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<std::ffi::OsString>>
+pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<OsString>>
 where
     P: AsRef<Path>,
 {
-    extern "C" {
-        // https://man7.org/linux/man-pages/man2/listxattr.2.html
-        fn llistxattr(
-            path: *const libc::c_char,
-            list: *mut libc::c_char,
-            size: libc::size_t,
-        ) -> libc::ssize_t;
-    }
-
     use std::os::unix::ffi::OsStrExt as _;
 
     let os_str_path = path.as_ref().as_os_str();
-    let c_str_path = std::ffi::CString::new(os_str_path.as_bytes())
+    let c_str_path = CString::new(os_str_path.as_bytes())
         // It is not possible to have a null byte in a Linux path.
         .expect("path with a null character");
 
@@ -80,7 +66,7 @@ where
     let len = unsafe {
         // First we call `llistxattr` with empty buffer to get the size of the
         // buffer that will collect the actual results.
-        llistxattr(c_str_path.as_ptr(), std::ptr::null_mut(), 0)
+        libc::llistxattr(c_str_path.as_ptr(), std::ptr::null_mut(), 0)
     };
     if len < 0 {
         return Err(std::io::Error::last_os_error());
@@ -96,7 +82,7 @@ where
     let len = unsafe {
         // Now we can call `llistxattr` with the actual buffer of the size we
         // determined by the previous call.
-        llistxattr(c_str_path.as_ptr(), buf.as_mut_ptr(), buf.len())
+        libc::llistxattr(c_str_path.as_ptr(), buf.as_mut_ptr(), buf.len())
     };
     if len < 0 {
         return Err(std::io::Error::last_os_error());
@@ -118,10 +104,10 @@ where
             // above. This holds true also for the last slice provided by the
             // iterator.
             let c_str = unsafe {
-                std::ffi::CStr::from_ptr(slice.as_ptr())
+                CStr::from_ptr(slice.as_ptr())
             };
 
-            std::ffi::OsStr::from_bytes(c_str.to_bytes()).to_os_string()
+            OsStr::from_bytes(c_str.to_bytes()).to_os_string()
         })
         .collect();
 
@@ -129,35 +115,19 @@ where
 }
 
 /// Collects value of a file extended attribute with the specified name.
-///
-/// This function is a wrapper around the `lgetxattr` Linux call.
-///
-/// See [`ext_attr_value`] from the Unix module for more details.
-///
-/// [`ext_attr_value`]: super::unix::ext_attr_names
 pub fn ext_attr_value<P, S>(path: P, name: S) -> std::io::Result<Vec<u8>>
 where
     P: AsRef<Path>,
-    S: AsRef<std::ffi::OsStr>,
+    S: AsRef<OsStr>,
 {
-    extern "C" {
-        // https://man7.org/linux/man-pages/man2/getxattr.2.html
-        fn lgetxattr(
-            path: *const libc::c_char,
-            name: *const libc::c_char,
-            value: *mut libc::c_void,
-            size: libc::size_t,
-        ) -> libc::ssize_t;
-    }
-
     use std::os::unix::ffi::OsStrExt as _;
 
     let os_str_path = path.as_ref().as_os_str();
-    let c_str_path = std::ffi::CString::new(os_str_path.as_bytes())
+    let c_str_path = CString::new(os_str_path.as_bytes())
         // It is not possible to have a null byte in a Linux path.
         .expect("path with a null character");
 
-    let c_str_name = std::ffi::CString::new(name.as_ref().as_bytes())
+    let c_str_name = CString::new(name.as_ref().as_bytes())
         // While `name` as returned by the `ext_attr_names` function cannot have
         // null bytes inside, we cannot guarantee that the user doesn't supply
         // a bogus string here. Thus, we have to do proper error handling here.
@@ -171,7 +141,12 @@ where
     let len = unsafe {
         // First we call `lgetxattr` with empty buffer to get the size of the
         // buffer that will collect the actual results.
-        lgetxattr(c_str_path.as_ptr(), c_str_name.as_ptr(), std::ptr::null_mut(), 0)
+        libc::lgetxattr(
+            c_str_path.as_ptr(),
+            c_str_name.as_ptr(),
+            std::ptr::null_mut(),
+            0,
+        )
     };
     if len < 0 {
         return Err(std::io::Error::last_os_error());
@@ -188,7 +163,12 @@ where
     let len = unsafe {
         // Now we can call `lgetxattr` with the actual buffer of the size we
         // determined by the previous call.
-        lgetxattr(c_str_path.as_ptr(), c_str_name.as_ptr(), buf_ptr, buf.len())
+        libc::lgetxattr(
+            c_str_path.as_ptr(),
+            c_str_name.as_ptr(),
+            buf_ptr,
+            buf.len(),
+        )
     };
     if len < 0 {
         return Err(std::io::Error::last_os_error());
@@ -202,7 +182,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
 
     use std::fs::File;
 
@@ -311,17 +291,18 @@ mod tests {
     }
 
     #[cfg(feature = "test-setfattr")]
-    fn setfattr<P, S>(path: P, name: S, value: &[u8])
+    pub(crate) fn setfattr<P, S>(path: P, name: S, value: &[u8])
     where
-        P: AsRef<std::path::Path>,
-        S: AsRef<std::ffi::OsStr>,
+        P: AsRef<Path>,
+        S: AsRef<OsStr>,
     {
         use std::os::unix::ffi::OsStrExt as _;
 
         assert! {
             std::process::Command::new("setfattr")
+                .arg("--no-dereference")
                 .arg("--name").arg(name)
-                .arg("--value").arg(std::ffi::OsStr::from_bytes(value))
+                .arg("--value").arg(OsStr::from_bytes(value))
                 .arg(path.as_ref().as_os_str())
                 .status()
                 .unwrap()
