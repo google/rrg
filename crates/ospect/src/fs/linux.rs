@@ -54,15 +54,6 @@ pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<OsString>>
 where
     P: AsRef<Path>,
 {
-    extern "C" {
-        // https://man7.org/linux/man-pages/man2/listxattr.2.html
-        fn llistxattr(
-            path: *const libc::c_char,
-            list: *mut libc::c_char,
-            size: libc::size_t,
-        ) -> libc::ssize_t;
-    }
-
     use std::os::unix::ffi::OsStrExt as _;
 
     let os_str_path = path.as_ref().as_os_str();
@@ -75,7 +66,7 @@ where
     let len = unsafe {
         // First we call `llistxattr` with empty buffer to get the size of the
         // buffer that will collect the actual results.
-        llistxattr(c_str_path.as_ptr(), std::ptr::null_mut(), 0)
+        libc::llistxattr(c_str_path.as_ptr(), std::ptr::null_mut(), 0)
     };
     if len < 0 {
         return Err(std::io::Error::last_os_error());
@@ -91,7 +82,7 @@ where
     let len = unsafe {
         // Now we can call `llistxattr` with the actual buffer of the size we
         // determined by the previous call.
-        llistxattr(c_str_path.as_ptr(), buf.as_mut_ptr(), buf.len())
+        libc::llistxattr(c_str_path.as_ptr(), buf.as_mut_ptr(), buf.len())
     };
     if len < 0 {
         return Err(std::io::Error::last_os_error());
@@ -129,16 +120,6 @@ where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    extern "C" {
-        // https://man7.org/linux/man-pages/man2/getxattr.2.html
-        fn lgetxattr(
-            path: *const libc::c_char,
-            name: *const libc::c_char,
-            value: *mut libc::c_void,
-            size: libc::size_t,
-        ) -> libc::ssize_t;
-    }
-
     use std::os::unix::ffi::OsStrExt as _;
 
     let os_str_path = path.as_ref().as_os_str();
@@ -160,7 +141,12 @@ where
     let len = unsafe {
         // First we call `lgetxattr` with empty buffer to get the size of the
         // buffer that will collect the actual results.
-        lgetxattr(c_str_path.as_ptr(), c_str_name.as_ptr(), std::ptr::null_mut(), 0)
+        libc::lgetxattr(
+            c_str_path.as_ptr(),
+            c_str_name.as_ptr(),
+            std::ptr::null_mut(),
+            0,
+        )
     };
     if len < 0 {
         return Err(std::io::Error::last_os_error());
@@ -177,7 +163,12 @@ where
     let len = unsafe {
         // Now we can call `lgetxattr` with the actual buffer of the size we
         // determined by the previous call.
-        lgetxattr(c_str_path.as_ptr(), c_str_name.as_ptr(), buf_ptr, buf.len())
+        libc::lgetxattr(
+            c_str_path.as_ptr(),
+            c_str_name.as_ptr(),
+            buf_ptr,
+            buf.len(),
+        )
     };
     if len < 0 {
         return Err(std::io::Error::last_os_error());
