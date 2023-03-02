@@ -3,6 +3,8 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+//! Windows-specific filesystem inspection functionalities.
+
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
