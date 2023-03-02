@@ -11,6 +11,8 @@ pub fn ext_attr_names<P>(_path: P) -> std::io::Result<Vec<OsString>>
 where
     P: AsRef<Path>,
 {
+    // TODO: Actually, the error below is not correct. We should error-out.
+
     // Windows does not support extended attributes, so we just do not yield any
     // results. Alternatively we could return an error, but `std` functions tend
     // no to do that (I think).

@@ -49,12 +49,6 @@ pub fn flags<P>(path: P) -> std::io::Result<u32> where
 }
 
 /// Collects names of all extended attributes for the specified file.
-///
-/// This function is a wrapper around the `llistxattr` Linux call.
-///
-/// See [`ext_attr_names`] from the Unix module for more details.
-///
-/// [`ext_attr_names`]: super::unix::ext_attr_names
 pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<std::ffi::OsString>>
 where
     P: AsRef<Path>,
