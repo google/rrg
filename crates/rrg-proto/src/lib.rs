@@ -205,14 +205,23 @@ impl crate::convert::FromLossy<std::fs::Metadata> for jobs::StatEntry {
     }
 }
 
-#[cfg(target_family = "unix")]
 impl Into<jobs::StatEntry_ExtAttr> for ospect::fs::ExtAttr {
 
     fn into(self) -> jobs::StatEntry_ExtAttr {
-        use std::os::unix::ffi::OsStringExt as _;
-
         let mut proto = jobs::StatEntry_ExtAttr::new();
-        proto.set_name(self.name.into_vec());
+
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::ffi::OsStringExt as _;
+            proto.set_name(self.name.into_vec());
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let name = self.name.to_string_lossy().into_owned().into_bytes();
+            proto.set_name(name);
+        }
+
         proto.set_value(self.value);
 
         proto

@@ -25,7 +25,6 @@ use crate::session::{self, Session};
 pub struct Request {
     /// A path to the file to stat.
     path: PathBuf,
-    // TODO(@panhania): Constrain existence of this field to UNIX-only systems.
     /// Whether to collect extended file attributes.
     collect_ext_attrs: bool,
     /// Whether, in case of a symlink, to collect data about the linked file.
@@ -45,7 +44,6 @@ impl Request {
     /// This method will return an error if the path needs to be expanded but
     /// the expansion fails for some reason (e.g. the requested path does not
     /// exist).
-    #[cfg(target_family = "unix")]
     fn target(&self) -> std::io::Result<std::borrow::Cow<PathBuf>> {
         use std::borrow::Cow::*;
 
@@ -67,7 +65,6 @@ pub struct Response {
     /// A path to the pointed file (in case of a symlink).
     symlink: Option<PathBuf>,
     /// Extended attributes of the file.
-    #[cfg(target_family = "unix")]
     ext_attrs: Vec<ospect::fs::ExtAttr>,
     /// Additional Linux-specific file flags.
     #[cfg(target_os = "linux")]
@@ -133,7 +130,6 @@ where
         None
     };
 
-    #[cfg(target_family = "unix")]
     let ext_attrs = if request.collect_ext_attrs {
         ext_attrs(&request)
     } else {
@@ -157,7 +153,6 @@ where
         path: request.path,
         metadata: metadata,
         symlink: symlink,
-        #[cfg(target_family = "unix")]
         ext_attrs: ext_attrs,
         #[cfg(target_os = "linux")]
         flags_linux: flags_linux,
@@ -200,7 +195,6 @@ impl super::Item for Response {
             proto.set_symlink(symlink.to_string_lossy().into_owned());
         }
 
-        #[cfg(target_family = "unix")]
         proto.set_ext_attrs(self.ext_attrs.into_iter().map(Into::into).collect());
 
         #[cfg(target_os = "linux")]
@@ -213,7 +207,6 @@ impl super::Item for Response {
 }
 
 /// Collects extended attributes of a file specified by the request.
-#[cfg(target_family = "unix")]
 fn ext_attrs(request: &Request) -> Vec<ospect::fs::ExtAttr> {
     let path = match request.target() {
         Ok(path) => path,
