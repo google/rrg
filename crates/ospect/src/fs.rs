@@ -323,25 +323,4 @@ mod tests {
     // as the kernel simply does not allow that [1].
     //
     // [1]: https://unix.stackexchange.com/questions/16537/extended-attribute-on-symbolic-link
-
-    #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
-    fn setfattr<P, S>(path: P, name: S, value: &[u8])
-    where
-        P: AsRef<std::path::Path>,
-        S: AsRef<std::ffi::OsStr>,
-    {
-        use crate::fs::linux::tests::setfattr;
-        use std::os::unix::ffi::OsStrExt as _;
-
-        assert! {
-            std::process::Command::new("setfattr")
-                .arg("--no-dereference")
-                .arg("--name").arg(name)
-                .arg("--value").arg(std::ffi::OsStr::from_bytes(value))
-                .arg(path.as_ref().as_os_str())
-                .status()
-                .unwrap()
-                .success()
-        };
-    }
 }
