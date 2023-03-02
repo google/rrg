@@ -206,7 +206,7 @@ impl crate::convert::FromLossy<std::fs::Metadata> for jobs::StatEntry {
 }
 
 #[cfg(target_family = "unix")]
-impl Into<jobs::StatEntry_ExtAttr> for ospect::fs::unix::ExtAttr {
+impl Into<jobs::StatEntry_ExtAttr> for ospect::fs::ExtAttr {
 
     fn into(self) -> jobs::StatEntry_ExtAttr {
         use std::os::unix::ffi::OsStringExt as _;
