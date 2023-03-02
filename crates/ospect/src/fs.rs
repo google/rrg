@@ -203,6 +203,8 @@ mod tests {
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn ext_attrs_multiple_values() {
+        use crate::fs::linux::tests::setfattr;
+
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         setfattr(tempfile.path(), "user.abc", b"quux");
         setfattr(tempfile.path(), "user.def", b"norf");
@@ -224,6 +226,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn ext_attrs_multiple_values() {
+        use crate::fs::macos::tests::xattr;
+
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         xattr(tempfile.path(), "user.abc", b"quux");
         xattr(tempfile.path(), "user.def", b"norf");
@@ -245,6 +249,8 @@ mod tests {
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn ext_attrs_empty_value() {
+        use crate::fs::linux::tests::setfattr;
+
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         setfattr(tempfile.path(), "user.abc", b"");
 
@@ -261,6 +267,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn ext_attrs_empty_value() {
+        use crate::fs::macos::tests::xattr;
+
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         xattr(tempfile.path(), "user.abc", b"");
 
@@ -277,6 +285,8 @@ mod tests {
     #[cfg(all(target_os = "linux", feature = "test-setfattr"))]
     #[test]
     fn ext_attrs_bytes_value() {
+        use crate::fs::linux::tests::setfattr;
+
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         setfattr(tempfile.path(), "user.abc", b"\xff\xfe\xff\xfe\xff");
 
@@ -293,6 +303,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn ext_attrs_bytes_value() {
+        use crate::fs::macos::tests::xattr;
+
         let tempfile = tempfile::NamedTempFile::new().unwrap();
         xattr(tempfile.path(), "user.abc", b"\xff\xfe\xff\xfe\xff");
 
@@ -318,6 +330,7 @@ mod tests {
         P: AsRef<std::path::Path>,
         S: AsRef<std::ffi::OsStr>,
     {
+        use crate::fs::linux::tests::setfattr;
         use std::os::unix::ffi::OsStrExt as _;
 
         assert! {
@@ -325,26 +338,6 @@ mod tests {
                 .arg("--no-dereference")
                 .arg("--name").arg(name)
                 .arg("--value").arg(std::ffi::OsStr::from_bytes(value))
-                .arg(path.as_ref().as_os_str())
-                .status()
-                .unwrap()
-                .success()
-        };
-    }
-
-    #[cfg(target_os = "macos")]
-    fn xattr<P, S>(path: P, name: S, value: &[u8])
-    where
-        P: AsRef<std::path::Path>,
-        S: AsRef<std::ffi::OsStr>,
-    {
-        use std::os::unix::ffi::OsStrExt as _;
-
-        assert! {
-            std::process::Command::new("xattr")
-                .arg("-w")
-                .arg(name)
-                .arg(std::ffi::OsStr::from_bytes(value))
                 .arg(path.as_ref().as_os_str())
                 .status()
                 .unwrap()

@@ -185,7 +185,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
 
     use super::*;
 
@@ -258,7 +258,7 @@ mod tests {
         assert_eq!(bar_value, b"norf");
     }
 
-    fn xattr<P, S>(path: P, name: S, value: &[u8])
+    pub(crate) fn xattr<P, S>(path: P, name: S, value: &[u8])
     where
         P: AsRef<Path>,
         S: AsRef<OsStr>,

@@ -191,7 +191,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
 
     use std::fs::File;
 
@@ -300,7 +300,7 @@ mod tests {
     }
 
     #[cfg(feature = "test-setfattr")]
-    fn setfattr<P, S>(path: P, name: S, value: &[u8])
+    pub(crate) fn setfattr<P, S>(path: P, name: S, value: &[u8])
     where
         P: AsRef<Path>,
         S: AsRef<OsStr>,
@@ -309,6 +309,7 @@ mod tests {
 
         assert! {
             std::process::Command::new("setfattr")
+                .arg("--no-dereference")
                 .arg("--name").arg(name)
                 .arg("--value").arg(OsStr::from_bytes(value))
                 .arg(path.as_ref().as_os_str())
