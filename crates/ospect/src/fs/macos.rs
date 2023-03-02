@@ -13,16 +13,6 @@ pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<OsString>>
 where
     P: AsRef<Path>,
 {
-    extern "C" {
-        // https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/listxattr.2.html
-        fn listxattr(
-            path: *const libc::c_char,
-            namebuf: *mut libc::c_char,
-            size: libc::size_t,
-            options: libc::c_int,
-        ) -> libc::ssize_t;
-    }
-
     use std::os::unix::ffi::OsStrExt as _;
 
     let os_str_path = path.as_ref().as_os_str();
@@ -41,7 +31,7 @@ where
     let len = unsafe {
         // First we call `listxattr` with empty buffer to get the size of the
         // buffer that will collect the actual results.
-        listxattr(
+        libc::listxattr(
             c_str_path.as_ptr(),
             std::ptr::null_mut(), 0,
             libc::XATTR_NOFOLLOW,
@@ -61,7 +51,7 @@ where
     let len = unsafe {
         // Now we can call `listxattr` with the actual buffer of the size we
         // determined by the previous call.
-        listxattr(
+        libc::listxattr(
             c_str_path.as_ptr(),
             buf.as_mut_ptr(), buf.len(),
             libc::XATTR_NOFOLLOW,
@@ -103,18 +93,6 @@ where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    extern "C" {
-        // https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/getxattr.2.html#//apple_ref/doc/man/2/getxattr
-        fn getxattr(
-            path: *const libc::c_char,
-            name: *const libc::c_char,
-            value: *mut libc::c_void,
-            size: libc::size_t,
-            position: u32,
-            options: libc::c_int,
-        ) -> libc::ssize_t;
-    }
-
     use std::os::unix::ffi::OsStrExt as _;
 
     let os_str_path = path.as_ref().as_os_str();
@@ -142,7 +120,7 @@ where
     let len = unsafe {
         // First we call `getxattr` with empty buffer to get the size of the
         // buffer that will collect the actual results.
-        getxattr(
+        libc::getxattr(
             c_str_path.as_ptr(),
             c_str_name.as_ptr(),
             std::ptr::null_mut(), 0,
@@ -165,7 +143,7 @@ where
     let len = unsafe {
         // Now we can call `getxattr` with the actual buffer of the size we
         // determined by the previous call.
-        getxattr(
+        libc::getxattr(
             c_str_path.as_ptr(),
             c_str_name.as_ptr(),
             buf_ptr, buf.len(),
