@@ -199,19 +199,19 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
 }
 
 /// An iterator over mounted filesystems information.
-struct Mounts {
+struct Mounts<R: std::io::Read> {
     /// An mtab-like file to parse for mount information.
-    file: std::io::BufReader<std::fs::File>,
+    reader: std::io::BufReader<R>,
     /// A reusable line buffer where mount entries are fed to.
     buf: String,
 }
 
-impl Mounts {
+impl<R: std::io::Read> Mounts<R> {
 
     /// Creates a new instance of the iterator.
-    fn new(file: std::fs::File) -> Mounts {
+    fn new(reader: R) -> Mounts<R> {
         Mounts {
-            file: std::io::BufReader::new(file),
+            reader: std::io::BufReader::new(reader),
             buf: String::new(),
         }
     }
@@ -237,7 +237,7 @@ impl Mounts {
     }
 }
 
-impl Iterator for Mounts {
+impl<R: std::io::Read> Iterator for Mounts<R> {
 
     type Item = std::io::Result<Mount>;
 
@@ -245,7 +245,7 @@ impl Iterator for Mounts {
         use std::io::BufRead as _;
 
         self.buf.clear();
-        match self.file.read_line(&mut self.buf) {
+        match self.reader.read_line(&mut self.buf) {
             Ok(0) => return None,
             Ok(_) => Some(self.parse_buf()),
             Err(error) => return Some(Err(error)),
