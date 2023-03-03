@@ -185,9 +185,72 @@ where
 
 /// Returns an iterator over mounted filesystems information.
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
-    // TODO(@panhania): Implement this by parsing `/proc/mounts`.
-    let error = std::io::ErrorKind::Unsupported.into();
-    Err::<std::iter::Empty<std::io::Result<Mount>>, _>(error)
+    // We try to parse `/proc/mounts`, but if it does not exist we fallback to
+    // `/etc/mtab` (which often is nowadays just a symlink to the former).
+    let file = match std::fs::File::open("/proc/mounts") {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            std::fs::File::open("/etc/mtab")?
+        }
+        Err(error) => return Err(error),
+    };
+
+    Ok(Mounts::new(file))
+}
+
+/// An iterator over mounted filesystems information.
+struct Mounts {
+    /// An mtab-like file to parse for mount information.
+    file: std::io::BufReader<std::fs::File>,
+    /// A reusable line buffer where mount entries are fed to.
+    buf: String,
+}
+
+impl Mounts {
+
+    /// Creates a new instance of the iterator.
+    fn new(file: std::fs::File) -> Mounts {
+        Mounts {
+            file: std::io::BufReader::new(file),
+            buf: String::new(),
+        }
+    }
+
+    /// Parses data stored in the line buffer.
+    fn parse_buf(&self) -> std::io::Result<Mount> {
+        let mut cols = self.buf.split(' ');
+
+        // There is more data in the file but we don't care for the time being
+        // and only "parse" the first three columns.
+        let source = cols.next()
+            .ok_or_else(|| std::io::ErrorKind::InvalidData)?;
+        let target = cols.next()
+            .ok_or_else(|| std::io::ErrorKind::InvalidData)?;
+        let fs_type = cols.next()
+            .ok_or_else(|| std::io::ErrorKind::InvalidData)?;
+
+        Ok(Mount {
+            source: source.into(),
+            target: target.into(),
+            fs_type: fs_type.into(),
+        })
+    }
+}
+
+impl Iterator for Mounts {
+
+    type Item = std::io::Result<Mount>;
+
+    fn next(&mut self) -> Option<std::io::Result<Mount>> {
+        use std::io::BufRead as _;
+
+        self.buf.clear();
+        match self.file.read_line(&mut self.buf) {
+            Ok(0) => return None,
+            Ok(_) => Some(self.parse_buf()),
+            Err(error) => return Some(Err(error)),
+        }
+    }
 }
 
 #[cfg(test)]
