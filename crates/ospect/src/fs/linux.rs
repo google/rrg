@@ -244,11 +244,21 @@ impl<R: std::io::Read> Iterator for Mounts<R> {
     fn next(&mut self) -> Option<std::io::Result<Mount>> {
         use std::io::BufRead as _;
 
-        self.buf.clear();
-        match self.reader.read_line(&mut self.buf) {
-            Ok(0) => return None,
-            Ok(_) => Some(self.parse_buf()),
-            Err(error) => return Some(Err(error)),
+        loop {
+            self.buf.clear();
+            match self.reader.read_line(&mut self.buf) {
+                Ok(0) => return None,
+                Ok(_) => (),
+                Err(error) => return Some(Err(error)),
+            }
+
+            // We want to parse the buffer only if it is not blank. In general
+            // blank lines should not happen but better safe then sorry.
+            if !self.buf.trim().is_empty() {
+                return Some(self.parse_buf())
+            } else {
+                continue;
+            }
         }
     }
 }
