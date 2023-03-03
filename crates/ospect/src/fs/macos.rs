@@ -8,6 +8,8 @@
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::path::Path;
 
+use super::*;
+
 /// Collects names of all extended attributes for the specified file.
 pub fn ext_attr_names<P>(path: P) -> std::io::Result<Vec<OsString>>
 where
@@ -160,6 +162,13 @@ where
     // garbage at the end, we have to truncate the buffer to its real length.
     buf.truncate(len as usize);
     Ok(buf)
+}
+
+/// Returns an iterator over mounted filesystems information.
+pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
+    // TODO(@panhania): Impelement this using the `getmntinfo` call.
+    let error = std::io::ErrorKind::Unsupported.into();
+    Err::<std::iter::Empty<std::io::Result<Mount>>, _>(error)
 }
 
 #[cfg(test)]

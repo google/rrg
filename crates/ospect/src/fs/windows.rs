@@ -8,6 +8,8 @@
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
+use super::*;
+
 /// Collects names of all extended attributes for the specified file.
 pub fn ext_attr_names<P>(_path: P) -> std::io::Result<Vec<OsString>>
 where
@@ -25,4 +27,11 @@ where
 {
     // Windows does not support extended file attributes, so we just error out.
     Err(std::io::ErrorKind::Unsupported.into())
+}
+
+/// Returns an iterator over mounted filesystems information.
+pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
+    // TODO(@panhania): Impelement this somehow.
+    let error = std::io::ErrorKind::Unsupported.into();
+    Err::<std::iter::Empty<std::io::Result<Mount>>, _>(error)
 }

@@ -188,6 +188,29 @@ where
     self::sys::ext_attr_value(path, name)
 }
 
+/// Information about a mounted filesystem.
+pub struct Mount {
+    /// Name of the mounted device.
+    pub source: String,
+    /// Mount point, i.e., where the mounted filesystem is available.
+    pub target: std::path::PathBuf,
+    /// Type of the mounted filesystem (e.g. `ext4`, `ramfs`, `proc`).
+    pub fs_type: String,
+}
+
+// TODO(@panhania): Add information about Windows once it is supported.
+/// Returns an iterator over mounted filesystems information.
+///
+/// The exact behaviour is system specific:
+///
+///   * On Linux it parses `/proc/mounts` entries (or alternatives).
+///   * On macOS it uses the [`getmntinfo`] call.
+///
+/// [`getmntinfo`]: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/getmntinfo.3.html
+pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
+    self::sys::mounts()
+}
+
 #[cfg(test)]
 mod tests {
 
