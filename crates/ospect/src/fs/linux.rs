@@ -391,4 +391,57 @@ pub(crate) mod tests {
                 .success()
         };
     }
+
+    #[test]
+    fn mounts_root_exists() {
+        let mut mounts = mounts()
+            .unwrap()
+            .map(Result::unwrap);
+
+        assert!(mounts.find(|mount| mount.target == Path::new("/")).is_some());
+    }
+
+    #[test]
+    fn mounts_empty_mtab() {
+        const MTAB: &'static str = "\
+        ";
+
+        let mut mounts = Mounts::new(MTAB.as_bytes());
+
+        assert!(mounts.next().is_none());
+    }
+
+    #[test]
+    fn mounts_fake_mtab() {
+        const MTAB: &'static str = "\
+sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
+proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
+/dev/foobar / ext4 rw,relatime 0 0
+/dev/quux /usr/quux ext4 rw,relatime 0 0
+        ";
+
+        let mut mounts = Mounts::new(MTAB.as_bytes());
+
+        let mount = mounts.next().unwrap().unwrap();
+        assert_eq!(mount.source, "sysfs");
+        assert_eq!(mount.target, Path::new("/sys"));
+        assert_eq!(mount.fs_type, "sysfs");
+
+        let mount = mounts.next().unwrap().unwrap();
+        assert_eq!(mount.source, "proc");
+        assert_eq!(mount.target, Path::new("/proc"));
+        assert_eq!(mount.fs_type, "proc");
+
+        let mount = mounts.next().unwrap().unwrap();
+        assert_eq!(mount.source, "/dev/foobar");
+        assert_eq!(mount.target, Path::new("/"));
+        assert_eq!(mount.fs_type, "ext4");
+
+        let mount = mounts.next().unwrap().unwrap();
+        assert_eq!(mount.source, "/dev/quux");
+        assert_eq!(mount.target, Path::new("/usr/quux"));
+        assert_eq!(mount.fs_type, "ext4");
+
+        assert!(mounts.next().is_none());
+    }
 }
