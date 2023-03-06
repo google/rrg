@@ -392,6 +392,9 @@ pub(crate) mod tests {
         };
     }
 
+    // TODO(@panhania): This function should be reused for testing macOS. It
+    // should be moved to the parent module and skipped in case of non-Unix
+    // system.
     #[test]
     fn mounts_root_exists() {
         let mut mounts = mounts()

@@ -6,7 +6,7 @@
 //! macOS-specific filesystem inspection functionalities.
 
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::*;
 
@@ -166,9 +166,96 @@ where
 
 /// Returns an iterator over mounted filesystems information.
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
-    // TODO(@panhania): Impelement this using the `getmntinfo` call.
-    let error = std::io::ErrorKind::Unsupported.into();
-    Err::<std::iter::Empty<std::io::Result<Mount>>, _>(error)
+    let mut buf = std::mem::MaybeUninit::<*mut libc::statfs>::uninit();
+
+    // SAFETY: This is actually not safe as the `getmntinfo` is most likely not
+    // thread-safe (the documentation is pretty vague on this but since it works
+    // through a reusable buffer, it almost certainly is not unless thread-local
+    // storage is involved). But since possible issue happens not on the Rust
+    // side, the worst can happen is we will get garbage data. So as long as we
+    // put limited trust in the string buffers we parse later we should be good.
+    let len = unsafe {
+        libc::getmntinfo(buf.as_mut_ptr(), libc::MNT_NOWAIT)
+    };
+    if len == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    // SAFETY: We verified that the function call succeeded, so the pointer to
+    // the buffer is now initialized but the content of the buffer itself should
+    // not be trusted. This is why we stay with the pointer and not convert it
+    // to a Rust reference (that has to adhere to non-aliasing principles).
+    let buf = unsafe {
+        buf.assume_init()
+    };
+
+    let mut mounts = Vec::with_capacity(len as usize);
+    for i in 0..(len as usize) {
+        // SAFETY: This is the tricky part as we dereference pointer that can be
+        // theoretically invalid at this point if another thread did call the
+        // `getmntinfo` function. We treat this function as a black box and
+        // consider two cases (we know for a fact that the first one is the real
+        // one from studying the source code but since it is not documented, we
+        // should not rely on that).
+        //
+        // In the first case there is a static buffer that is shared among all
+        // threads. This is the reason why we don't convert the pointer to slice
+        // ealier and continue to work with raw pointers. And this is also the
+        // source of data race: by the time we do the dereference below another
+        // thread might have already overriden the data. But the buffer itself
+        // is static and all entries have constant size so in the worst case we
+        // read some garbage data but we will not cause any buffer overflow (as
+        // the pointer before was valid and the buffer is of the same length).
+        //
+        // In the second case, buffers are dynamically allocated (which should
+        // not be the case because we are explicitly told not to free the memory
+        // allocated for the buffer). But then we have no issue as each call to
+        // `getmntinfo` gets different buffer.
+        //
+        // Theoretically there is a possibility of a third option: there is a
+        // static pointer to a dynamically allocated buffer that is shrunk or
+        // grown depending on how much results are going to take. We ignore that
+        // this is possible as it means that such an operating system is beyond
+        // any salvation anyway and we should let the bad guys roam there free.
+        let mut statfs = unsafe {
+            *buf.offset(i as isize)
+        };
+
+        // As mentioned before, the strings can contain garbage data, i.e. they
+        // do not have to be properly null-terminated. For this reason we patch
+        // them up by putting an artificial zero at the end. This means that we
+        // can still return garbage names from this function but at leats there
+        // is no memory safety issue.
+        *statfs.f_fstypename.last_mut().unwrap() = 0;
+        *statfs.f_mntonname.last_mut().unwrap() = 0;
+        *statfs.f_mntfromname.last_mut().unwrap() = 0;
+
+        // SAFETY: Because we patch the strings above we are sure that all the
+        // safety invariants required by the `from_ptr` call are met. Note that
+        // `statfs` is now on the stack, so the lifetime of this reference is
+        // valid until the end of this scope.
+        let source = unsafe {
+            std::ffi::CStr::from_ptr(statfs.f_mntonname.as_ptr())
+        }.to_string_lossy();
+        // SAFETY: Same as above.
+        let target = unsafe {
+            std::ffi::CStr::from_ptr(statfs.f_mntfromname.as_ptr())
+        }.to_bytes();
+        // SAFETY: Same as above.
+        let fs_type = unsafe {
+            std::ffi::CStr::from_ptr(statfs.f_fstypename.as_ptr())
+        }.to_string_lossy();
+
+        use std::os::unix::ffi::OsStrExt as _;
+
+        mounts.push(Mount {
+            source: source.into_owned(),
+            target: PathBuf::from(OsStr::from_bytes(target)),
+            fs_type: fs_type.into_owned(),
+        });
+    }
+
+    Ok(mounts.into_iter().map(Ok))
 }
 
 #[cfg(test)]
