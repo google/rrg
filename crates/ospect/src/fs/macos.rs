@@ -166,6 +166,16 @@ where
 
 /// Returns an iterator over mounted filesystems information.
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
+    // We slap a lock on this function to at least partially mitigate issues
+    // mentioned in multiple comments below. Note however, thay this lock does
+    // not magically mean that there are no issues with the code below. Because
+    // we cannot ensure that nobody else calls `getmntinfo` directly, all the
+    // concerns are still valid, this only prevents users of the safe library
+    // from shooting themselves in the foot.
+    static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let mutex = MUTEX.lock()
+        .unwrap();
+
     let mut buf = std::mem::MaybeUninit::<*mut libc::statfs>::uninit();
 
     // SAFETY: This is actually not safe as the `getmntinfo` is most likely not
@@ -254,6 +264,13 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
             fs_type: fs_type.into_owned(),
         });
     }
+
+    // All the relevant buffer data is already copied to our vector, we can
+    // release the lock now and the buffer can be safely overridden.
+    // TODO(@panhania): Replace with `Mutex::unlock` once it is stabilized [1].
+    //
+    // [1]: https://github.com/rust-lang/rust/issues/81872
+    drop(mutex);
 
     Ok(mounts.into_iter().map(Ok))
 }
