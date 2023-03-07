@@ -90,9 +90,6 @@ optional = true
 version = "0.10.6"
 optional = true
 
-[target.'cfg(target_os = "linux")'.dependencies.ioctls]
-version = "0.6.1"
-
 # TODO(https://github.com/google/rrg/issues/47): This should be a dev dependency
 # but because of Cargo limitations [1] it has to be marked not as such. However,
 # because it is hidden behind a feature flag, it should not be a big problem.
