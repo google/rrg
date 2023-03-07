@@ -18,7 +18,7 @@ default = [
     "action-timeline",
 ]
 
-action-insttime = ["dep:chrono"]
+action-insttime = []
 action-interfaces = []
 action-filesystems = []
 action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
@@ -69,10 +69,6 @@ version = "1.5.5"
 
 [dependencies.lazy_static]
 version = "1.4.0"
-
-[dependencies.chrono]
-version = "0.4.11"
-optional = true
 
 [dependencies.digest]
 version = "0.10.5"
