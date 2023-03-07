@@ -31,7 +31,9 @@ where
 
 /// Returns an iterator over mounted filesystems information.
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
-    // TODO(@panhania): Impelement this somehow.
+    // TODO(@panhania): Implement this. See [1] for details how it can be done.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/fileio/enumerating-volume-mount-points
     let error = std::io::ErrorKind::Unsupported.into();
     Err::<std::iter::Empty<std::io::Result<Mount>>, _>(error)
 }
