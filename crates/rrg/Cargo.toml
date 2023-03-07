@@ -18,9 +18,9 @@ default = [
     "action-timeline",
 ]
 
-action-insttime = ["dep:chrono", "dep:proc-mounts"]
+action-insttime = ["dep:chrono"]
 action-interfaces = []
-action-filesystems = ["dep:proc-mounts"]
+action-filesystems = []
 action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
 action-listdir = []
 action-metadata = []
@@ -96,10 +96,6 @@ optional = true
 
 [target.'cfg(target_os = "linux")'.dependencies.ioctls]
 version = "0.6.1"
-
-[target.'cfg(target_os = "linux")'.dependencies.proc-mounts]
-version = "0.2.4"
-optional = true
 
 # TODO(https://github.com/google/rrg/issues/47): This should be a dev dependency
 # but because of Cargo limitations [1] it has to be marked not as such. However,
