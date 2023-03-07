@@ -5,5 +5,5 @@
 
 /// Returns the time at which the system was installed.
 pub fn installed() -> std::io::Result<std::time::SystemTime> {
-    Err(std::io::ErrorKind::Unsupported.into())
+    crate::os::unix::installed()
 }

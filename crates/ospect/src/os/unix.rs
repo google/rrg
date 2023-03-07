@@ -5,5 +5,6 @@
 
 /// Returns the time at which the system was installed.
 pub fn installed() -> std::io::Result<std::time::SystemTime> {
-    crate::os::unix::installed()
+    let root_metadata = std::fs::metadata("/")?;
+    root_metadata.created()
 }
