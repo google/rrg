@@ -18,9 +18,9 @@ default = [
     "action-timeline",
 ]
 
-action-insttime = ["dep:chrono", "dep:proc-mounts"]
+action-insttime = []
 action-interfaces = []
-action-filesystems = ["dep:proc-mounts"]
+action-filesystems = []
 action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
 action-listdir = []
 action-metadata = []
@@ -70,10 +70,6 @@ version = "1.5.5"
 [dependencies.lazy_static]
 version = "1.4.0"
 
-[dependencies.chrono]
-version = "0.4.11"
-optional = true
-
 [dependencies.digest]
 version = "0.10.5"
 optional = true
@@ -92,13 +88,6 @@ optional = true
 
 [dependencies.sha2]
 version = "0.10.6"
-optional = true
-
-[target.'cfg(target_os = "linux")'.dependencies.ioctls]
-version = "0.6.1"
-
-[target.'cfg(target_os = "linux")'.dependencies.proc-mounts]
-version = "0.2.4"
 optional = true
 
 # TODO(https://github.com/google/rrg/issues/47): This should be a dev dependency

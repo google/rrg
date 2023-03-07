@@ -11,7 +11,6 @@
 
 use crate::session::{self, Session};
 
-use log::error;
 use std::fmt::{Display, Formatter};
 
 /// Enum of possible errors, which can occur during collecting filesystems data.
@@ -61,7 +60,7 @@ impl From<Error> for session::Error {
 /// A response type for the filesystems action.
 pub struct Response {
     /// Information about the filesystem.
-    mount_info: proc_mounts::MountInfo,
+    mount_info: ospect::fs::Mount,
 }
 
 /// Handles requests for the filesystems action.
@@ -69,18 +68,10 @@ pub struct Response {
 /// Initially searches in `/proc/mounts`. If it's missing, falls back to
 /// `/etc/mtab`.
 pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
-    use proc_mounts::MountIter;
+    let mounts = ospect::fs::mounts()
+        .map_err(Error::MissingFile)?;
 
-    // Check whether `/proc/mounts` exists.
-    let mount_iter = match MountIter::new() {
-        Ok(mount_iter) => mount_iter,
-        Err(_) => {
-            // `/proc/mounts` doesn't exist. Try to fall back to `/etc/mtab`.
-            MountIter::new_from_file("/etc/mtab").map_err(Error::MissingFile)?
-        },
-    };
-
-    for mount_info in mount_iter {
+    for mount_info in mounts {
         let mount_info = mount_info.map_err(Error::MountInfoParse)?;
         session.reply(Response {
            mount_info,
@@ -90,20 +81,6 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
     Ok(())
 }
 
-/// Converts filesystem mount option in `String` representation to
-/// GRR's `KeyValue` protobuf struct representation.
-fn option_to_key_value(option: String) -> rrg_proto::jobs::KeyValue {
-    match &option.split('=').collect::<Vec<&str>>()[..] {
-        &[key] => rrg_proto::jobs::KeyValue::key(String::from(key)),
-        &[key, value] => rrg_proto::jobs::KeyValue::pair(String::from(key), String::from(value)),
-        _ => {
-            error!("invalid mount option syntax: {}", option);
-            // TODO: It's better not to send any key-value in this case.
-            rrg_proto::jobs::KeyValue::new()
-        },
-    }
-}
-
 impl super::Item for Response {
 
     const RDF_NAME: &'static str = "Filesystem";
@@ -111,18 +88,13 @@ impl super::Item for Response {
     type Proto = rrg_proto::sysinfo::Filesystem;
 
     fn into_proto(self) -> rrg_proto::sysinfo::Filesystem {
-        let options: rrg_proto::jobs::AttributedDict = self.mount_info.options.into_iter()
-            .map(option_to_key_value)
-            .collect();
-
         // TODO: Remove lossy conversion of `PathBuf` to `String`
         // when `mount_point` and `device` fields of `Filesystem` message
         // will have `bytes` type instead of `string`.
         let mut proto = rrg_proto::sysinfo::Filesystem::new();
-        proto.set_device(self.mount_info.source.to_string_lossy().into_owned());
-        proto.set_mount_point(self.mount_info.dest.to_string_lossy().into_owned());
-        proto.set_field_type(self.mount_info.fstype);
-        proto.set_options(options);
+        proto.set_device(self.mount_info.source);
+        proto.set_mount_point(self.mount_info.target.to_string_lossy().into_owned());
+        proto.set_field_type(self.mount_info.fs_type);
 
         proto
     }
@@ -148,12 +120,12 @@ mod tests {
 
         impl fuse::Filesystem for FuseFilesystem {}
 
-        let fs_name = std::path::PathBuf::from("fuse-test-fs");
+        let fs_name = "fuse-test-fs";
 
         let tmp_dir = tempfile::tempdir().unwrap();
         let mountpoint = tmp_dir.path();
 
-        let fs_name_option = format!("fsname={}", fs_name.to_str().unwrap());
+        let fs_name_option = format!("fsname={}", fs_name);
         let options = [
             "-o", "ro",
             "-o", "nosuid",
@@ -180,25 +152,8 @@ mod tests {
 
         let mount_info = &fuse_mounted_fs.mount_info;
         assert_eq!(mount_info.source, fs_name);
-        assert_eq!(mount_info.dest, tmp_dir.path());
-        assert_eq!(mount_info.fstype, "fuse.custom-type");
-
-        let options = &mount_info.options;
-        assert!(options.iter().any(|opt| opt == "ro"));
-        assert!(options.iter().any(|opt| opt == "nosuid"));
-        assert!(options.iter().any(|opt| opt == "nodev"));
-        assert!(options.iter().any(|opt| opt == "relatime"));
-
-        let uid = unsafe { libc::getuid() };
-        let gid = unsafe { libc::getgid() };
-
-        // `user_id` and `group_id` are set by libfuse.
-        // http://man7.org/linux/man-pages/man8/mount.fuse.8.html
-        let current_uid_option = format!("user_id={}", uid);
-        assert!(options.iter().any(|opt| *opt == current_uid_option));
-
-        let current_gid_option = format!("group_id={}", gid);
-        assert!(options.iter().any(|opt| *opt == current_gid_option));
+        assert_eq!(mount_info.target, tmp_dir.path());
+        assert_eq!(mount_info.fs_type, "fuse.custom-type");
 
         drop(background_session);
     }
