@@ -8,6 +8,8 @@
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::path::Path;
 
+use super::*;
+
 // TODO: Document behaviour for symlinks.
 /// Collects extended flags of the specified file.
 ///
@@ -181,6 +183,86 @@ where
     Ok(buf)
 }
 
+/// Returns an iterator over mounted filesystems information.
+pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
+    // We try to parse `/proc/mounts`, but if it does not exist we fallback to
+    // `/etc/mtab` (which often is nowadays just a symlink to the former).
+    let file = match std::fs::File::open("/proc/mounts") {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            std::fs::File::open("/etc/mtab")?
+        }
+        Err(error) => return Err(error),
+    };
+
+    Ok(Mounts::new(file))
+}
+
+/// An iterator over mounted filesystems information.
+struct Mounts<R: std::io::Read> {
+    /// An mtab-like file to parse for mount information.
+    reader: std::io::BufReader<R>,
+    /// A reusable line buffer where mount entries are fed to.
+    buf: String,
+}
+
+impl<R: std::io::Read> Mounts<R> {
+
+    /// Creates a new instance of the iterator.
+    fn new(reader: R) -> Mounts<R> {
+        Mounts {
+            reader: std::io::BufReader::new(reader),
+            buf: String::new(),
+        }
+    }
+
+    /// Parses data stored in the line buffer.
+    fn parse_buf(&self) -> std::io::Result<Mount> {
+        let mut cols = self.buf.split(' ');
+
+        // There is more data in the file but we don't care for the time being
+        // and only "parse" the first three columns.
+        let source = cols.next()
+            .ok_or_else(|| std::io::ErrorKind::InvalidData)?;
+        let target = cols.next()
+            .ok_or_else(|| std::io::ErrorKind::InvalidData)?;
+        let fs_type = cols.next()
+            .ok_or_else(|| std::io::ErrorKind::InvalidData)?;
+
+        Ok(Mount {
+            source: source.into(),
+            target: target.into(),
+            fs_type: fs_type.into(),
+        })
+    }
+}
+
+impl<R: std::io::Read> Iterator for Mounts<R> {
+
+    type Item = std::io::Result<Mount>;
+
+    fn next(&mut self) -> Option<std::io::Result<Mount>> {
+        use std::io::BufRead as _;
+
+        loop {
+            self.buf.clear();
+            match self.reader.read_line(&mut self.buf) {
+                Ok(0) => return None,
+                Ok(_) => (),
+                Err(error) => return Some(Err(error)),
+            }
+
+            // We want to parse the buffer only if it is not blank. In general
+            // blank lines should not happen but better safe then sorry.
+            if !self.buf.trim().is_empty() {
+                return Some(self.parse_buf())
+            } else {
+                continue;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
 
@@ -308,5 +390,49 @@ pub(crate) mod tests {
                 .unwrap()
                 .success()
         };
+    }
+
+    #[test]
+    fn mounts_empty_mtab() {
+        const MTAB: &'static str = "\
+        ";
+
+        let mut mounts = Mounts::new(MTAB.as_bytes());
+
+        assert!(mounts.next().is_none());
+    }
+
+    #[test]
+    fn mounts_fake_mtab() {
+        const MTAB: &'static str = "\
+sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
+proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
+/dev/foobar / ext4 rw,relatime 0 0
+/dev/quux /usr/quux ext4 rw,relatime 0 0
+        ";
+
+        let mut mounts = Mounts::new(MTAB.as_bytes());
+
+        let mount = mounts.next().unwrap().unwrap();
+        assert_eq!(mount.source, "sysfs");
+        assert_eq!(mount.target, Path::new("/sys"));
+        assert_eq!(mount.fs_type, "sysfs");
+
+        let mount = mounts.next().unwrap().unwrap();
+        assert_eq!(mount.source, "proc");
+        assert_eq!(mount.target, Path::new("/proc"));
+        assert_eq!(mount.fs_type, "proc");
+
+        let mount = mounts.next().unwrap().unwrap();
+        assert_eq!(mount.source, "/dev/foobar");
+        assert_eq!(mount.target, Path::new("/"));
+        assert_eq!(mount.fs_type, "ext4");
+
+        let mount = mounts.next().unwrap().unwrap();
+        assert_eq!(mount.source, "/dev/quux");
+        assert_eq!(mount.target, Path::new("/usr/quux"));
+        assert_eq!(mount.fs_type, "ext4");
+
+        assert!(mounts.next().is_none());
     }
 }
