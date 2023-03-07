@@ -346,4 +346,14 @@ mod tests {
     // as the kernel simply does not allow that [1].
     //
     // [1]: https://unix.stackexchange.com/questions/16537/extended-attribute-on-symbolic-link
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn mounts_root_exists() {
+        let mut mounts = mounts()
+            .unwrap()
+            .map(Result::unwrap);
+
+        assert!(mounts.find(|mount| mount.target == Path::new("/")).is_some());
+    }
 }
