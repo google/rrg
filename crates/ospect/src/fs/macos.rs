@@ -245,11 +245,11 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
         // `statfs` is now on the stack, so the lifetime of this reference is
         // valid until the end of this scope.
         let source = unsafe {
-            std::ffi::CStr::from_ptr(statfs.f_mntonname.as_ptr())
+            std::ffi::CStr::from_ptr(statfs.f_mntfromname.as_ptr())
         }.to_string_lossy();
         // SAFETY: Same as above.
         let target = unsafe {
-            std::ffi::CStr::from_ptr(statfs.f_mntfromname.as_ptr())
+            std::ffi::CStr::from_ptr(statfs.f_mntonname.as_ptr())
         }.to_bytes();
         // SAFETY: Same as above.
         let fs_type = unsafe {
