@@ -6,6 +6,10 @@
 pub mod convert;
 pub mod path;
 
+pub mod v2 {
+    include!(concat!(env!("OUT_DIR"), "/proto-v2/mod.rs"));
+}
+
 include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));
 
 impl From<bool> for jobs::DataBlob {

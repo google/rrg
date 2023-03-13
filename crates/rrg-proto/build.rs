@@ -38,4 +38,18 @@ fn main() {
             ..Default::default()
         })
         .run().unwrap();
+
+    let proto_out_dir = outdir.join("proto-v2");
+    std::fs::create_dir_all(&proto_out_dir).unwrap();
+
+    protobuf_codegen_pure::Codegen::new()
+        .out_dir(&proto_out_dir)
+        .include("../../vendor/protobuf/src")
+        .include("../../proto")
+        .inputs(["../../proto/rrg.proto"])
+        .customize(protobuf_codegen_pure::Customize {
+            gen_mod_rs: Some(true),
+            ..Default::default()
+        })
+        .run().unwrap();
 }
