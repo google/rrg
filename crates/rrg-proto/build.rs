@@ -19,6 +19,12 @@ const PROTOS: &'static [&'static str] = &[
     "../../vendor/grr/grr/proto/grr_response_proto/user.proto",
 ];
 
+const PROTOS_V2: &'static [&'static str] = &[
+    "../../proto/rrg.proto",
+    "../../proto/rrg/agent.proto",
+    "../../proto/rrg/startup.proto",
+];
+
 fn main() {
     let outdir: PathBuf = std::env::var("OUT_DIR")
         .expect("no output directory")
@@ -39,6 +45,10 @@ fn main() {
         })
         .run().unwrap();
 
+    for proto in PROTOS_V2 {
+        println!("cargo:rerun-if-changed={}", proto);
+    }
+
     let proto_out_dir = outdir.join("proto-v2");
     std::fs::create_dir_all(&proto_out_dir).unwrap();
 
@@ -46,9 +56,7 @@ fn main() {
         .out_dir(&proto_out_dir)
         .include("../../vendor/protobuf/src")
         .include("../../proto")
-        .inputs(["../../proto/rrg.proto"])
-        .inputs(["../../proto/rrg/agent.proto"])
-        .inputs(["../../proto/rrg/startup.proto"])
+        .inputs(PROTOS_V2)
         .customize(protobuf_codegen_pure::Customize {
             gen_mod_rs: Some(true),
             ..Default::default()
