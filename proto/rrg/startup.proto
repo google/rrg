@@ -1,0 +1,23 @@
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style license that can be found
+// in the LICENSE file or at https://opensource.org/licenses/MIT.
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "rrg/agent.proto";
+
+package rrg.startup;
+
+// Metadata about the agent startup event.
+//
+// This message should be sent to the `STARTUP` sink. It should be sent only
+// once: at the moment the agent process is started.
+message Metadata {
+    // Metadata about the agent that has been started.
+    rrg.agent.Metadata agent = 1;
+    // Time at which the agent was started.
+    google.protobuf.Timestamp agent_startup_time = 2;
+    // Time at which the operating system booted.
+    google.protobuf.Timestamp os_boot_time = 3;
+}

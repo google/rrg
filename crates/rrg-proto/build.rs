@@ -48,6 +48,7 @@ fn main() {
         .include("../../proto")
         .inputs(["../../proto/rrg.proto"])
         .inputs(["../../proto/rrg/agent.proto"])
+        .inputs(["../../proto/rrg/startup.proto"])
         .customize(protobuf_codegen_pure::Customize {
             gen_mod_rs: Some(true),
             ..Default::default()
