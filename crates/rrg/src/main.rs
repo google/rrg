@@ -3,27 +3,24 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+use log::{info, error};
 use rrg::args::Args;
 
 fn main() {
     let args = rrg::args::from_env_args();
     init(&args);
 
-    log::info!("sending Fleetspeak startup information");
+    info!("sending Fleetspeak startup information");
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))
         .expect("failed to initialize Fleetspeak connection");
 
-    log::info!("sending RRG startup information");
+    info!("sending RRG startup information");
     match rrg::startup::send() {
-        Err(error) => {
-            log::error!("failed to collect startup information: {}", error);
-        }
-        Ok(()) => {
-            log::info!("successfully sent startup information");
-        }
+        Err(error) => error!("failed to collect startup information: {error}"),
+        Ok(()) => info!("successfully sent startup information"),
     }
 
-    log::info!("listening for messages");
+    info!("listening for messages");
     rrg::listen(&args);
 }
 
