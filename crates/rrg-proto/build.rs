@@ -21,7 +21,6 @@ const PROTOS: &'static [&'static str] = &[
 
 const PROTOS_V2: &'static [&'static str] = &[
     "../../proto/rrg.proto",
-    "../../proto/rrg/agent.proto",
     "../../proto/rrg/startup.proto",
 ];
 

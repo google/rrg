@@ -5,19 +5,42 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
-import "rrg/agent.proto";
 
 package rrg.startup;
 
-// Metadata about the agent startup event.
+// Information about the agent startup.
 //
 // This message should be sent to the `STARTUP` sink. It should be sent only
 // once: at the moment the agent process is started.
-message Metadata {
+message Startup {
     // Metadata about the agent that has been started.
-    rrg.agent.Metadata agent = 1;
+    Metadata metadata = 1;
     // Time at which the agent was started.
     google.protobuf.Timestamp agent_startup_time = 2;
     // Time at which the operating system booted.
     google.protobuf.Timestamp os_boot_time = 3;
+}
+
+// Metadata about the RRG agent.
+message Metadata {
+    // Name of the agent (should always be "RRG").
+    string name = 1;
+    // Value of the command-line arguments the agent was invoked with.
+    string args = 2;
+    // Version of the agent.
+    Version version = 3;
+    // The time at which the agent executable was built.
+    google.protobuf.Timestamp build_time = 4;
+}
+
+// Descriptor of the version quadruple.
+message Version {
+    // Major component of the version (`x` in `x.y.z.r`).
+    uint32 major = 1;
+    // Minor component of the version (`y` in `x.y.z.r`).
+    uint32 minor = 2;
+    // Patch component of the version (`z` in `x.y.z.r`).
+    uint32 patch = 3;
+    // Revision component of the version (`r` in `x.y.z.r`).
+    uint32 revision = 4;
 }
