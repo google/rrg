@@ -16,7 +16,7 @@ message Startup {
     // Metadata about the agent that has been started.
     Metadata metadata = 1;
     // Value of the command-line arguments the agent was invoked with.
-    string args = 2;
+    repeated string args = 2;
     // Time at which the agent was started.
     google.protobuf.Timestamp agent_startup_time = 3;
     // Time at which the operating system booted.

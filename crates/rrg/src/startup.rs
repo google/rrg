@@ -5,12 +5,33 @@
 
 // TODO(panhania): Add support for binary paths in the `Metadata` object.
 
+/// Information about the agent startup.
+pub struct Startup {
+    /// Metadata about the agent that has been started.
+    pub metadata: Metadata,
+    /// Value of command-line arguments that the agent was invoked with.
+    pub args: Vec<String>,
+    /// Time at which the agent was started.
+    pub agent_started: std::time::SystemTime,
+    // TOOD(@panhania): Add support for the `os_booted` field.
+}
+
+impl Startup {
+
+    /// Creates a startup information as of now.
+    pub fn now() -> Startup {
+        Startup {
+            metadata: Metadata::from_cargo(),
+            args: std::env::args().collect(),
+            agent_started: std::time::SystemTime::now(),
+        }
+    }
+}
+
 /// A type that holds metadata about the RRG agent.
 pub struct Metadata {
     /// Name of the RRG agent.
     pub name: String,
-    /// Description of the RRG agent.
-    pub description: String,
     /// Version of the RRG agent.
     pub version: Version,
 }
@@ -24,7 +45,6 @@ impl Metadata {
     pub fn from_cargo() -> Metadata {
         Metadata {
             name: String::from(env!("CARGO_PKG_NAME")),
-            description: String::from(env!("CARGO_PKG_DESCRIPTION")),
             version: Version::from_cargo(),
         }
     }
@@ -56,44 +76,27 @@ impl Version {
             revision: env!("CARGO_PKG_VERSION_PRE").parse().unwrap_or(0),
         }
     }
-
-    /// Returns a numeric representation of version metadata.
-    ///
-    /// This function assumes that all version components are smaller than 10.
-    /// In other cases, the output is undefined (but the function call itself
-    /// does not panic).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use rrg::startup::Version;
-    ///
-    /// let version = Version {
-    ///     major: 1,
-    ///     minor: 2,
-    ///     patch: 3,
-    ///     revision: 4,
-    /// };
-    ///
-    /// assert_eq!(version.as_numeric(), 1234)
-    /// ```
-    pub fn as_numeric(&self) -> u32 {
-        let mut result = 0;
-        result = 10 * result + self.major as u32;
-        result = 10 * result + self.minor as u32;
-        result = 10 * result + self.patch as u32;
-        result = 10 * result + self.revision as u32;
-        result
-    }
 }
 
-impl Into<rrg_proto::jobs::ClientInformation> for Metadata {
+impl Into<rrg_proto::v2::startup::Startup> for Startup {
 
-    fn into(self) -> rrg_proto::jobs::ClientInformation {
-        let mut proto = rrg_proto::jobs::ClientInformation::new();
-        proto.set_client_name(self.name);
-        proto.set_client_version(self.version.as_numeric());
-        proto.set_client_description(self.description);
+    fn into(self) -> rrg_proto::v2::startup::Startup {
+        let mut proto = rrg_proto::v2::startup::Startup::new();
+        proto.set_metadata(self.metadata.into());
+        proto.set_args(self.args.into());
+
+        // TODO(panhania@): Upgrade to version 3.2.0 of `protobuf` that supports
+        // `From<SystemTime>` conversion of Protocol Buffers `Timestamp`.
+        let agent_started_since_epoch = self.agent_started
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap();
+
+        let mut agent_startup_time = protobuf::well_known_types::Timestamp::new();
+        agent_startup_time
+            .set_nanos(agent_started_since_epoch.subsec_nanos() as i32);
+        agent_startup_time
+            .set_seconds(agent_started_since_epoch.as_secs() as i64);
+        proto.set_agent_startup_time(agent_startup_time);
 
         proto
     }
