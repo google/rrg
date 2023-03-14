@@ -15,10 +15,7 @@ fn main() {
         .expect("failed to initialize Fleetspeak connection");
 
     info!("sending RRG startup information");
-    match rrg::startup::send() {
-        Err(error) => error!("failed to collect startup information: {error}"),
-        Ok(()) => info!("successfully sent startup information"),
-    }
+    // TODO(panhania@): Add support for sending startup information.
 
     info!("listening for messages");
     rrg::listen(&args);
