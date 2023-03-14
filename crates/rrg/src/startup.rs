@@ -5,6 +5,16 @@
 
 // TODO(panhania): Add support for binary paths in the `Metadata` object.
 
+/// Sends a system message with startup information to the GRR server.
+pub fn startup() -> Result<(), fleetspeak::WriteError> {
+    let startup = Startup::now();
+
+    crate::Parcel {
+        sink: crate::Sink::Blob,
+        payload: startup,
+    }.send_unaccounted()
+}
+
 /// Information about the agent startup.
 pub struct Startup {
     /// Metadata about the agent that has been started.
@@ -25,6 +35,14 @@ impl Startup {
             args: std::env::args().collect(),
             agent_started: std::time::SystemTime::now(),
         }
+    }
+}
+
+impl crate::Output for Startup {
+    type Proto = rrg_proto::v2::startup::Startup;
+
+    fn into_proto(self) -> rrg_proto::v2::startup::Startup {
+        self.into()
     }
 }
 

@@ -3,7 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use log::{info, error};
+use log::info;
 use rrg::args::Args;
 
 fn main() {
@@ -15,7 +15,8 @@ fn main() {
         .expect("failed to initialize Fleetspeak connection");
 
     info!("sending RRG startup information");
-    // TODO(panhania@): Add support for sending startup information.
+    rrg::startup()
+        .expect("failed to send RRG startup information");
 
     info!("listening for messages");
     rrg::listen(&args);
