@@ -15,18 +15,18 @@ package rrg.startup;
 message Startup {
     // Metadata about the agent that has been started.
     Metadata metadata = 1;
+    // Value of the command-line arguments the agent was invoked with.
+    string args = 2;
     // Time at which the agent was started.
-    google.protobuf.Timestamp agent_startup_time = 2;
+    google.protobuf.Timestamp agent_startup_time = 3;
     // Time at which the operating system booted.
-    google.protobuf.Timestamp os_boot_time = 3;
+    google.protobuf.Timestamp os_boot_time = 4;
 }
 
 // Metadata about the RRG agent.
 message Metadata {
     // Name of the agent (should always be "RRG").
     string name = 1;
-    // Value of the command-line arguments the agent was invoked with.
-    string args = 2;
     // Version of the agent.
     Version version = 3;
     // The time at which the agent executable was built.
