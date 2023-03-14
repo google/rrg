@@ -23,6 +23,71 @@ pub mod gzchunked;
 
 use crate::args::{Args};
 
+pub trait Output {
+    type Proto: protobuf::Message;
+
+    /// Converts the output into a Protocol Buffers message.
+    fn into_proto(self) -> Self::Proto;
+}
+
+pub enum Sink {
+    Startup,
+    Blob,
+}
+
+impl From<Sink> for rrg_proto::v2::rrg::Sink {
+
+    fn from(sink: Sink) -> rrg_proto::v2::rrg::Sink {
+        match sink {
+            Sink::Startup => rrg_proto::v2::rrg::Sink::STARTUP,
+            Sink::Blob => rrg_proto::v2::rrg::Sink::BLOB,
+        }
+    }
+}
+
+pub struct Parcel<O: Output> {
+    /// A sink to deliver the parcel to.
+    sink: Sink,
+    /// The actual content of the parcel.
+    payload: O,
+}
+
+impl<O: Output> Parcel<O> {
+
+    pub fn send_unaccounted(self) -> Result<(), fleetspeak::WriteError> {
+        use protobuf::Message as _;
+
+        let data = rrg_proto::v2::rrg::Parcel::from(self).write_to_bytes()
+            // This should only fail in case we are out of memory, which we are
+            // almost certainly not (and if we are, we have bigger issue).
+            .unwrap();
+
+        fleetspeak::send(fleetspeak::Message {
+            service: String::from("GRR"),
+            kind: Some(String::from("rrg-parcel")),
+            data,
+        })
+    }
+}
+
+impl<O: Output> From<Parcel<O>> for rrg_proto::v2::rrg::Parcel {
+
+    fn from(parcel: Parcel<O>) -> rrg_proto::v2::rrg::Parcel {
+        let payload_proto = parcel.payload.into_proto();
+        let payload_any = protobuf::well_known_types::Any::pack(&payload_proto)
+            // The should not really ever fail, assumming that the protobuf
+            // message we are working with is well-formed and we are not out of
+            // memory.
+            .unwrap();
+
+        let mut proto = rrg_proto::v2::rrg::Parcel::new();
+        proto.set_sink(parcel.sink.into());
+        proto.set_payload(payload_any);
+
+        proto
+    }
+}
+
 /// Enters the agent's main loop and waits for messages.
 ///
 /// It will poll for messages from the GRR server and should consume very few
