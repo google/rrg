@@ -25,9 +25,6 @@ pub mod filesystems;
 #[cfg(target_family = "unix")]
 pub mod interfaces;
 
-#[cfg(feature = "action-metadata")]
-pub mod metadata;
-
 #[cfg(feature = "action-listdir")]
 pub mod listdir;
 
@@ -65,11 +62,6 @@ where
     S: crate::session::Session,
 {
     match request.action_name() {
-        #[cfg(feature = "action-metadata")]
-        "GetClientInfo" => {
-            handle(session, request, self::metadata::handle)
-        }
-
         #[cfg(feature = "action-listdir")]
         "ListDirectory" => {
             handle(session, request, self::listdir::handle)
