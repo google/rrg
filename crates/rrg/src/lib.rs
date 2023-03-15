@@ -44,10 +44,30 @@ impl ParseActionError {
     }
 }
 
+impl std::fmt::Display for ParseActionError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{}", self.kind)
+    }
+}
+
+impl std::error::Error for ParseActionError {
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParseActionErrorKind {
     UnknownAction(i32),
+}
+
+impl std::fmt::Display for ParseActionErrorKind {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ParseActionErrorKind::UnknownAction(val) => {
+                write!(fmt, "unknown action value '{val}'")
+            }
+        }
+    }
 }
 
 impl From<ParseActionErrorKind> for ParseActionError {
@@ -76,8 +96,6 @@ impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
     }
 }
 
-// TODO(@panhania): Implement the `Error` trait for `ParseActionError`.
-
 pub struct Request {
     // An identifier of the flow issuing the request.
     flow_id: u64,
@@ -91,7 +109,7 @@ pub struct Request {
 
 impl Request {
 
-    fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ParseRequestError> {
+    pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ParseRequestError> {
         let message = fleetspeak::receive_with_heartbeat(heartbeat_rate)
             // If we fail to receive a message from Fleetspeak, our connection
             // is most likely broken and we should die. In general, this should
@@ -160,12 +178,43 @@ impl From<ParseActionError> for ParseRequestError {
     }
 }
 
+impl std::fmt::Display for ParseRequestError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{}", self.kind)?;
+        if let Some(error) = &self.error {
+            write!(fmt, ": {}", error)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl std::error::Error for ParseRequestError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.error.as_deref()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParseRequestErrorKind {
     MalformedBytes,
     // TODO(@panhania): Add support for missing `flow_id`, `request_id` and
     // `action` fields.
     InvalidAction(ParseActionErrorKind),
+}
+
+impl std::fmt::Display for ParseRequestErrorKind {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use ParseRequestErrorKind::*;
+
+        match self {
+            MalformedBytes => write!(fmt, "malformed protobuf message bytes"),
+            InvalidAction(kind) => write!(fmt, "{}", kind),
+        }
+    }
 }
 
 impl From<ParseRequestErrorKind> for ParseRequestError {
@@ -177,8 +226,6 @@ impl From<ParseRequestErrorKind> for ParseRequestError {
         }
     }
 }
-
-// TODO(@panhania): Implement the `Error` trait for `ParseRequestError`.
 
 pub trait Input {
     type Proto: protobuf::Message;
