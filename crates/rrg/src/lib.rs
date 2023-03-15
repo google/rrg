@@ -88,6 +88,14 @@ impl<O: Output> From<Parcel<O>> for rrg_proto::v2::rrg::Parcel {
     }
 }
 
+/// Initializes the RRG subsystems.
+///
+/// This function should be called only once (at the very beginning of the
+/// process lifetime).
+pub fn init(args: &Args) {
+    log::init(args)
+}
+
 /// Enters the agent's main loop and waits for messages.
 ///
 /// It will poll for messages from the GRR server and should consume very few

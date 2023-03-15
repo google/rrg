@@ -4,11 +4,10 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 use log::info;
-use rrg::args::Args;
 
 fn main() {
     let args = rrg::args::from_env_args();
-    init(&args);
+    rrg::init(&args);
 
     info!("sending Fleetspeak startup information");
     fleetspeak::startup(env!("CARGO_PKG_VERSION"))
@@ -20,8 +19,4 @@ fn main() {
 
     info!("listening for messages");
     rrg::listen(&args);
-}
-
-fn init(args: &Args) {
-    rrg::log::init(args);
 }
