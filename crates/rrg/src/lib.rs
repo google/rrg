@@ -96,11 +96,17 @@ impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
     }
 }
 
-pub struct Request {
-    // An identifier of the flow issuing the request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RequestId {
+    /// An identifier of the flow issuing the request.
     flow_id: u64,
-    // A server-issued identifier of the request (unique within the flow).
+    /// A server-issued identifier of the request (unique within the flow).
     request_id: u64,
+}
+
+pub struct Request {
+    /// A unique identifier of the request.
+    id: RequestId,
     // An action to invoke.
     action: Action,
     // Serialized protobuf message with arguments to invoke the action with.
@@ -108,6 +114,10 @@ pub struct Request {
 }
 
 impl Request {
+
+    pub fn id(&self) -> RequestId {
+        self.id
+    }
 
     pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ParseRequestError> {
         let message = fleetspeak::receive_with_heartbeat(heartbeat_rate)
@@ -158,8 +168,10 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
 
     fn try_from(mut proto: rrg_proto::v2::rrg::Request) -> Result<Request, ParseRequestError> {
         Ok(Request {
-            flow_id: proto.get_flow_id(),
-            request_id: proto.get_request_id(),
+            id: RequestId {
+                flow_id: proto.get_flow_id(),
+                request_id: proto.get_request_id(),
+            },
             action: proto.get_action().try_into()?,
             serialized_args: proto.take_args().take_value(),
         })
