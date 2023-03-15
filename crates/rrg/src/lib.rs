@@ -21,7 +21,171 @@ pub mod chunked;
 #[cfg(feature = "action-timeline")]
 pub mod gzchunked;
 
+use rrg_macro::warn;
+
 use crate::args::{Args};
+
+/// List of all actions supported by the agent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Action {
+    /// Get metadata about the operating system and the machine.
+    GetSystemMetadata,
+}
+
+#[derive(Debug)]
+pub struct ParseActionError {
+    kind: ParseActionErrorKind,
+}
+
+impl ParseActionError {
+
+    pub fn kind(&self) -> ParseActionErrorKind {
+        self.kind
+    }
+}
+
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ParseActionErrorKind {
+    UnknownAction(i32),
+}
+
+impl From<ParseActionErrorKind> for ParseActionError {
+
+    fn from(kind: ParseActionErrorKind) -> ParseActionError {
+        ParseActionError {
+            kind,
+        }
+    }
+}
+
+impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
+
+    type Error = ParseActionError;
+
+    fn try_from(proto: rrg_proto::v2::rrg::Action) -> Result<Action, ParseActionError> {
+        use rrg_proto::v2::rrg::Action::*;
+
+        match proto {
+            GET_SYSTEM_METADATA => Ok(Action::GetSystemMetadata),
+            _ => {
+                let val = protobuf::ProtobufEnum::value(&proto);
+                Err(ParseActionErrorKind::UnknownAction(val).into())
+            },
+        }
+    }
+}
+
+// TODO(@panhania): Implement the `Error` trait for `ParseActionError`.
+
+pub struct Request {
+    // An identifier of the flow issuing the request.
+    flow_id: u64,
+    // A server-issued identifier of the request (unique within the flow).
+    request_id: u64,
+    // An action to invoke.
+    action: Action,
+    // Serialized protobuf message with arguments to invoke the action with.
+    serialized_args: Vec<u8>,
+}
+
+impl Request {
+
+    fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ParseRequestError> {
+        let message = fleetspeak::receive_with_heartbeat(heartbeat_rate)
+            // If we fail to receive a message from Fleetspeak, our connection
+            // is most likely broken and we should die. In general, this should
+            // not happen.
+            .expect("failed to receive a message from Fleetspeak");
+
+        if message.service != "GRR" {
+            let service = message.service;
+            warn!("request send by service '{service}' (instead of 'GRR')");
+        }
+        if message.kind.as_deref() != Some("rrg-request") {
+            match message.kind {
+                Some(kind) => warn!("request with unexpected kind '{kind}'"),
+                None => warn!("request with unspecified kind"),
+            }
+        }
+
+        use protobuf::Message as _;
+        let proto = rrg_proto::v2::rrg::Request::parse_from_bytes(&message.data[..])
+            .map_err(|error| {
+                use ParseRequestErrorKind::*;
+                ParseRequestError::new(MalformedBytes, error)
+            })?;
+
+        Ok(Request::try_from(proto)?)
+    }
+}
+
+impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
+
+    type Error = ParseRequestError;
+
+    fn try_from(mut proto: rrg_proto::v2::rrg::Request) -> Result<Request, ParseRequestError> {
+        Ok(Request {
+            flow_id: proto.get_flow_id(),
+            request_id: proto.get_request_id(),
+            action: proto.get_action().try_into()?,
+            serialized_args: proto.take_args().take_value(),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct ParseRequestError {
+    kind: ParseRequestErrorKind,
+    error: Option<Box<dyn std::error::Error>>,
+}
+
+impl ParseRequestError {
+
+    pub fn new<E>(kind: ParseRequestErrorKind, error: E) -> ParseRequestError
+    where
+        E: Into<Box<dyn std::error::Error>>
+    {
+        ParseRequestError {
+            kind,
+            error: Some(error.into()),
+        }
+    }
+}
+
+impl From<ParseActionError> for ParseRequestError {
+
+    fn from(error: ParseActionError) -> ParseRequestError {
+        ParseRequestErrorKind::InvalidAction(error.kind()).into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ParseRequestErrorKind {
+    MalformedBytes,
+    // TODO(@panhania): Add support for missing `flow_id`, `request_id` and
+    // `action` fields.
+    InvalidAction(ParseActionErrorKind),
+}
+
+impl From<ParseRequestErrorKind> for ParseRequestError {
+
+    fn from(kind: ParseRequestErrorKind) -> ParseRequestError {
+        ParseRequestError {
+            kind,
+            error: None,
+        }
+    }
+}
+
+// TODO(@panhania): Implement the `Error` trait for `ParseRequestError`.
+
+pub trait Input {
+    type Proto: protobuf::Message;
+
+    /// Convert a Protocol Buffers message into an idiomatic Rust type.
+    fn from_proto(proto: Self::Proto) -> Self;
+}
 
 pub trait Output {
     type Proto: protobuf::Message;
