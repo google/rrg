@@ -136,6 +136,20 @@ impl Request {
 
         Ok(Request::try_from(proto)?)
     }
+
+    /// Parses the action arguments stored in this request.
+    ///
+    /// At the moment the request is received we don't know yet what is the type
+    /// of the arguments it contains, so we cannot interpret it. Only once the
+    /// request is dispatched to an appropriate action handler, we can parse the
+    /// arguments to a concrete type.
+    fn parse_args<A>(&self) -> Result<A, action::ParseArgsError>
+    where
+        A: action::Args,
+    {
+        let args_proto = protobuf::Message::parse_from_bytes(&self.serialized_args[..])?;
+        A::from_proto(args_proto)
+    }
 }
 
 impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
