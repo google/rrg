@@ -141,65 +141,6 @@ impl ResponseBuilder {
     }
 }
 
-/// A wrapper around [`Item`] objects addressed to a particular sink.
-///
-/// Sometimes the agent should send data to the server that is not associated
-/// with a particular flow request. An example can be the agent startup data
-/// sent to the server regardless of whether there was a request for it or not.
-/// Another example can be file contents that are delivered to the server not
-/// as part of the flow results but go to a separate store that has logic for
-/// deduplicating data that we already collected in the past.
-///
-/// Since this data is not associated with any flow request it still has to be
-/// somehow identified. This is why we send data to a particular [`Sink`] that
-/// knows how to deal with items of particular kind (e.g. there is a sink for
-/// file contents and a separate sink for startup information).
-///
-/// [`Item`]: crate::action::Item
-/// [`Sink`]: crate::message::Sink
-pub struct Parcel<I: crate::action::Item> {
-    /// Destination of the parcel.
-    sink: crate::message::sink::Sink,
-    /// The item contained within this parcel.
-    item: I,
-}
-
-impl<I: crate::action::Item> Parcel<I> {
-
-    /// Creates a new parcel from the given `item` addressed to `sink`.
-    pub fn new(sink: crate::message::sink::Sink, item: I) -> Parcel<I> {
-        Parcel {
-            sink,
-            item,
-        }
-    }
-
-    /// Sink to which the parcel should be delivered to.
-    pub fn sink(&self) -> crate::message::sink::Sink {
-        self.sink
-    }
-
-    // TODO: Delete or rename this method.
-    /// Unpacks the underlying parcel.
-    pub fn unpack(self) -> I {
-        self.item
-    }
-
-    /// Sends the parcel message through Fleetspeak to the GRR server.
-    ///
-    /// This function consumes the parcel to ensure that it is not sent twice.
-    ///
-    /// Note that this function should generally not be used if running as part
-    /// of some [`Session`], otherwise network usage might not be correctly
-    /// accounted for. Prefer to use [`Session::send`] for such cases.
-    ///
-    /// [`Session`]: crate::session::Session
-    /// [`Session::send`]: crate::session::Session::send
-    pub fn send(self) {
-        super::fleetspeak::send_raw(self.into());
-    }
-}
-
 impl<I> From<Reply<I>> for rrg_proto::v2::rrg::Response
 where
     I: crate::action::Item,
@@ -246,34 +187,6 @@ impl From<Status> for rrg_proto::v2::rrg::Status {
         if let Err(error) = status.result {
             proto.set_error(error.into());
         }
-
-        proto
-    }
-}
-
-impl<I: crate::action::Item> Into<rrg_proto::jobs::GrrMessage> for Parcel<I> {
-
-    fn into(self) -> rrg_proto::jobs::GrrMessage {
-        use protobuf::Message as _;
-
-        let mut proto = rrg_proto::jobs::GrrMessage::new();
-        proto.set_session_id(String::from(self.sink.id()));
-        proto.set_field_type(rrg_proto::jobs::GrrMessage_Type::MESSAGE);
-
-        let serialized_item = self.item
-            .into_proto()
-            .write_to_bytes()
-            // It is not clear what should we do in case of an error. It is very
-            // hard to imagine a scenario when serialization fails so for now we
-            // just fail hard. If we observe any problems with this assumption,
-            // we can always change this behaviour.
-            .expect("failed to serialize the item message");
-
-        // Like with response messages, for parcels we also have to store the
-        // parcel data in the field named "args". This is something that should
-        // be fixed one day.
-        proto.set_args_rdf_name(String::from(I::RDF_NAME));
-        proto.set_args(serialized_item);
 
         proto
     }

@@ -283,9 +283,21 @@ impl From<ParseRequestErrorKind> for ParseRequestError {
     }
 }
 
+/// Handle to a specific sink.
+///
+/// Sinks ("well-known flows" or "message handlers" in GRR nomenclature) are
+/// ever-existing data processors on the GRR server that listen for various
+/// kinds of data. They are a way to break away from the usual request-response
+/// workflow.
+///
+/// For example, sinks are used to notify the server about agent startup (which
+/// is clearly not a response to a particular request) or to send file blobs to
+/// a specialized storage that can handle data deduplication.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Sink {
+    /// Collects records of agent startup.
     Startup,
+    /// Collects binary blobs (e.g. fragments of files).
     Blob,
 }
 
@@ -299,6 +311,16 @@ impl From<Sink> for rrg_proto::v2::rrg::Sink {
     }
 }
 
+/// Data that should be sent to a particular [sink].
+///
+/// Sometimes the agent should send data to the server that is not associated
+/// with any particular request. An example can be the agent startup information
+/// sent to the server at the moment the agent process start. Another example is
+/// file contents that are delivered to the server not as part of the action
+/// results but are sent out-of-band to a sink that has logic for deduplication
+/// of data that we already collected in the past.
+///
+/// [sink]: crate::Sink
 pub struct Parcel<I: crate::action::Item> {
     /// A sink to deliver the parcel to.
     sink: Sink,
@@ -307,7 +329,27 @@ pub struct Parcel<I: crate::action::Item> {
 }
 
 impl<I: crate::action::Item> Parcel<I> {
+    /// Creates a new parcel from the given `item` addressed to `sink`.
+    pub fn new(sink: Sink, item: I) -> Parcel<I> {
+        Parcel {
+            sink,
+            payload: item,
+        }
+    }
+}
 
+impl<I: crate::action::Item> Parcel<I> {
+
+    /// Sends the parcel message through Fleetspeak to the GRR server.
+    ///
+    /// This function consumes the parcel to ensure that it is not sent twice.
+    ///
+    /// Note that this function should generally not be used if running as part
+    /// of some [session], otherwise network usage might not be correctly
+    /// accounted for. Prefer to use [`Session::send`] for such cases.
+    ///
+    /// [session]: crate::session::Session
+    /// [`Session::send`]: crate::session::Session::send
     pub fn send_unaccounted(self) -> Result<(), fleetspeak::WriteError> {
         use protobuf::Message as _;
 
