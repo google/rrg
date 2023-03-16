@@ -27,6 +27,21 @@ impl<I: crate::action::Item> Reply<I> {
     pub fn send(self) {
         super::fleetspeak::send_raw(self.into());
     }
+
+    pub fn send_unaccounted(self) -> Result<(), fleetspeak::WriteError> {
+        use protobuf::Message as _;
+
+        let data = rrg_proto::v2::rrg::Response::from(self).write_to_bytes()
+            // This should only fail in case we are out of memory, which we are
+            // almost certainly not (and if we are, we have bigger issue).
+            .expect("failed to serialize a result response");
+
+        fleetspeak::send(fleetspeak::Message {
+            service: String::from("GRR"),
+            kind: Some(String::from("rrg-response")),
+            data,
+        })
+    }
 }
 
 // TODO(@panhania): Consider defining an `crate::action::Error` type and make
@@ -52,6 +67,21 @@ impl<E: std::error::Error> Status<E> {
     /// This function consumes the status to ensure that it is not sent twice.
     pub fn send(self) {
         super::fleetspeak::send_raw(self.into())
+    }
+
+    pub fn send_unaccounted(self) -> Result<(), fleetspeak::WriteError> {
+        use protobuf::Message as _;
+
+        let data = rrg_proto::v2::rrg::Response::from(self).write_to_bytes()
+            // This should only fail in case we are out of memory, which we are
+            // almost certainly not (and if we are, we have bigger issue).
+            .expect("failed to serialize a status response");
+
+        fleetspeak::send(fleetspeak::Message {
+            service: String::from("GRR"),
+            kind: Some(String::from("rrg-response")),
+            data,
+        })
     }
 }
 
@@ -170,6 +200,64 @@ impl<I: crate::action::Item> Parcel<I> {
     }
 }
 
+impl<I> From<Reply<I>> for rrg_proto::v2::rrg::Response
+where
+    I: crate::action::Item,
+{
+    fn from(reply: Reply<I>) -> rrg_proto::v2::rrg::Response {
+        let mut proto = rrg_proto::v2::rrg::Response::new();
+        proto.set_flow_id(reply.request_id.flow_id);
+        proto.set_request_id(reply.request_id.request_id);
+        proto.set_response_id(reply.response_id.0);
+
+        // TODO(@panhania): Migrate this code to use `Any::pack` once we upgrade
+        // the `protobuf` package.
+        use protobuf::Message as _;
+
+        let result_proto = reply.item.into_proto();
+        let result_bytes = result_proto.write_to_bytes()
+            // This should only fail in case we are out of memory, which we are
+            // almost certainly not (and if we are, we have bigger issue).
+            .expect("failed to serialize a result");
+
+        proto.mut_result().set_value(result_bytes);
+
+        proto
+    }
+}
+
+impl<E> From<Status<E>> for rrg_proto::v2::rrg::Response
+where
+    E: std::error::Error,
+{
+    fn from(status: Status<E>) -> rrg_proto::v2::rrg::Response {
+        let mut proto = rrg_proto::v2::rrg::Response::new();
+        proto.set_flow_id(status.request_id.flow_id);
+        proto.set_request_id(status.request_id.request_id);
+        proto.set_response_id(status.response_id.0);
+        proto.set_status(status.into());
+
+        proto
+    }
+}
+
+impl<E> From<Status<E>> for rrg_proto::v2::rrg::Status
+where
+    E: std::error::Error,
+{
+    fn from(status: Status<E>) -> rrg_proto::v2::rrg::Status {
+        let mut proto = rrg_proto::v2::rrg::Status::new();
+        if let Err(error) = status.result {
+            // TODO(@panhania): Add error kind conversion.
+            // TODO(@panhania): We likely want to implement proto conversion on
+            // the `session::Error` directly, but we need to make `Status` not
+            // generic first.
+            proto.mut_error().set_message(error.to_string());
+        }
+
+        proto
+    }
+}
 
 impl<I> Into<rrg_proto::jobs::GrrMessage> for Reply<I>
 where

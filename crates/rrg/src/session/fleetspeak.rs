@@ -34,7 +34,13 @@ impl FleetspeakSession {
         let mut session = FleetspeakSession::new(request.id());
 
         let result = crate::action::dispatch(&mut session, request);
-        session.response_builder.status(result).send();
+        let status = session.response_builder.status(result);
+
+        status.send_unaccounted()
+            // If we fail to send the response to Fleetspeak, our connection is
+            // most likely broken and we should die. In general, this should not
+            // happen.
+            .expect("failed to send a status response to Fleetspeak");
 
         // TODO(panhania@): Consider returning the status so that the parent can
         // log appropriate message.
@@ -48,7 +54,13 @@ impl crate::session::Session for FleetspeakSession {
         I: crate::action::Item,
     {
         // TODO(panhania@): Enforce limits.
-        self.response_builder.reply(item).send();
+        let reply = self.response_builder.reply(item);
+
+        reply.send_unaccounted()
+            // If we fail to send the response to Fleetspeak, our connection is
+            // most likely broken and we should die. In general, this should not
+            // happen.
+            .expect("failed to send a result response to Fleetspeak");
 
         Ok(())
     }
