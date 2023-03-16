@@ -60,7 +60,7 @@ pub use error::{ParseArgsError, ParseArgsErrorKind, DispatchError};
 ///
 /// It will also error out if the action execution itself fails for whatever
 /// reason.
-pub fn dispatch<'s, S>(session: &mut S, request: crate::Request) -> Result<(), DispatchError>
+pub fn dispatch<'s, S>(session: &mut S, request: crate::Request) -> Result<(), crate::session::Error>
 where
     S: crate::session::Session,
 {
@@ -127,7 +127,7 @@ where
 ///
 /// This function will return an error if the request arguments cannot be parsed
 /// for the specific action or if the action execution fails.
-fn handle<S, A, H>(session: &mut S, request: crate::Request, handler: H) -> Result<(), DispatchError>
+fn handle<S, A, H>(session: &mut S, request: crate::Request, handler: H) -> crate::session::Result<()>
 where
     S: crate::session::Session,
     A: Args,

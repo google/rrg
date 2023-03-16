@@ -16,6 +16,8 @@ pub struct Error {
 /// Kinds of errors that can happen during a session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ErrorKind {
+    /// The arguments given for the action were malformed.
+    InvalidArgs,
     /// The action execution failed.
     ExecutionFailure,
 }
@@ -43,6 +45,7 @@ impl ErrorKind {
         use ErrorKind::*;
 
         match *self {
+            InvalidArgs => "invalid action arguments",
             ExecutionFailure => "action execution failed",
         }
     }
@@ -59,5 +62,15 @@ impl std::error::Error for Error {
 
     fn cause(&self) -> Option<&dyn std::error::Error> {
         Some(self.error.as_ref())
+    }
+}
+
+impl From<crate::action::ParseArgsError> for Error {
+
+    fn from(error: crate::action::ParseArgsError) -> Error {
+        Error {
+            kind: ErrorKind::InvalidArgs,
+            error: Box::new(error),
+        }
     }
 }

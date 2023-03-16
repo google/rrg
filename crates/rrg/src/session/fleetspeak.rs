@@ -18,6 +18,18 @@ impl FleetspeakSession {
         }
     }
 
+    // TODO(panhania@): Rename this function to `dispatch`.
+    //
+    // Currently, the call chain looks like:
+    //
+    //   1. `FleetspeakSession::handle`
+    //   2. `action::dispatch`
+    //   3. `action::handle`
+    //   4. `<action>::handle`
+    //
+    // This `dispatch` in the middle is a little bit charring. It would be more
+    // reasonable to first have two `dispatch` calls that at some point call
+    // correct `handle` function.
     pub fn handle(request: crate::Request) {
         let mut session = FleetspeakSession::new(request.id());
 
