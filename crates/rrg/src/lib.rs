@@ -283,20 +283,6 @@ impl From<ParseRequestErrorKind> for ParseRequestError {
     }
 }
 
-pub trait Input {
-    type Proto: protobuf::Message;
-
-    /// Convert a Protocol Buffers message into an idiomatic Rust type.
-    fn from_proto(proto: Self::Proto) -> Self;
-}
-
-pub trait Output {
-    type Proto: protobuf::Message;
-
-    /// Converts the output into a Protocol Buffers message.
-    fn into_proto(self) -> Self::Proto;
-}
-
 pub enum Sink {
     Startup,
     Blob,
@@ -312,14 +298,14 @@ impl From<Sink> for rrg_proto::v2::rrg::Sink {
     }
 }
 
-pub struct Parcel<O: Output> {
+pub struct Parcel<I: crate::action::Item> {
     /// A sink to deliver the parcel to.
     sink: Sink,
     /// The actual content of the parcel.
-    payload: O,
+    payload: I,
 }
 
-impl<O: Output> Parcel<O> {
+impl<I: crate::action::Item> Parcel<I> {
 
     pub fn send_unaccounted(self) -> Result<(), fleetspeak::WriteError> {
         use protobuf::Message as _;
@@ -337,9 +323,9 @@ impl<O: Output> Parcel<O> {
     }
 }
 
-impl<O: Output> From<Parcel<O>> for rrg_proto::v2::rrg::Parcel {
+impl<I: crate::action::Item> From<Parcel<I>> for rrg_proto::v2::rrg::Parcel {
 
-    fn from(parcel: Parcel<O>) -> rrg_proto::v2::rrg::Parcel {
+    fn from(parcel: Parcel<I>) -> rrg_proto::v2::rrg::Parcel {
         let payload_proto = parcel.payload.into_proto();
         let payload_any = protobuf::well_known_types::Any::pack(&payload_proto)
             // The should not really ever fail, assumming that the protobuf

@@ -38,8 +38,11 @@ impl Startup {
     }
 }
 
-impl crate::Output for Startup {
+impl crate::action::Item for Startup {
     type Proto = rrg_proto::v2::startup::Startup;
+
+    // TODO(@panhania): Remove `RDF_NAME` altogether.
+    const RDF_NAME: &'static str = "";
 
     fn into_proto(self) -> rrg_proto::v2::startup::Startup {
         self.into()
