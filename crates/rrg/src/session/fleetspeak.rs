@@ -1,5 +1,3 @@
-use crate::message::Sink;
-
 /// A session implementation that uses real Fleetspeak connection.
 ///
 /// This is a normal session type that that is associated with some flow on the
@@ -65,12 +63,20 @@ impl crate::session::Session for FleetspeakSession {
         Ok(())
     }
 
-    fn send<I>(&mut self, sink: Sink, item: I) -> crate::session::Result<()>
+    fn send<I>(&mut self, sink: crate::Sink, item: I) -> crate::session::Result<()>
     where
         I: crate::action::Item,
     {
-        // TODO(panhania@): Enforce limits.
-        crate::message::Parcel::new(sink, item).send();
+        let parcel = crate::Parcel {
+            sink,
+            payload: item,
+        };
+
+        parcel.send_unaccounted()
+            // If we fail to send the parcel to Fleetspeak, our connection is
+            // most likely broken and we should die. In general, this should not
+            // happen.
+            .expect("failed to send a parcel to Fleetspeak");
 
         Ok(())
     }

@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use crate::message::Sink;
+use crate::Sink;
 
 /// A session implementation intended to be used in tests.
 ///

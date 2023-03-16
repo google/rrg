@@ -183,7 +183,7 @@ where
         let chunk = Chunk::from_bytes(part);
         let chunk_id = chunk.id();
 
-        session.send(crate::message::Sink::TRANSFER_STORE, chunk)?;
+        session.send(crate::Sink::Blob, chunk)?;
         response.chunk_ids.push(chunk_id);
     }
 
@@ -447,13 +447,13 @@ mod tests {
     /// Retrieves timeline entries from the given session object.
     fn entries(session: &Session) -> Vec<rrg_proto::timeline::TimelineEntry> {
         use std::collections::HashMap;
-        use crate::message::Sink;
+        use crate::Sink;
 
-        let chunk_count = session.parcel_count(Sink::TRANSFER_STORE);
+        let chunk_count = session.parcel_count(Sink::Blob);
         assert_eq!(session.reply_count(), 1);
         assert_eq!(session.reply::<Response>(0).chunk_ids.len(), chunk_count);
 
-        let chunks_by_id = session.parcels::<Chunk>(Sink::TRANSFER_STORE)
+        let chunks_by_id = session.parcels::<Chunk>(Sink::Blob)
             .map(|chunk| (chunk.id(), chunk))
             .collect::<HashMap<_, _>>();
 
