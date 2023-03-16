@@ -94,7 +94,7 @@ impl From<ErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
         use ErrorKind::*;
 
         match kind {
-            InvalidArgs => Self::INVALID_ARGUMENTS,
+            InvalidArgs => Self::INVALID_ARGS,
             ExecutionFailure => Self::ACTION_FAILURE,
         }
     }

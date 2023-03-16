@@ -109,10 +109,8 @@ message Status {
       // status to). This variant should be removed.
       // Request contains malformed data.
       INVALID_REQUEST = 2;
-      // TODO(@panhania): `INVALID_ARGUMENTS` is long and inconsistent with the
-      // word `args` used above. We should rename it to `INVALID_ARGS`.
       // Action was invoked with invalid arguments.
-      INVALID_ARGUMENTS = 3;
+      INVALID_ARGS = 3;
       // Network bytes sent treshold has been reached.
       NETWORK_BYTES_SENT_LIMIT_EXCEEDED = 4;
       // CPU time usage treshhold has been reached.
