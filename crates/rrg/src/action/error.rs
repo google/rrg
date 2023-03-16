@@ -76,28 +76,3 @@ impl From<protobuf::ProtobufError> for ParseArgsError {
         }
     }
 }
-
-/// The error type for cases when there was a request to run an unknown action.
-#[derive(Debug)]
-pub struct UnknownActionError {
-    action_name: String,
-}
-
-impl UnknownActionError {
-
-    pub fn new<S: Into<String>>(action_name: S) -> UnknownActionError {
-        UnknownActionError {
-            action_name: action_name.into(),
-        }
-    }
-}
-
-impl std::fmt::Display for UnknownActionError {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "unknown action '{}'", self.action_name)
-    }
-}
-
-impl std::error::Error for UnknownActionError {
-}
