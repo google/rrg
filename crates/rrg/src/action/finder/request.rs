@@ -7,7 +7,7 @@
 //! a function converting proto format of the request
 //! `rrg_proto::FileFinderArgs` to the internal format.
 
-use crate::session::{time_from_micros, RegexParseError};
+use crate::session::{time_from_micros};
 use log::info;
 use protobuf::ProtobufEnum;
 use std::fmt::Write;
@@ -276,10 +276,7 @@ fn parse_regex(bytes: &[u8]) -> Result<regex::bytes::Regex, crate::action::Parse
 
     match regex::bytes::Regex::new(str) {
         Ok(v) => Ok(v),
-        Err(e) => Err(crate::action::ParseArgsError::invalid_field(RegexParseError {
-            raw_data: bytes.to_owned(),
-            error: e,
-        })),
+        Err(e) => Err(crate::action::ParseArgsError::invalid_field(e)),
     }
 }
 
@@ -293,10 +290,7 @@ fn constant_literal_to_regex(
     }
     match regex::bytes::Regex::new(&str) {
         Ok(v) => Ok(v),
-        Err(e) => Err(crate::action::ParseArgsError::invalid_field(RegexParseError {
-            raw_data: bytes.to_owned(),
-            error: e,
-        })),
+        Err(e) => Err(crate::action::ParseArgsError::invalid_field(e)),
     }
 }
 
