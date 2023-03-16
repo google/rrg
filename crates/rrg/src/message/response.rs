@@ -244,11 +244,7 @@ impl From<Status> for rrg_proto::v2::rrg::Status {
     fn from(status: Status) -> rrg_proto::v2::rrg::Status {
         let mut proto = rrg_proto::v2::rrg::Status::new();
         if let Err(error) = status.result {
-            // TODO(@panhania): Add error kind conversion.
-            // TODO(@panhania): We likely want to implement proto conversion on
-            // the `session::Error` directly, but we need to make `Status` not
-            // generic first.
-            proto.mut_error().set_message(error.to_string());
+            proto.set_error(error.into());
         }
 
         proto

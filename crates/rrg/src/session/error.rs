@@ -18,6 +18,8 @@ pub struct Error {
 pub enum ErrorKind {
     /// The arguments given for the action were malformed.
     InvalidArgs,
+    // TODO(@panhania): The protobuf definition uses `ACTION_FAILURE`. While not
+    // strictly necessary, we can be consistent here and rename this variant.
     /// The action execution failed.
     ExecutionFailure,
 }
@@ -71,6 +73,29 @@ impl From<crate::action::ParseArgsError> for Error {
         Error {
             kind: ErrorKind::InvalidArgs,
             error: Box::new(error),
+        }
+    }
+}
+
+impl From<Error> for rrg_proto::v2::rrg::Status_Error {
+
+    fn from(error: Error) -> rrg_proto::v2::rrg::Status_Error {
+        let mut proto = rrg_proto::v2::rrg::Status_Error::new();
+        proto.set_field_type(error.kind.into());
+        proto.set_message(error.to_string());
+
+        proto
+    }
+}
+
+impl From<ErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
+
+    fn from(kind: ErrorKind) -> rrg_proto::v2::rrg::Status_Error_Type {
+        use ErrorKind::*;
+
+        match kind {
+            InvalidArgs => Self::INVALID_ARGUMENTS,
+            ExecutionFailure => Self::ACTION_FAILURE,
         }
     }
 }

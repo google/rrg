@@ -104,8 +104,13 @@ message Status {
       UNSET = 0;
       // Specified action is not supported or uknown.
       UNSUPPORTED_ACTION = 1;
+      // TODO(@panhania): `INVALID_REQUEST` is impossible: we cannot send status
+      // back if we failed to parse request (as there is nowhere to send the
+      // status to). This variant should be removed.
       // Request contains malformed data.
       INVALID_REQUEST = 2;
+      // TODO(@panhania): `INVALID_ARGUMENTS` is long and inconsistent with the
+      // word `args` used above. We should rename it to `INVALID_ARGS`.
       // Action was invoked with invalid arguments.
       INVALID_ARGUMENTS = 3;
       // Network bytes sent treshold has been reached.
