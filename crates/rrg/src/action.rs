@@ -60,11 +60,20 @@ pub use error::{ParseArgsError, ParseArgsErrorKind, DispatchError};
 ///
 /// It will also error out if the action execution itself fails for whatever
 /// reason.
-pub fn dispatch<'s, S>(session: &mut S, request: crate::message::Request) -> Result<(), DispatchError>
+pub fn dispatch<'s, S>(session: &mut S, request: crate::Request) -> Result<(), DispatchError>
 where
     S: crate::session::Session,
 {
-    match request.action_name() {
+    use crate::Action::*;
+
+    match request.action {
+        GetSystemMetadata => {
+            handle(session, request, self::get_system_metadata::handle)
+        }
+    }
+
+    /*
+    match request.action {
         #[cfg(feature = "action-listdir")]
         "ListDirectory" => {
             handle(session, request, self::listdir::handle)
@@ -106,6 +115,7 @@ where
             return Err(error::UnknownActionError::new(action_name).into())
         }
     }
+    */
 }
 
 /// Handles a `request` using the specified `handler`.
@@ -117,7 +127,7 @@ where
 ///
 /// This function will return an error if the request arguments cannot be parsed
 /// for the specific action or if the action execution fails.
-fn handle<S, A, H>(session: &mut S, request: crate::message::Request, handler: H) -> Result<(), DispatchError>
+fn handle<S, A, H>(session: &mut S, request: crate::Request, handler: H) -> Result<(), DispatchError>
 where
     S: crate::session::Session,
     A: Args,

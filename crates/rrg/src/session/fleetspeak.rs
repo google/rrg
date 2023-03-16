@@ -12,13 +12,13 @@ pub struct FleetspeakSession {
 impl FleetspeakSession {
 
     /// Creates a new Fleetspeak session for the given `request` object.
-    fn new(request_id: crate::message::RequestId) -> FleetspeakSession {
+    fn new(request_id: crate::RequestId) -> FleetspeakSession {
         FleetspeakSession {
             response_builder: crate::message::ResponseBuilder::new(request_id),
         }
     }
 
-    pub fn handle(request: crate::message::Request) {
+    pub fn handle(request: crate::Request) {
         let mut session = FleetspeakSession::new(request.id());
 
         let result = crate::action::dispatch(&mut session, request);

@@ -2,7 +2,7 @@
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
-use crate::message::RequestId;
+use crate::RequestId;
 
 /// An action reply message.
 ///
@@ -179,7 +179,7 @@ where
         use protobuf::Message as _;
 
         let mut proto = rrg_proto::jobs::GrrMessage::new();
-        proto.set_session_id(self.request_id.session_id);
+        proto.set_session_id(self.request_id.session_id());
         proto.set_request_id(self.request_id.request_id);
         proto.set_response_id(self.response_id.0);
         proto.set_field_type(rrg_proto::jobs::GrrMessage_Type::MESSAGE);
@@ -231,7 +231,7 @@ where
             .expect("failed to serialized action status");
 
         let mut proto = rrg_proto::jobs::GrrMessage::new();
-        proto.set_session_id(self.request_id.session_id);
+        proto.set_session_id(self.request_id.session_id());
         proto.set_request_id(self.request_id.request_id);
         proto.set_response_id(self.response_id.0);
         proto.set_field_type(rrg_proto::jobs::GrrMessage_Type::STATUS);

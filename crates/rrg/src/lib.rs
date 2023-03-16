@@ -104,6 +104,14 @@ pub struct RequestId {
     request_id: u64,
 }
 
+impl RequestId {
+
+    // TODO(@panhania): Remove this once legacy protocol is read to be deleted.
+    pub fn session_id(&self) -> String {
+        format!("aff4:/flows/F:{}", self.flow_id)
+    }
+}
+
 pub struct Request {
     /// A unique identifier of the request.
     id: RequestId,
@@ -347,10 +355,10 @@ pub fn init(args: &Args) {
 /// appropriate.
 pub fn listen(args: &Args) {
     loop {
-        let request = match crate::message::Request::receive(args.heartbeat_rate) {
+        let request = match crate::Request::receive(args.heartbeat_rate) {
             Ok(request) => request,
             Err(error) => {
-                rrg_macro::error!("failed to obtain a request: {}", error);
+                rrg_macro::error!("failed to receive a request: {}", error);
                 continue
             }
         };
