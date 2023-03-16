@@ -3,51 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-/// Awaits for the raw GRR Protocol Buffers message object from Fleetspeak.
-///
-/// This function will block until the message is available. While waiting, it
-/// will heartbeat at the specified rate making sure that Fleetspeak does not
-/// kill the agent for unresponsiveness.
-///
-/// # Errors
-///
-/// This function will return error in case of recoverable issues (e.g. the
-/// message is missing some required field). However, it will panic in case
-/// there is a fundamental problem (e.g. the Fleetspeak connection is broken)
-/// as it makes no sense to continue running in such case.
-pub fn receive_raw(heartbeat_rate: std::time::Duration) -> Result<rrg_proto::jobs::GrrMessage, super::ReceiveRequestError> {
-    use fleetspeak::ReadError::*;
-
-    // TODO(@panhania): Rework Fleetspeak errors to use kinds and delete those
-    // that make no sense to catch anyway.
-    let message = match fleetspeak::receive_with_heartbeat(heartbeat_rate) {
-        Ok(message) => message,
-        Err(error @ (Malformed(_) | Decode(_))) => return Err(error.into()),
-        Err(error) => {
-            // If we failed to collect the message because of I/O error or magic
-            // check, it means that our communication is broken (e.g. the pipe
-            // was closed) and the agent should be killed.
-            panic!("failed to collect a message: {}", error)
-        }
-    };
-
-    if message.service != "GRR" {
-        rrg_macro::warn!("message send by '{}' service (instead of GRR)", message.service);
-    }
-
-    match message.kind {
-        Some(ref kind) if kind != "GrrMessage" => {
-            rrg_macro::warn!("message with unrecognized type '{}'", kind);
-        }
-        Some(_) => (),
-        None => {
-            rrg_macro::warn!("message with missing type specification");
-        }
-    }
-
-    Ok(protobuf::Message::parse_from_bytes(&message.data[..])?)
-}
-
 /// Sends a raw GRR Protocol Buffers message object to Fleetspeak.
 ///
 /// This function will block until it is possible to send the message (which

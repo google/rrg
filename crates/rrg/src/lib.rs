@@ -96,6 +96,7 @@ impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
     }
 }
 
+/// A unique identifier of a request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RequestId {
     /// An identifier of the flow issuing the request.
@@ -112,21 +113,40 @@ impl RequestId {
     }
 }
 
+// TODO(@panhania): Write more comprehensive docs on requests.
+/// An action request.
 pub struct Request {
     /// A unique identifier of the request.
     id: RequestId,
-    // An action to invoke.
+    /// An action to invoke.
     action: Action,
-    // Serialized protobuf message with arguments to invoke the action with.
+    /// Serialized protobuf message with arguments to invoke the action with.
     serialized_args: Vec<u8>,
 }
 
 impl Request {
-
+    /// Gets the unique identifier of the request.
     pub fn id(&self) -> RequestId {
         self.id
     }
 
+    /// Gets the action this request should invoke.
+    pub fn action(&self) -> Action {
+        self.action
+    }
+
+    /// Awaits for a new request message from Fleetspeak.
+    ///
+    /// This will suspend execution until the request is actually available.
+    /// However, the process will keep heartbeating at the specified rate to
+    /// ensure that Fleetspeak does not kill the agent for unresponsiveness.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in case the request was invalid (e.g.
+    /// it was missing some necessary fields). However, it will panic in case of
+    /// irrecoverable error like Fleetspeak connection issue as it makes little
+    /// sense to continue running in such a state.
     pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ParseRequestError> {
         let message = fleetspeak::receive_with_heartbeat(heartbeat_rate)
             // If we fail to receive a message from Fleetspeak, our connection
@@ -154,6 +174,8 @@ impl Request {
 
         Ok(Request::try_from(proto)?)
     }
+
+    // TODO: Consider moving it to the top and renaming this to just `args`.
 
     /// Parses the action arguments stored in this request.
     ///

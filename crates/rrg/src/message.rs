@@ -24,6 +24,5 @@ mod request;
 mod response;
 mod sink;
 
-pub use request::{Request, RequestId, ReceiveRequestError};
 pub use response::{Reply, Status, Parcel, ResponseBuilder, ResponseId};
 pub use sink::{Sink};
