@@ -18,10 +18,9 @@ pub struct Error {
 pub enum ErrorKind {
     /// The arguments given for the action were malformed.
     InvalidArgs,
-    // TODO(@panhania): The protobuf definition uses `ACTION_FAILURE`. While not
     // strictly necessary, we can be consistent here and rename this variant.
     /// The action execution failed.
-    ExecutionFailure,
+    ActionFailure,
 }
 
 impl Error {
@@ -35,7 +34,7 @@ impl Error {
         E: std::error::Error + Send + Sync + 'static,
     {
         Error {
-            kind: ErrorKind::ExecutionFailure,
+            kind: ErrorKind::ActionFailure,
             error: Box::new(error),
         }
     }
@@ -48,7 +47,7 @@ impl ErrorKind {
 
         match *self {
             InvalidArgs => "invalid action arguments",
-            ExecutionFailure => "action execution failed",
+            ActionFailure => "action execution failed",
         }
     }
 }
@@ -95,7 +94,7 @@ impl From<ErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
 
         match kind {
             InvalidArgs => Self::INVALID_ARGS,
-            ExecutionFailure => Self::ACTION_FAILURE,
+            ActionFailure => Self::ACTION_FAILURE,
         }
     }
 }
