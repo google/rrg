@@ -104,21 +104,16 @@ message Status {
       UNSET = 0;
       // Specified action is not supported or uknown.
       UNSUPPORTED_ACTION = 1;
-      // TODO(@panhania): `INVALID_REQUEST` is impossible: we cannot send status
-      // back if we failed to parse request (as there is nowhere to send the
-      // status to). This variant should be removed.
-      // Request contains malformed data.
-      INVALID_REQUEST = 2;
       // Action was invoked with invalid arguments.
-      INVALID_ARGS = 3;
+      INVALID_ARGS = 2;
       // Network bytes sent treshold has been reached.
-      NETWORK_BYTES_SENT_LIMIT_EXCEEDED = 4;
+      NETWORK_BYTES_SENT_LIMIT_EXCEEDED = 3;
       // CPU time usage treshhold has been reached.
-      CPU_TIME_LIMIT_EXCEEDED = 5;
+      CPU_TIME_LIMIT_EXCEEDED = 4;
       // Elapsed real (wall) time treshhold has been reached.
-      REAL_TIME_LIMIT_EXCEEDED = 6;
+      REAL_TIME_LIMIT_EXCEEDED = 5;
       // Action-specific error occurred.
-      ACTION_FAILURE = 7;
+      ACTION_FAILURE = 6;
     }
 
     // Type of the error.
