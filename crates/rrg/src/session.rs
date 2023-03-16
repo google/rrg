@@ -27,7 +27,7 @@ use crate::action;
 pub use crate::session::fake::FakeSession;
 pub use crate::session::fleetspeak::FleetspeakSession;
 
-pub use self::error::{Error, ParseError, UnknownEnumValueError};
+pub use self::error::{Error, ParseError};
 pub use self::time::time_from_micros;
 
 /// A specialized `Result` type for sessions.
