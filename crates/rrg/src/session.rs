@@ -26,7 +26,7 @@ use crate::action;
 pub use crate::session::fake::FakeSession;
 pub use crate::session::fleetspeak::FleetspeakSession;
 
-pub use self::error::{Error, ParseError};
+pub use self::error::{Error};
 
 /// A specialized `Result` type for sessions.
 pub type Result<T> = std::result::Result<T, Error>;
