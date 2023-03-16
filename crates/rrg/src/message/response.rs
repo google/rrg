@@ -53,16 +53,16 @@ impl<I: crate::action::Item> Reply<I> {
 /// Every action execution should return a status message as the last response
 /// to the server. The status should contain information if the action execution
 /// succeeded and error details in case it did not.
-pub struct Status<E: std::error::Error> {
+pub struct Status {
     /// A unique request identifier for which this status is generated.
     request_id: RequestId,
     /// A unique response identifier of this status.
     response_id: ResponseId,
     /// The action execution status.
-    result: Result<(), E>,
+    result: Result<(), crate::session::Error>,
 }
 
-impl<E: std::error::Error> Status<E> {
+impl Status {
 
     /// Sends the status message through Fleetspeak to the GRR server.
     ///
@@ -115,10 +115,7 @@ impl ResponseBuilder {
     }
 
     /// Builds a new status response for the given action outcome.
-    pub fn status<E>(self, result: Result<(), E>) -> Status<E>
-    where
-        E: std::error::Error,
-    {
+    pub fn status(self, result: crate::session::Result<()>) -> Status {
         Status {
             request_id: self.request_id,
             // Because this method consumes the builder, we do not need to
@@ -229,11 +226,9 @@ where
     }
 }
 
-impl<E> From<Status<E>> for rrg_proto::v2::rrg::Response
-where
-    E: std::error::Error,
-{
-    fn from(status: Status<E>) -> rrg_proto::v2::rrg::Response {
+impl From<Status> for rrg_proto::v2::rrg::Response {
+
+    fn from(status: Status) -> rrg_proto::v2::rrg::Response {
         let mut proto = rrg_proto::v2::rrg::Response::new();
         proto.set_flow_id(status.request_id.flow_id);
         proto.set_request_id(status.request_id.request_id);
@@ -244,11 +239,9 @@ where
     }
 }
 
-impl<E> From<Status<E>> for rrg_proto::v2::rrg::Status
-where
-    E: std::error::Error,
-{
-    fn from(status: Status<E>) -> rrg_proto::v2::rrg::Status {
+impl From<Status> for rrg_proto::v2::rrg::Status {
+
+    fn from(status: Status) -> rrg_proto::v2::rrg::Status {
         let mut proto = rrg_proto::v2::rrg::Status::new();
         if let Err(error) = status.result {
             // TODO(@panhania): Add error kind conversion.
