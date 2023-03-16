@@ -46,7 +46,7 @@ pub mod finder;
 // TODO(@panhania): Hide this module behind a feature.
 pub mod get_system_metadata;
 
-pub use error::{ParseArgsError, ParseArgsErrorKind, DispatchError};
+pub use error::{ParseArgsError, ParseArgsErrorKind};
 
 /// Dispatches the given `request` to an appropriate action handler.
 ///
