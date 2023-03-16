@@ -7,7 +7,6 @@
 //! a function converting proto format of the request
 //! `rrg_proto::FileFinderArgs` to the internal format.
 
-use crate::session::{time_from_micros};
 use log::info;
 use protobuf::ProtobufEnum;
 use std::fmt::Write;
@@ -124,6 +123,10 @@ impl From<rrg_proto::flows::FileFinderStatActionOptions> for StatActionOptions {
     }
 }
 
+fn time_from_micros(micros: u64) -> std::time::SystemTime {
+    std::time::UNIX_EPOCH + std::time::Duration::from_micros(micros)
+}
+
 fn into_action(proto: rrg_proto::flows::FileFinderAction) -> Result<Option<Action>, crate::action::ParseArgsError> {
     // `FileFinderAction::action_type` defines which action will be performed.
     // Only options from the selected action are read.
@@ -167,15 +170,13 @@ fn get_modification_time_condition(
     proto: &rrg_proto::flows::FileFinderModificationTimeCondition,
 ) -> Result<Option<Condition>, crate::action::ParseArgsError> {
     let min = if proto.has_min_last_modified_time() {
-        Some(time_from_micros(proto.get_min_last_modified_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_min_last_modified_time()))
     } else {
         None
     };
 
     let max = if proto.has_max_last_modified_time() {
-        Some(time_from_micros(proto.get_max_last_modified_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_max_last_modified_time()))
     } else {
         None
     };
@@ -190,15 +191,13 @@ fn get_access_time_condition(
     proto: &rrg_proto::flows::FileFinderAccessTimeCondition,
 ) -> Result<Option<Condition>, crate::action::ParseArgsError> {
     let min = if proto.has_min_last_access_time() {
-        Some(time_from_micros(proto.get_min_last_access_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_min_last_access_time()))
     } else {
         None
     };
 
     let max = if proto.has_max_last_access_time() {
-        Some(time_from_micros(proto.get_max_last_access_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_max_last_access_time()))
     } else {
         None
     };
@@ -213,15 +212,13 @@ fn get_inode_change_time_condition(
     proto: &rrg_proto::flows::FileFinderInodeChangeTimeCondition,
 ) -> Result<Option<Condition>, crate::action::ParseArgsError> {
     let min = if proto.has_min_last_inode_change_time() {
-        Some(time_from_micros(proto.get_min_last_inode_change_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_min_last_inode_change_time()))
     } else {
         None
     };
 
     let max = if proto.has_max_last_inode_change_time() {
-        Some(time_from_micros(proto.get_max_last_inode_change_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_max_last_inode_change_time()))
     } else {
         None
     };
@@ -668,8 +665,8 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::ModificationTime { min, max } => {
-                assert_eq!(min.unwrap(), time_from_micros(123).unwrap());
-                assert_eq!(max.unwrap(), time_from_micros(234).unwrap());
+                assert_eq!(min.unwrap(), time_from_micros(123));
+                assert_eq!(max.unwrap(), time_from_micros(234));
             }
             v @ _ => panic!("Unexpected condition type: {:?}", v),
         }
@@ -690,8 +687,8 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::AccessTime { min, max } => {
-                assert_eq!(min.unwrap(), time_from_micros(123).unwrap());
-                assert_eq!(max.unwrap(), time_from_micros(234).unwrap());
+                assert_eq!(min.unwrap(), time_from_micros(123));
+                assert_eq!(max.unwrap(), time_from_micros(234));
             }
             v @ _ => panic!("Unexpected condition type: {:?}", v),
         }
@@ -712,8 +709,8 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::InodeChangeTime { min, max } => {
-                assert_eq!(min.unwrap(), time_from_micros(123).unwrap());
-                assert_eq!(max.unwrap(), time_from_micros(234).unwrap());
+                assert_eq!(min.unwrap(), time_from_micros(123));
+                assert_eq!(max.unwrap(), time_from_micros(234));
             }
             v @ _ => panic!("Unexpected condition type: {:?}", v),
         }
