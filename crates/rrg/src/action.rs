@@ -66,7 +66,7 @@ where
 {
     use crate::Action::*;
 
-    match request.action {
+    match request.action() {
         GetSystemMetadata => {
             handle(session, request, self::get_system_metadata::handle)
         }
