@@ -23,9 +23,7 @@ pub mod chunked;
 #[cfg(feature = "action-timeline")]
 pub mod gzchunked;
 
-use crate::args::{Args};
-
-pub use request::{Action, Request, RequestId};
+pub use request::{Action, Args, ParseArgsError, ParseArgsErrorKind, Request, RequestId};
 pub use response::{Reply, ResponseBuilder, ResponseId};
 
 /// Handle to a specific sink.
@@ -133,7 +131,7 @@ impl<I: crate::action::Item> From<Parcel<I>> for rrg_proto::v2::rrg::Parcel {
 ///
 /// This function should be called only once (at the very beginning of the
 /// process lifetime).
-pub fn init(args: &Args) {
+pub fn init(args: &crate::args::Args) {
     log::init(args)
 }
 
@@ -149,7 +147,7 @@ pub fn init(args: &Args) {
 /// (e.g. the Fleetspeak connection has been broken). All non-critical errors
 /// are going to be handled carefully, notifying the server about the failure if
 /// appropriate.
-pub fn listen(args: &Args) {
+pub fn listen(args: &crate::args::Args) {
     loop {
         let request = match Request::receive(args.heartbeat_rate) {
             Ok(request) => request,

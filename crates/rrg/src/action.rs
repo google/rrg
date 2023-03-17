@@ -15,8 +15,6 @@
 //! instance of the corresponding request type and send some (zero or more)
 //! instances of the corresponding response type.
 
-mod error;
-
 #[cfg(feature = "action-filesystems")]
 #[cfg(target_os = "linux")]
 pub mod filesystems;
@@ -45,8 +43,6 @@ pub mod finder;
 
 // TODO(@panhania): Hide this module behind a feature.
 pub mod get_system_metadata;
-
-pub use error::{ParseArgsError, ParseArgsErrorKind};
 
 /// Dispatches the given `request` to an appropriate action handler.
 ///
@@ -130,30 +126,13 @@ where
 fn handle<S, A, H>(session: &mut S, request: crate::Request, handler: H) -> crate::session::Result<()>
 where
     S: crate::session::Session,
-    A: Args,
+    A: crate::Args,
     H: FnOnce(&mut S, A) -> crate::session::Result<()>,
 {
     Ok(handler(session, request.args()?)?)
 }
 
 // TODO(panhania@): Remove all usages of the `Request` trait and replace it with
-// `Args`.
-pub trait Args: Sized {
-    /// Low-level Protocol Buffers type representing the action arguments.
-    type Proto: protobuf::Message + Default;
-
-    /// Converts a low-level type to a structured request arguments.
-    fn from_proto(proto: Self::Proto) -> Result<Self, ParseArgsError>;
-}
-
-impl Args for () {
-
-    type Proto = protobuf::well_known_types::Empty;
-
-    fn from_proto(_: protobuf::well_known_types::Empty) -> Result<(), ParseArgsError> {
-        Ok(())
-    }
-}
 
 pub trait Item: Sized {
     /// Low-level Protocol Buffers type representing the action results.

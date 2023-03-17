@@ -66,9 +66,9 @@ impl std::error::Error for Error {
     }
 }
 
-impl From<crate::action::ParseArgsError> for Error {
+impl From<crate::ParseArgsError> for Error {
 
-    fn from(error: crate::action::ParseArgsError) -> Error {
+    fn from(error: crate::ParseArgsError) -> Error {
         Error {
             kind: ErrorKind::InvalidArgs,
             error: Box::new(error),

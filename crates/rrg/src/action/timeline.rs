@@ -192,13 +192,13 @@ where
     Ok(())
 }
 
-impl super::Args for Request {
+impl crate::Args for Request {
 
     type Proto = rrg_proto::timeline::TimelineArgs;
 
-    fn from_proto(mut proto: Self::Proto) -> Result<Request, super::ParseArgsError> {
+    fn from_proto(mut proto: Self::Proto) -> Result<Request, crate::ParseArgsError> {
         let root = rrg_proto::path::from_bytes(proto.take_root())
-            .map_err(crate::action::ParseArgsError::invalid_field)?;
+            .map_err(crate::ParseArgsError::invalid_field)?;
 
         Ok(Request {
             root: root,

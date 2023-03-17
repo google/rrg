@@ -123,15 +123,16 @@ impl Request {
         self.action
     }
 
+    // TODO(@panhania): Add "Errors" section to this doc comment.
     /// Returns the action arguments stored in this request.
     ///
     /// At the moment the request is received we don't know yet what is the type
     /// of the arguments it contains, so we cannot interpret it. Only once the
     /// request is dispatched to an appropriate action handler, we can parse the
     /// arguments to a concrete type.
-    pub fn args<A>(&self) -> Result<A, crate::action::ParseArgsError>
+    pub fn args<A>(&self) -> Result<A, ParseArgsError>
     where
-        A: crate::action::Args,
+        A: Args,
     {
         let args_proto = protobuf::Message::parse_from_bytes(&self.serialized_args[..])?;
         A::from_proto(args_proto)
@@ -270,6 +271,109 @@ impl From<ParseRequestErrorKind> for ParseRequestError {
         ParseRequestError {
             kind,
             error: None,
+        }
+    }
+}
+
+/// Arguments to invoke an action with.
+///
+/// The arguments are specified in the [request] issued by a GRR flow and stored
+/// there in a serialized Protocol Buffers message. Once the request is passed
+/// to the appropriate action handler this message is parsed to a concrete Rust
+/// type.
+///
+/// [request]: crate::Request
+pub trait Args: Sized {
+    /// Low-level Protocol Buffers type representing the action arguments.
+    type Proto: protobuf::Message + Default;
+
+    /// Converts a low-level type to a structured request arguments.
+    fn from_proto(proto: Self::Proto) -> Result<Self, ParseArgsError>;
+}
+
+impl Args for () {
+
+    type Proto = protobuf::well_known_types::Empty;
+
+    fn from_proto(_: protobuf::well_known_types::Empty) -> Result<(), ParseArgsError> {
+        Ok(())
+    }
+}
+
+/// The error type for cases when action argument parsing fails.
+#[derive(Debug)]
+pub struct ParseArgsError {
+    /// A corresponding [`ParseArgsErrorKind`] of this error.
+    kind: ParseArgsErrorKind,
+    /// A detailed payload associated with the error.
+    error: Box<dyn std::error::Error + Send + Sync>,
+}
+
+impl ParseArgsError {
+
+    /// Creates a new error instance caused by some invalid field error.
+    pub fn invalid_field<E>(error: E) -> ParseArgsError
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        ParseArgsError {
+            kind: ParseArgsErrorKind::InvalidField,
+            error: Box::new(error),
+        }
+    }
+
+    /// Returns the corresponding [`ParseArgsErrorKind`] of this error.
+    pub fn kind(&self) -> ParseArgsErrorKind {
+        self.kind
+    }
+}
+
+/// Kinds of errors that can happen when parsing action arguments.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ParseArgsErrorKind {
+    // TODO(@panhania): Rename to `MalformedBytes` to be consistent with other
+    // error types.
+    /// The serialized message with arguments was impossible to deserialize.
+    InvalidProto,
+    // TODO(panhania@): Augment with field name.
+    /// One of the fields of the arguments struct is invalid.
+    InvalidField,
+}
+
+impl ParseArgsErrorKind {
+
+    fn as_str(&self) -> &'static str {
+        use ParseArgsErrorKind::*;
+
+        match *self {
+            InvalidProto => "invalid serialized protobuf message",
+            InvalidField => "invalid argument field",
+        }
+    }
+}
+
+impl std::fmt::Display for ParseArgsError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}: {}", self.kind.as_str(), self.error)
+    }
+}
+
+impl std::error::Error for ParseArgsError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.error.source()
+    }
+}
+
+// TODO(@panhania): Verify whether we really need this conversion. Other error
+// types seems not to have anything like this.
+impl From<protobuf::ProtobufError> for ParseArgsError {
+
+    fn from(error: protobuf::ProtobufError) -> Self {
+        ParseArgsError {
+            kind: ParseArgsErrorKind::InvalidProto,
+            error: Box::new(error),
         }
     }
 }

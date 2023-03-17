@@ -106,11 +106,11 @@ where
     Ok(())
 }
 
-impl super::Args for Args {
+impl crate::Args for Args {
 
     type Proto = rrg_proto::flows::ListNetworkConnectionsArgs;
 
-    fn from_proto(proto: Self::Proto) -> Result<Args, crate::action::ParseArgsError> {
+    fn from_proto(proto: Self::Proto) -> Result<Args, crate::ParseArgsError> {
         Ok(Args {
             listening_only: proto.get_listening_only(),
         })
