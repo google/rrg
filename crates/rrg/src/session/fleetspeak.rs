@@ -59,10 +59,7 @@ impl crate::session::Session for FleetspeakSession {
     where
         I: crate::response::Item,
     {
-        let parcel = crate::response::Parcel {
-            sink,
-            payload: item,
-        };
+        let parcel = crate::response::Parcel::new(sink, item);
 
         parcel.send_unaccounted()
             // If we fail to send the parcel to Fleetspeak, our connection is

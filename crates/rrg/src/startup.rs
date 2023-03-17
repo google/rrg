@@ -9,10 +9,8 @@
 pub fn startup() -> Result<(), fleetspeak::WriteError> {
     let startup = Startup::now();
 
-    crate::response::Parcel {
-        sink: crate::Sink::Blob,
-        payload: startup,
-    }.send_unaccounted()
+    crate::response::Parcel::new(crate::Sink::Blob, startup)
+        .send_unaccounted()
 }
 
 /// Information about the agent startup.

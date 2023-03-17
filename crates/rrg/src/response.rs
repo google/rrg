@@ -193,7 +193,6 @@ impl From<Sink> for rrg_proto::v2::rrg::Sink {
     }
 }
 
-// TODO(@panhania): Unexpose fields of this struct.
 /// Data that should be sent to a particular [sink].
 ///
 /// Sometimes the agent should send data to the server that is not associated
@@ -206,9 +205,9 @@ impl From<Sink> for rrg_proto::v2::rrg::Sink {
 /// [sink]: crate::Sink
 pub struct Parcel<I: crate::response::Item> {
     /// A sink to deliver the parcel to.
-    pub sink: Sink,
+    sink: Sink,
     /// The actual content of the parcel.
-    pub payload: I,
+    payload: I,
 }
 
 impl<I: crate::response::Item> Parcel<I> {
