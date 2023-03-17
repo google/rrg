@@ -208,8 +208,6 @@ impl super::Args for Request {
 
 impl super::Item for Response {
 
-    const RDF_NAME: &'static str = "TimelineResult";
-
     type Proto = rrg_proto::timeline::TimelineResult;
 
     fn into_proto(self) -> rrg_proto::timeline::TimelineResult {
@@ -226,8 +224,6 @@ impl super::Item for Response {
 }
 
 impl crate::action::Item for Chunk {
-
-    const RDF_NAME: &'static str = "DataBlob";
 
     type Proto = rrg_proto::jobs::DataBlob;
 

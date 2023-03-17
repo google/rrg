@@ -119,8 +119,6 @@ impl super::Args for Args {
 
 impl super::Item for Item {
 
-    const RDF_NAME: &'static str = "NetworkConnection";
-
     type Proto = rrg_proto::sysinfo::NetworkConnection;
 
     fn into_proto(self) -> Self::Proto {

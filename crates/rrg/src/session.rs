@@ -249,8 +249,6 @@ mod tests {
 
     impl action::Item for StringResponse {
 
-        const RDF_NAME: &'static str = "RDFString";
-
         type Proto = protobuf::well_known_types::StringValue;
 
         fn into_proto(self) -> protobuf::well_known_types::StringValue {

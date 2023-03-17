@@ -160,21 +160,11 @@ pub trait Item: Sized {
     /// Low-level Protocol Buffers type representing the action results.
     type Proto: protobuf::Message + Default;
 
-    /// A name of the corresponding RDF class in GRR.
-    const RDF_NAME: &'static str;
-
     /// Converts an action result ot its low-level representation.
     fn into_proto(self) -> Self::Proto;
 }
 
 impl Item for () {
-
-    // This implementation is intended to be used only in tests and we do not
-    // really care about the `RDF_NAME` field there. And since GRR does not have
-    // any RDF wrapper for empty type (except maybe `EmptyFlowArgs`, but this is
-    // semantically different), we just leave it blank.
-    const RDF_NAME: &'static str = "";
-
     type Proto = protobuf::well_known_types::Empty;
 
     fn into_proto(self) -> protobuf::well_known_types::Empty {

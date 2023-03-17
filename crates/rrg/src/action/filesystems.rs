@@ -83,8 +83,6 @@ pub fn handle<S: Session>(session: &mut S, _: ()) -> session::Result<()> {
 
 impl super::Item for Response {
 
-    const RDF_NAME: &'static str = "Filesystem";
-
     type Proto = rrg_proto::sysinfo::Filesystem;
 
     fn into_proto(self) -> rrg_proto::sysinfo::Filesystem {

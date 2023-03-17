@@ -22,10 +22,6 @@ struct Response {
 
 impl super::Item for Response {
 
-    // TODO: Change to RDFDatetime when the client will be capable to send
-    // "raw" strings without wrapping them into protobuf.
-    const RDF_NAME: &'static str = "DataBlob";
-
     type Proto = protobuf::well_known_types::UInt64Value;
 
     fn into_proto(self) -> Self::Proto {

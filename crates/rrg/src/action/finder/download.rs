@@ -116,8 +116,6 @@ pub struct Chunk {
 }
 
 impl super::super::Item for Chunk {
-    const RDF_NAME: &'static str = "DataBlob";
-
     type Proto = rrg_proto::jobs::DataBlob;
 
     fn into_proto(self) -> rrg_proto::jobs::DataBlob {

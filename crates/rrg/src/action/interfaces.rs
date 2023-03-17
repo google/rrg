@@ -36,8 +36,6 @@ where
 
 impl super::Item for Item {
 
-    const RDF_NAME: &'static str = "Interface";
-
     type Proto = rrg_proto::jobs::Interface;
 
     fn into_proto(self) -> rrg_proto::jobs::Interface {

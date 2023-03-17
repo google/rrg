@@ -181,8 +181,6 @@ impl super::Args for Request {
 
 impl super::Item for Response {
 
-    const RDF_NAME: &'static str = "StatEntry";
-
     type Proto = rrg_proto::jobs::StatEntry;
 
     fn into_proto(self) -> Self::Proto {
