@@ -60,7 +60,7 @@ pub fn dispatch<'s, S>(session: &mut S, request: crate::Request) -> Result<(), c
 where
     S: crate::session::Session,
 {
-    use crate::Action::*;
+    use crate::request::Action::*;
 
     match request.action() {
         GetSystemMetadata => {
@@ -126,7 +126,7 @@ where
 fn handle<S, A, H>(session: &mut S, request: crate::Request, handler: H) -> crate::session::Result<()>
 where
     S: crate::session::Session,
-    A: crate::Args,
+    A: crate::request::Args,
     H: FnOnce(&mut S, A) -> crate::session::Result<()>,
 {
     Ok(handler(session, request.args()?)?)

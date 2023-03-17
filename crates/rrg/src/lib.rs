@@ -25,8 +25,8 @@ pub mod chunked;
 #[cfg(feature = "action-timeline")]
 pub mod gzchunked;
 
-pub use request::{Action, Args, ParseArgsError, ParseArgsErrorKind, Request, RequestId};
-pub use response::{Reply, ResponseBuilder, ResponseId, Sink};
+pub use request::{Request, RequestId};
+pub use response::{ResponseBuilder, ResponseId, Sink};
 
 /// Initializes the RRG subsystems.
 ///
