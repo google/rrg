@@ -105,14 +105,6 @@ pub struct RequestId {
     request_id: u64,
 }
 
-impl RequestId {
-
-    // TODO(@panhania): Remove this once legacy protocol is read to be deleted.
-    pub fn session_id(&self) -> String {
-        format!("aff4:/flows/F:{}", self.flow_id)
-    }
-}
-
 // TODO(@panhania): Write more comprehensive docs on requests.
 /// An action request.
 pub struct Request {
