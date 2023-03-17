@@ -59,7 +59,7 @@ impl crate::session::Session for FleetspeakSession {
     where
         I: crate::response::Item,
     {
-        let parcel = crate::Parcel {
+        let parcel = crate::response::Parcel {
             sink,
             payload: item,
         };

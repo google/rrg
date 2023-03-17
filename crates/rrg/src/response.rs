@@ -165,6 +165,90 @@ impl ResponseBuilder {
     }
 }
 
+/// Handle to a specific sink.
+///
+/// Sinks ("well-known flows" or "message handlers" in GRR nomenclature) are
+/// ever-existing data processors on the GRR server that listen for various
+/// kinds of data. They are a way to break away from the usual request-response
+/// workflow.
+///
+/// For example, sinks are used to notify the server about agent startup (which
+/// is clearly not a response to a particular request) or to send file blobs to
+/// a specialized storage that can handle data deduplication.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum Sink {
+    /// Collects records of agent startup.
+    Startup,
+    /// Collects binary blobs (e.g. fragments of files).
+    Blob,
+}
+
+impl From<Sink> for rrg_proto::v2::rrg::Sink {
+
+    fn from(sink: Sink) -> rrg_proto::v2::rrg::Sink {
+        match sink {
+            Sink::Startup => rrg_proto::v2::rrg::Sink::STARTUP,
+            Sink::Blob => rrg_proto::v2::rrg::Sink::BLOB,
+        }
+    }
+}
+
+// TODO(@panhania): Unexpose fields of this struct.
+/// Data that should be sent to a particular [sink].
+///
+/// Sometimes the agent should send data to the server that is not associated
+/// with any particular request. An example can be the agent startup information
+/// sent to the server at the moment the agent process start. Another example is
+/// file contents that are delivered to the server not as part of the action
+/// results but are sent out-of-band to a sink that has logic for deduplication
+/// of data that we already collected in the past.
+///
+/// [sink]: crate::Sink
+pub struct Parcel<I: crate::response::Item> {
+    /// A sink to deliver the parcel to.
+    pub sink: Sink,
+    /// The actual content of the parcel.
+    pub payload: I,
+}
+
+impl<I: crate::response::Item> Parcel<I> {
+    /// Creates a new parcel from the given `item` addressed to `sink`.
+    pub fn new(sink: Sink, item: I) -> Parcel<I> {
+        Parcel {
+            sink,
+            payload: item,
+        }
+    }
+}
+
+impl<I: crate::response::Item> Parcel<I> {
+
+    /// Sends the parcel message through Fleetspeak to the GRR server.
+    ///
+    /// This function consumes the parcel to ensure that it is not sent twice.
+    ///
+    /// Note that this function should generally not be used if running as part
+    /// of some [session], otherwise network usage might not be correctly
+    /// accounted for. Prefer to use [`Session::send`] for such cases.
+    ///
+    /// [session]: crate::session::Session
+    /// [`Session::send`]: crate::session::Session::send
+    pub fn send_unaccounted(self) -> Result<(), fleetspeak::WriteError> {
+        use protobuf::Message as _;
+
+        let data = rrg_proto::v2::rrg::Parcel::from(self).write_to_bytes()
+            // This should only fail in case we are out of memory, which we are
+            // almost certainly not (and if we are, we have bigger issue).
+            .unwrap();
+
+        fleetspeak::send(fleetspeak::Message {
+            service: String::from("GRR"),
+            kind: Some(String::from("rrg-parcel")),
+            data,
+        })
+    }
+}
+
 impl<I> From<Reply<I>> for rrg_proto::v2::rrg::Response
 where
     I: Item,
@@ -211,6 +295,26 @@ impl From<Status> for rrg_proto::v2::rrg::Status {
         if let Err(error) = status.result {
             proto.set_error(error.into());
         }
+
+        proto
+    }
+}
+
+impl<I> From<Parcel<I>> for rrg_proto::v2::rrg::Parcel
+where
+    I: crate::response::Item,
+{
+    fn from(parcel: Parcel<I>) -> rrg_proto::v2::rrg::Parcel {
+        let payload_proto = parcel.payload.into_proto();
+        let payload_any = protobuf::well_known_types::Any::pack(&payload_proto)
+            // The should not really ever fail, assumming that the protobuf
+            // message we are working with is well-formed and we are not out of
+            // memory.
+            .unwrap();
+
+        let mut proto = rrg_proto::v2::rrg::Parcel::new();
+        proto.set_sink(parcel.sink.into());
+        proto.set_payload(payload_any);
 
         proto
     }

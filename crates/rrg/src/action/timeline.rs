@@ -443,13 +443,12 @@ mod tests {
     /// Retrieves timeline entries from the given session object.
     fn entries(session: &Session) -> Vec<rrg_proto::timeline::TimelineEntry> {
         use std::collections::HashMap;
-        use crate::Sink;
 
-        let chunk_count = session.parcel_count(Sink::Blob);
+        let chunk_count = session.parcel_count(crate::Sink::Blob);
         assert_eq!(session.reply_count(), 1);
         assert_eq!(session.reply::<Response>(0).chunk_ids.len(), chunk_count);
 
-        let chunks_by_id = session.parcels::<Chunk>(Sink::Blob)
+        let chunks_by_id = session.parcels::<Chunk>(crate::Sink::Blob)
             .map(|chunk| (chunk.id(), chunk))
             .collect::<HashMap<_, _>>();
 
