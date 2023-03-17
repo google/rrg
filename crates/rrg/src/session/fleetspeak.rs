@@ -4,7 +4,7 @@
 /// server. It keeps track of the responses it sends and collects statistics
 /// about network and runtime utilization to kill the action if it is needed.
 pub struct FleetspeakSession {
-    response_builder: crate::message::ResponseBuilder,
+    response_builder: crate::ResponseBuilder,
 }
 
 impl FleetspeakSession {
@@ -12,7 +12,7 @@ impl FleetspeakSession {
     /// Creates a new Fleetspeak session for the given `request` object.
     fn new(request_id: crate::RequestId) -> FleetspeakSession {
         FleetspeakSession {
-            response_builder: crate::message::ResponseBuilder::new(request_id),
+            response_builder: crate::ResponseBuilder::new(request_id),
         }
     }
 

@@ -9,11 +9,12 @@ pub mod action;
 pub mod fs;
 pub mod io;
 pub mod log;
-pub mod message;
 pub mod args;
 pub mod session;
 
 mod request;
+mod response;
+
 pub mod startup; // TODO(@panhania): Hide this module.
 
 // Consider moving these to a separate submodule.
@@ -25,6 +26,7 @@ pub mod gzchunked;
 use crate::args::{Args};
 
 pub use request::{Action, Request, RequestId};
+pub use response::{Reply, ResponseBuilder, ResponseId};
 
 /// Handle to a specific sink.
 ///
