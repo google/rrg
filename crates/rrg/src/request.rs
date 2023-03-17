@@ -6,19 +6,28 @@
 use rrg_macro::warn;
 
 /// List of all actions supported by the agent.
+///
+/// An action is a "unit of execution" and is invoked by flows (created on the
+/// GRR server). To start an action execution the flow needs to send a [request]
+/// to the agent. Then the agents replies with one or more responses back to the
+/// flow.
+///
+/// [request]: crate::Request
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Action {
     /// Get metadata about the operating system and the machine.
     GetSystemMetadata,
 }
 
+/// The error type for cases when parsing action fails.
 #[derive(Debug)]
 pub struct ParseActionError {
+    /// A corresponding [`ParseActionErrorKind`] of the error.
     kind: ParseActionErrorKind,
 }
 
 impl ParseActionError {
-
+    /// Returns the corresponding [`ParseActionErrorKind`] of the error.
     pub fn kind(&self) -> ParseActionErrorKind {
         self.kind
     }
@@ -34,8 +43,10 @@ impl std::fmt::Display for ParseActionError {
 impl std::error::Error for ParseActionError {
 }
 
+/// List of general categories of action parsing errors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParseActionErrorKind {
+    /// The action value is not known.
     UnknownAction(i32),
 }
 
@@ -86,8 +97,12 @@ pub struct RequestId {
     pub request_id: u64,
 }
 
-// TODO(@panhania): Write more comprehensive docs on requests.
 /// An action request.
+///
+/// Requests are issued by flows and delivered to the agent through Fleetspeak.
+/// A request contains metadata about the flow issuing the request as well as
+/// details of the work to be carried by the agent: the type of the action to
+/// execute and its arguments.
 pub struct Request {
     /// A unique identifier of the request.
     id: RequestId,
@@ -181,14 +196,18 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
     }
 }
 
+/// The error type for cases when parsing a request fails.
 #[derive(Debug)]
 pub struct ParseRequestError {
+    /// A corresponding [`ParseRequestErrorKind`] of the error.
     kind: ParseRequestErrorKind,
+    /// A more datailed cause of the error.
     error: Option<Box<dyn std::error::Error>>,
 }
 
 impl ParseRequestError {
 
+    /// Creates a new error from a known kind and its cause.
     pub fn new<E>(kind: ParseRequestErrorKind, error: E) -> ParseRequestError
     where
         E: Into<Box<dyn std::error::Error>>
@@ -226,11 +245,12 @@ impl std::error::Error for ParseRequestError {
     }
 }
 
+/// List of general categories of action parsing errors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParseRequestErrorKind {
+    /// The serialized message with request was impossible to deserialize.
     MalformedBytes,
-    // TODO(@panhania): Add support for missing `flow_id`, `request_id` and
-    // `action` fields.
+    /// It was not possible to parse the action specified in the request.
     InvalidAction(ParseActionErrorKind),
 }
 
