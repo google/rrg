@@ -254,8 +254,8 @@ where
 {
     fn from(reply: Reply<I>) -> rrg_proto::v2::rrg::Response {
         let mut proto = rrg_proto::v2::rrg::Response::new();
-        proto.set_flow_id(reply.request_id.flow_id);
-        proto.set_request_id(reply.request_id.request_id);
+        proto.set_flow_id(reply.request_id.flow_id());
+        proto.set_request_id(reply.request_id.request_id());
         proto.set_response_id(reply.response_id.0);
 
         // TODO(@panhania): Migrate this code to use `Any::pack` once we upgrade
@@ -278,8 +278,8 @@ impl From<Status> for rrg_proto::v2::rrg::Response {
 
     fn from(status: Status) -> rrg_proto::v2::rrg::Response {
         let mut proto = rrg_proto::v2::rrg::Response::new();
-        proto.set_flow_id(status.request_id.flow_id);
-        proto.set_request_id(status.request_id.request_id);
+        proto.set_flow_id(status.request_id.flow_id());
+        proto.set_request_id(status.request_id.request_id());
         proto.set_response_id(status.response_id.0);
         proto.set_status(status.into());
 

@@ -87,14 +87,25 @@ impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
     }
 }
 
-// TODO(@panhania): Hide fields of this struct.
 /// A unique identifier of a request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RequestId {
     /// An identifier of the flow issuing the request.
-    pub flow_id: u64,
+    flow_id: u64,
     /// A server-issued identifier of the request (unique within the flow).
-    pub request_id: u64,
+    request_id: u64,
+}
+
+impl RequestId {
+    /// Returns an identifier of the flow issuing the request.
+    pub fn flow_id(&self) -> u64 {
+        self.flow_id
+    }
+
+    /// Returns a server-issued identifier of the request.
+    pub fn request_id(&self) -> u64 {
+        self.request_id
+    }
 }
 
 /// An action request.
