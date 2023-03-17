@@ -133,8 +133,7 @@ where
     A: Args,
     H: FnOnce(&mut S, A) -> crate::session::Result<()>,
 {
-    let args = request.parse_args()?;
-    Ok(handler(session, args)?)
+    Ok(handler(session, request.args()?)?)
 }
 
 // TODO(panhania@): Remove all usages of the `Request` trait and replace it with

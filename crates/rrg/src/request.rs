@@ -123,6 +123,20 @@ impl Request {
         self.action
     }
 
+    /// Returns the action arguments stored in this request.
+    ///
+    /// At the moment the request is received we don't know yet what is the type
+    /// of the arguments it contains, so we cannot interpret it. Only once the
+    /// request is dispatched to an appropriate action handler, we can parse the
+    /// arguments to a concrete type.
+    pub fn args<A>(&self) -> Result<A, crate::action::ParseArgsError>
+    where
+        A: crate::action::Args,
+    {
+        let args_proto = protobuf::Message::parse_from_bytes(&self.serialized_args[..])?;
+        A::from_proto(args_proto)
+    }
+
     /// Awaits for a new request message from Fleetspeak.
     ///
     /// This will suspend execution until the request is actually available.
@@ -161,22 +175,6 @@ impl Request {
             })?;
 
         Ok(Request::try_from(proto)?)
-    }
-
-    // TODO: Consider moving it to the top and renaming this to just `args`.
-
-    /// Parses the action arguments stored in this request.
-    ///
-    /// At the moment the request is received we don't know yet what is the type
-    /// of the arguments it contains, so we cannot interpret it. Only once the
-    /// request is dispatched to an appropriate action handler, we can parse the
-    /// arguments to a concrete type.
-    pub fn parse_args<A>(&self) -> Result<A, crate::action::ParseArgsError>
-    where
-        A: crate::action::Args,
-    {
-        let args_proto = protobuf::Message::parse_from_bytes(&self.serialized_args[..])?;
-        A::from_proto(args_proto)
     }
 }
 
