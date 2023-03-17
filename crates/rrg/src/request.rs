@@ -342,10 +342,8 @@ impl ParseArgsError {
 /// Kinds of errors that can happen when parsing action arguments.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParseArgsErrorKind {
-    // TODO(@panhania): Rename to `MalformedBytes` to be consistent with other
-    // error types.
     /// The serialized message with arguments was impossible to deserialize.
-    InvalidProto,
+    MalformedBytes,
     // TODO(panhania@): Augment with field name.
     /// One of the fields of the arguments struct is invalid.
     InvalidField,
@@ -357,7 +355,7 @@ impl ParseArgsErrorKind {
         use ParseArgsErrorKind::*;
 
         match *self {
-            InvalidProto => "invalid serialized protobuf message",
+            MalformedBytes => "malformed protobuf message bytes",
             InvalidField => "invalid argument field",
         }
     }
@@ -383,7 +381,7 @@ impl From<protobuf::ProtobufError> for ParseArgsError {
 
     fn from(error: protobuf::ProtobufError) -> Self {
         ParseArgsError {
-            kind: ParseArgsErrorKind::InvalidProto,
+            kind: ParseArgsErrorKind::MalformedBytes,
             error: Box::new(error),
         }
     }
