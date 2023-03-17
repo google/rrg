@@ -115,7 +115,7 @@ pub struct Chunk {
     pub data: Vec<u8>,
 }
 
-impl super::super::Item for Chunk {
+impl crate::response::Item for Chunk {
     type Proto = rrg_proto::jobs::DataBlob;
 
     fn into_proto(self) -> rrg_proto::jobs::DataBlob {

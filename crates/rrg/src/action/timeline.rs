@@ -206,7 +206,7 @@ impl crate::Args for Request {
     }
 }
 
-impl super::Item for Response {
+impl crate::response::Item for Response {
 
     type Proto = rrg_proto::timeline::TimelineResult;
 
@@ -223,7 +223,7 @@ impl super::Item for Response {
     }
 }
 
-impl crate::action::Item for Chunk {
+impl crate::response::Item for Chunk {
 
     type Proto = rrg_proto::jobs::DataBlob;
 

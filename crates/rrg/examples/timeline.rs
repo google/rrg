@@ -60,7 +60,7 @@ impl rrg::session::Session for Session {
 
     fn reply<I>(&mut self, item: I) -> rrg::session::Result<()>
     where
-        I: rrg::action::Item + 'static,
+        I: rrg::response::Item + 'static,
     {
         // For now we are not interested in doing anything useful with chunk ids
         // since everything is dumped into one file and there is no need to
@@ -75,7 +75,7 @@ impl rrg::session::Session for Session {
 
     fn send<I>(&mut self, sink: rrg::Sink, item: I) -> rrg::session::Result<()>
     where
-        I: rrg::action::Item + 'static,
+        I: rrg::response::Item + 'static,
     {
         use std::io::Write as _;
         use byteorder::{BigEndian, WriteBytesExt as _};

@@ -179,7 +179,7 @@ impl crate::Args for Request {
     }
 }
 
-impl super::Item for Response {
+impl crate::response::Item for Response {
 
     type Proto = rrg_proto::jobs::StatEntry;
 

@@ -4,13 +4,37 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use crate::RequestId;
 
+/// A response item that can be sent to the server.
+///
+/// Each object that we want to sent to the server has to be serializable to a
+/// Protocol Buffers message that the GRR server can interpret. In other words,
+/// "items" are simply objects that can be converted to such messages.
+///
+/// Note that unlike `From<protobuf::Message>`, implementators of this trait can
+/// include a bit of "impurity" to the conversion (e.g. logging).
+pub trait Item: Sized {
+    /// Low-level Protocol Buffers type representing the action results.
+    type Proto: protobuf::Message + Default;
+
+    /// Converts an action result ot its low-level representation.
+    fn into_proto(self) -> Self::Proto;
+}
+
+impl Item for () {
+    type Proto = protobuf::well_known_types::Empty;
+
+    fn into_proto(self) -> protobuf::well_known_types::Empty {
+        protobuf::well_known_types::Empty::new()
+    }
+}
+
 /// An action reply message.
 ///
 /// This is a message wrapper around the [`Item`] type but associates it with a
 /// particular request.
 ///
-/// [`Item`]: crate::action::Item
-pub struct Reply<I: crate::action::Item> {
+/// [`Item`]: crate::response::Item
+pub struct Reply<I: Item> {
     /// A unique request identifier for which this item was yielded.
     request_id: RequestId,
     /// A unique response identifier of this item.
@@ -19,7 +43,7 @@ pub struct Reply<I: crate::action::Item> {
     item: I,
 }
 
-impl<I: crate::action::Item> Reply<I> {
+impl<I: Item> Reply<I> {
 
     /// Sends the reply message through Fleetspeak to the GRR server.
     ///
@@ -128,7 +152,7 @@ impl ResponseBuilder {
     /// Builds a new reply response for the given action item.
     pub fn reply<I>(&mut self, item: I) -> Reply<I>
     where
-        I: crate::action::Item,
+        I: Item,
     {
         let response_id = self.next_response_id;
         self.next_response_id.0 += 1;
@@ -143,7 +167,7 @@ impl ResponseBuilder {
 
 impl<I> From<Reply<I>> for rrg_proto::v2::rrg::Response
 where
-    I: crate::action::Item,
+    I: Item,
 {
     fn from(reply: Reply<I>) -> rrg_proto::v2::rrg::Response {
         let mut proto = rrg_proto::v2::rrg::Response::new();

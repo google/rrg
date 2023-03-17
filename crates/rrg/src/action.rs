@@ -133,19 +133,3 @@ where
 }
 
 // TODO(panhania@): Remove all usages of the `Request` trait and replace it with
-
-pub trait Item: Sized {
-    /// Low-level Protocol Buffers type representing the action results.
-    type Proto: protobuf::Message + Default;
-
-    /// Converts an action result ot its low-level representation.
-    fn into_proto(self) -> Self::Proto;
-}
-
-impl Item for () {
-    type Proto = protobuf::well_known_types::Empty;
-
-    fn into_proto(self) -> protobuf::well_known_types::Empty {
-        protobuf::well_known_types::Empty::new()
-    }
-}

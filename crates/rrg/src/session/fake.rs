@@ -40,7 +40,7 @@ impl FakeSession {
     /// or if it exists but has a wrong type.
     pub fn reply<R>(&self, id: usize) -> &R
     where
-        R: crate::action::Item + 'static,
+        R: crate::response::Item + 'static,
     {
         match self.replies().nth(id) {
             Some(reply) => reply,
@@ -54,7 +54,7 @@ impl FakeSession {
     /// incorrect type.
     pub fn replies<R>(&self) -> impl Iterator<Item = &R>
     where
-        R: crate::action::Item + 'static
+        R: crate::response::Item + 'static
     {
         self.replies.iter().map(|reply| {
             reply.downcast_ref().expect("unexpected reply type")
@@ -78,7 +78,7 @@ impl FakeSession {
     /// `sink` does not exist or if it exists but has wrong type.
     pub fn parcel<I>(&self, sink: Sink, id: usize) -> &I
     where
-        I: crate::action::Item + 'static,
+        I: crate::response::Item + 'static,
     {
         match self.parcels(sink).nth(id) {
             Some(parcel) => parcel,
@@ -92,7 +92,7 @@ impl FakeSession {
     /// incorrect type.
     pub fn parcels<I>(&self, sink: Sink) -> impl Iterator<Item = &I>
     where
-        I: crate::action::Item + 'static,
+        I: crate::response::Item + 'static,
     {
         // Since the empty iterator (as defined in the standard library) is a
         // specific type, it cannot be returned in one branch but not in another
@@ -113,7 +113,7 @@ impl crate::session::Session for FakeSession {
 
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>
     where
-        I: crate::action::Item + 'static,
+        I: crate::response::Item + 'static,
     {
         self.replies.push(Box::new(item));
 
@@ -122,7 +122,7 @@ impl crate::session::Session for FakeSession {
 
     fn send<I>(&mut self, sink: Sink, item: I) -> crate::session::Result<()>
     where
-        I: crate::action::Item + 'static,
+        I: crate::response::Item + 'static,
     {
         let parcels = self.parcels.entry(sink).or_insert_with(Vec::new);
         parcels.push(Box::new(item));

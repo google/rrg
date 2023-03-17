@@ -20,7 +20,7 @@ struct Response {
     time: Option<SystemTime>,
 }
 
-impl super::Item for Response {
+impl crate::response::Item for Response {
 
     type Proto = protobuf::well_known_types::UInt64Value;
 

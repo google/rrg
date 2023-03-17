@@ -38,7 +38,7 @@ impl Startup {
     }
 }
 
-impl crate::action::Item for Startup {
+impl crate::response::Item for Startup {
     type Proto = rrg_proto::v2::startup::Startup;
 
     fn into_proto(self) -> rrg_proto::v2::startup::Startup {

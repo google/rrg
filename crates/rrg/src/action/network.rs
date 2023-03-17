@@ -117,7 +117,7 @@ impl crate::Args for Args {
     }
 }
 
-impl super::Item for Item {
+impl crate::response::Item for Item {
 
     type Proto = rrg_proto::sysinfo::NetworkConnection;
 

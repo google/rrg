@@ -41,7 +41,7 @@ impl crate::session::Session for FleetspeakSession {
 
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>
     where
-        I: crate::action::Item,
+        I: crate::response::Item,
     {
         // TODO(panhania@): Enforce limits.
         let reply = self.response_builder.reply(item);
@@ -57,7 +57,7 @@ impl crate::session::Session for FleetspeakSession {
 
     fn send<I>(&mut self, sink: crate::Sink, item: I) -> crate::session::Result<()>
     where
-        I: crate::action::Item,
+        I: crate::response::Item,
     {
         let parcel = crate::Parcel {
             sink,

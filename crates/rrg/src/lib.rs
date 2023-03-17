@@ -13,7 +13,9 @@ pub mod args;
 pub mod session;
 
 mod request;
-mod response;
+// TOOD(@panhania): Hide this module once the `timeline` example is removed or
+// refactored.
+pub mod response;
 
 pub mod startup; // TODO(@panhania): Hide this module.
 
@@ -64,14 +66,14 @@ impl From<Sink> for rrg_proto::v2::rrg::Sink {
 /// of data that we already collected in the past.
 ///
 /// [sink]: crate::Sink
-pub struct Parcel<I: crate::action::Item> {
+pub struct Parcel<I: crate::response::Item> {
     /// A sink to deliver the parcel to.
     sink: Sink,
     /// The actual content of the parcel.
     payload: I,
 }
 
-impl<I: crate::action::Item> Parcel<I> {
+impl<I: crate::response::Item> Parcel<I> {
     /// Creates a new parcel from the given `item` addressed to `sink`.
     pub fn new(sink: Sink, item: I) -> Parcel<I> {
         Parcel {
@@ -81,7 +83,7 @@ impl<I: crate::action::Item> Parcel<I> {
     }
 }
 
-impl<I: crate::action::Item> Parcel<I> {
+impl<I: crate::response::Item> Parcel<I> {
 
     /// Sends the parcel message through Fleetspeak to the GRR server.
     ///
@@ -109,8 +111,10 @@ impl<I: crate::action::Item> Parcel<I> {
     }
 }
 
-impl<I: crate::action::Item> From<Parcel<I>> for rrg_proto::v2::rrg::Parcel {
-
+impl<I> From<Parcel<I>> for rrg_proto::v2::rrg::Parcel
+where
+    I: crate::response::Item,
+{
     fn from(parcel: Parcel<I>) -> rrg_proto::v2::rrg::Parcel {
         let payload_proto = parcel.payload.into_proto();
         let payload_any = protobuf::well_known_types::Any::pack(&payload_proto)

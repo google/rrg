@@ -20,8 +20,6 @@ mod error;
 mod fake;
 mod fleetspeak;
 
-use crate::action;
-
 #[cfg(test)]
 pub use crate::session::fake::FakeSession;
 pub use crate::session::fleetspeak::FleetspeakSession;
@@ -35,11 +33,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub trait Session {
     /// Sends a reply to the flow that call the action.
     fn reply<I>(&mut self, item: I) -> Result<()>
-    where I: action::Item + 'static;
+    where I: crate::response::Item + 'static;
 
     /// Sends an item to a particular sink.
     fn send<I>(&mut self, sink: crate::Sink, item: I) -> Result<()>
-    where I: action::Item + 'static;
+    where I: crate::response::Item + 'static;
 
     /// Sends a heartbeat signal to the Fleetspeak process.
     fn heartbeat(&mut self) {
@@ -247,7 +245,7 @@ mod tests {
         }
     }
 
-    impl action::Item for StringResponse {
+    impl crate::response::Item for StringResponse {
 
         type Proto = protobuf::well_known_types::StringValue;
 
