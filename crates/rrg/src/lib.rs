@@ -157,7 +157,7 @@ pub fn listen(args: &Args) {
             }
         };
 
-        session::FleetspeakSession::handle(request);
+        session::FleetspeakSession::dispatch(request);
     }
 }
 
