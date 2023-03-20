@@ -134,13 +134,18 @@ impl Request {
         self.action
     }
 
-    // TODO(@panhania): Add "Errors" section to this doc comment.
     /// Returns the action arguments stored in this request.
     ///
     /// At the moment the request is received we don't know yet what is the type
     /// of the arguments it contains, so we cannot interpret it. Only once the
     /// request is dispatched to an appropriate action handler, we can parse the
     /// arguments to a concrete type.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if it is not possible to interpret
+    /// the serialized request arguments as the expected type (e.g. the message
+    /// is malformed or some of the required fields are not present).
     pub fn args<A>(&self) -> Result<A, ParseArgsError>
     where
         A: Args,
