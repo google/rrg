@@ -268,12 +268,12 @@ fn get_ext_flags_condition(
 fn parse_regex(bytes: &[u8]) -> Result<regex::bytes::Regex, crate::request::ParseArgsError> {
     let str = match std::str::from_utf8(bytes) {
         Ok(v) => Ok(v),
-        Err(e) => Err(crate::request::ParseArgsError::invalid_field(e)),
+        Err(e) => Err(crate::request::ParseArgsError::invalid_field("regex", e)),
     }?;
 
     match regex::bytes::Regex::new(str) {
         Ok(v) => Ok(v),
-        Err(e) => Err(crate::request::ParseArgsError::invalid_field(e)),
+        Err(e) => Err(crate::request::ParseArgsError::invalid_field("regex", e)),
     }
 }
 
@@ -287,7 +287,7 @@ fn constant_literal_to_regex(
     }
     match regex::bytes::Regex::new(&str) {
         Ok(v) => Ok(v),
-        Err(e) => Err(crate::request::ParseArgsError::invalid_field(e)),
+        Err(e) => Err(crate::request::ParseArgsError::invalid_field("literal", e)),
     }
 }
 
@@ -440,7 +440,7 @@ impl crate::request::Args for Request {
             let error = UnsupportedPathTypeError {
                 path_type: proto.get_pathtype(),
             };
-            return Err(crate::request::ParseArgsError::invalid_field(error));
+            return Err(crate::request::ParseArgsError::invalid_field("pathtype", error));
         }
 
         let follow_links = proto.get_follow_links();
@@ -520,7 +520,7 @@ mod tests {
         let err = Request::from_proto(proto).unwrap_err();
 
         match err.kind() {
-            crate::request::ParseArgsErrorKind::InvalidField => {}
+            crate::request::ParseArgsErrorKind::InvalidField("pathtype") => {}
             e @ _ => panic!("Unexpected error type: {:?}", e),
         }
     }
@@ -812,7 +812,7 @@ mod tests {
 
         let err = Request::from_proto(proto).unwrap_err();
 
-        assert!(matches!(err.kind(), crate::request::ParseArgsErrorKind::InvalidField));
+        assert!(matches!(err.kind(), crate::request::ParseArgsErrorKind::InvalidField("regex")));
     }
 
     #[test]

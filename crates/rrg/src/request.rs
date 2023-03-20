@@ -322,13 +322,13 @@ pub struct ParseArgsError {
 
 impl ParseArgsError {
 
-    /// Creates a new error instance caused by some invalid field error.
-    pub fn invalid_field<E>(error: E) -> ParseArgsError
+    /// Creates a new error instance caused by invalid field error.
+    pub fn invalid_field<E>(name: &'static str, error: E) -> ParseArgsError
     where
         E: std::error::Error + Send + Sync + 'static,
     {
         ParseArgsError {
-            kind: ParseArgsErrorKind::InvalidField,
+            kind: ParseArgsErrorKind::InvalidField(name),
             error: Box::new(error),
         }
     }
@@ -344,19 +344,22 @@ impl ParseArgsError {
 pub enum ParseArgsErrorKind {
     /// The serialized message with arguments was impossible to deserialize.
     MalformedBytes,
-    // TODO(panhania@): Augment with field name.
     /// One of the fields of the arguments struct is invalid.
-    InvalidField,
+    InvalidField(&'static str),
 }
 
-impl ParseArgsErrorKind {
+impl std::fmt::Display for ParseArgsErrorKind {
 
-    fn as_str(&self) -> &'static str {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use ParseArgsErrorKind::*;
 
         match *self {
-            MalformedBytes => "malformed protobuf message bytes",
-            InvalidField => "invalid argument field",
+            MalformedBytes => {
+                write!(fmt, "malformed protobuf message bytes")
+            }
+            InvalidField(name) => {
+                write!(fmt, "invalid argument field '{name}'")
+            }
         }
     }
 }
@@ -364,7 +367,7 @@ impl ParseArgsErrorKind {
 impl std::fmt::Display for ParseArgsError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}: {}", self.kind.as_str(), self.error)
+        write!(fmt, "{}: {}", self.kind, self.error)
     }
 }
 

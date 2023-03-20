@@ -198,7 +198,9 @@ impl crate::request::Args for Request {
 
     fn from_proto(mut proto: Self::Proto) -> Result<Request, crate::request::ParseArgsError> {
         let root = rrg_proto::path::from_bytes(proto.take_root())
-            .map_err(crate::request::ParseArgsError::invalid_field)?;
+            .map_err(|error| {
+                crate::request::ParseArgsError::invalid_field("root", error)
+            })?;
 
         Ok(Request {
             root: root,

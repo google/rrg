@@ -169,7 +169,9 @@ impl crate::request::Args for Request {
 
     fn from_proto(mut proto: Self::Proto) -> Result<Self, crate::request::ParseArgsError> {
         let path = proto.take_pathspec().try_into()
-            .map_err(crate::request::ParseArgsError::invalid_field)?;
+            .map_err(|error| {
+                crate::request::ParseArgsError::invalid_field("pathspec", error)
+            })?;
 
         Ok(Request {
             path: path,
