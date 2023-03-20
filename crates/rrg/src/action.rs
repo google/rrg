@@ -131,5 +131,3 @@ where
 {
     Ok(handler(session, request.args()?)?)
 }
-
-// TODO(panhania@): Remove all usages of the `Request` trait and replace it with
