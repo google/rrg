@@ -69,17 +69,16 @@ mod tests {
     #[test]
     fn test_fake_parcel_count() {
 
-        // TODO: Extend this test with more sinks (once we have some more sinks
-        // defined).
-
         fn handle<S: Session>(session: &mut S, _: ()) {
             session.send(Sink::Startup, ()).unwrap();
+            session.send(Sink::Blob, ()).unwrap();
             session.send(Sink::Startup, ()).unwrap();
         }
 
         let mut session = FakeSession::new();
         handle(&mut session, ());
 
+        assert_eq!(session.parcel_count(Sink::Blob), 1);
         assert_eq!(session.parcel_count(Sink::Startup), 2);
     }
 
