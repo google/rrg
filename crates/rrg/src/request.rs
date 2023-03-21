@@ -150,7 +150,12 @@ impl Request {
     where
         A: Args,
     {
-        let args_proto = protobuf::Message::parse_from_bytes(&self.serialized_args[..])?;
+        let args_proto = protobuf::Message::parse_from_bytes(&self.serialized_args[..])
+            .map_err(|error| ParseArgsError {
+                kind: ParseArgsErrorKind::MalformedBytes,
+                error: Box::new(error),
+            })?;
+
         A::from_proto(args_proto)
     }
 
@@ -380,17 +385,5 @@ impl std::error::Error for ParseArgsError {
 
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.error.source()
-    }
-}
-
-// TODO(@panhania): Verify whether we really need this conversion. Other error
-// types seems not to have anything like this.
-impl From<protobuf::ProtobufError> for ParseArgsError {
-
-    fn from(error: protobuf::ProtobufError) -> Self {
-        ParseArgsError {
-            kind: ParseArgsErrorKind::MalformedBytes,
-            error: Box::new(error),
-        }
     }
 }
