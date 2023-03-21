@@ -70,8 +70,6 @@ impl<I: Item> Reply<I> {
     }
 }
 
-// TODO(@panhania): Consider defining an `crate::action::Error` type and make
-// the `Status` type non-generic.
 /// An action execution status message.
 ///
 /// Every action execution should return a status message as the last response
