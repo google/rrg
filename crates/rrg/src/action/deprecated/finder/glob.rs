@@ -7,13 +7,6 @@ use regex::Regex;
 
 /// Converts glob expression into a Rust Regex.
 ///
-/// # Examples
-/// ```
-/// use rrg::action::finder::glob::glob_to_regex;
-///
-/// assert_eq!(glob_to_regex("as*[!12]??").unwrap().as_str(), "^as.*[^12]..$");
-/// ```
-///
 /// This implementation is inspired by CPython code:
 /// https://github.com/python/cpython/blob/2.7/Lib/fnmatch.py
 pub fn glob_to_regex(pat: &str) -> Result<Regex, regex::Error> {

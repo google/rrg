@@ -12,7 +12,7 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use rrg::action::timeline;
+use rrg::action::deprecated::timeline;
 
 /// A binary for the timeline action.
 #[derive(argh::FromArgs)]

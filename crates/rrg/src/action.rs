@@ -15,31 +15,8 @@
 //! instance of the corresponding request type and send some (zero or more)
 //! instances of the corresponding response type.
 
-#[cfg(feature = "action-filesystems")]
-#[cfg(target_os = "linux")]
-pub mod filesystems;
-
-#[cfg(feature = "action-interfaces")]
-#[cfg(target_family = "unix")]
-pub mod interfaces;
-
-#[cfg(feature = "action-listdir")]
-pub mod listdir;
-
-#[cfg(feature = "action-timeline")]
-pub mod timeline;
-
-#[cfg(feature = "action-network")]
-pub mod network;
-
-#[cfg(feature = "action-stat")]
-pub mod stat;
-
-#[cfg(feature = "action-insttime")]
-pub mod insttime;
-
-#[cfg(feature = "action-finder")]
-pub mod finder;
+#[allow(dead_code)]
+pub mod deprecated; // TODO(@panhania): Unexpose this module.
 
 // TODO(@panhania): Hide this module behind a feature.
 pub mod get_system_metadata;

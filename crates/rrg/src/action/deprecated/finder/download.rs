@@ -1,7 +1,7 @@
-use crate::action::finder::chunks::{
+use super::chunks::{
     get_file_chunks, Chunks, GetFileChunksConfig,
 };
-use crate::action::finder::request::{
+use super::request::{
     DownloadActionOptions, HashActionOptions,
 };
 use crate::fs::Entry;

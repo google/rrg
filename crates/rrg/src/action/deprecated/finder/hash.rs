@@ -1,4 +1,4 @@
-use crate::action::finder::request::HashActionOptions;
+use super::request::HashActionOptions;
 use crate::fs::Entry;
 use digest::Digest as _;
 use log::warn;
