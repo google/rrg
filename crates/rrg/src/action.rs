@@ -44,51 +44,6 @@ where
             handle(session, request, self::get_system_metadata::handle)
         }
     }
-
-    /*
-    match request.action {
-        #[cfg(feature = "action-listdir")]
-        "ListDirectory" => {
-            handle(session, request, self::listdir::handle)
-        }
-
-        #[cfg(feature = "action-timeline")]
-        "Timeline" => {
-            handle(session, request, self::timeline::handle)
-        }
-
-        #[cfg(feature = "action-network")]
-        "ListNetworkConnections" => {
-            handle(session, request, self::network::handle)
-        }
-
-        #[cfg(feature = "action-stat")]
-        "GetFileStat" => {
-            handle(session, request, self::stat::handle)
-        }
-
-        #[cfg(feature = "action-insttime")]
-        "GetInstallDate" => {
-            handle(session, request, self::insttime::handle)
-        }
-
-        #[cfg(feature = "action-interfaces")]
-        #[cfg(target_family = "unix")]
-        "EnumerateInterfaces" => {
-            handle(session, request, self::interfaces::handle)
-        }
-
-        #[cfg(feature = "action-filesystems")]
-        #[cfg(target_os = "linux")]
-        "EnumerateFilesystems" => {
-            handle(session, request, self::filesystems::handle)
-        }
-
-        action_name => {
-            return Err(error::UnknownActionError::new(action_name).into())
-        }
-    }
-    */
 }
 
 /// Handles a `request` using the specified `handler`.
