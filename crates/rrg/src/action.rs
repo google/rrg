@@ -18,7 +18,7 @@
 #[allow(dead_code)]
 pub mod deprecated; // TODO(@panhania): Unexpose this module.
 
-// TODO(@panhania): Hide this module behind a feature.
+#[cfg(feature = "action-get_system_metadata")]
 pub mod get_system_metadata;
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -40,6 +40,7 @@ where
     use crate::request::Action::*;
 
     match request.action() {
+        #[cfg(feature = "action-get_system_metadata")]
         GetSystemMetadata => {
             handle(session, request, self::get_system_metadata::handle)
         }

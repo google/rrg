@@ -16,6 +16,7 @@ use rrg_macro::warn;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Action {
     /// Get metadata about the operating system and the machine.
+    #[cfg(feature = "action-get_system_metadata")]
     GetSystemMetadata,
 }
 
@@ -78,6 +79,7 @@ impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
         use rrg_proto::v2::rrg::Action::*;
 
         match proto {
+            #[cfg(feature = "action-get_system_metadata")]
             GET_SYSTEM_METADATA => Ok(Action::GetSystemMetadata),
             _ => {
                 let val = protobuf::ProtobufEnum::value(&proto);
