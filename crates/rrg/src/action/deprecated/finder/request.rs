@@ -7,7 +7,6 @@
 //! a function converting proto format of the request
 //! `rrg_proto::FileFinderArgs` to the internal format.
 
-use crate::session::{time_from_micros, RegexParseError};
 use log::info;
 use protobuf::ProtobufEnum;
 use std::fmt::Write;
@@ -124,7 +123,11 @@ impl From<rrg_proto::flows::FileFinderStatActionOptions> for StatActionOptions {
     }
 }
 
-fn into_action(proto: rrg_proto::flows::FileFinderAction) -> Result<Option<Action>, crate::action::ParseArgsError> {
+fn time_from_micros(micros: u64) -> std::time::SystemTime {
+    std::time::UNIX_EPOCH + std::time::Duration::from_micros(micros)
+}
+
+fn into_action(proto: rrg_proto::flows::FileFinderAction) -> Result<Option<Action>, crate::request::ParseArgsError> {
     // `FileFinderAction::action_type` defines which action will be performed.
     // Only options from the selected action are read.
     use rrg_proto::flows::FileFinderAction_Action::*;
@@ -136,7 +139,7 @@ fn into_action(proto: rrg_proto::flows::FileFinderAction) -> Result<Option<Actio
 }
 
 impl TryFrom<rrg_proto::flows::FileFinderHashActionOptions> for Action {
-    type Error = crate::action::ParseArgsError;
+    type Error = crate::request::ParseArgsError;
 
     fn try_from(
         proto: rrg_proto::flows::FileFinderHashActionOptions,
@@ -149,7 +152,7 @@ impl TryFrom<rrg_proto::flows::FileFinderHashActionOptions> for Action {
 }
 
 impl TryFrom<rrg_proto::flows::FileFinderDownloadActionOptions> for Action {
-    type Error = crate::action::ParseArgsError;
+    type Error = crate::request::ParseArgsError;
 
     fn try_from(
         proto: rrg_proto::flows::FileFinderDownloadActionOptions,
@@ -165,17 +168,15 @@ impl TryFrom<rrg_proto::flows::FileFinderDownloadActionOptions> for Action {
 
 fn get_modification_time_condition(
     proto: &rrg_proto::flows::FileFinderModificationTimeCondition,
-) -> Result<Option<Condition>, crate::action::ParseArgsError> {
+) -> Result<Option<Condition>, crate::request::ParseArgsError> {
     let min = if proto.has_min_last_modified_time() {
-        Some(time_from_micros(proto.get_min_last_modified_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_min_last_modified_time()))
     } else {
         None
     };
 
     let max = if proto.has_max_last_modified_time() {
-        Some(time_from_micros(proto.get_max_last_modified_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_max_last_modified_time()))
     } else {
         None
     };
@@ -188,17 +189,15 @@ fn get_modification_time_condition(
 
 fn get_access_time_condition(
     proto: &rrg_proto::flows::FileFinderAccessTimeCondition,
-) -> Result<Option<Condition>, crate::action::ParseArgsError> {
+) -> Result<Option<Condition>, crate::request::ParseArgsError> {
     let min = if proto.has_min_last_access_time() {
-        Some(time_from_micros(proto.get_min_last_access_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_min_last_access_time()))
     } else {
         None
     };
 
     let max = if proto.has_max_last_access_time() {
-        Some(time_from_micros(proto.get_max_last_access_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_max_last_access_time()))
     } else {
         None
     };
@@ -211,17 +210,15 @@ fn get_access_time_condition(
 
 fn get_inode_change_time_condition(
     proto: &rrg_proto::flows::FileFinderInodeChangeTimeCondition,
-) -> Result<Option<Condition>, crate::action::ParseArgsError> {
+) -> Result<Option<Condition>, crate::request::ParseArgsError> {
     let min = if proto.has_min_last_inode_change_time() {
-        Some(time_from_micros(proto.get_min_last_inode_change_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_min_last_inode_change_time()))
     } else {
         None
     };
 
     let max = if proto.has_max_last_inode_change_time() {
-        Some(time_from_micros(proto.get_max_last_inode_change_time())
-            .map_err(crate::action::ParseArgsError::invalid_field)?)
+        Some(time_from_micros(proto.get_max_last_inode_change_time()))
     } else {
         None
     };
@@ -268,24 +265,21 @@ fn get_ext_flags_condition(
     None
 }
 
-fn parse_regex(bytes: &[u8]) -> Result<regex::bytes::Regex, crate::action::ParseArgsError> {
+fn parse_regex(bytes: &[u8]) -> Result<regex::bytes::Regex, crate::request::ParseArgsError> {
     let str = match std::str::from_utf8(bytes) {
         Ok(v) => Ok(v),
-        Err(e) => Err(crate::action::ParseArgsError::invalid_field(e)),
+        Err(e) => Err(crate::request::ParseArgsError::invalid_field("regex", e)),
     }?;
 
     match regex::bytes::Regex::new(str) {
         Ok(v) => Ok(v),
-        Err(e) => Err(crate::action::ParseArgsError::invalid_field(RegexParseError {
-            raw_data: bytes.to_owned(),
-            error: e,
-        })),
+        Err(e) => Err(crate::request::ParseArgsError::invalid_field("regex", e)),
     }
 }
 
 fn constant_literal_to_regex(
     bytes: &[u8],
-) -> Result<regex::bytes::Regex, crate::action::ParseArgsError> {
+) -> Result<regex::bytes::Regex, crate::request::ParseArgsError> {
     let mut str = String::new();
     for b in bytes {
         // Unwrap used on a string which can't return I/O error.
@@ -293,16 +287,13 @@ fn constant_literal_to_regex(
     }
     match regex::bytes::Regex::new(&str) {
         Ok(v) => Ok(v),
-        Err(e) => Err(crate::action::ParseArgsError::invalid_field(RegexParseError {
-            raw_data: bytes.to_owned(),
-            error: e,
-        })),
+        Err(e) => Err(crate::request::ParseArgsError::invalid_field("literal", e)),
     }
 }
 
 fn get_contents_regex_match_condition(
     proto: &rrg_proto::flows::FileFinderContentsRegexMatchCondition,
-) -> Result<Option<ContentsMatchCondition>, crate::action::ParseArgsError> {
+) -> Result<Option<ContentsMatchCondition>, crate::request::ParseArgsError> {
     let bytes_before = proto.get_bytes_before() as u64;
     let bytes_after = proto.get_bytes_after() as u64;
     let start_offset = proto.get_start_offset();
@@ -334,7 +325,7 @@ fn get_contents_regex_match_condition(
 /// the same semantics.
 fn get_contents_literal_match_condition(
     proto: &rrg_proto::flows::FileFinderContentsLiteralMatchCondition,
-) -> Result<Option<ContentsMatchCondition>, crate::action::ParseArgsError> {
+) -> Result<Option<ContentsMatchCondition>, crate::request::ParseArgsError> {
     let bytes_before = proto.get_bytes_before() as u64;
     let bytes_after = proto.get_bytes_after() as u64;
     let start_offset = proto.get_start_offset();
@@ -364,7 +355,7 @@ fn get_contents_literal_match_condition(
 
 fn get_conditions(
     proto: &[rrg_proto::flows::FileFinderCondition],
-) -> Result<Vec<Condition>, crate::action::ParseArgsError> {
+) -> Result<Vec<Condition>, crate::request::ParseArgsError> {
     let mut conditions = vec![];
     for proto_condition in proto {
         conditions.extend(get_condition(proto_condition)?);
@@ -374,7 +365,7 @@ fn get_conditions(
 
 fn get_condition(
     proto: &rrg_proto::flows::FileFinderCondition,
-) -> Result<Option<Condition>, crate::action::ParseArgsError> {
+) -> Result<Option<Condition>, crate::request::ParseArgsError> {
     use rrg_proto::flows::FileFinderCondition_Type::*;
     Ok(match proto.get_condition_type() {
         MODIFICATION_TIME => {
@@ -395,7 +386,7 @@ fn get_condition(
 
 fn get_contents_match_conditions(
     proto: &[rrg_proto::flows::FileFinderCondition],
-) -> Result<Vec<ContentsMatchCondition>, crate::action::ParseArgsError> {
+) -> Result<Vec<ContentsMatchCondition>, crate::request::ParseArgsError> {
     let mut conditions = vec![];
     for proto_condition in proto {
         conditions.extend(get_contents_match_condition(proto_condition)?);
@@ -406,7 +397,7 @@ fn get_contents_match_conditions(
 // TODO: maybe it can return Option instead of Vec now
 fn get_contents_match_condition(
     proto: &rrg_proto::flows::FileFinderCondition,
-) -> Result<Option<ContentsMatchCondition>, crate::action::ParseArgsError> {
+) -> Result<Option<ContentsMatchCondition>, crate::request::ParseArgsError> {
     if !proto.has_condition_type() {
         return Ok(None);
     }
@@ -440,16 +431,16 @@ impl std::fmt::Display for UnsupportedPathTypeError {
 impl std::error::Error for UnsupportedPathTypeError {
 }
 
-impl super::super::Args for Request {
+impl crate::request::Args for Request {
     type Proto = rrg_proto::flows::FileFinderArgs;
 
-    fn from_proto(proto: rrg_proto::flows::FileFinderArgs) -> Result<Request, crate::action::ParseArgsError> {
+    fn from_proto(proto: rrg_proto::flows::FileFinderArgs) -> Result<Request, crate::request::ParseArgsError> {
         info!("File Finder: proto request: {:#?}", &proto);
         if proto.get_pathtype() != rrg_proto::jobs::PathSpec_PathType::OS {
             let error = UnsupportedPathTypeError {
                 path_type: proto.get_pathtype(),
             };
-            return Err(crate::action::ParseArgsError::invalid_field(error));
+            return Err(crate::request::ParseArgsError::invalid_field("pathtype", error));
         }
 
         let follow_links = proto.get_follow_links();
@@ -478,7 +469,7 @@ impl super::super::Args for Request {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::action::Args as _;
+    use crate::request::Args as _;
 
     #[test]
     fn test_empty_request() {
@@ -529,7 +520,7 @@ mod tests {
         let err = Request::from_proto(proto).unwrap_err();
 
         match err.kind() {
-            crate::action::ParseArgsErrorKind::InvalidField => {}
+            crate::request::ParseArgsErrorKind::InvalidField("pathtype") => {}
             e @ _ => panic!("Unexpected error type: {:?}", e),
         }
     }
@@ -674,8 +665,8 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::ModificationTime { min, max } => {
-                assert_eq!(min.unwrap(), time_from_micros(123).unwrap());
-                assert_eq!(max.unwrap(), time_from_micros(234).unwrap());
+                assert_eq!(min.unwrap(), time_from_micros(123));
+                assert_eq!(max.unwrap(), time_from_micros(234));
             }
             v @ _ => panic!("Unexpected condition type: {:?}", v),
         }
@@ -696,8 +687,8 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::AccessTime { min, max } => {
-                assert_eq!(min.unwrap(), time_from_micros(123).unwrap());
-                assert_eq!(max.unwrap(), time_from_micros(234).unwrap());
+                assert_eq!(min.unwrap(), time_from_micros(123));
+                assert_eq!(max.unwrap(), time_from_micros(234));
             }
             v @ _ => panic!("Unexpected condition type: {:?}", v),
         }
@@ -718,8 +709,8 @@ mod tests {
         assert_eq!(request.conditions.len(), 1);
         match request.conditions.first().unwrap() {
             Condition::InodeChangeTime { min, max } => {
-                assert_eq!(min.unwrap(), time_from_micros(123).unwrap());
-                assert_eq!(max.unwrap(), time_from_micros(234).unwrap());
+                assert_eq!(min.unwrap(), time_from_micros(123));
+                assert_eq!(max.unwrap(), time_from_micros(234));
             }
             v @ _ => panic!("Unexpected condition type: {:?}", v),
         }
@@ -821,7 +812,7 @@ mod tests {
 
         let err = Request::from_proto(proto).unwrap_err();
 
-        assert!(matches!(err.kind(), crate::action::ParseArgsErrorKind::InvalidField));
+        assert!(matches!(err.kind(), crate::request::ParseArgsErrorKind::InvalidField("regex")));
     }
 
     #[test]

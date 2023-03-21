@@ -3,21 +3,13 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use crate::session::RegexParseError;
 use regex::Regex;
 
 /// Converts glob expression into a Rust Regex.
 ///
-/// # Examples
-/// ```
-/// use rrg::action::finder::glob::glob_to_regex;
-///
-/// assert_eq!(glob_to_regex("as*[!12]??").unwrap().as_str(), "^as.*[^12]..$");
-/// ```
-///
 /// This implementation is inspired by CPython code:
 /// https://github.com/python/cpython/blob/2.7/Lib/fnmatch.py
-pub fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
+pub fn glob_to_regex(pat: &str) -> Result<Regex, regex::Error> {
     let chars: Vec<char> = pat.chars().collect();
     let mut i: usize = 0;
     let n: usize = chars.len();
@@ -63,11 +55,7 @@ pub fn glob_to_regex(pat: &str) -> Result<Regex, RegexParseError> {
     // Resulting regex is supposed to perform full matches on the text.
     res = format!("^{}$", res);
 
-    match Regex::new(&res) {
-        Ok(v) => Ok(v),
-        Err(e) =>
-            Err(RegexParseError{raw_data: res.bytes().collect(), error: e})
-    }
+    Regex::new(&res)
 }
 
 #[cfg(test)]

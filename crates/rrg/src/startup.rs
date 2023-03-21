@@ -3,108 +3,142 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-//! A handler and associated types for the startup action.
-//!
-//! The startup action collects basic information about the system (e.g. its
-//! boot time) and metadata about the agent (e.g. it's name and version). It is
-//! special in a sense that generally it should be not invoked by flows, but be
-//! called explicitly during agent startup.
+// TODO(panhania): Add support for binary paths in the `Metadata` object.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+/// Sends a system message with startup information to the GRR server.
+pub fn startup() -> Result<(), fleetspeak::WriteError> {
+    let startup = Startup::now();
 
-use log::error;
-
-use crate::metadata::{Metadata};
-use crate::session;
-
-/// A response type for the startup action.
-pub struct Response {
-    /// Time of last system boot.
-    boot_time: SystemTime,
-    /// Metadata about the RRG agent.
-    metadata: Metadata,
+    crate::response::Parcel::new(crate::Sink::Blob, startup)
+        .send_unaccounted()
 }
 
-impl Response {
+/// Information about the agent startup.
+pub struct Startup {
+    /// Metadata about the agent that has been started.
+    pub metadata: Metadata,
+    /// Value of command-line arguments that the agent was invoked with.
+    pub args: Vec<String>,
+    /// Time at which the agent was started.
+    pub agent_started: std::time::SystemTime,
+    // TOOD(@panhania): Add support for the `os_booted` field.
+}
 
-    /// Build a response object with startup information filled-in.
-    fn build() -> Response {
-        Response {
-            boot_time: boot_time(),
+impl Startup {
+
+    /// Creates a startup information as of now.
+    pub fn now() -> Startup {
+        Startup {
             metadata: Metadata::from_cargo(),
+            args: std::env::args().collect(),
+            agent_started: std::time::SystemTime::now(),
         }
     }
 }
 
-/// Sends startup information to the server.
-pub fn send() -> session::Result<()> {
-    let sink = crate::message::Sink::TRANSFER_STORE;
-    crate::message::Parcel::new(sink, Response::build()).send();
+impl crate::response::Item for Startup {
+    type Proto = rrg_proto::v2::startup::Startup;
 
-    Ok(())
-}
-
-/// Returns information about the system boot time.
-fn boot_time() -> SystemTime {
-    // TODO: Make `sysinfo` or another crate not an optional dependency.
-
-    #[cfg(feature = "dep:sysinfo")]
-    {
-        use sysinfo::{System, SystemExt};
-        let boot_time_secs = System::new().get_boot_time();
-
-        UNIX_EPOCH + Duration::from_secs(boot_time_secs)
-    }
-
-    #[cfg(not(feature = "dep:sysinfo"))]
-    {
-        UNIX_EPOCH
+    fn into_proto(self) -> rrg_proto::v2::startup::Startup {
+        self.into()
     }
 }
 
-impl crate::action::Item for Response {
+/// A type that holds metadata about the RRG agent.
+pub struct Metadata {
+    /// Name of the RRG agent.
+    pub name: String,
+    /// Version of the RRG agent.
+    pub version: Version,
+}
 
-    const RDF_NAME: &'static str = "StartupInfo";
+impl Metadata {
 
-    type Proto = rrg_proto::jobs::StartupInfo;
+    /// Constructs metadata object from Cargo information.
+    ///
+    /// This function assumes that are relevant crate information is correctly
+    /// specified in the `Cargo.toml` file.
+    pub fn from_cargo() -> Metadata {
+        Metadata {
+            name: String::from(env!("CARGO_PKG_NAME")),
+            version: Version::from_cargo(),
+        }
+    }
+}
 
-    fn into_proto(self) -> rrg_proto::jobs::StartupInfo {
+/// A type for representing version metadata.
+pub struct Version {
+    /// Major version of the RRG agent (`x` in `x.y.z.r`).
+    pub major: u8,
+    /// Minor version of the RRG agent (`y` in `x.y.z.r`).
+    pub minor: u8,
+    /// Patch version of the RRG agent (`z` in `x.y.z.r`).
+    pub patch: u8,
+    /// Revision version of the RRG agent (`r` in `x.y.z.r`).
+    pub revision: u8,
+}
 
-        let mut proto = rrg_proto::jobs::StartupInfo::new();
-        proto.set_client_info(self.metadata.into());
+impl Version {
 
-        match rrg_proto::micros(self.boot_time) {
-            Ok(boot_time_micros) => {
-                proto.set_boot_time(boot_time_micros);
-            }
-            Err(error) => {
-                error!("failed to convert boot time: {}", error);
-            }
-        };
+    /// Constructs version metadata from Cargo information.
+    ///
+    /// This function assumes that are relevant crate information is correctly
+    /// specified in the `Cargo.toml` file.
+    pub fn from_cargo() -> Version {
+        Version {
+            major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap_or(0),
+            minor: env!("CARGO_PKG_VERSION_MINOR").parse().unwrap_or(0),
+            patch: env!("CARGO_PKG_VERSION_PATCH").parse().unwrap_or(0),
+            revision: env!("CARGO_PKG_VERSION_PRE").parse().unwrap_or(0),
+        }
+    }
+}
+
+impl Into<rrg_proto::v2::startup::Startup> for Startup {
+
+    fn into(self) -> rrg_proto::v2::startup::Startup {
+        let mut proto = rrg_proto::v2::startup::Startup::new();
+        proto.set_metadata(self.metadata.into());
+        proto.set_args(self.args.into());
+
+        // TODO(panhania@): Upgrade to version 3.2.0 of `protobuf` that supports
+        // `From<SystemTime>` conversion of Protocol Buffers `Timestamp`.
+        let agent_started_since_epoch = self.agent_started
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap();
+
+        let mut agent_startup_time = protobuf::well_known_types::Timestamp::new();
+        agent_startup_time
+            .set_nanos(agent_started_since_epoch.subsec_nanos() as i32);
+        agent_startup_time
+            .set_seconds(agent_started_since_epoch.as_secs() as i64);
+        proto.set_agent_startup_time(agent_startup_time);
 
         proto
     }
 }
 
-#[cfg(test)]
-mod tests {
+impl Into<rrg_proto::v2::startup::Metadata> for Metadata {
 
-    use super::*;
+    fn into(self) -> rrg_proto::v2::startup::Metadata {
+        let mut proto = rrg_proto::v2::startup::Metadata::new();
+        proto.set_name(self.name);
+        // TODO(@panhania): Add support for remaining fields.
+        proto.set_version(self.version.into());
 
-    // TODO: Delete this once `sysinfo` (or a replacement) is made a mandatory
-    // dependency.
-    #[cfg(feature = "dep:sysinfo")]
-    #[test]
-    fn test_boot_time() {
-        let response = Response::build();
-        assert!(response.boot_time > std::time::UNIX_EPOCH);
-        assert!(response.boot_time < std::time::SystemTime::now());
+        proto
     }
+}
 
-    #[test]
-    fn test_metadata() {
-        let response = Response::build();
-        assert!(response.metadata.version.as_numeric() > 0);
-        assert_eq!(response.metadata.name, "rrg");
+impl Into<rrg_proto::v2::startup::Version> for Version {
+
+    fn into(self) -> rrg_proto::v2::startup::Version {
+        let mut proto = rrg_proto::v2::startup::Version::new();
+        proto.set_major(u32::from(self.major));
+        proto.set_minor(u32::from(self.minor));
+        proto.set_patch(u32::from(self.patch));
+        proto.set_revision(u32::from(self.revision));
+
+        proto
     }
 }

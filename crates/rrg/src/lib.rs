@@ -9,11 +9,15 @@ pub mod action;
 pub mod fs;
 pub mod io;
 pub mod log;
-pub mod message;
-pub mod metadata;
 pub mod args;
 pub mod session;
-pub mod startup;
+
+mod request;
+// TOOD(@panhania): Hide this module once the `timeline` example is removed or
+// refactored.
+pub mod response;
+
+pub mod startup; // TODO(@panhania): Hide this module.
 
 // Consider moving these to a separate submodule.
 #[cfg(feature = "action-timeline")]
@@ -21,7 +25,16 @@ pub mod chunked;
 #[cfg(feature = "action-timeline")]
 pub mod gzchunked;
 
-use crate::args::{Args};
+pub use request::{Request, RequestId};
+pub use response::{ResponseBuilder, ResponseId, Sink};
+
+/// Initializes the RRG subsystems.
+///
+/// This function should be called only once (at the very beginning of the
+/// process lifetime).
+pub fn init(args: &crate::args::Args) {
+    log::init(args)
+}
 
 /// Enters the agent's main loop and waits for messages.
 ///
@@ -35,16 +48,33 @@ use crate::args::{Args};
 /// (e.g. the Fleetspeak connection has been broken). All non-critical errors
 /// are going to be handled carefully, notifying the server about the failure if
 /// appropriate.
-pub fn listen(args: &Args) {
+pub fn listen(args: &crate::args::Args) {
     loop {
-        let request = match crate::message::Request::receive(args.heartbeat_rate) {
+        let request = match Request::receive(args.heartbeat_rate) {
             Ok(request) => request,
             Err(error) => {
-                rrg_macro::error!("failed to obtain a request: {}", error);
+                rrg_macro::error!("failed to receive a request: {}", error);
                 continue
             }
         };
 
-        session::FleetspeakSession::handle(request);
+        session::FleetspeakSession::dispatch(request);
     }
+}
+
+/// Sends a system message with startup information to the GRR server.
+///
+/// This function should be called only once at the beginning of RRG's process
+/// lifetime. It communicates to the GRR server that the agent has been started
+/// and sends some basic information like agent metadata.
+///
+/// # Errors
+///
+/// In case we fail to send startup information, this function will report an
+/// error. Note that by "send" we just mean pushing the message to Fleetspeak,
+/// whether Fleetspeak manages to reach the GRR server with it is a separate
+/// issue. Failure to push the message to Fleetspeak means that the pipe used
+/// for communication is most likely broken and we should quit.
+pub fn startup() -> Result<(), fleetspeak::WriteError> {
+    startup::startup()
 }

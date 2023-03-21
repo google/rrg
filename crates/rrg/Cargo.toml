@@ -7,6 +7,9 @@ edition.workspace = true
 
 [features]
 default = [
+    "action-get_system_metadata",
+
+    # These actions are deprecated (awaiting migration to the new protocol).
     "action-insttime",
     "action-interfaces",
     "action-filesystems",
@@ -18,6 +21,9 @@ default = [
     "action-timeline",
 ]
 
+action-get_system_metadata = []
+
+# These actions are deprecated (awaiting migration to the new protocol).
 action-insttime = []
 action-interfaces = []
 action-filesystems = []

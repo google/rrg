@@ -34,9 +34,7 @@ where
     Ok(())
 }
 
-impl super::Item for Item {
-
-    const RDF_NAME: &'static str = "Interface";
+impl crate::response::Item for Item {
 
     type Proto = rrg_proto::jobs::Interface;
 

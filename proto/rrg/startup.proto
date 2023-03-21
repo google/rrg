@@ -1,0 +1,46 @@
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style license that can be found
+// in the LICENSE file or at https://opensource.org/licenses/MIT.
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+package rrg.startup;
+
+// Information about the agent startup.
+//
+// This message should be sent to the `STARTUP` sink. It should be sent only
+// once: at the moment the agent process is started.
+message Startup {
+    // Metadata about the agent that has been started.
+    Metadata metadata = 1;
+    // Value of the command-line arguments the agent was invoked with.
+    repeated string args = 2;
+    // Time at which the agent was started.
+    google.protobuf.Timestamp agent_startup_time = 3;
+    // Time at which the operating system booted.
+    google.protobuf.Timestamp os_boot_time = 4;
+}
+
+// Metadata about the RRG agent.
+message Metadata {
+    // Name of the agent (should always be "RRG").
+    string name = 1;
+    // Version of the agent.
+    Version version = 3;
+    // The time at which the agent executable was built.
+    google.protobuf.Timestamp build_time = 4;
+}
+
+// Descriptor of the version quadruple.
+message Version {
+    // Major component of the version (`x` in `x.y.z.r`).
+    uint32 major = 1;
+    // Minor component of the version (`y` in `x.y.z.r`).
+    uint32 minor = 2;
+    // Patch component of the version (`z` in `x.y.z.r`).
+    uint32 patch = 3;
+    // Revision component of the version (`r` in `x.y.z.r`).
+    uint32 revision = 4;
+}

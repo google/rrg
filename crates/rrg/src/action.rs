@@ -15,38 +15,11 @@
 //! instance of the corresponding request type and send some (zero or more)
 //! instances of the corresponding response type.
 
-mod error;
+#[allow(dead_code)]
+pub mod deprecated; // TODO(@panhania): Unexpose this module.
 
-#[cfg(feature = "action-filesystems")]
-#[cfg(target_os = "linux")]
-pub mod filesystems;
-
-#[cfg(feature = "action-interfaces")]
-#[cfg(target_family = "unix")]
-pub mod interfaces;
-
-#[cfg(feature = "action-metadata")]
-pub mod metadata;
-
-#[cfg(feature = "action-listdir")]
-pub mod listdir;
-
-#[cfg(feature = "action-timeline")]
-pub mod timeline;
-
-#[cfg(feature = "action-network")]
-pub mod network;
-
-#[cfg(feature = "action-stat")]
-pub mod stat;
-
-#[cfg(feature = "action-insttime")]
-pub mod insttime;
-
-#[cfg(feature = "action-finder")]
-pub mod finder;
-
-pub use error::{ParseArgsError, ParseArgsErrorKind, DispatchError};
+#[cfg(feature = "action-get_system_metadata")]
+pub mod get_system_metadata;
 
 /// Dispatches the given `request` to an appropriate action handler.
 ///
@@ -60,55 +33,16 @@ pub use error::{ParseArgsError, ParseArgsErrorKind, DispatchError};
 ///
 /// It will also error out if the action execution itself fails for whatever
 /// reason.
-pub fn dispatch<'s, S>(session: &mut S, request: crate::message::Request) -> Result<(), DispatchError>
+pub fn dispatch<'s, S>(session: &mut S, request: crate::Request) -> Result<(), crate::session::Error>
 where
     S: crate::session::Session,
 {
-    match request.action_name() {
-        #[cfg(feature = "action-metadata")]
-        "GetClientInfo" => {
-            handle(session, request, self::metadata::handle)
-        }
+    use crate::request::Action::*;
 
-        #[cfg(feature = "action-listdir")]
-        "ListDirectory" => {
-            handle(session, request, self::listdir::handle)
-        }
-
-        #[cfg(feature = "action-timeline")]
-        "Timeline" => {
-            handle(session, request, self::timeline::handle)
-        }
-
-        #[cfg(feature = "action-network")]
-        "ListNetworkConnections" => {
-            handle(session, request, self::network::handle)
-        }
-
-        #[cfg(feature = "action-stat")]
-        "GetFileStat" => {
-            handle(session, request, self::stat::handle)
-        }
-
-        #[cfg(feature = "action-insttime")]
-        "GetInstallDate" => {
-            handle(session, request, self::insttime::handle)
-        }
-
-        #[cfg(feature = "action-interfaces")]
-        #[cfg(target_family = "unix")]
-        "EnumerateInterfaces" => {
-            handle(session, request, self::interfaces::handle)
-        }
-
-        #[cfg(feature = "action-filesystems")]
-        #[cfg(target_os = "linux")]
-        "EnumerateFilesystems" => {
-            handle(session, request, self::filesystems::handle)
-        }
-
-        action_name => {
-            return Err(error::UnknownActionError::new(action_name).into())
+    match request.action() {
+        #[cfg(feature = "action-get_system_metadata")]
+        GetSystemMetadata => {
+            handle(session, request, self::get_system_metadata::handle)
         }
     }
 }
@@ -122,57 +56,11 @@ where
 ///
 /// This function will return an error if the request arguments cannot be parsed
 /// for the specific action or if the action execution fails.
-fn handle<S, A, H>(session: &mut S, request: crate::message::Request, handler: H) -> Result<(), DispatchError>
+fn handle<S, A, H>(session: &mut S, request: crate::Request, handler: H) -> crate::session::Result<()>
 where
     S: crate::session::Session,
-    A: Args,
+    A: crate::request::Args,
     H: FnOnce(&mut S, A) -> crate::session::Result<()>,
 {
-    let args = request.parse_args()?;
-    Ok(handler(session, args)?)
-}
-
-// TODO(panhania@): Remove all usages of the `Request` trait and replace it with
-// `Args`.
-pub trait Args: Sized {
-    /// Low-level Protocol Buffers type representing the action arguments.
-    type Proto: protobuf::Message + Default;
-
-    /// Converts a low-level type to a structured request arguments.
-    fn from_proto(proto: Self::Proto) -> Result<Self, ParseArgsError>;
-}
-
-impl Args for () {
-
-    type Proto = protobuf::well_known_types::Empty;
-
-    fn from_proto(_: protobuf::well_known_types::Empty) -> Result<(), ParseArgsError> {
-        Ok(())
-    }
-}
-
-pub trait Item: Sized {
-    /// Low-level Protocol Buffers type representing the action results.
-    type Proto: protobuf::Message + Default;
-
-    /// A name of the corresponding RDF class in GRR.
-    const RDF_NAME: &'static str;
-
-    /// Converts an action result ot its low-level representation.
-    fn into_proto(self) -> Self::Proto;
-}
-
-impl Item for () {
-
-    // This implementation is intended to be used only in tests and we do not
-    // really care about the `RDF_NAME` field there. And since GRR does not have
-    // any RDF wrapper for empty type (except maybe `EmptyFlowArgs`, but this is
-    // semantically different), we just leave it blank.
-    const RDF_NAME: &'static str = "";
-
-    type Proto = protobuf::well_known_types::Empty;
-
-    fn into_proto(self) -> protobuf::well_known_types::Empty {
-        protobuf::well_known_types::Empty::new()
-    }
+    Ok(handler(session, request.args()?)?)
 }

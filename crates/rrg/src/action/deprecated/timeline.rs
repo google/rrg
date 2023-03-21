@@ -183,7 +183,7 @@ where
         let chunk = Chunk::from_bytes(part);
         let chunk_id = chunk.id();
 
-        session.send(crate::message::Sink::TRANSFER_STORE, chunk)?;
+        session.send(crate::Sink::Blob, chunk)?;
         response.chunk_ids.push(chunk_id);
     }
 
@@ -192,13 +192,15 @@ where
     Ok(())
 }
 
-impl super::Args for Request {
+impl crate::request::Args for Request {
 
     type Proto = rrg_proto::timeline::TimelineArgs;
 
-    fn from_proto(mut proto: Self::Proto) -> Result<Request, super::ParseArgsError> {
+    fn from_proto(mut proto: Self::Proto) -> Result<Request, crate::request::ParseArgsError> {
         let root = rrg_proto::path::from_bytes(proto.take_root())
-            .map_err(crate::action::ParseArgsError::invalid_field)?;
+            .map_err(|error| {
+                crate::request::ParseArgsError::invalid_field("root", error)
+            })?;
 
         Ok(Request {
             root: root,
@@ -206,9 +208,7 @@ impl super::Args for Request {
     }
 }
 
-impl super::Item for Response {
-
-    const RDF_NAME: &'static str = "TimelineResult";
+impl crate::response::Item for Response {
 
     type Proto = rrg_proto::timeline::TimelineResult;
 
@@ -225,9 +225,7 @@ impl super::Item for Response {
     }
 }
 
-impl crate::action::Item for Chunk {
-
-    const RDF_NAME: &'static str = "DataBlob";
+impl crate::response::Item for Chunk {
 
     type Proto = rrg_proto::jobs::DataBlob;
 
@@ -447,13 +445,12 @@ mod tests {
     /// Retrieves timeline entries from the given session object.
     fn entries(session: &Session) -> Vec<rrg_proto::timeline::TimelineEntry> {
         use std::collections::HashMap;
-        use crate::message::Sink;
 
-        let chunk_count = session.parcel_count(Sink::TRANSFER_STORE);
+        let chunk_count = session.parcel_count(crate::Sink::Blob);
         assert_eq!(session.reply_count(), 1);
         assert_eq!(session.reply::<Response>(0).chunk_ids.len(), chunk_count);
 
-        let chunks_by_id = session.parcels::<Chunk>(Sink::TRANSFER_STORE)
+        let chunks_by_id = session.parcels::<Chunk>(crate::Sink::Blob)
             .map(|chunk| (chunk.id(), chunk))
             .collect::<HashMap<_, _>>();
 

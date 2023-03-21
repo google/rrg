@@ -106,20 +106,18 @@ where
     Ok(())
 }
 
-impl super::Args for Args {
+impl crate::request::Args for Args {
 
     type Proto = rrg_proto::flows::ListNetworkConnectionsArgs;
 
-    fn from_proto(proto: Self::Proto) -> Result<Args, crate::action::ParseArgsError> {
+    fn from_proto(proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         Ok(Args {
             listening_only: proto.get_listening_only(),
         })
     }
 }
 
-impl super::Item for Item {
-
-    const RDF_NAME: &'static str = "NetworkConnection";
+impl crate::response::Item for Item {
 
     type Proto = rrg_proto::sysinfo::NetworkConnection;
 

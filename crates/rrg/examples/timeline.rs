@@ -12,7 +12,7 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use rrg::action::timeline;
+use rrg::action::deprecated::timeline;
 
 /// A binary for the timeline action.
 #[derive(argh::FromArgs)]
@@ -60,7 +60,7 @@ impl rrg::session::Session for Session {
 
     fn reply<I>(&mut self, item: I) -> rrg::session::Result<()>
     where
-        I: rrg::action::Item + 'static,
+        I: rrg::response::Item + 'static,
     {
         // For now we are not interested in doing anything useful with chunk ids
         // since everything is dumped into one file and there is no need to
@@ -73,16 +73,16 @@ impl rrg::session::Session for Session {
         Ok(())
     }
 
-    fn send<I>(&mut self, sink: rrg::message::Sink, item: I) -> rrg::session::Result<()>
+    fn send<I>(&mut self, sink: rrg::Sink, item: I) -> rrg::session::Result<()>
     where
-        I: rrg::action::Item + 'static,
+        I: rrg::response::Item + 'static,
     {
         use std::io::Write as _;
         use byteorder::{BigEndian, WriteBytesExt as _};
 
         // Just a sanity check in case the implementation of the timeline action
         // starts sending data to other sinks.
-        assert_eq!(sink, rrg::message::Sink::TRANSFER_STORE);
+        assert_eq!(sink, rrg::Sink::Blob);
 
         let parcel = (&item as &dyn std::any::Any)
             .downcast_ref::<timeline::Chunk>()

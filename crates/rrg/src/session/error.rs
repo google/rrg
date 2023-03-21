@@ -3,7 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::fmt::{Debug, Display, Formatter};
-use regex::Error as RegexError;
 
 /// An error type for failures that can occur during a session.
 #[derive(Debug)]
@@ -17,8 +16,11 @@ pub struct Error {
 /// Kinds of errors that can happen during a session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ErrorKind {
+    /// The arguments given for the action were malformed.
+    InvalidArgs,
+    // strictly necessary, we can be consistent here and rename this variant.
     /// The action execution failed.
-    ExecutionFailure,
+    ActionFailure,
 }
 
 impl Error {
@@ -32,7 +34,7 @@ impl Error {
         E: std::error::Error + Send + Sync + 'static,
     {
         Error {
-            kind: ErrorKind::ExecutionFailure,
+            kind: ErrorKind::ActionFailure,
             error: Box::new(error),
         }
     }
@@ -44,7 +46,8 @@ impl ErrorKind {
         use ErrorKind::*;
 
         match *self {
-            ExecutionFailure => "action execution failed",
+            InvalidArgs => "invalid action arguments",
+            ActionFailure => "action execution failed",
         }
     }
 }
@@ -63,154 +66,35 @@ impl std::error::Error for Error {
     }
 }
 
-/// An error type for failures that can occur when parsing proto messages.
-#[derive(Debug)]
-pub enum ParseError {
-    /// An error occurred because the decoded proto message was malformed.
-    Malformed(Box<dyn std::error::Error + Send + Sync>),
-    /// An error occurred when decoding bytes of a proto message.
-    Decode(protobuf::ProtobufError),
-}
+impl From<crate::request::ParseArgsError> for Error {
 
-impl ParseError {
-
-    /// Converts a detailed error indicating a malformed proto to `ParseError`.
-    ///
-    /// This is just a convenience function for lifting custom error types that
-    /// contain more specific information to generic `ParseError`.
-    pub fn malformed<E>(error: E) -> ParseError
-    where
-        E: Into<Box<dyn std::error::Error + Send + Sync>>,
-    {
-        ParseError::Malformed(error.into())
-    }
-}
-
-impl Display for ParseError {
-
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        use ParseError::*;
-
-        match *self {
-            Malformed(ref error) => {
-                write!(fmt, "invalid proto message: {}", error)
-            }
-            Decode(ref error) => {
-                write!(fmt, "failed to decode proto message: {}", error)
-            }
+    fn from(error: crate::request::ParseArgsError) -> Error {
+        Error {
+            kind: ErrorKind::InvalidArgs,
+            error: Box::new(error),
         }
     }
 }
 
-impl std::error::Error for ParseError {
+impl From<Error> for rrg_proto::v2::rrg::Status_Error {
 
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use ParseError::*;
+    fn from(error: Error) -> rrg_proto::v2::rrg::Status_Error {
+        let mut proto = rrg_proto::v2::rrg::Status_Error::new();
+        proto.set_field_type(error.kind.into());
+        proto.set_message(error.to_string());
 
-        match *self {
-            Malformed(ref error) => Some(error.as_ref()),
-            Decode(ref error) => Some(error),
+        proto
+    }
+}
+
+impl From<ErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
+
+    fn from(kind: ErrorKind) -> rrg_proto::v2::rrg::Status_Error_Type {
+        use ErrorKind::*;
+
+        match kind {
+            InvalidArgs => Self::INVALID_ARGS,
+            ActionFailure => Self::ACTION_FAILURE,
         }
-    }
-}
-
-impl From<protobuf::ProtobufError> for ParseError {
-
-    fn from(error: protobuf::ProtobufError) -> ParseError {
-        ParseError::Decode(error)
-    }
-}
-
-/// An error type for situations where time micros cannot be converted
-/// to `std::time::SystemTime`.
-#[derive(Debug)]
-pub struct TimeMicrosConversionError {
-    /// Time micros value causing the conversion error.
-    pub micros: u64,
-}
-
-impl Display for TimeMicrosConversionError {
-
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "cannot convert micros to std::time::SystemTime: {}", self.micros)
-    }
-}
-
-impl std::error::Error for TimeMicrosConversionError {
-
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
-impl From<TimeMicrosConversionError> for ParseError {
-
-    fn from(error: TimeMicrosConversionError) -> ParseError {
-        ParseError::malformed(error)
-    }
-}
-
-#[derive(Debug)]
-pub struct RegexParseError {
-    /// Raw data of the string which could not be converted to Regex.
-    pub raw_data: Vec<u8>,
-    /// Error message caught during the conversion.
-    pub error: RegexError,
-}
-
-impl Display for RegexParseError {
-
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "Regex parse error happened on parsing '{:?}'. \
-                     Regex error: '{}'",
-               self.raw_data,
-               self.error.to_string())
-    }
-}
-
-impl std::error::Error for RegexParseError {
-
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
-impl From<RegexParseError> for ParseError {
-
-    fn from(error: RegexParseError) -> ParseError {
-        ParseError::malformed(error)
-    }
-}
-
-/// An error type for situations where proto enum has a value for which
-/// the definition is not known.
-#[derive(Debug)]
-pub struct UnknownEnumValueError {
-    /// A name of the enum field having unknown enum value.
-    pub name: &'static str,
-
-    /// An enum value, which definition is not known.
-    pub value: i32,
-}
-
-impl Display for UnknownEnumValueError {
-
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
-        write!(fmt, "protobuf enum '{}' has unrecognised value: '{}'",
-               self.name, self.value)
-    }
-}
-
-impl std::error::Error for UnknownEnumValueError {
-
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
-impl From<UnknownEnumValueError> for ParseError {
-
-    fn from(error: UnknownEnumValueError) -> ParseError {
-        ParseError::malformed(error)
     }
 }

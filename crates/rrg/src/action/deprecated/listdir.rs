@@ -89,13 +89,15 @@ where
     Ok(())
 }
 
-impl super::Args for Request {
+impl crate::request::Args for Request {
 
     type Proto = rrg_proto::jobs::ListDirRequest;
 
-    fn from_proto(mut proto: Self::Proto) -> Result<Request, super::ParseArgsError> {
+    fn from_proto(mut proto: Self::Proto) -> Result<Request, crate::request::ParseArgsError> {
         let path = proto.take_pathspec().try_into()
-            .map_err(crate::action::ParseArgsError::invalid_field)?;
+            .map_err(|error| {
+                crate::request::ParseArgsError::invalid_field("pathspec", error)
+            })?;
 
         Ok(Request {
             path: path,
@@ -103,9 +105,7 @@ impl super::Args for Request {
     }
 }
 
-impl super::Item for Response {
-
-    const RDF_NAME: &'static str = "StatEntry";
+impl crate::response::Item for Response {
 
     type Proto = rrg_proto::jobs::StatEntry;
 

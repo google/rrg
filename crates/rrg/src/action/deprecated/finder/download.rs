@@ -1,7 +1,7 @@
-use crate::action::finder::chunks::{
+use super::chunks::{
     get_file_chunks, Chunks, GetFileChunksConfig,
 };
-use crate::action::finder::request::{
+use super::request::{
     DownloadActionOptions, HashActionOptions,
 };
 use crate::fs::Entry;
@@ -115,9 +115,7 @@ pub struct Chunk {
     pub data: Vec<u8>,
 }
 
-impl super::super::Item for Chunk {
-    const RDF_NAME: &'static str = "DataBlob";
-
+impl crate::response::Item for Chunk {
     type Proto = rrg_proto::jobs::DataBlob;
 
     fn into_proto(self) -> rrg_proto::jobs::DataBlob {

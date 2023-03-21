@@ -1,5 +1,5 @@
-use crate::action::finder::chunks::{get_file_chunks, GetFileChunksConfig};
-use crate::action::finder::request::{
+use super::chunks::{get_file_chunks, GetFileChunksConfig};
+use super::request::{
     Condition, ContentsMatchCondition, MatchMode,
 };
 use crate::fs::Entry;
