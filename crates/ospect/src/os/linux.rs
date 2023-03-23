@@ -7,3 +7,10 @@
 pub fn installed() -> std::io::Result<std::time::SystemTime> {
     crate::os::unix::installed()
 }
+
+/// Returns the [`Kind`] of currently running operating system.
+///
+/// [`Kind`]: crate::os::Kind
+pub fn kind() -> crate::os::Kind {
+    crate::os::Kind::Linux
+}

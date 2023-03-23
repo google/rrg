@@ -50,3 +50,17 @@ mod sys {
 pub fn installed() -> std::io::Result<std::time::SystemTime> {
     self::sys::installed()
 }
+
+/// A list of operating systems that the library is guaranteed to run on.
+pub enum Kind {
+    Linux,
+    Macos,
+    Windows,
+}
+
+/// Returns the [`Kind`] of currently running operating system.
+///
+/// [`Kind`]: crate::os::Kind
+pub fn kind() -> Kind {
+    self::sys::kind()
+}

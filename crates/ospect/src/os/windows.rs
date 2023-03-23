@@ -38,3 +38,10 @@ pub fn installed() -> std::io::Result<SystemTime> {
 
     Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(install_date_secs))
 }
+
+/// Returns the [`Kind`] of currently running operating system.
+///
+/// [`Kind`]: crate::os::Kind
+pub fn kind() -> crate::os::Kind {
+    crate::os::Kind::Linux
+}
