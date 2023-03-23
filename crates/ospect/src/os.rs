@@ -78,3 +78,15 @@ pub fn kind() -> Kind {
 pub fn version() -> std::io::Result<String> {
     self::sys::version()
 }
+
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn version_not_empty() {
+        assert!(!version().unwrap().is_empty());
+    }
+}

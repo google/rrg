@@ -17,6 +17,5 @@ pub fn kind() -> crate::os::Kind {
 
 /// Returns the version string of the currently running operating system.
 pub fn version() -> std::io::Result<String> {
-    // TODO(@panhania): Implement this function.
-    Err(std::io::ErrorKind::Unsupported.into())
+    crate::os::unix::version()
 }
