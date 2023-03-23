@@ -105,17 +105,6 @@ optional = true
 version = "0.3.1"
 optional = true
 
-[target.'cfg(target_os = "windows")'.dependencies.windows-sys]
-version = "0.45.0"
-features = [
-    "Win32_Foundation",
-    "Win32_NetworkManagement_IpHelper",
-    "Win32_NetworkManagement_Ndis",
-    "Win32_Networking_WinSock",
-    "Win32_System_ProcessStatus",
-    "Win32_System_Registry",
-]
-
 [dev-dependencies.rand]
 version = "0.8.5"
 
