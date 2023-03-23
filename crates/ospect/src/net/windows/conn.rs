@@ -202,7 +202,7 @@ impl Table for MIB_TCPTABLE_OWNER_PID {
             buf,
             buf_size,
             false.into(),
-            windows_sys::Win32::Networking::WinSock::AF_INET,
+            windows_sys::Win32::Networking::WinSock::AF_INET as u32,
             TCP_TABLE_OWNER_PID_ALL,
             0,
         )
@@ -227,7 +227,7 @@ impl Table for MIB_TCP6TABLE_OWNER_PID {
             buf,
             buf_size,
             false.into(),
-            windows_sys::Win32::Networking::WinSock::AF_INET6,
+            windows_sys::Win32::Networking::WinSock::AF_INET6 as u32,
             TCP_TABLE_OWNER_PID_ALL,
             0,
         )
@@ -252,7 +252,7 @@ impl Table for MIB_UDPTABLE_OWNER_PID {
             buf,
             buf_size,
             false.into(),
-            windows_sys::Win32::Networking::WinSock::AF_INET,
+            windows_sys::Win32::Networking::WinSock::AF_INET as u32,
             UDP_TABLE_OWNER_PID,
             0,
         )
@@ -277,7 +277,7 @@ impl Table for MIB_UDP6TABLE_OWNER_PID {
             buf,
             buf_size,
             false.into(),
-            windows_sys::Win32::Networking::WinSock::AF_INET6,
+            windows_sys::Win32::Networking::WinSock::AF_INET6 as u32,
             UDP_TABLE_OWNER_PID,
             0,
         )

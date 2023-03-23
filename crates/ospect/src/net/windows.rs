@@ -32,7 +32,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
     let mut code = unsafe {
         GetAdaptersAddresses(
             // `AF_UNSPEC` will get addresses of both IPv4 and IPv6 adapters.
-            windows_sys::Win32::Networking::WinSock::AF_UNSPEC,
+            windows_sys::Win32::Networking::WinSock::AF_UNSPEC as u32,
             // Probably we don't need any extra information.
             0,
             std::ptr::null_mut(),
@@ -55,7 +55,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
         code = unsafe {
             GetAdaptersAddresses(
                 // `AF_UNSPEC` will get addresses of both IPv4 and IPv6 adapters.
-                windows_sys::Win32::Networking::WinSock::AF_UNSPEC,
+                windows_sys::Win32::Networking::WinSock::AF_UNSPEC as u32,
                 // Probably we don't need any extra information.
                 0,
                 std::ptr::null_mut(),
@@ -137,7 +137,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
                 *sock_addr.Address.lpSockaddr
             }.sa_family;
 
-            match u32::from(family) {
+            match family {
                 windows_sys::Win32::Networking::WinSock::AF_INET => {
                     use windows_sys::Win32::Networking::WinSock::SOCKADDR_IN;
 
