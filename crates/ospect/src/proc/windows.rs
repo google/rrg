@@ -37,9 +37,7 @@ impl Ids {
                 )
             };
 
-            // TODO(@panhania): Move to the Windows `FALSE` constant once we
-            // bump the `windows-sys` crate to a version that has it available.
-            if status == (false as _) {
+            if status == FALSE {
                 // SAFETY: We are on Windows and the function should be safe to
                 // call in all context.
                 let code = unsafe { GetLastError() };

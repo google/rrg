@@ -111,8 +111,7 @@ pub fn version() -> std::io::Result<String> {
             kernel32_info_buf.as_mut_ptr().cast::<std::ffi::c_void>(),
         )
     };
-    // TODO(@panhania): Upgrade `windows_sys` and use `FALSE` instead.
-    if status == 0 {
+    if status == FALSE {
         return Err(std::io::Error::last_os_error());
     }
 
@@ -131,8 +130,7 @@ pub fn version() -> std::io::Result<String> {
             kernel32_info_len.as_mut_ptr(),
         )
     };
-    // TODO(@panhania): Upgrade `windows_sys` and use `FALSE` instead.
-    if status == 0 {
+    if status == FALSE {
         return Err(std::io::Error::last_os_error());
     }
 
