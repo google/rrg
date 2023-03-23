@@ -3,8 +3,8 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-/// Metadata associated with the operating system.
-struct Metadata {
+/// A result of the the `get_system_metadata` action.
+struct Item {
     /// The kind of the operating system the agent is running on.
     kind: ospect::os::Kind,
     /// Version string of the operating system the agent is running on.
@@ -13,10 +13,11 @@ struct Metadata {
     installed: std::time::SystemTime,
 }
 
-impl Metadata {
+impl Item {
 
-    fn new() -> std::io::Result<Metadata> {
-        Ok(Metadata {
+    /// Returns metadata of the operating system the agent is running on.
+    fn new() -> std::io::Result<Item> {
+        Ok(Item {
             kind: ospect::os::kind(),
             version: ospect::os::version()?,
             installed: ospect::os::installed()?,
@@ -24,18 +25,20 @@ impl Metadata {
     }
 }
 
-impl From<Metadata> for rrg_proto::v2::os::Metadata {
+impl crate::response::Item for Item {
 
-    fn from(metadata: Metadata) -> rrg_proto::v2::os::Metadata {
+    type Proto = rrg_proto::v2::get_system_metadata::Result;
+
+    fn into_proto(self) -> rrg_proto::v2::get_system_metadata::Result {
         // TODO(panhania@): Upgrade to version 3.2.0 of `protobuf` that supports
         // `From<SystemTime>` conversion of Protocol Buffers `Timestamp`.
-        let mut proto = rrg_proto::v2::os::Metadata::new();
-        proto.set_field_type(metadata.kind.into());
-        proto.set_version(metadata.version);
+        let mut proto = rrg_proto::v2::get_system_metadata::Result::new();
+        proto.set_field_type(self.kind.into());
+        proto.set_version(self.version);
 
         // TODO(panhania@): Upgrade to version 3.2.0 of `protobuf` that supports
         // `From<SystemTime>` conversion of Protocol Buffers `Timestamp`.
-        let installed_since_epoch = metadata.installed
+        let installed_since_epoch = self.installed
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap();
 
@@ -50,35 +53,15 @@ impl From<Metadata> for rrg_proto::v2::os::Metadata {
     }
 }
 
-/// A result of the the `get_system_metadata` action.
-struct Item {
-    /// Metadata associated with the operating system the agent is running on.
-    metadata: Metadata,
-}
-
-impl crate::response::Item for Item {
-
-    type Proto = rrg_proto::v2::get_system_metadata::Result;
-
-    fn into_proto(self) -> rrg_proto::v2::get_system_metadata::Result {
-        let mut proto = rrg_proto::v2::get_system_metadata::Result::new();
-        proto.set_metadata(self.metadata.into());
-
-        proto
-    }
-}
-
 // Handles invocations of the `get_system_metadata` action.
 pub fn handle<S>(session: &mut S, _: ()) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    let metadata = Metadata::new()
+    let item = Item::new()
         .map_err(crate::session::Error::action)?;
 
-    session.reply(Item {
-        metadata,
-    })?;
+    session.reply(item)?;
 
     Ok(())
 }
