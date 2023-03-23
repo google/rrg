@@ -64,3 +64,17 @@ pub enum Kind {
 pub fn kind() -> Kind {
     self::sys::kind()
 }
+
+/// Returns the version string of the currently running operating system.
+///
+/// No assumptions on the specific format of this string should be made and the
+/// output can vary between operating system versions, distributions and even
+/// `ospect` releases.
+///
+/// # Errors
+///
+/// This function will return an error in case there was some issue when trying
+/// to query data from the system.
+pub fn version() -> std::io::Result<String> {
+    self::sys::version()
+}

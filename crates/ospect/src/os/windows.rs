@@ -45,3 +45,9 @@ pub fn installed() -> std::io::Result<SystemTime> {
 pub fn kind() -> crate::os::Kind {
     crate::os::Kind::Linux
 }
+
+/// Returns the version string of the currently running operating system.
+pub fn version() -> std::io::Result<String> {
+    // TODO(@panhania): Implement this function.
+    Err(std::io::ErrorKind::Unsupported.into())
+}
