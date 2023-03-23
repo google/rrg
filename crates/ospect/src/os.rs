@@ -50,3 +50,43 @@ mod sys {
 pub fn installed() -> std::io::Result<std::time::SystemTime> {
     self::sys::installed()
 }
+
+/// A list of operating systems that the library is guaranteed to run on.
+pub enum Kind {
+    Linux,
+    Macos,
+    Windows,
+}
+
+/// Returns the [`Kind`] of currently running operating system.
+///
+/// [`Kind`]: crate::os::Kind
+pub fn kind() -> Kind {
+    self::sys::kind()
+}
+
+/// Returns the version string of the currently running operating system.
+///
+/// No assumptions on the specific format of this string should be made and the
+/// output can vary between operating system versions, distributions and even
+/// `ospect` releases.
+///
+/// # Errors
+///
+/// This function will return an error in case there was some issue when trying
+/// to query data from the system.
+pub fn version() -> std::io::Result<String> {
+    self::sys::version()
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn version_not_empty() {
+        assert!(!version().unwrap().is_empty());
+    }
+}

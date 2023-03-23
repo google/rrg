@@ -8,6 +8,17 @@ pub mod path;
 
 pub mod v2 {
     include!(concat!(env!("OUT_DIR"), "/proto-v2/mod.rs"));
+
+    impl From<ospect::os::Kind> for os::Type {
+
+        fn from(kind: ospect::os::Kind) -> os::Type {
+            match kind {
+                ospect::os::Kind::Linux => os::Type::LINUX,
+                ospect::os::Kind::Macos => os::Type::MACOS,
+                ospect::os::Kind::Windows => os::Type::WINDOWS,
+            }
+        }
+    }
 }
 
 include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));
