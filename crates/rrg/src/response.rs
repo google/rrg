@@ -64,7 +64,7 @@ impl<I: Item> Reply<I> {
 
         fleetspeak::send(fleetspeak::Message {
             service: String::from("GRR"),
-            kind: Some(String::from("rrg-response")),
+            kind: Some(String::from("rrg.Response")),
             data,
         })
     }
@@ -104,7 +104,7 @@ impl Status {
 
         fleetspeak::send(fleetspeak::Message {
             service: String::from("GRR"),
-            kind: Some(String::from("rrg-response")),
+            kind: Some(String::from("rrg.Response")),
             data,
         })
     }
@@ -240,7 +240,7 @@ impl<I: crate::response::Item> Parcel<I> {
 
         fleetspeak::send(fleetspeak::Message {
             service: String::from("GRR"),
-            kind: Some(String::from("rrg-parcel")),
+            kind: Some(String::from("rrg.Parcel")),
             data,
         })
     }

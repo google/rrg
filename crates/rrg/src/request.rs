@@ -184,7 +184,7 @@ impl Request {
             let service = message.service;
             warn!("request send by service '{service}' (instead of 'GRR')");
         }
-        if message.kind.as_deref() != Some("rrg-request") {
+        if message.kind.as_deref() != Some("rrg.Request") {
             match message.kind {
                 Some(kind) => warn!("request with unexpected kind '{kind}'"),
                 None => warn!("request with unspecified kind"),
