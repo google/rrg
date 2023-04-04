@@ -14,7 +14,7 @@ path = "../rrg-macro/"
 version = "0.4.8"
 
 [dependencies.protobuf]
-version = "2.27.1"
+version = "2.28.0"
 
 [dev-dependencies.quickcheck]
 version = "1.0.3"
@@ -23,7 +23,7 @@ version = "1.0.3"
 version = "1.0.0"
 
 [build-dependencies.protobuf-codegen-pure]
-version = "2.27.1"
+version = "2.28.0"
 
 [build-dependencies.tempfile]
 version = "3.1.0"
