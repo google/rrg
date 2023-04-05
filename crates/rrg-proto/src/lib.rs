@@ -30,6 +30,17 @@ pub mod v2 {
         }
     }
 
+
+    impl TryFrom<fs::Path> for std::path::PathBuf {
+
+        type Error = ParsePathError;
+
+        fn try_from(mut proto: fs::Path) -> Result<std::path::PathBuf, ParsePathError> {
+            crate::path::from_bytes(proto.take_raw_bytes())
+                .map_err(ParsePathError)
+        }
+    }
+
     impl From<std::fs::FileType> for fs::FileMetadata_Type {
 
         fn from(file_type: std::fs::FileType) -> fs::FileMetadata_Type {
@@ -77,6 +88,24 @@ pub mod v2 {
             }
 
             proto
+        }
+    }
+
+    /// A type representing errors that can occur when parsing paths.
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct ParsePathError(crate::path::ParseError);
+
+    impl std::fmt::Display for ParsePathError {
+
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            self.0.fmt(fmt)
+        }
+    }
+
+    impl std::error::Error for ParsePathError {
+
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            self.0.source()
         }
     }
 }
