@@ -22,6 +22,8 @@ message Path {
     // still get more-or-less meaningful results.
     //
     // [1]: https://simonsapin.github.io/wtf-8
+    //
+    // TODO(@panhania): Rename this field as on Unixes it is not a WTF-8 string.
     bytes wtf8 = 1;
 }
 

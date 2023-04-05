@@ -19,6 +19,66 @@ pub mod v2 {
             }
         }
     }
+
+    impl From<std::path::PathBuf> for fs::Path {
+
+        fn from(path: std::path::PathBuf) -> fs::Path {
+            let mut proto = fs::Path::default();
+            proto.set_wtf8(crate::path::into_bytes(path));
+
+            proto
+        }
+    }
+
+    impl From<std::fs::FileType> for fs::FileMetadata_Type {
+
+        fn from(file_type: std::fs::FileType) -> fs::FileMetadata_Type {
+            match () {
+                _ if file_type.is_file() => fs::FileMetadata_Type::FILE,
+                _ if file_type.is_dir() => fs::FileMetadata_Type::DIR,
+                _ if file_type.is_symlink() => fs::FileMetadata_Type::SYMLINK,
+                _ => fs::FileMetadata_Type::UNKNOWN,
+            }
+        }
+    }
+
+    impl From<std::fs::Metadata> for fs::FileMetadata {
+
+        fn from(metadata: std::fs::Metadata) -> fs::FileMetadata {
+            let mut proto = fs::FileMetadata::default();
+            proto.set_field_type(metadata.file_type().into());
+            proto.set_size(metadata.len());
+
+            // TODO(@panhania): Upgrade to version 3.2.0 of `protobuf` that
+            // supports `From<SystemTime>` conversion of Protocol Buffers
+            // `Timestamp`.
+            fn into_timestamp(time: std::time::SystemTime) -> protobuf::well_known_types::Timestamp {
+                let since_epoch = time.duration_since(std::time::UNIX_EPOCH)
+                    .expect("pre-epoch time");
+
+                let mut proto = protobuf::well_known_types::Timestamp::default();
+                proto.set_nanos(since_epoch.subsec_nanos() as i32);
+                proto.set_seconds(since_epoch.as_secs() as i64);
+
+                proto
+            }
+
+            match metadata.accessed() {
+                Ok(time) => proto.set_access_time(into_timestamp(time)),
+                Err(_) => (), // TODO(@panhania): Consider logging.
+            }
+            match metadata.modified() {
+                Ok(time) => proto.set_modification_time(into_timestamp(time)),
+                Err(_) => (), // TODO(@panhania): Consider logging.
+            }
+            match metadata.created() {
+                Ok(time) => proto.set_creation_time(into_timestamp(time)),
+                Err(_) => (), // TODO(@panhania): Consider logging.
+            }
+
+            proto
+        }
+    }
 }
 
 include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));
