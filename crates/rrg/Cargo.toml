@@ -8,6 +8,7 @@ edition.workspace = true
 [features]
 default = [
     "action-get_system_metadata",
+    "action-get_file_metadata",
 
     # These actions are deprecated (awaiting migration to the new protocol).
     "action-insttime",
@@ -22,6 +23,7 @@ default = [
 ]
 
 action-get_system_metadata = []
+action-get_file_metadata = []
 
 # These actions are deprecated (awaiting migration to the new protocol).
 action-insttime = []

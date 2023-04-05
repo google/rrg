@@ -21,6 +21,9 @@ pub mod deprecated; // TODO(@panhania): Unexpose this module.
 #[cfg(feature = "action-get_system_metadata")]
 pub mod get_system_metadata;
 
+#[cfg(feature = "action-get_file_metadata")]
+pub mod get_file_metadata;
+
 /// Dispatches the given `request` to an appropriate action handler.
 ///
 /// This method is a mapping between action names (as specified in the protocol)
@@ -43,6 +46,10 @@ where
         #[cfg(feature = "action-get_system_metadata")]
         GetSystemMetadata => {
             handle(session, request, self::get_system_metadata::handle)
+        }
+        #[cfg(feature = "action-get_file_metadata")]
+        GetFileMetadata => {
+            handle(session, request, self::get_file_metadata::handle)
         }
     }
 }
