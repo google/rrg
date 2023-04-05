@@ -1,0 +1,52 @@
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style license that can be found
+// in the LICENSE file or at https://opensource.org/licenses/MIT.
+syntax = "proto3";
+
+package rrg.fs;
+
+import "google/protobuf/timestamp.proto";
+
+// Path in the filesystem.
+message Path {
+    // WTF-8 encoded string representing the path.
+    //
+    // Because different operating systems represent paths differently, we need
+    // a system-agnostic way to deal with this issue. The Rust standard library
+    // uses the WTF-8 encoding [1] internally so it seems like a reasonable pick
+    // for us as well.
+    //
+    // One benefit of using WTF-8 is that it is "almost UTF-8", so even if the
+    // language does not have support for WTF-8, we can treat it as UTF-8 and
+    // still get more-or-less meaningful results.
+    //
+    // [1]: https://simonsapin.github.io/wtf-8
+    bytes wtf8 = 1;
+}
+
+// Metadata associated with a specific file.
+message FileMetadata {
+    // List of different file types.
+    enum Type {
+        // Unknown (or unspecified).
+        UNKNOWN = 0;
+        // Regular file.
+        FILE = 1;
+        // Directory.
+        DIR = 2;
+        // Symbolic link.
+        SYMLINK = 3;
+    }
+
+    // Type of the file.
+    Type type = 1;
+    // Size of the file in bytes.
+    uint64 size = 2;
+    // Time at which the file was last accessed.
+    google.protobuf.Timestamp access_time = 3;
+    // Time at which the file was last modified.
+    google.protobuf.Timestamp modification_time = 4;
+    // Time at which the file was created.
+    google.protobuf.Timestamp creation_time = 5;
+}

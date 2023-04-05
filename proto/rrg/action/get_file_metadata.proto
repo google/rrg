@@ -1,0 +1,25 @@
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style license that can be found
+// in the LICENSE file or at https://opensource.org/licenses/MIT.
+syntax = "proto3";
+
+package rrg.action.get_file_metadata;
+
+import "rrg/fs.proto";
+
+message Args {
+    // Path to the file to get the metadata for.
+    //
+    // Note that if a path points to a symbolic link, the metadata associated
+    // with the link itself will be returned, not the metadata of the file that
+    // the link points to.
+    rrg.fs.Path path = 1;
+}
+
+message Result {
+    // Canonical path of the file.
+    rrg.fs.Path path = 1;
+    // Metadata of the file.
+    rrg.fs.FileMetadata metadata = 2;
+}
