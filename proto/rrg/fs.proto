@@ -10,21 +10,19 @@ import "google/protobuf/timestamp.proto";
 
 // Path in the filesystem.
 message Path {
-    // WTF-8 encoded string representing the path.
+    // Raw bytes representing the path.
     //
-    // Because different operating systems represent paths differently, we need
-    // a system-agnostic way to deal with this issue. The Rust standard library
-    // uses the WTF-8 encoding [1] internally so it seems like a reasonable pick
-    // for us as well.
+    // Different operating systems represent paths differently and have varying
+    // capabilities. In most general case, Linux systems allow paths with pretty
+    // much arbitrary bytes and so we need to support this case.
     //
-    // One benefit of using WTF-8 is that it is "almost UTF-8", so even if the
-    // language does not have support for WTF-8, we can treat it as UTF-8 and
-    // still get more-or-less meaningful results.
+    // On Windows, where paths are stored using UCS-2 encoding (that is 16-bit),
+    // represent paths with the WTF-8 encoding [1]: an "almost UTF-8". So, even
+    // if the language does not have support for WTF-8, we can treat it as UTF-8
+    // and still get more-or-less meaningful results.
     //
     // [1]: https://simonsapin.github.io/wtf-8
-    //
-    // TODO(@panhania): Rename this field as on Unixes it is not a WTF-8 string.
-    bytes wtf8 = 1;
+    bytes raw_bytes = 1;
 }
 
 // Metadata associated with a specific file.

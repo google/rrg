@@ -24,7 +24,7 @@ pub mod v2 {
 
         fn from(path: std::path::PathBuf) -> fs::Path {
             let mut proto = fs::Path::default();
-            proto.set_wtf8(crate::path::into_bytes(path));
+            proto.set_raw_bytes(crate::path::into_bytes(path));
 
             proto
         }
