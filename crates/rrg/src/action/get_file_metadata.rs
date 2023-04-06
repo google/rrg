@@ -148,7 +148,8 @@ mod tests {
     fn handle_regular_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
 
         std::fs::File::create(tempdir.join("foo"))
             .unwrap();
@@ -172,7 +173,8 @@ mod tests {
     fn handle_symlink() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
 
         std::fs::File::create(tempdir.join("file"))
             .unwrap();
@@ -226,7 +228,8 @@ mod tests {
     fn canonicalize_parent_simple() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path();
+        let tempdir = &tempdir.path().canonicalize()
+            .unwrap();
 
         std::fs::File::create(path!(tempdir, "foo.txt"))
             .unwrap();
@@ -242,7 +245,8 @@ mod tests {
     fn canonicalize_parent_dots() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path();
+        let tempdir = &tempdir.path().canonicalize()
+            .unwrap();
 
         std::fs::create_dir_all(path!(tempdir, "a", "b"))
             .unwrap();
@@ -278,7 +282,8 @@ mod tests {
     fn canonicalize_parent_symlinks() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path();
+        let tempdir = &tempdir.path().canonicalize()
+            .unwrap();
 
         std::fs::create_dir_all(path!(tempdir, "dir"))
             .unwrap();
