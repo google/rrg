@@ -121,6 +121,78 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn handle_non_existent() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.path().join("foo"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_err());
+    }
+
+    #[test]
+    fn handle_relative() {
+        let args = Args {
+            path: PathBuf::from("foo/bar/baz")
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_err());
+    }
+
+    #[test]
+    fn handle_regular_file() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::File::create(tempdir.join("foo"))
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.join("foo").to_path_buf(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, tempdir.join("foo"));
+        assert_eq!(item.metadata.is_file(), true);
+    }
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_symlink() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::File::create(tempdir.join("file"))
+            .unwrap();
+        std::os::unix::fs::symlink(tempdir.join("file"), tempdir.join("link"))
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.join("link"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, tempdir.join("link"));
+        assert_eq!(item.metadata.is_symlink(), true);
+    }
+
     macro_rules! path {
         ($root:expr) => {{
             ::std::path::PathBuf::from($root)
