@@ -17,6 +17,7 @@ struct Item {
     /// Retrieved metadata of the file we retrieved.
     metadata: std::fs::Metadata,
     /// Extended attributes of the file.
+    #[cfg(target_family = "unix")]
     ext_attrs: Vec<ospect::fs::ExtAttr>,
     // TODO(@panhania): Add support for file flags (also known as attributes).
     //
@@ -45,6 +46,7 @@ where
     let metadata = args.path.symlink_metadata()
         .map_err(crate::session::Error::action)?;
 
+    #[cfg(target_family = "unix")]
     let ext_attrs = || -> std::io::Result<Vec<ospect::fs::ExtAttr>> {
         ospect::fs::ext_attrs(args.path.as_ref())?
             .collect()
@@ -63,6 +65,7 @@ where
     session.reply(Item {
         path,
         metadata,
+        #[cfg(target_family = "unix")]
         ext_attrs,
     })?;
 
@@ -94,8 +97,11 @@ impl crate::response::Item for Item {
         proto.set_path(self.path.into());
         proto.set_metadata(self.metadata.into());
 
-        for ext_attr in self.ext_attrs {
-            proto.mut_ext_attrs().push(ext_attr.into());
+        #[cfg(target_family = "unix")]
+        {
+            for ext_attr in self.ext_attrs {
+                proto.mut_ext_attrs().push(ext_attr.into());
+            }
         }
 
         proto
