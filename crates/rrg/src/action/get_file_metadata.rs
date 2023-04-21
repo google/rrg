@@ -16,6 +16,8 @@ struct Item {
     path: PathBuf,
     /// Retrieved metadata of the file we retrieved.
     metadata: std::fs::Metadata,
+    /// Extended attributes of the file.
+    ext_attrs: Vec<ospect::fs::ExtAttr>,
 }
 
 /// Handles invocations of the `get_file_metadata` action.
@@ -33,6 +35,11 @@ where
     let metadata = args.path.symlink_metadata()
         .map_err(crate::session::Error::action)?;
 
+    let ext_attrs = || -> std::io::Result<Vec<ospect::fs::ExtAttr>> {
+        ospect::fs::ext_attrs(args.path.as_ref())?
+            .collect()
+    }().map_err(crate::session::Error::action)?;
+
     // Canonicalization of a symlink would yield a path that is fully resolved
     // (including the symlink) which is not what we want as we return metadata
     // of the symlink itself and not the data it points to. Thus, we want only
@@ -46,6 +53,7 @@ where
     session.reply(Item {
         path,
         metadata,
+        ext_attrs,
     })?;
 
     Ok(())
@@ -75,6 +83,10 @@ impl crate::response::Item for Item {
         let mut proto = rrg_proto::v2::get_file_metadata::Result::default();
         proto.set_path(self.path.into());
         proto.set_metadata(self.metadata.into());
+
+        for ext_attr in self.ext_attrs {
+            proto.mut_ext_attrs().push(ext_attr.into());
+        }
 
         proto
     }
@@ -193,6 +205,71 @@ mod tests {
         let item = session.reply::<Item>(0);
         assert_eq!(item.path, tempdir.join("link"));
         assert_eq!(item.metadata.is_symlink(), true);
+    }
+
+    #[cfg(feature = "test-setfattr")]
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn handle_ext_attrs() {
+        let tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--no-dereference")
+                .arg("--name").arg("user.foo")
+                .arg("--value").arg("bar")
+                .arg(tempfile.path().as_os_str())
+                .status().unwrap()
+                .success()
+        };
+
+        let args = Args {
+            path: tempfile.path().to_path_buf(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, tempfile.path());
+        assert_eq!(item.ext_attrs.len(), 1);
+        assert_eq!(item.ext_attrs[0].name, "user.foo");
+        assert_eq!(item.ext_attrs[0].value, b"bar");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn handle_ext_attrs() {
+        let tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        assert! {
+            std::process::Command::new("xattr")
+                .arg("-w")
+                .arg("user.foo")
+                .arg("bar")
+                .arg(tempfile.path().to_path_buf())
+                .status().unwrap()
+                .success()
+        };
+
+        let args = Args {
+            path: tempfile.path().to_owned(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, tempfile.path());
+        assert_eq!(item.ext_attrs.len(), 1);
+        assert_eq!(item.ext_attrs[0].name, "user.foo");
+        assert_eq!(item.ext_attrs[0].value, b"bar");
     }
 
     macro_rules! path {

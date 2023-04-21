@@ -22,4 +22,8 @@ message Result {
     rrg.fs.Path path = 1;
     // Metadata of the file.
     rrg.fs.FileMetadata metadata = 2;
+    // Extended attrbutes of the file.
+    //
+    // This field is supported only on Linux and macOS.
+    repeated rrg.fs.FileExtAttr ext_attrs = 3;
 }
