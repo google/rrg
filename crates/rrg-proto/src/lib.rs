@@ -91,6 +91,32 @@ pub mod v2 {
         }
     }
 
+    impl From<ospect::fs::ExtAttr> for fs::FileExtAttr {
+
+        fn from(ext_attr: ospect::fs::ExtAttr) -> fs::FileExtAttr {
+            let mut proto = fs::FileExtAttr::default();
+            proto.set_value(ext_attr.value);
+
+            #[cfg(target_family = "unix")]
+            {
+                use std::os::unix::ffi::OsStringExt as _;
+                proto.set_name(ext_attr.name.into_vec());
+            }
+
+            // Extended attributes are not supported on Windows, so technically
+            // we don't need to have this code. But in case somebody creates an
+            // aritficial extended attribute code it is better to be at least
+            // somewhat covered.
+            #[cfg(target_family = "windows")]
+            {
+                let name_str = ext_attr.name.to_string_lossy();
+                proto.set_name(name_str.as_bytes().into());
+            }
+
+            proto
+        }
+    }
+
     /// A type representing errors that can occur when parsing paths.
     #[derive(Debug, PartialEq, Eq)]
     pub struct ParsePathError(crate::path::ParseError);

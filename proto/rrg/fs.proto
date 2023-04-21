@@ -50,3 +50,23 @@ message FileMetadata {
     // Time at which the file was created.
     google.protobuf.Timestamp creation_time = 5;
 }
+
+// Extended attribute of a file.
+//
+// Note that extended attributes are not available on Windows and there are some
+// differences between how they work on macOS and Linux. See the [Wikipedia][1]
+// article for more details.
+//
+// [Wikipedia]: https://en.wikipedia.org/wiki/Extended_file_attributes
+message FileExtAttr {
+    // A name of the article.
+    //
+    // On macOS this is an UTF-8 encoded string, but on Linux it can consist of
+    // arbitrary byte sequence (although most probably it will be also an UTF-8
+    // string).
+    bytes name = 1;
+    // A value of the attribute.
+    //
+    // This can be an arbitrary sequence of bytes both on macOS and Linux.
+    bytes value = 2;
+}
