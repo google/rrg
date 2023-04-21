@@ -18,6 +18,16 @@ struct Item {
     metadata: std::fs::Metadata,
     /// Extended attributes of the file.
     ext_attrs: Vec<ospect::fs::ExtAttr>,
+    // TODO(@panhania): Add support for file flags (also known as attributes).
+    //
+    // Collection of them is already implemented in the `ospect` crate, but it
+    // is no clear which protobuf message should include them and whether we
+    // should have separate fields for each platform or to cram everything into
+    // one.
+    //
+    // It is also not clear how the field should be named as on Linux this
+    // feature is called "attributes" (not to be confused with file extended
+    // attributes!) and on macOS it is called "flags".
 }
 
 /// Handles invocations of the `get_file_metadata` action.
