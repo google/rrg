@@ -276,7 +276,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
-        assert_eq!(item.path, tempfile.path());
+        assert_eq!(item.path, tempfile.path().canonicalize().unwrap());
         assert_eq!(item.ext_attrs.len(), 1);
         assert_eq!(item.ext_attrs[0].name, "user.foo");
         assert_eq!(item.ext_attrs[0].value, b"bar");
