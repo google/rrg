@@ -33,14 +33,25 @@ message Metadata {
     google.protobuf.Timestamp build_time = 4;
 }
 
-// Descriptor of the version quadruple.
+// Descriptor of the version.
+//
+// RRG uses [semantic versioning][semver], so refer to the specification for the
+// details.
+//
+// [semver]: https://semver.org/
 message Version {
-    // Major component of the version (`x` in `x.y.z.r`).
+    // Major component of the version (`x` in `x.y.z`).
     uint32 major = 1;
-    // Minor component of the version (`y` in `x.y.z.r`).
+    // Minor component of the version (`y` in `x.y.z`).
     uint32 minor = 2;
-    // Patch component of the version (`z` in `x.y.z.r`).
+    // Patch component of the version (`z` in `x.y.z`).
     uint32 patch = 3;
-    // Revision component of the version (`r` in `x.y.z.r`).
-    uint32 revision = 4;
+    // Optional pre-release label of the version (`foo` in `x.y.z-foo`).
+    //
+    // This is a rather free-form identifier that can also include numbers and
+    // dots (e.g. `beta.1`). See the [syntax] description of the Rust [`semver`]
+    // crate for exact specification.
+    //
+    // [syntax]: https://docs.rs/semver/latest/semver/struct.Prerelease.html#syntax
+    string pre = 4;
 }

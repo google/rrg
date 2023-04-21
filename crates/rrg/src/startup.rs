@@ -68,14 +68,14 @@ impl Metadata {
 
 /// A type for representing version metadata.
 pub struct Version {
-    /// Major version of the RRG agent (`x` in `x.y.z.r`).
+    /// Major version of the RRG agent (`x` in `x.y.z`).
     pub major: u8,
-    /// Minor version of the RRG agent (`y` in `x.y.z.r`).
+    /// Minor version of the RRG agent (`y` in `x.y.z`).
     pub minor: u8,
-    /// Patch version of the RRG agent (`z` in `x.y.z.r`).
+    /// Patch version of the RRG agent (`z` in `x.y.z`).
     pub patch: u8,
-    /// Revision version of the RRG agent (`r` in `x.y.z.r`).
-    pub revision: u8,
+    /// Pre-release label of the RRG agent (`foo` in `x.y.z-foo`).
+    pub pre: &'static str,
 }
 
 impl Version {
@@ -89,7 +89,7 @@ impl Version {
             major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap_or(0),
             minor: env!("CARGO_PKG_VERSION_MINOR").parse().unwrap_or(0),
             patch: env!("CARGO_PKG_VERSION_PATCH").parse().unwrap_or(0),
-            revision: env!("CARGO_PKG_VERSION_PRE").parse().unwrap_or(0),
+            pre: env!("CARGO_PKG_VERSION_PRE"),
         }
     }
 }
@@ -137,7 +137,7 @@ impl Into<rrg_proto::v2::startup::Version> for Version {
         proto.set_major(u32::from(self.major));
         proto.set_minor(u32::from(self.minor));
         proto.set_patch(u32::from(self.patch));
-        proto.set_revision(u32::from(self.revision));
+        proto.set_pre(String::from(self.pre));
 
         proto
     }
