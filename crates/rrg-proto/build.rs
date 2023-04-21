@@ -21,8 +21,10 @@ const PROTOS: &'static [&'static str] = &[
 
 const PROTOS_V2: &'static [&'static str] = &[
     "../../proto/rrg.proto",
+    "../../proto/rrg/fs.proto",
     "../../proto/rrg/os.proto",
     "../../proto/rrg/startup.proto",
+    "../../proto/rrg/action/get_file_metadata.proto",
     "../../proto/rrg/action/get_system_metadata.proto",
 ];
 

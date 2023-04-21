@@ -19,6 +19,121 @@ pub mod v2 {
             }
         }
     }
+
+    impl From<std::path::PathBuf> for fs::Path {
+
+        fn from(path: std::path::PathBuf) -> fs::Path {
+            let mut proto = fs::Path::default();
+            proto.set_raw_bytes(crate::path::into_bytes(path));
+
+            proto
+        }
+    }
+
+
+    impl TryFrom<fs::Path> for std::path::PathBuf {
+
+        type Error = ParsePathError;
+
+        fn try_from(mut proto: fs::Path) -> Result<std::path::PathBuf, ParsePathError> {
+            crate::path::from_bytes(proto.take_raw_bytes())
+                .map_err(ParsePathError)
+        }
+    }
+
+    impl From<std::fs::FileType> for fs::FileMetadata_Type {
+
+        fn from(file_type: std::fs::FileType) -> fs::FileMetadata_Type {
+            match () {
+                _ if file_type.is_file() => fs::FileMetadata_Type::FILE,
+                _ if file_type.is_dir() => fs::FileMetadata_Type::DIR,
+                _ if file_type.is_symlink() => fs::FileMetadata_Type::SYMLINK,
+                _ => fs::FileMetadata_Type::UNKNOWN,
+            }
+        }
+    }
+
+    impl From<std::fs::Metadata> for fs::FileMetadata {
+
+        fn from(metadata: std::fs::Metadata) -> fs::FileMetadata {
+            let mut proto = fs::FileMetadata::default();
+            proto.set_field_type(metadata.file_type().into());
+            proto.set_size(metadata.len());
+
+            // TODO(@panhania): Upgrade to version 3.2.0 of `protobuf` that
+            // supports `From<SystemTime>` conversion of Protocol Buffers
+            // `Timestamp`.
+            fn into_timestamp(time: std::time::SystemTime) -> protobuf::well_known_types::Timestamp {
+                let since_epoch = time.duration_since(std::time::UNIX_EPOCH)
+                    .expect("pre-epoch time");
+
+                let mut proto = protobuf::well_known_types::Timestamp::default();
+                proto.set_nanos(since_epoch.subsec_nanos() as i32);
+                proto.set_seconds(since_epoch.as_secs() as i64);
+
+                proto
+            }
+
+            match metadata.accessed() {
+                Ok(time) => proto.set_access_time(into_timestamp(time)),
+                Err(_) => (), // TODO(@panhania): Consider logging.
+            }
+            match metadata.modified() {
+                Ok(time) => proto.set_modification_time(into_timestamp(time)),
+                Err(_) => (), // TODO(@panhania): Consider logging.
+            }
+            match metadata.created() {
+                Ok(time) => proto.set_creation_time(into_timestamp(time)),
+                Err(_) => (), // TODO(@panhania): Consider logging.
+            }
+
+            proto
+        }
+    }
+
+    impl From<ospect::fs::ExtAttr> for fs::FileExtAttr {
+
+        fn from(ext_attr: ospect::fs::ExtAttr) -> fs::FileExtAttr {
+            let mut proto = fs::FileExtAttr::default();
+            proto.set_value(ext_attr.value);
+
+            #[cfg(target_family = "unix")]
+            {
+                use std::os::unix::ffi::OsStringExt as _;
+                proto.set_name(ext_attr.name.into_vec());
+            }
+
+            // Extended attributes are not supported on Windows, so technically
+            // we don't need to have this code. But in case somebody creates an
+            // aritficial extended attribute code it is better to be at least
+            // somewhat covered.
+            #[cfg(target_family = "windows")]
+            {
+                let name_str = ext_attr.name.to_string_lossy();
+                proto.set_name(name_str.as_bytes().into());
+            }
+
+            proto
+        }
+    }
+
+    /// A type representing errors that can occur when parsing paths.
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct ParsePathError(crate::path::ParseError);
+
+    impl std::fmt::Display for ParsePathError {
+
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            self.0.fmt(fmt)
+        }
+    }
+
+    impl std::error::Error for ParsePathError {
+
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            self.0.source()
+        }
+    }
 }
 
 include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));

@@ -18,6 +18,9 @@ pub enum Action {
     /// Get metadata about the operating system and the machine.
     #[cfg(feature = "action-get_system_metadata")]
     GetSystemMetadata,
+    /// Get metadata about the specified file.
+    #[cfg(feature = "action-get_file_metadata")]
+    GetFileMetadata,
 }
 
 /// The error type for cases when parsing action fails.
@@ -81,6 +84,8 @@ impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
         match proto {
             #[cfg(feature = "action-get_system_metadata")]
             GET_SYSTEM_METADATA => Ok(Action::GetSystemMetadata),
+            #[cfg(feature ="action-get_file_metadata")]
+            GET_FILE_METADATA => Ok(Action::GetFileMetadata),
             _ => {
                 let val = protobuf::ProtobufEnum::value(&proto);
                 Err(ParseActionErrorKind::UnknownAction(val).into())
