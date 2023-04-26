@@ -9,7 +9,7 @@
 pub fn startup() -> Result<(), fleetspeak::WriteError> {
     let startup = Startup::now();
 
-    crate::response::Parcel::new(crate::Sink::Blob, startup)
+    crate::response::Parcel::new(crate::Sink::Startup, startup)
         .send_unaccounted()
 }
 
