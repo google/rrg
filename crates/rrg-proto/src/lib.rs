@@ -56,23 +56,11 @@ pub mod v2 {
     impl From<std::fs::Metadata> for fs::FileMetadata {
 
         fn from(metadata: std::fs::Metadata) -> fs::FileMetadata {
+            use crate::into_timestamp;
+
             let mut proto = fs::FileMetadata::default();
             proto.set_field_type(metadata.file_type().into());
             proto.set_size(metadata.len());
-
-            // TODO(@panhania): Upgrade to version 3.2.0 of `protobuf` that
-            // supports `From<SystemTime>` conversion of Protocol Buffers
-            // `Timestamp`.
-            fn into_timestamp(time: std::time::SystemTime) -> protobuf::well_known_types::Timestamp {
-                let since_epoch = time.duration_since(std::time::UNIX_EPOCH)
-                    .expect("pre-epoch time");
-
-                let mut proto = protobuf::well_known_types::Timestamp::default();
-                proto.set_nanos(since_epoch.subsec_nanos() as i32);
-                proto.set_seconds(since_epoch.as_secs() as i64);
-
-                proto
-            }
 
             match metadata.accessed() {
                 Ok(time) => proto.set_access_time(into_timestamp(time)),
@@ -534,4 +522,25 @@ pub fn micros(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
 pub fn secs(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
     let duration = std::time::Duration::from_nanos(nanos(time)?);
     Ok(duration.as_secs())
+}
+
+// TODO(@panhania): Upgrade to version 3.2.0 of `protobuf` that supports
+// `From<SystemTime>` conversion of Protocol Buffers `Timestamp`.
+/// Converts [`SystemTime`] to a Protocol Buffers `Timestamp` message.
+///
+/// # Examples
+///
+/// ```
+/// let timestamp = rrg_proto::into_timestamp(std::time::SystemTime::now());
+/// assert!(timestamp.seconds > 0);
+/// ```
+pub fn into_timestamp(time: std::time::SystemTime) -> protobuf::well_known_types::Timestamp {
+    let since_epoch = time.duration_since(std::time::UNIX_EPOCH)
+        .expect("pre-epoch time");
+
+    let mut proto = protobuf::well_known_types::Timestamp::default();
+    proto.set_nanos(since_epoch.subsec_nanos() as i32);
+    proto.set_seconds(since_epoch.as_secs() as i64);
+
+    proto
 }

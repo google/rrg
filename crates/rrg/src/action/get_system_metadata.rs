@@ -30,24 +30,12 @@ impl crate::response::Item for Item {
     type Proto = rrg_proto::v2::get_system_metadata::Result;
 
     fn into_proto(self) -> rrg_proto::v2::get_system_metadata::Result {
-        // TODO(panhania@): Upgrade to version 3.2.0 of `protobuf` that supports
-        // `From<SystemTime>` conversion of Protocol Buffers `Timestamp`.
+        use rrg_proto::into_timestamp;
+
         let mut proto = rrg_proto::v2::get_system_metadata::Result::new();
         proto.set_field_type(self.kind.into());
         proto.set_version(self.version);
-
-        // TODO(panhania@): Upgrade to version 3.2.0 of `protobuf` that supports
-        // `From<SystemTime>` conversion of Protocol Buffers `Timestamp`.
-        let installed_since_epoch = self.installed
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap();
-
-        let mut install_time = protobuf::well_known_types::Timestamp::new();
-        install_time
-            .set_nanos(installed_since_epoch.subsec_nanos() as i32);
-        install_time
-            .set_seconds(installed_since_epoch.as_secs() as i64);
-        proto.set_install_time(install_time);
+        proto.set_install_time(into_timestamp(self.installed));
 
         proto
     }

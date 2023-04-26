@@ -97,22 +97,12 @@ impl Version {
 impl Into<rrg_proto::v2::startup::Startup> for Startup {
 
     fn into(self) -> rrg_proto::v2::startup::Startup {
+        use rrg_proto::into_timestamp;
+
         let mut proto = rrg_proto::v2::startup::Startup::new();
         proto.set_metadata(self.metadata.into());
         proto.set_args(self.args.into());
-
-        // TODO(panhania@): Upgrade to version 3.2.0 of `protobuf` that supports
-        // `From<SystemTime>` conversion of Protocol Buffers `Timestamp`.
-        let agent_started_since_epoch = self.agent_started
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap();
-
-        let mut agent_startup_time = protobuf::well_known_types::Timestamp::new();
-        agent_startup_time
-            .set_nanos(agent_started_since_epoch.subsec_nanos() as i32);
-        agent_startup_time
-            .set_seconds(agent_started_since_epoch.as_secs() as i64);
-        proto.set_agent_startup_time(agent_startup_time);
+        proto.set_agent_startup_time(into_timestamp(self.agent_started));
 
         proto
     }
