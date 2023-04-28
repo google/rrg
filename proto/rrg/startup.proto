@@ -5,6 +5,7 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
+import "rrg/fs.proto";
 
 package rrg.startup;
 
@@ -15,6 +16,8 @@ package rrg.startup;
 message Startup {
     // Metadata about the agent that has been started.
     Metadata metadata = 1;
+    // Path to the agent's executable that is running.
+    rrg.fs.Path path = 5;
     // Value of the command-line arguments the agent was invoked with.
     repeated string args = 2;
     // Time at which the agent was started.

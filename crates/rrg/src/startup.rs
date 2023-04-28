@@ -17,6 +17,8 @@ pub fn startup() -> Result<(), fleetspeak::WriteError> {
 pub struct Startup {
     /// Metadata about the agent that has been started.
     pub metadata: Metadata,
+    // Path to the agent's executable that is running.
+    pub path: Option<std::path::PathBuf>,
     /// Value of command-line arguments that the agent was invoked with.
     pub args: Vec<String>,
     /// Time at which the agent was started.
@@ -28,8 +30,20 @@ impl Startup {
 
     /// Creates a startup information as of now.
     pub fn now() -> Startup {
+        // TODO(rust-lang/rust#91345): Simplify with `inspect_err`.
+        let path = {
+            match std::env::current_exe().and_then(std::fs::canonicalize) {
+                Ok(path) => Some(path),
+                Err(error) => {
+                    log::error!("failed to obtain agent's path: {error}");
+                    None
+                }
+            }
+        };
+
         Startup {
             metadata: Metadata::from_cargo(),
+            path,
             args: std::env::args().collect(),
             agent_started: std::time::SystemTime::now(),
         }
@@ -101,6 +115,9 @@ impl Into<rrg_proto::v2::startup::Startup> for Startup {
 
         let mut proto = rrg_proto::v2::startup::Startup::new();
         proto.set_metadata(self.metadata.into());
+        if let Some(path) = self.path {
+            proto.set_path(path.into());
+        }
         proto.set_args(self.args.into());
         proto.set_agent_startup_time(into_timestamp(self.agent_started));
 
