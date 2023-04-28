@@ -3,6 +3,9 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+// TODO(@panhania): This is not how `target` of `log` macros should be used. All
+// these macros should be deleted.
+
 /// Logs a RRG-specific message at the error level.
 ///
 /// # Examples

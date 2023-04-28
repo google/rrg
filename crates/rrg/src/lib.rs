@@ -50,15 +50,20 @@ pub fn init(args: &crate::args::Args) {
 /// appropriate.
 pub fn listen(args: &crate::args::Args) {
     loop {
+        use ::log::{info, error};
+
         let request = match Request::receive(args.heartbeat_rate) {
             Ok(request) => request,
             Err(error) => {
-                rrg_macro::error!("failed to receive a request: {}", error);
+                error!("failed to receive a request: {}", error);
                 continue
             }
         };
+        let request_id = request.id();
+        info!("received request '{}': {:?}", request_id, request.action());
 
         session::FleetspeakSession::dispatch(request);
+        info!("finished handling request '{}'", request_id);
     }
 }
 

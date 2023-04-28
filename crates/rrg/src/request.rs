@@ -115,6 +115,13 @@ impl RequestId {
     }
 }
 
+impl std::fmt::Display for RequestId {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{:X}/{}", self.flow_id, self.request_id)
+    }
+}
+
 /// An action request.
 ///
 /// Requests are issued by flows and delivered to the agent through Fleetspeak.
@@ -217,6 +224,9 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
                 flow_id: proto.get_flow_id(),
                 request_id: proto.get_request_id(),
             },
+            // TODO(@panhania): We should not parse action at this moment as we
+            // cannot return a meaningful error to the server in case the agent
+            // does not recognize the action.
             action: proto.get_action().try_into()?,
             serialized_args: proto.take_args().take_value(),
         })
