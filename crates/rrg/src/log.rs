@@ -14,6 +14,7 @@ pub fn init(args: &crate::args::Args) {
     }
     if let Some(ref path) = args.log_to_file {
         let file = std::fs::OpenOptions::new()
+            .create(true)
             .append(true)
             .open(path)
             .expect("failed to open the log file");
