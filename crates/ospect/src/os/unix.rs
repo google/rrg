@@ -11,6 +11,18 @@ pub fn installed() -> std::io::Result<std::time::SystemTime> {
 
 /// Returns the version string of the currently running operating system.
 pub fn version() -> std::io::Result<String> {
+    let uname = uname()?;
+
+    // SAFETY: All strings in `utsname` are guaranteed to be null-terminated. As
+    // mentioned, the buffer is valid for the entire scope of the function and
+    // we create an owned copy before we return, so the call is safe.
+    Ok(unsafe {
+        std::ffi::CStr::from_ptr(uname.version.as_ptr())
+    }.to_string_lossy().into_owned())
+}
+
+/// Returns `uname` information of the currently running operating system.
+fn uname() -> std::io::Result<libc::utsname> {
     let mut utsname = std::mem::MaybeUninit::uninit();
 
     // SAFETY: We just pass the buffer we allocated. The buffer is valid for the
@@ -28,10 +40,5 @@ pub fn version() -> std::io::Result<String> {
         utsname.assume_init()
     };
 
-    // SAFETY: All strings in `utsname` are guaranteed to be null-terminated. As
-    // mentioned, the buffer is valid for the entire scope of the function and
-    // we create an owned copy before we return, so the call is safe.
-    Ok(unsafe {
-        std::ffi::CStr::from_ptr(utsname.version.as_ptr())
-    }.to_string_lossy().into_owned())
+    Ok(utsname)
 }
