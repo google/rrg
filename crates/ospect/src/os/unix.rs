@@ -21,6 +21,18 @@ pub fn version() -> std::io::Result<String> {
     }.to_string_lossy().into_owned())
 }
 
+/// Returns the hostname of the currently running operating system.
+pub fn hostname() -> std::io::Result<String> {
+    let uname = uname()?;
+
+    // SAFETY: All strings in `utsname` are guaranteed to be null-terminated. As
+    // mentioned, the buffer is valid for the entire scope of the function and
+    // we create an owned copy before we return, so the call is safe.
+    Ok(unsafe {
+        std::ffi::CStr::from_ptr(uname.nodename.as_ptr())
+    }.to_string_lossy().into_owned())
+}
+
 /// Returns `uname` information of the currently running operating system.
 fn uname() -> std::io::Result<libc::utsname> {
     let mut uname = std::mem::MaybeUninit::uninit();

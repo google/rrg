@@ -22,6 +22,5 @@ pub fn version() -> std::io::Result<String> {
 
 /// Returns the hostname of the currently running operating system.
 pub fn hostname() -> std::io::Result<String> {
-    // TODO(@panhania): Implement this function.
-    Err(std::io::ErrorKind::Unsupported.into())
+    crate::os::unix::hostname()
 }

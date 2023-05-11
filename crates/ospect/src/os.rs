@@ -100,7 +100,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO(@panhania): Enable this for all platforms.
+    // TODO(@panhania): Enable this for Windows.
+    #[cfg_attr(target_family = "windows", ignore)]
     fn hostname_not_empty() {
         assert!(!hostname().unwrap().is_empty());
     }
