@@ -23,12 +23,12 @@ pub fn version() -> std::io::Result<String> {
 
 /// Returns `uname` information of the currently running operating system.
 fn uname() -> std::io::Result<libc::utsname> {
-    let mut utsname = std::mem::MaybeUninit::uninit();
+    let mut uname = std::mem::MaybeUninit::uninit();
 
     // SAFETY: We just pass the buffer we allocated. The buffer is valid for the
     // entire scope of this function.
     let code = unsafe {
-        libc::uname(utsname.as_mut_ptr())
+        libc::uname(uname.as_mut_ptr())
     };
     if code < 0 {
         return Err(std::io::Error::last_os_error());
@@ -36,9 +36,9 @@ fn uname() -> std::io::Result<libc::utsname> {
 
     // SAFETY: We verified that the call succeeded. It means that the call has
     // initialized the buffer and we can read from it.
-    let utsname = unsafe {
-        utsname.assume_init()
+    let uname = unsafe {
+        uname.assume_init()
     };
 
-    Ok(utsname)
+    Ok(uname)
 }
