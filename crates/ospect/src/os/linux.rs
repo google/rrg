@@ -19,3 +19,9 @@ pub fn kind() -> crate::os::Kind {
 pub fn version() -> std::io::Result<String> {
     crate::os::unix::version()
 }
+
+/// Returns the hostname of the currently running operating system.
+pub fn hostname() -> std::io::Result<String> {
+    // TODO(@panhania): Implement this function.
+    Err(std::io::ErrorKind::Unsupported.into())
+}

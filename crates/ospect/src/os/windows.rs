@@ -174,3 +174,9 @@ pub fn version() -> std::io::Result<String> {
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getversionexw
     Ok(format!("{major}.{minor}.{build}.{revision}"))
 }
+
+/// Returns the hostname of the currently running operating system.
+pub fn hostname() -> std::io::Result<String> {
+    // TODO(@panhania): Implement this function.
+    Err(std::io::ErrorKind::Unsupported.into())
+}

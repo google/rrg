@@ -79,6 +79,15 @@ pub fn version() -> std::io::Result<String> {
     self::sys::version()
 }
 
+/// Returns the hostname of the currently running operating system.
+///
+/// # Errors
+///
+/// This function will return an error in case there was some issue when trying
+/// to query data from the system.
+pub fn hostname() -> std::io::Result<String> {
+    self::sys::hostname()
+}
 
 #[cfg(test)]
 mod tests {
@@ -88,5 +97,11 @@ mod tests {
     #[test]
     fn version_not_empty() {
         assert!(!version().unwrap().is_empty());
+    }
+
+    #[test]
+    #[ignore] // TODO(@panhania): Enable this for all platforms.
+    fn hostname_not_empty() {
+        assert!(!hostname().unwrap().is_empty());
     }
 }
