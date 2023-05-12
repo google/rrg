@@ -22,19 +22,24 @@ pub fn version() -> std::io::Result<String> {
 }
 
 /// Returns the hostname of the currently running operating system.
-pub fn hostname() -> std::io::Result<String> {
+pub fn hostname() -> std::io::Result<std::ffi::OsString> {
     let uname = uname()?;
 
     // SAFETY: All strings in `utsname` are guaranteed to be null-terminated. As
     // mentioned, the buffer is valid for the entire scope of the function and
     // we create an owned copy before we return, so the call is safe.
-    Ok(unsafe {
+    let hostname = unsafe {
         std::ffi::CStr::from_ptr(uname.nodename.as_ptr())
-    }.to_string_lossy().into_owned())
+    };
+
+    use std::os::unix::ffi::OsStrExt as _;
+    let hostname = std::ffi::OsStr::from_bytes(hostname.to_bytes());
+
+    Ok(hostname.to_os_string())
 }
 
 /// Returns the FQDN of the currently running operating system.
-pub fn fqdn() -> std::io::Result<String> {
+pub fn fqdn() -> std::io::Result<std::ffi::OsString> {
     let uname = uname()?;
 
     let hints = libc::addrinfo {
@@ -78,13 +83,18 @@ pub fn fqdn() -> std::io::Result<String> {
         info.assume_init()
     };
 
-    // SAFETY: We have verified that the call for which we specified the
-    // `AI_CANONNAME` flag succeeded, to the `ai_canonname` is pointing to the
-    // name of the host. We create an owned copy of the value and free the
-    // memory afterwards.
-    let fqdn = unsafe {
-        std::ffi::CStr::from_ptr((*info).ai_canonname)
-    }.to_string_lossy().into_owned();
+    let fqdn = {
+        // SAFETY: We have verified that the call for which we specified the
+        // `AI_CANONNAME` flag succeeded, to the `ai_canonname` is pointing to
+        // the name of the host. We create a scoped reference that is used then
+        // copied to an owned value and free the memory afterwards.
+        let fqdn = unsafe {
+            std::ffi::CStr::from_ptr((*info).ai_canonname)
+        };
+
+        use std::os::unix::ffi::OsStrExt as _;
+        std::ffi::OsStr::from_bytes(fqdn.to_bytes()).to_os_string()
+    };
 
     // SAFETY: `fqdn` has been copied and no references are kept around, so we
     // can release the memory now.

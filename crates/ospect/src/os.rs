@@ -85,7 +85,7 @@ pub fn version() -> std::io::Result<String> {
 ///
 /// This function will return an error in case there was some issue when trying
 /// to query data from the system.
-pub fn hostname() -> std::io::Result<String> {
+pub fn hostname() -> std::io::Result<std::ffi::OsString> {
     self::sys::hostname()
 }
 
@@ -99,7 +99,7 @@ pub fn hostname() -> std::io::Result<String> {
 ///
 /// This function will return an error in case there was some issue when trying
 /// to query data from the system.
-pub fn fqdn() -> std::io::Result<String> {
+pub fn fqdn() -> std::io::Result<std::ffi::OsString> {
     self::sys::fqdn()
 }
 

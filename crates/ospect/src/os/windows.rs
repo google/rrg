@@ -176,13 +176,13 @@ pub fn version() -> std::io::Result<String> {
 }
 
 /// Returns the hostname of the currently running operating system.
-pub fn hostname() -> std::io::Result<String> {
+pub fn hostname() -> std::io::Result<std::ffi::OsString> {
     use windows_sys::Win32::System::SystemInformation;
     computer_name(SystemInformation::ComputerNameDnsHostname)
 }
 
 /// Returns the FQDN of the currently running operating system.
-pub fn fqdn() -> std::io::Result<String> {
+pub fn fqdn() -> std::io::Result<std::ffi::OsString> {
     use windows_sys::Win32::System::SystemInformation;
     computer_name(SystemInformation::ComputerNameDnsFullyQualified)
 }
@@ -190,7 +190,7 @@ pub fn fqdn() -> std::io::Result<String> {
 /// Returns the name information of the currently running operating system.
 fn computer_name(
     format: windows_sys::Win32::System::SystemInformation::COMPUTER_NAME_FORMAT,
-) ->  std::io::Result<String>
+) ->  std::io::Result<std::ffi::OsString>
 {
     use windows_sys::Win32::System::SystemInformation::GetComputerNameExW;
 
@@ -244,5 +244,5 @@ fn computer_name(
     }
 
     use std::os::windows::ffi::OsStringExt as _;
-    Ok(std::ffi::OsString::from_wide(&buf).to_string_lossy().into_owned())
+    Ok(std::ffi::OsString::from_wide(&buf))
 }
