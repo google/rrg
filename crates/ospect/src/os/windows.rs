@@ -174,3 +174,75 @@ pub fn version() -> std::io::Result<String> {
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getversionexw
     Ok(format!("{major}.{minor}.{build}.{revision}"))
 }
+
+/// Returns the hostname of the currently running operating system.
+pub fn hostname() -> std::io::Result<std::ffi::OsString> {
+    use windows_sys::Win32::System::SystemInformation;
+    computer_name(SystemInformation::ComputerNameDnsHostname)
+}
+
+/// Returns the FQDN of the currently running operating system.
+pub fn fqdn() -> std::io::Result<std::ffi::OsString> {
+    use windows_sys::Win32::System::SystemInformation;
+    computer_name(SystemInformation::ComputerNameDnsFullyQualified)
+}
+
+/// Returns the name information of the currently running operating system.
+fn computer_name(
+    format: windows_sys::Win32::System::SystemInformation::COMPUTER_NAME_FORMAT,
+) ->  std::io::Result<std::ffi::OsString>
+{
+    use windows_sys::Win32::System::SystemInformation::GetComputerNameExW;
+
+    let mut buf_len = 0;
+
+    // SAFETY: We call `GetComputerNameExW` with no buffer to get the required
+    // size for it. It will be returned in the `buf_len` variable. Note that
+    // `buf_len` must be initialized to 0 when doing this call.
+    //
+    // See [1] for more details.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getcomputernameexw#remarks
+    let status = unsafe {
+        GetComputerNameExW(format, std::ptr::null_mut(), &mut buf_len)
+    };
+    if status != 0 {
+        // This should never happen because the call with no buffer should not
+        // succeed. But just to be on the safe side, we verify that.
+        return Err(std::io::ErrorKind::Other.into());
+    }
+
+    // SAFETY: We know that the previous call failed (it had to), so we can read
+    // the error code. Nevertheless, this function is always safe to call (it
+    // might just return irrelevant information).
+    let code = unsafe {
+        windows_sys::Win32::Foundation::GetLastError()
+    };
+    if code != windows_sys::Win32::Foundation::ERROR_MORE_DATA {
+        return Err(std::io::Error::from_raw_os_error(code as _));
+    }
+
+    let mut buf = Vec::with_capacity(buf_len as usize);
+
+    // SAFETY: We allocated buffer of the required capacity. In a (pretty much)
+    // impossible case where the name changes in the meantime, the function will
+    // return an error as we pass unchanged capacity along. We verify the error
+    // below.
+    let status = unsafe {
+        GetComputerNameExW(format, buf.as_mut_ptr(), &mut buf_len)
+    };
+    if status == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    // SAFETY: We verified that the call succeeded. It means that the buffer has
+    // been correctly filled with data and we can set its length. Note that this
+    // length is smaller by 1 that we initially allocated the buffer because on
+    // success this value does not account for the null character at the end.
+    unsafe {
+        buf.set_len(buf_len as usize);
+    }
+
+    use std::os::windows::ffi::OsStringExt as _;
+    Ok(std::ffi::OsString::from_wide(&buf))
+}

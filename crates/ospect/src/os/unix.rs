@@ -11,12 +11,108 @@ pub fn installed() -> std::io::Result<std::time::SystemTime> {
 
 /// Returns the version string of the currently running operating system.
 pub fn version() -> std::io::Result<String> {
-    let mut utsname = std::mem::MaybeUninit::uninit();
+    let uname = uname()?;
+
+    // SAFETY: All strings in `utsname` are guaranteed to be null-terminated. As
+    // mentioned, the buffer is valid for the entire scope of the function and
+    // we create an owned copy before we return, so the call is safe.
+    Ok(unsafe {
+        std::ffi::CStr::from_ptr(uname.version.as_ptr())
+    }.to_string_lossy().into_owned())
+}
+
+/// Returns the hostname of the currently running operating system.
+pub fn hostname() -> std::io::Result<std::ffi::OsString> {
+    let uname = uname()?;
+
+    // SAFETY: All strings in `utsname` are guaranteed to be null-terminated. As
+    // mentioned, the buffer is valid for the entire scope of the function and
+    // we create an owned copy before we return, so the call is safe.
+    let hostname = unsafe {
+        std::ffi::CStr::from_ptr(uname.nodename.as_ptr())
+    };
+
+    use std::os::unix::ffi::OsStrExt as _;
+    let hostname = std::ffi::OsStr::from_bytes(hostname.to_bytes());
+
+    Ok(hostname.to_os_string())
+}
+
+/// Returns the FQDN of the currently running operating system.
+pub fn fqdn() -> std::io::Result<std::ffi::OsString> {
+    let uname = uname()?;
+
+    let hints = libc::addrinfo {
+        ai_family: libc::AF_UNSPEC, // `AF_UNSPEC` means "any family".
+        ai_socktype: 0, // 0 means "any type".
+        ai_protocol: 0, // 0 means "any protocol".
+        ai_flags: libc::AI_CANONNAME,
+        // The following fields are irrelevant for `getaddrinfo` call.
+        ai_addrlen: 0,
+        ai_addr: std::ptr::null_mut(),
+        ai_canonname: std::ptr::null_mut(),
+        ai_next: std::ptr::null_mut(),
+    };
+
+    let mut info = std::mem::MaybeUninit::uninit();
+
+    // SAFETY: We call the function as described in the documentation [1] and
+    // verify the return code below. In case of success, we free the memory at
+    // the end of the function.
+    //
+    // [1]: https://man7.org/linux/man-pages/man3/getaddrinfo.3.html
+    let code = unsafe {
+        libc::getaddrinfo(
+            uname.nodename.as_ptr(),
+            std::ptr::null(),
+            &hints,
+            info.as_mut_ptr(),
+        )
+    };
+    if code != 0 {
+        // Ideally, we should use `gai_strerror` to get a human-friendly message
+        // of the error. Unfortunately, it is not clear whether this function is
+        // or is not thread-safe so we just return a generic error.
+        use std::io::{Error, ErrorKind::Other};
+        return Err(Error::new(Other, "`getaddrinfo` failure"))
+    }
+
+    // SAFETY: We verified that the call succeeded. It means that the call has
+    // initialized the pointer and we can read from it.
+    let info = unsafe {
+        info.assume_init()
+    };
+
+    let fqdn = {
+        // SAFETY: We have verified that the call for which we specified the
+        // `AI_CANONNAME` flag succeeded, to the `ai_canonname` is pointing to
+        // the name of the host. We create a scoped reference that is used then
+        // copied to an owned value and free the memory afterwards.
+        let fqdn = unsafe {
+            std::ffi::CStr::from_ptr((*info).ai_canonname)
+        };
+
+        use std::os::unix::ffi::OsStrExt as _;
+        std::ffi::OsStr::from_bytes(fqdn.to_bytes()).to_os_string()
+    };
+
+    // SAFETY: `fqdn` has been copied and no references are kept around, so we
+    // can release the memory now.
+    unsafe {
+        libc::freeaddrinfo(info);
+    }
+
+    Ok(fqdn)
+}
+
+/// Returns `uname` information of the currently running operating system.
+fn uname() -> std::io::Result<libc::utsname> {
+    let mut uname = std::mem::MaybeUninit::uninit();
 
     // SAFETY: We just pass the buffer we allocated. The buffer is valid for the
     // entire scope of this function.
     let code = unsafe {
-        libc::uname(utsname.as_mut_ptr())
+        libc::uname(uname.as_mut_ptr())
     };
     if code < 0 {
         return Err(std::io::Error::last_os_error());
@@ -24,14 +120,9 @@ pub fn version() -> std::io::Result<String> {
 
     // SAFETY: We verified that the call succeeded. It means that the call has
     // initialized the buffer and we can read from it.
-    let utsname = unsafe {
-        utsname.assume_init()
+    let uname = unsafe {
+        uname.assume_init()
     };
 
-    // SAFETY: All strings in `utsname` are guaranteed to be null-terminated. As
-    // mentioned, the buffer is valid for the entire scope of the function and
-    // we create an owned copy before we return, so the call is safe.
-    Ok(unsafe {
-        std::ffi::CStr::from_ptr(utsname.version.as_ptr())
-    }.to_string_lossy().into_owned())
+    Ok(uname)
 }

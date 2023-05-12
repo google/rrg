@@ -9,6 +9,10 @@ struct Item {
     kind: ospect::os::Kind,
     /// Version string of the operating system the agent is running on.
     version: String,
+    /// Hostname of the operating system the agent is running on.
+    hostname: std::ffi::OsString,
+    /// FQDN of the operating system the agent is running on.
+    fqdn: std::ffi::OsString,
     /// Estimated time at which the operating system was installed.
     installed: std::time::SystemTime,
 }
@@ -20,6 +24,8 @@ impl Item {
         Ok(Item {
             kind: ospect::os::kind(),
             version: ospect::os::version()?,
+            hostname: ospect::os::hostname()?,
+            fqdn: ospect::os::fqdn()?,
             installed: ospect::os::installed()?,
         })
     }
@@ -35,6 +41,8 @@ impl crate::response::Item for Item {
         let mut proto = rrg_proto::v2::get_system_metadata::Result::new();
         proto.set_field_type(self.kind.into());
         proto.set_version(self.version);
+        proto.set_hostname(self.hostname.to_string_lossy().into_owned());
+        proto.set_fqdn(self.fqdn.to_string_lossy().into_owned());
         proto.set_install_time(into_timestamp(self.installed));
 
         proto

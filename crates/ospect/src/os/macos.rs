@@ -19,3 +19,13 @@ pub fn kind() -> crate::os::Kind {
 pub fn version() -> std::io::Result<String> {
     crate::os::unix::version()
 }
+
+/// Returns the hostname of the currently running operating system.
+pub fn hostname() -> std::io::Result<std::ffi::OsString> {
+    crate::os::unix::hostname()
+}
+
+/// Returns the FQDN of the currently running operating system.
+pub fn fqdn() -> std::io::Result<std::ffi::OsString> {
+    crate::os::unix::fqdn()
+}

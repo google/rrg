@@ -79,6 +79,29 @@ pub fn version() -> std::io::Result<String> {
     self::sys::version()
 }
 
+/// Returns the hostname of the currently running operating system.
+///
+/// # Errors
+///
+/// This function will return an error in case there was some issue when trying
+/// to query data from the system.
+pub fn hostname() -> std::io::Result<std::ffi::OsString> {
+    self::sys::hostname()
+}
+
+/// Returns the FQDN of the currently running operating system.
+///
+/// Note that FQDN retrival is not reliable on all operating systems and in some
+/// cases just a hostname can be returned instead (depending on the configration
+/// of the sepcific system).
+///
+/// # Errors
+///
+/// This function will return an error in case there was some issue when trying
+/// to query data from the system.
+pub fn fqdn() -> std::io::Result<std::ffi::OsString> {
+    self::sys::fqdn()
+}
 
 #[cfg(test)]
 mod tests {
@@ -88,5 +111,15 @@ mod tests {
     #[test]
     fn version_not_empty() {
         assert!(!version().unwrap().is_empty());
+    }
+
+    #[test]
+    fn hostname_not_empty() {
+        assert!(!hostname().unwrap().is_empty());
+    }
+
+    #[test]
+    fn fqdn_not_empty() {
+        assert!(!fqdn().unwrap().is_empty());
     }
 }

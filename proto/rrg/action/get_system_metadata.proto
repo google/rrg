@@ -22,6 +22,15 @@ message Result {
     // No assumptions on the specific format of this string should be made.
     string version = 2;
 
+    // The hostname of the operating system.
+    string hostname = 4;
+
+    // The FQDN of the operating system.
+    //
+    // Note that depending on the specific operating system configuration this
+    // value might be sometimes reported as just a hostname.
+    string fqdn = 5;
+
     // The time at which the operating system was installed.
     //
     // Note that this data is based on various heuristics and might not be very
