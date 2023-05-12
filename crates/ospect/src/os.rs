@@ -89,6 +89,20 @@ pub fn hostname() -> std::io::Result<String> {
     self::sys::hostname()
 }
 
+/// Returns the FQDN of the currently running operating system.
+///
+/// Note that FQDN retrival is not reliable on all operating systems and in some
+/// cases just a hostname can be returned instead (depending on the configration
+/// of the sepcific system).
+///
+/// # Errors
+///
+/// This function will return an error in case there was some issue when trying
+/// to query data from the system.
+pub fn fqdn() -> std::io::Result<String> {
+    self::sys::fqdn()
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -104,5 +118,12 @@ mod tests {
     #[cfg_attr(target_family = "windows", ignore)]
     fn hostname_not_empty() {
         assert!(!hostname().unwrap().is_empty());
+    }
+
+    #[test]
+    // TODO(@panhania): Enable this for all supported platforms.
+    #[ignore]
+    fn fqdn_not_empty() {
+        assert!(!fqdn().unwrap().is_empty());
     }
 }

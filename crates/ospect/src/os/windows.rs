@@ -180,3 +180,9 @@ pub fn hostname() -> std::io::Result<String> {
     // TODO(@panhania): Implement this function.
     Err(std::io::ErrorKind::Unsupported.into())
 }
+
+/// Returns the FQDN of the currently running operating system.
+pub fn fqdn() -> std::io::Result<String> {
+    // TODO(@panhania): Implement this function.
+    Err(std::io::ErrorKind::Unsupported.into())
+}
