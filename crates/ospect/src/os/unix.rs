@@ -51,7 +51,7 @@ pub fn fqdn() -> std::io::Result<String> {
 
     let mut info = std::mem::MaybeUninit::uninit();
 
-    // SAFETY: We call the function as described in the documentaion [1] and
+    // SAFETY: We call the function as described in the documentation [1] and
     // verify the return code below. In case of success, we free the memory at
     // the end of the function.
     //
