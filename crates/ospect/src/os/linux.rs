@@ -27,6 +27,5 @@ pub fn hostname() -> std::io::Result<String> {
 
 /// Returns the FQDN of the currently running operating system.
 pub fn fqdn() -> std::io::Result<String> {
-    // TODO(@panhania): Implement this function.
-    Err(std::io::ErrorKind::Unsupported.into())
+    crate::os::unix::fqdn()
 }

@@ -121,8 +121,8 @@ mod tests {
     }
 
     #[test]
-    // TODO(@panhania): Enable this for all supported platforms.
-    #[ignore]
+    // TODO(@panhania): Enable this for Windows.
+    #[cfg_attr(target_family = "windows", ignore)]
     fn fqdn_not_empty() {
         assert!(!fqdn().unwrap().is_empty());
     }
