@@ -28,4 +28,12 @@ message Result {
     //
     // This field is supported only on Linux and macOS.
     repeated rrg.fs.FileExtAttr ext_attrs = 3;
+
+    // A symlink value of the file.
+    //
+    // This field is set only if the file is a symlink.
+    //
+    // Note that this path might be relative. Moreover, it is not canonicalized
+    // in any way and might not even exist (a dangling symlink).
+    rrg.fs.Path symlink = 4;
 }

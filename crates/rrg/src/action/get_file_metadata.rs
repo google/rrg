@@ -29,6 +29,8 @@ struct Item {
     // It is also not clear how the field should be named as on Linux this
     // feature is called "attributes" (not to be confused with file extended
     // attributes!) and on macOS it is called "flags".
+    /// Path to the file pointed by a symlink (if available).
+    symlink: Option<PathBuf>,
 }
 
 /// Handles invocations of the `get_file_metadata` action.
@@ -56,17 +58,26 @@ where
     // (including the symlink) which is not what we want as we return metadata
     // of the symlink itself and not the data it points to. Thus, we want only
     // to canonicalize the parent part of the path.
-    let path = if metadata.is_symlink() {
-        canonicalize_parent(args.path)
+    let path;
+    let symlink;
+
+    if metadata.is_symlink() {
+        path = canonicalize_parent(&args.path);
+        symlink = Some(std::fs::read_link(&args.path));
     } else {
-        args.path.canonicalize()
-    }.map_err(crate::session::Error::action)?;
+        path = args.path.canonicalize();
+        symlink = None;
+    };
+
+    let path = path.map_err(crate::session::Error::action)?;
+    let symlink = symlink.transpose().map_err(crate::session::Error::action)?;
 
     session.reply(Item {
         path,
         metadata,
         #[cfg(target_family = "unix")]
         ext_attrs,
+        symlink,
     })?;
 
     Ok(())
@@ -102,6 +113,10 @@ impl crate::response::Item for Item {
             for ext_attr in self.ext_attrs {
                 proto.mut_ext_attrs().push(ext_attr.into());
             }
+        }
+
+        if let Some(symlink) = self.symlink {
+            proto.set_symlink(symlink.into());
         }
 
         proto
@@ -221,6 +236,7 @@ mod tests {
         let item = session.reply::<Item>(0);
         assert_eq!(item.path, tempdir.join("link"));
         assert_eq!(item.metadata.is_symlink(), true);
+        assert_eq!(item.symlink, Some(tempdir.join("file")));
     }
 
     #[cfg(feature = "test-setfattr")]
