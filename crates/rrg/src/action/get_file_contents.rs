@@ -2,8 +2,9 @@
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
-use std::{path::PathBuf};
+use std::path::PathBuf;
 
+/// Limit on the size of individual file part blob sent to the blob sink.
 const MAX_BLOB_LEN: usize = 2 * 1024 * 1024; // 2 MiB.
 
 /// Arguments of the `get_file_contents` action.
