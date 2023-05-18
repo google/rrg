@@ -42,9 +42,9 @@ where
         .map_err(crate::session::Error::action)?;
 
     let buf_len = std::cmp::min(args.len as usize, MAX_BLOB_LEN);
-    let mut buf = vec![0; buf_len];
 
     loop {
+        let mut buf = vec![0; buf_len];
         let len = file.read(&mut buf[..])
             .map_err(crate::session::Error::action)?;
 
@@ -52,12 +52,14 @@ where
             break;
         }
 
-        // TODO(@panhania): Send blobs.
+        let blob = crate::blob::Blob::from(buf);
+        let blob_sha256 = sha2::Sha256::digest(blob.as_bytes()).into();
 
+        session.send(crate::Sink::Blob, blob)?;
         session.reply(Item {
             offset,
             len,
-            blob_sha256: sha2::Sha256::digest(&buf[..len]).into(),
+            blob_sha256,
         })?;
 
         offset += len as u64;
