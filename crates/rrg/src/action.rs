@@ -24,6 +24,9 @@ pub mod get_system_metadata;
 #[cfg(feature = "action-get_file_metadata")]
 pub mod get_file_metadata;
 
+#[cfg(feature = "action-get_file_contents")]
+pub mod get_file_contents;
+
 /// Dispatches the given `request` to an appropriate action handler.
 ///
 /// This method is a mapping between action names (as specified in the protocol)
@@ -50,6 +53,11 @@ where
         #[cfg(feature = "action-get_file_metadata")]
         GetFileMetadata => {
             handle(session, request, self::get_file_metadata::handle)
+        }
+
+        #[cfg(feature = "action-get_file_contents")]
+        GetFileContents => {
+            handle(session, request, self::get_file_contents::handle)
         }
     }
 }

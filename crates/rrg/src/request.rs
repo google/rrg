@@ -21,6 +21,9 @@ pub enum Action {
     /// Get metadata about the specified file.
     #[cfg(feature = "action-get_file_metadata")]
     GetFileMetadata,
+    /// Get contents of the specified file.
+    #[cfg(feature = "action-get_file_contents")]
+    GetFileContents,
 }
 
 /// The error type for cases when parsing action fails.
