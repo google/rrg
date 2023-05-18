@@ -12,6 +12,7 @@ pub mod log;
 pub mod args;
 pub mod session;
 
+mod blob;
 mod request;
 // TOOD(@panhania): Hide this module once the `timeline` example is removed or
 // refactored.
