@@ -25,7 +25,7 @@ default = [
 
 action-get_system_metadata = []
 action-get_file_metadata = []
-action-get_file_contents = ["dep:digest", "dep:sha2"]
+action-get_file_contents = ["dep:sha2"]
 
 # These actions are deprecated (awaiting migration to the new protocol).
 action-insttime = []
