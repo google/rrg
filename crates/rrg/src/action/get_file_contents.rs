@@ -38,19 +38,22 @@ where
         .map_err(crate::session::Error::action)?;
 
     let mut offset = args.offset;
+    let mut len_left = args.len;
+
     file.seek(std::io::SeekFrom::Start(offset))
         .map_err(crate::session::Error::action)?;
 
-    let buf_len = std::cmp::min(args.len as usize, MAX_BLOB_LEN);
-
     loop {
-        let mut buf = vec![0; buf_len];
-        let len = file.read(&mut buf[..])
+        let mut buf = vec![0; std::cmp::min(len_left, MAX_BLOB_LEN)];
+
+        let len_read = file.read(&mut buf[..])
             .map_err(crate::session::Error::action)?;
 
-        if len == 0 {
+        if len_read == 0 {
             break;
         }
+
+        buf.truncate(len_read);
 
         let blob = crate::blob::Blob::from(buf);
         let blob_sha256 = sha2::Sha256::digest(blob.as_bytes()).into();
@@ -58,11 +61,12 @@ where
         session.send(crate::Sink::Blob, blob)?;
         session.reply(Item {
             offset,
-            len,
+            len: len_read,
             blob_sha256,
         })?;
 
-        offset += len as u64;
+        offset += len_read as u64;
+        len_left -= len_read;
     }
 
     Ok(())
