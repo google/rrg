@@ -89,6 +89,8 @@ impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
             GET_SYSTEM_METADATA => Ok(Action::GetSystemMetadata),
             #[cfg(feature ="action-get_file_metadata")]
             GET_FILE_METADATA => Ok(Action::GetFileMetadata),
+            #[cfg(feature = "action-get_file_contents")]
+            GET_FILE_CONTENTS => Ok(Action::GetFileContents),
             _ => {
                 let val = protobuf::ProtobufEnum::value(&proto);
                 Err(ParseActionErrorKind::UnknownAction(val).into())
