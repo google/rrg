@@ -124,8 +124,8 @@ mod tests {
     }
 
     #[test]
-    // TODO(@panhania): Enable once this method is supported on all platforms.
-    #[ignore]
+    // TODO(@panhania): Enable onc `arch` is implemented on Windows.
+    #[cfg_attr(target_os = "windows", ignore)]
     fn arch_not_empty() {
         assert!(!arch().unwrap().is_empty());
     }

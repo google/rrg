@@ -22,8 +22,7 @@ pub fn version() -> std::io::Result<String> {
 
 /// Returns the CPU architecture of the currently running operating system.
 pub fn arch() -> std::io::Result<String> {
-    // TODO(@panhania): Implement this method.
-    Err(std::io::ErrorKind::Unsupported.into())
+    crate::os::unix::arch()
 }
 
 /// Returns the hostname of the currently running operating system.
