@@ -175,6 +175,12 @@ pub fn version() -> std::io::Result<String> {
     Ok(format!("{major}.{minor}.{build}.{revision}"))
 }
 
+/// Returns the CPU architecture of the currently running operating system.
+pub fn arch() -> std::io::Result<String> {
+    // TODO(@panhania): Implement this method.
+    Err(std::io::ErrorKind::Unsupported.into())
+}
+
 /// Returns the hostname of the currently running operating system.
 pub fn hostname() -> std::io::Result<std::ffi::OsString> {
     use windows_sys::Win32::System::SystemInformation;
