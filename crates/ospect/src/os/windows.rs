@@ -175,6 +175,53 @@ pub fn version() -> std::io::Result<String> {
     Ok(format!("{major}.{minor}.{build}.{revision}"))
 }
 
+/// Returns the CPU architecture of the currently running operating system.
+pub fn arch() -> std::io::Result<String> {
+    use windows_sys::Win32::System::{
+        Diagnostics,
+        SystemInformation::*,
+    };
+
+    let mut sysinfo = std::mem::MaybeUninit::uninit();
+    // SAFETY: We create a `SYSTEM_INFO` structure and pass it to the function
+    // as described in [1]. The function always succeeds and there are no status
+    // codes to be handled.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getnativesysteminfo
+    unsafe {
+        GetNativeSystemInfo(sysinfo.as_mut_ptr());
+    }
+    // SAFETY: `GetNativeSystemInfo` call initialized the struct as explained
+    // above.
+    let sysinfo = unsafe { sysinfo.assume_init() };
+
+    // SAFETY: We need to access a union field because (presumalby) they wanted
+    // to have an alternative view for these values. Note that this will not
+    // cause any memory unsafety as in the worst case we can a garbage value
+    // that will not match anything below.
+    let arch = unsafe {
+        sysinfo.Anonymous.Anonymous.wProcessorArchitecture
+    };
+
+    // See [1] for the list of all possible values. We try to match Linux names
+    // as described in [2].
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/ns-sysinfoapi-system_info#members
+    // [2]: https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
+    let arch_str = match arch {
+        Diagnostics::Debug::PROCESSOR_ARCHITECTURE_AMD64 => "x86_64",
+        Diagnostics::Debug::PROCESSOR_ARCHITECTURE_ARM => "arm",
+        // TODO(@panhania): Replace with `PROCESSOR_ARCHITECTURE_ARM64` once it
+        // is part of the `windows-sys` crate.
+        0x12 => "arm64",
+        Diagnostics::Debug::PROCESSOR_ARCHITECTURE_IA64 => "ia64",
+        Diagnostics::Debug::PROCESSOR_ARCHITECTURE_INTEL => "x86",
+        Diagnostics::Debug::PROCESSOR_ARCHITECTURE_UNKNOWN | _ => "unknown",
+    };
+
+    Ok(String::from(arch_str))
+}
+
 /// Returns the hostname of the currently running operating system.
 pub fn hostname() -> std::io::Result<std::ffi::OsString> {
     use windows_sys::Win32::System::SystemInformation;

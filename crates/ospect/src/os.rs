@@ -79,6 +79,16 @@ pub fn version() -> std::io::Result<String> {
     self::sys::version()
 }
 
+/// Returns the CPU architecture of the currently running operating system.
+///
+/// No assumptions on the specific format of this string should be made. Even
+/// the same architecture can be reported in different ways depending on the
+/// operating system or even its version (e.g. a 64-bit ARM-based architecture
+/// can be reported as `arm64` or `aarch64`).
+pub fn arch() -> std::io::Result<String> {
+    self::sys::arch()
+}
+
 /// Returns the hostname of the currently running operating system.
 ///
 /// # Errors
@@ -111,6 +121,17 @@ mod tests {
     #[test]
     fn version_not_empty() {
         assert!(!version().unwrap().is_empty());
+    }
+
+    #[test]
+    fn arch_not_empty() {
+        assert!(!arch().unwrap().is_empty());
+    }
+
+    #[test]
+    #[cfg_attr(not(target_arch = "x86_64"), ignore)]
+    fn arch_x86_64() {
+        assert_eq!(arch().unwrap(), "x86_64");
     }
 
     #[test]
