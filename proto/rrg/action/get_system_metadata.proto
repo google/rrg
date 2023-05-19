@@ -22,6 +22,11 @@ message Result {
   // No assumptions on the specific format of this string should be made.
   string version = 2;
 
+  // CPU architecture of the operating system (e.g. `x86_64`).
+  //
+  // No assumptions on the specific format of this string should be made.
+  string arch = 6;
+
   // The hostname of the operating system.
   string hostname = 4;
 
