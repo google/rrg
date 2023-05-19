@@ -129,6 +129,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(target_arch = "x86_64"), ignore)]
+    fn arch_x86_64() {
+        assert_eq!(arch().unwrap(), "x86_64");
+    }
+
+    #[test]
     fn hostname_not_empty() {
         assert!(!hostname().unwrap().is_empty());
     }
