@@ -124,8 +124,6 @@ mod tests {
     }
 
     #[test]
-    // TODO(@panhania): Enable onc `arch` is implemented on Windows.
-    #[cfg_attr(target_os = "windows", ignore)]
     fn arch_not_empty() {
         assert!(!arch().unwrap().is_empty());
     }

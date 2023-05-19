@@ -24,6 +24,7 @@ features = [
     "Win32_NetworkManagement_Ndis",
     "Win32_Networking_WinSock",
     "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_Debug",
     "Win32_System_SystemInformation",
     "Win32_System_LibraryLoader",
     "Win32_System_ProcessStatus",
