@@ -108,8 +108,8 @@ message Status {
     // List of all possible error types that can occur.
     enum Type {
       UNSET = 0;
-      // Specified action is not supported or uknown.
-      UNSUPPORTED_ACTION = 1; // TODO: Rename this to `UNKNOWN_ACTION.`
+      // Specified action is not known.
+      UNKNOWN_ACTION = 1;
       // Action was invoked with invalid arguments.
       INVALID_ARGS = 2;
       // Network bytes sent treshold has been reached.

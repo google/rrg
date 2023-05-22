@@ -106,7 +106,7 @@ impl From<ErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
         use ErrorKind::*;
 
         match kind {
-            UnknownAction => Self::UNSUPPORTED_ACTION,
+            UnknownAction => Self::UNKNOWN_ACTION,
             InvalidArgs => Self::INVALID_ARGS,
             ActionFailure => Self::ACTION_FAILURE,
         }
