@@ -92,9 +92,9 @@ impl From<ParseActionErrorKind> for ParseActionError {
 
 impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
 
-    type Error = ParseActionError;
+    type Error = UnknownAction;
 
-    fn try_from(proto: rrg_proto::v2::rrg::Action) -> Result<Action, ParseActionError> {
+    fn try_from(proto: rrg_proto::v2::rrg::Action) -> Result<Action, UnknownAction> {
         use rrg_proto::v2::rrg::Action::*;
 
         match proto {
@@ -105,8 +105,8 @@ impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
             #[cfg(feature = "action-get_file_contents")]
             GET_FILE_CONTENTS => Ok(Action::GetFileContents),
             _ => {
-                let val = protobuf::ProtobufEnum::value(&proto);
-                Err(ParseActionErrorKind::UnknownAction(val).into())
+                let value = protobuf::ProtobufEnum::value(&proto);
+                Err(UnknownAction { value })
             },
         }
     }
@@ -150,7 +150,7 @@ pub struct Request {
     /// A unique identifier of the request.
     id: RequestId,
     /// An action to invoke.
-    action: Action,
+    action: Result<Action, UnknownAction>,
     /// Serialized protobuf message with arguments to invoke the action with.
     serialized_args: Vec<u8>,
 }
@@ -162,7 +162,7 @@ impl Request {
     }
 
     /// Gets the action this request should invoke.
-    pub fn action(&self) -> Action {
+    pub fn action(&self) -> Result<Action, UnknownAction> {
         self.action
     }
 
@@ -242,10 +242,7 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
                 flow_id: proto.get_flow_id(),
                 request_id: proto.get_request_id(),
             },
-            // TODO(@panhania): We should not parse action at this moment as we
-            // cannot return a meaningful error to the server in case the agent
-            // does not recognize the action.
-            action: proto.get_action().try_into()?,
+            action: proto.get_action().try_into(),
             serialized_args: proto.take_args().take_value(),
         })
     }
