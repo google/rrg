@@ -39,57 +39,6 @@ pub struct UnknownAction {
     pub(crate) value: i32, // TODO(@panhania): Hide this field.
 }
 
-/// The error type for cases when parsing action fails.
-#[derive(Debug)]
-pub struct ParseActionError {
-    /// A corresponding [`ParseActionErrorKind`] of the error.
-    kind: ParseActionErrorKind,
-}
-
-impl ParseActionError {
-    /// Returns the corresponding [`ParseActionErrorKind`] of the error.
-    pub fn kind(&self) -> ParseActionErrorKind {
-        self.kind
-    }
-}
-
-impl std::fmt::Display for ParseActionError {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "{}", self.kind)
-    }
-}
-
-impl std::error::Error for ParseActionError {
-}
-
-/// List of general categories of action parsing errors.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ParseActionErrorKind {
-    /// The action value is not known.
-    UnknownAction(i32),
-}
-
-impl std::fmt::Display for ParseActionErrorKind {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ParseActionErrorKind::UnknownAction(val) => {
-                write!(fmt, "unknown action value '{val}'")
-            }
-        }
-    }
-}
-
-impl From<ParseActionErrorKind> for ParseActionError {
-
-    fn from(kind: ParseActionErrorKind) -> ParseActionError {
-        ParseActionError {
-            kind,
-        }
-    }
-}
-
 impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
 
     type Error = UnknownAction;
@@ -271,13 +220,6 @@ impl ParseRequestError {
     }
 }
 
-impl From<ParseActionError> for ParseRequestError {
-
-    fn from(error: ParseActionError) -> ParseRequestError {
-        ParseRequestErrorKind::InvalidAction(error.kind()).into()
-    }
-}
-
 impl std::fmt::Display for ParseRequestError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -302,8 +244,6 @@ impl std::error::Error for ParseRequestError {
 pub enum ParseRequestErrorKind {
     /// The serialized message with request was impossible to deserialize.
     MalformedBytes,
-    /// It was not possible to parse the action specified in the request.
-    InvalidAction(ParseActionErrorKind),
 }
 
 impl std::fmt::Display for ParseRequestErrorKind {
@@ -313,7 +253,6 @@ impl std::fmt::Display for ParseRequestErrorKind {
 
         match self {
             MalformedBytes => write!(fmt, "malformed protobuf message bytes"),
-            InvalidAction(kind) => write!(fmt, "{}", kind),
         }
     }
 }
