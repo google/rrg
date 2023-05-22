@@ -5,7 +5,7 @@
 
 use rrg_macro::warn;
 
-/// List of all actions supported by the agent.
+/// List of all actions known by the agent.
 ///
 /// An action is a "unit of execution" and is invoked by flows (created on the
 /// GRR server). To start an action execution the flow needs to send a [request]
@@ -24,6 +24,19 @@ pub enum Action {
     /// Get contents of the specified file.
     #[cfg(feature = "action-get_file_contents")]
     GetFileContents,
+}
+
+/// An action that is not known to the agent.
+///
+/// Sometimes we may receive an action that is not known because the server is
+/// more up-to-date than the agent (or is just broken). But we should not fail
+/// parsing the request as we would like to still communicate failure back to
+/// the server. Therefore, we keep this value around and fail at action dispatch
+/// delivering a response to the calling flow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct UnknownAction {
+    /// A raw value from the Protocol Buffers message.
+    pub(crate) value: i32, // TODO(@panhania): Hide this field.
 }
 
 /// The error type for cases when parsing action fails.
