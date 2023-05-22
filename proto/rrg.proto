@@ -110,16 +110,18 @@ message Status {
       UNSET = 0;
       // Specified action is not known.
       UNKNOWN_ACTION = 1;
+      // Specified action is not supported.
+      UNSUPPORTED_ACTION = 2;
       // Action was invoked with invalid arguments.
-      INVALID_ARGS = 2;
+      INVALID_ARGS = 3;
       // Network bytes sent treshold has been reached.
-      NETWORK_BYTES_SENT_LIMIT_EXCEEDED = 3;
+      NETWORK_BYTES_SENT_LIMIT_EXCEEDED = 4;
       // CPU time usage treshhold has been reached.
-      CPU_TIME_LIMIT_EXCEEDED = 4;
+      CPU_TIME_LIMIT_EXCEEDED = 5;
       // Elapsed real (wall) time treshhold has been reached.
-      REAL_TIME_LIMIT_EXCEEDED = 5;
+      REAL_TIME_LIMIT_EXCEEDED = 6;
       // Action-specific error occurred.
-      ACTION_FAILURE = 6;
+      ACTION_FAILURE = 7;
     }
 
     // Type of the error.
