@@ -61,7 +61,6 @@ where
         GetFileMetadata => {
             handle(session, request, self::get_file_metadata::handle)
         }
-
         #[cfg(feature = "action-get_file_contents")]
         GetFileContents => {
             handle(session, request, self::get_file_contents::handle)
