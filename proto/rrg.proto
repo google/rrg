@@ -14,22 +14,22 @@ import "google/protobuf/timestamp.proto";
 enum Action {
   UNKNOWN = 0;
 
-  // Get metadata about the agent itself.
-  GET_AGENT_METADATA = 1;
   // Get medatadata about the operating system and the machine.
-  GET_SYSTEM_METADATA = 2;
+  GET_SYSTEM_METADATA = 1;
   // Get metadata of the specified file.
-  GET_FILE_METADATA = 3;
+  GET_FILE_METADATA = 2;
   // Get contents of the specified file.
-  GET_FILE_CONTENTS = 4;
+  GET_FILE_CONTENTS = 3;
   // Get hash of the specified file.
-  GET_FILE_HASH = 5;
+  GET_FILE_HASH = 4;
   // List contents of a directory.
-  LIST_DIRECTORY = 6;
+  LIST_DIRECTORY = 5;
   // List processes available on the system.
-  LIST_PROCESSES = 7;
+  LIST_PROCESSES = 6;
   // List connections available on the system.
-  LIST_CONNECTIONS = 8;
+  LIST_CONNECTIONS = 7;
+  // List named pipes available on the system (Windows-only).
+  LIST_NAMED_PIPES = 8;
   // List users available on the system.
   LIST_USERS = 9;
   // Get the snapshot of the entire filesystem.
@@ -108,18 +108,20 @@ message Status {
     // List of all possible error types that can occur.
     enum Type {
       UNSET = 0;
-      // Specified action is not supported or uknown.
-      UNSUPPORTED_ACTION = 1;
+      // Specified action is not known.
+      UNKNOWN_ACTION = 1;
+      // Specified action is not supported.
+      UNSUPPORTED_ACTION = 2;
       // Action was invoked with invalid arguments.
-      INVALID_ARGS = 2;
+      INVALID_ARGS = 3;
       // Network bytes sent treshold has been reached.
-      NETWORK_BYTES_SENT_LIMIT_EXCEEDED = 3;
+      NETWORK_BYTES_SENT_LIMIT_EXCEEDED = 4;
       // CPU time usage treshhold has been reached.
-      CPU_TIME_LIMIT_EXCEEDED = 4;
+      CPU_TIME_LIMIT_EXCEEDED = 5;
       // Elapsed real (wall) time treshhold has been reached.
-      REAL_TIME_LIMIT_EXCEEDED = 5;
+      REAL_TIME_LIMIT_EXCEEDED = 6;
       // Action-specific error occurred.
-      ACTION_FAILURE = 6;
+      ACTION_FAILURE = 7;
     }
 
     // Type of the error.

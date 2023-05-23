@@ -5,7 +5,7 @@
 
 use rrg_macro::warn;
 
-/// List of all actions supported by the agent.
+/// List of all actions known by the agent.
 ///
 /// An action is a "unit of execution" and is invoked by flows (created on the
 /// GRR server). To start an action execution the flow needs to send a [request]
@@ -16,84 +16,86 @@ use rrg_macro::warn;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Action {
     /// Get metadata about the operating system and the machine.
-    #[cfg(feature = "action-get_system_metadata")]
     GetSystemMetadata,
     /// Get metadata about the specified file.
-    #[cfg(feature = "action-get_file_metadata")]
     GetFileMetadata,
     /// Get contents of the specified file.
-    #[cfg(feature = "action-get_file_contents")]
     GetFileContents,
+    /// Get hash of the specified file.
+    GetFileHash,
+    /// List contents of a directory.
+    ListDirectory,
+    /// List processes available on the system.
+    ListProcesses,
+    /// List connections available on the system.
+    ListConnections,
+    /// List named pipes available on the system (Windows-only).
+    ListNamedPipes,
+    /// List users available on the system.
+    ListUsers,
+    /// Get the snapshot of the entire filesystem.
+    GetFilesystemTimeline,
 }
 
-/// The error type for cases when parsing action fails.
-#[derive(Debug)]
-pub struct ParseActionError {
-    /// A corresponding [`ParseActionErrorKind`] of the error.
-    kind: ParseActionErrorKind,
-}
-
-impl ParseActionError {
-    /// Returns the corresponding [`ParseActionErrorKind`] of the error.
-    pub fn kind(&self) -> ParseActionErrorKind {
-        self.kind
-    }
-}
-
-impl std::fmt::Display for ParseActionError {
+impl std::fmt::Display for Action {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "{}", self.kind)
+        match *self {
+            Action::GetSystemMetadata => write!(fmt, "get_system_metadata"),
+            Action::GetFileMetadata => write!(fmt, "get_file_metadata"),
+            Action::GetFileContents => write!(fmt, "get_file_contents"),
+            Action::GetFileHash => write!(fmt, "get_file_hash"),
+            Action::ListDirectory => write!(fmt, "list_directory"),
+            Action::ListProcesses => write!(fmt, "list_processes"),
+            Action::ListConnections => write!(fmt, "list_connections"),
+            Action::ListNamedPipes => write!(fmt, "list_named_pipes"),
+            Action::ListUsers => write!(fmt, "list_users"),
+            Action::GetFilesystemTimeline => write!(fmt, "get_filesystem_timeline"),
+        }
     }
 }
 
-impl std::error::Error for ParseActionError {
-}
-
-/// List of general categories of action parsing errors.
+/// An action that is not known to the agent.
+///
+/// Sometimes we may receive an action that is not known because the server is
+/// more up-to-date than the agent (or is just broken). But we should not fail
+/// parsing the request as we would like to still communicate failure back to
+/// the server. Therefore, we keep this value around and fail at action dispatch
+/// delivering a response to the calling flow.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ParseActionErrorKind {
-    /// The action value is not known.
-    UnknownAction(i32),
+pub struct UnknownAction {
+    /// A raw value from the Protocol Buffers message.
+    value: i32,
 }
 
-impl std::fmt::Display for ParseActionErrorKind {
+impl std::fmt::Display for UnknownAction {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ParseActionErrorKind::UnknownAction(val) => {
-                write!(fmt, "unknown action value '{val}'")
-            }
-        }
-    }
-}
-
-impl From<ParseActionErrorKind> for ParseActionError {
-
-    fn from(kind: ParseActionErrorKind) -> ParseActionError {
-        ParseActionError {
-            kind,
-        }
+        write!(fmt, "unknown({})", self.value)
     }
 }
 
 impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
 
-    type Error = ParseActionError;
+    type Error = UnknownAction;
 
-    fn try_from(proto: rrg_proto::v2::rrg::Action) -> Result<Action, ParseActionError> {
+    fn try_from(proto: rrg_proto::v2::rrg::Action) -> Result<Action, UnknownAction> {
         use rrg_proto::v2::rrg::Action::*;
 
         match proto {
-            #[cfg(feature = "action-get_system_metadata")]
             GET_SYSTEM_METADATA => Ok(Action::GetSystemMetadata),
-            #[cfg(feature ="action-get_file_metadata")]
             GET_FILE_METADATA => Ok(Action::GetFileMetadata),
-            #[cfg(feature = "action-get_file_contents")]
             GET_FILE_CONTENTS => Ok(Action::GetFileContents),
+            GET_FILE_HASH => Ok(Action::GetFileHash),
+            LIST_DIRECTORY => Ok(Action::ListDirectory),
+            LIST_PROCESSES => Ok(Action::ListProcesses),
+            LIST_CONNECTIONS => Ok(Action::ListConnections),
+            LIST_NAMED_PIPES => Ok(Action::ListNamedPipes),
+            LIST_USERS => Ok(Action::ListUsers),
+            GET_FILESYSTEM_TIMELINE => Ok(Action::GetFilesystemTimeline),
             _ => {
-                let val = protobuf::ProtobufEnum::value(&proto);
-                Err(ParseActionErrorKind::UnknownAction(val).into())
+                let value = protobuf::ProtobufEnum::value(&proto);
+                Err(UnknownAction { value })
             },
         }
     }
@@ -137,7 +139,7 @@ pub struct Request {
     /// A unique identifier of the request.
     id: RequestId,
     /// An action to invoke.
-    action: Action,
+    action: Result<Action, UnknownAction>,
     /// Serialized protobuf message with arguments to invoke the action with.
     serialized_args: Vec<u8>,
 }
@@ -149,7 +151,7 @@ impl Request {
     }
 
     /// Gets the action this request should invoke.
-    pub fn action(&self) -> Action {
+    pub fn action(&self) -> Result<Action, UnknownAction> {
         self.action
     }
 
@@ -229,10 +231,7 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
                 flow_id: proto.get_flow_id(),
                 request_id: proto.get_request_id(),
             },
-            // TODO(@panhania): We should not parse action at this moment as we
-            // cannot return a meaningful error to the server in case the agent
-            // does not recognize the action.
-            action: proto.get_action().try_into()?,
+            action: proto.get_action().try_into(),
             serialized_args: proto.take_args().take_value(),
         })
     }
@@ -261,13 +260,6 @@ impl ParseRequestError {
     }
 }
 
-impl From<ParseActionError> for ParseRequestError {
-
-    fn from(error: ParseActionError) -> ParseRequestError {
-        ParseRequestErrorKind::InvalidAction(error.kind()).into()
-    }
-}
-
 impl std::fmt::Display for ParseRequestError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -292,8 +284,6 @@ impl std::error::Error for ParseRequestError {
 pub enum ParseRequestErrorKind {
     /// The serialized message with request was impossible to deserialize.
     MalformedBytes,
-    /// It was not possible to parse the action specified in the request.
-    InvalidAction(ParseActionErrorKind),
 }
 
 impl std::fmt::Display for ParseRequestErrorKind {
@@ -303,7 +293,6 @@ impl std::fmt::Display for ParseRequestErrorKind {
 
         match self {
             MalformedBytes => write!(fmt, "malformed protobuf message bytes"),
-            InvalidAction(kind) => write!(fmt, "{}", kind),
         }
     }
 }
@@ -407,5 +396,29 @@ impl std::error::Error for ParseArgsError {
 
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.error.source()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn action_try_from_proto_all_known() {
+        use protobuf::ProtobufEnum as _;
+
+        for action in rrg_proto::v2::rrg::Action::values() {
+            if *action == rrg_proto::v2::rrg::Action::UNKNOWN {
+                continue;
+            }
+
+            assert!(Action::try_from(*action).is_ok());
+        }
+    }
+
+    #[test]
+    fn action_try_fromt_proto_unknown() {
+        assert!(Action::try_from(rrg_proto::v2::rrg::Action::UNKNOWN).is_err());
     }
 }

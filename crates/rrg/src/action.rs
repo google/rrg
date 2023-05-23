@@ -45,7 +45,14 @@ where
 {
     use crate::request::Action::*;
 
-    match request.action() {
+    let action = match request.action() {
+        Ok(action) => action,
+        Err(action) => {
+            return Err(crate::session::Error::unknown_action(action));
+        }
+    };
+
+    match action {
         #[cfg(feature = "action-get_system_metadata")]
         GetSystemMetadata => {
             handle(session, request, self::get_system_metadata::handle)
@@ -59,6 +66,12 @@ where
         GetFileContents => {
             handle(session, request, self::get_file_contents::handle)
         }
+        // We allow `unreachable_patterns` because otherwise we get a warning if
+        // we compile with all the actions enabled.
+        #[allow(unreachable_patterns)]
+        action => {
+            return Err(crate::session::Error::unsupported_action(action));
+        },
     }
 }
 
