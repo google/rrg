@@ -44,7 +44,7 @@ impl std::fmt::Display for Action {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct UnknownAction {
     /// A raw value from the Protocol Buffers message.
-    pub(crate) value: i32, // TODO(@panhania): Hide this field.
+    value: i32,
 }
 
 impl std::fmt::Display for UnknownAction {

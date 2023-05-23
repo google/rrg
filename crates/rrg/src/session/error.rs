@@ -138,7 +138,7 @@ struct UnknownActionError {
 impl std::fmt::Display for UnknownActionError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "unknown action '{}'", self.action.value)
+        write!(fmt, "unknown action '{}'", self.action)
     }
 }
 
@@ -154,8 +154,7 @@ struct UnsupportedActionError {
 impl std::fmt::Display for UnsupportedActionError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        // TODO(@panhania): Use `Display`, not `Debug` once it is implemented.
-        write!(fmt, "unsupported action '{:?}'", self.action)
+        write!(fmt, "unsupported action '{}'", self.action)
     }
 }
 
