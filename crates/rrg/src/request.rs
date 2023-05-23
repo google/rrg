@@ -398,3 +398,27 @@ impl std::error::Error for ParseArgsError {
         self.error.source()
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn action_try_from_proto_all_known() {
+        use protobuf::ProtobufEnum as _;
+
+        for action in rrg_proto::v2::rrg::Action::values() {
+            if *action == rrg_proto::v2::rrg::Action::UNKNOWN {
+                continue;
+            }
+
+            assert!(Action::try_from(*action).is_ok());
+        }
+    }
+
+    #[test]
+    fn action_try_fromt_proto_unknown() {
+        assert!(Action::try_from(rrg_proto::v2::rrg::Action::UNKNOWN).is_err());
+    }
+}
