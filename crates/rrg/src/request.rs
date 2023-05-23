@@ -23,6 +23,17 @@ pub enum Action {
     GetFileContents,
 }
 
+impl std::fmt::Display for Action {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            Action::GetSystemMetadata => write!(fmt, "get_system_metadata"),
+            Action::GetFileMetadata => write!(fmt, "get_file_metadata"),
+            Action::GetFileContents => write!(fmt, "get_file_contents"),
+        }
+    }
+}
+
 /// An action that is not known to the agent.
 ///
 /// Sometimes we may receive an action that is not known because the server is
@@ -34,6 +45,13 @@ pub enum Action {
 pub struct UnknownAction {
     /// A raw value from the Protocol Buffers message.
     pub(crate) value: i32, // TODO(@panhania): Hide this field.
+}
+
+impl std::fmt::Display for UnknownAction {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "unknown({})", self.value)
+    }
 }
 
 impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
