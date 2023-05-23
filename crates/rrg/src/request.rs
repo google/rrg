@@ -21,6 +21,18 @@ pub enum Action {
     GetFileMetadata,
     /// Get contents of the specified file.
     GetFileContents,
+    /// Get hash of the specified file.
+    GetFileHash,
+    /// List contents of a directory.
+    ListDirectory,
+    /// List processes available on the system.
+    ListProcesses,
+    /// List connections available on the system.
+    ListConnections,
+    /// List users available on the system.
+    ListUsers,
+    /// Get the snapshot of the entire filesystem.
+    GetFilesystemTimeline,
 }
 
 impl std::fmt::Display for Action {
@@ -30,6 +42,12 @@ impl std::fmt::Display for Action {
             Action::GetSystemMetadata => write!(fmt, "get_system_metadata"),
             Action::GetFileMetadata => write!(fmt, "get_file_metadata"),
             Action::GetFileContents => write!(fmt, "get_file_contents"),
+            Action::GetFileHash => write!(fmt, "get_file_hash"),
+            Action::ListDirectory => write!(fmt, "list_directory"),
+            Action::ListProcesses => write!(fmt, "list_processes"),
+            Action::ListConnections => write!(fmt, "list_connections"),
+            Action::ListUsers => write!(fmt, "list_users"),
+            Action::GetFilesystemTimeline => write!(fmt, "get_filesystem_timeline"),
         }
     }
 }
@@ -65,6 +83,12 @@ impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
             GET_SYSTEM_METADATA => Ok(Action::GetSystemMetadata),
             GET_FILE_METADATA => Ok(Action::GetFileMetadata),
             GET_FILE_CONTENTS => Ok(Action::GetFileContents),
+            GET_FILE_HASH => Ok(Action::GetFileHash),
+            LIST_DIRECTORY => Ok(Action::ListDirectory),
+            LIST_PROCESSES => Ok(Action::ListProcesses),
+            LIST_CONNECTIONS => Ok(Action::ListConnections),
+            LIST_USERS => Ok(Action::ListUsers),
+            GET_FILESYSTEM_TIMELINE => Ok(Action::GetFilesystemTimeline),
             _ => {
                 let value = protobuf::ProtobufEnum::value(&proto);
                 Err(UnknownAction { value })
