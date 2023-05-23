@@ -2,7 +2,6 @@
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
-use std::fmt::{Debug, Display, Formatter};
 
 /// An error type for failures that can occur during a session.
 #[derive(Debug)]
@@ -60,9 +59,9 @@ impl Error {
     }
 }
 
-impl Display for Error {
+impl std::fmt::Display for Error {
 
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         use ErrorKind::*;
 
         match self.kind {
