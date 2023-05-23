@@ -28,10 +28,12 @@ enum Action {
   LIST_PROCESSES = 6;
   // List connections available on the system.
   LIST_CONNECTIONS = 7;
+  // List named pipes available on the system (Windows-only).
+  LIST_NAMED_PIPES = 8;
   // List users available on the system.
-  LIST_USERS = 8;
+  LIST_USERS = 9;
   // Get the snapshot of the entire filesystem.
-  GET_FILESYSTEM_TIMELINE = 9;
+  GET_FILESYSTEM_TIMELINE = 10;
 
   // TODO: Define more actions that should be supported.
 
