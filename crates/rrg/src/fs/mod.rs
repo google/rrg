@@ -16,8 +16,10 @@ use log::warn;
 
 /// A path to a filesystem item and associated metadata.
 ///
-/// This type is very similar to standard `DirEntry` but its `metadata` property
+/// This type is very similar to standard [`DirEntry`] but its metadata and path
 /// is guaranteed to always be there.
+///
+/// [`DirEntry`]: std::fs::DirEntry
 pub struct Entry {
     /// A path to the filesystem item.
     pub path: PathBuf,
@@ -72,9 +74,10 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
 
 /// Returns a shallow iterator over entries within a directory.
 ///
-/// This function is very similar to the standard `std::fs::read_dir`, except
-/// that the returned iterator always returns entries with valid metadata and
-/// path.
+/// This function is very similar to the standard [`read_dir`], except that the
+/// returned iterator always returns entries with valid metadata and a path.
+///
+/// [`read_dir`]: std::fs::read_dir
 ///
 /// # Errors
 ///
@@ -117,8 +120,6 @@ pub fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
 /// swallowed.
 ///
 /// The iterator can be constructed with the [`walk_dir`] function.
-///
-/// [`walk_dir`]: fn.walk_dir.html
 pub struct WalkDir {
     root: Option<Entry>,
     pending: Vec<ListDir>,
@@ -189,12 +190,10 @@ impl std::iter::Iterator for WalkDir {
 
 /// Iterator over the entries in a directory.
 ///
-/// Unlike the `ReadDir` iterator entries, `ListDir` entries are guaranteed to
-/// have valid metadata objects attached.
+/// Unlike the [`ReadDir`] iterator entries, [`ListDir`] entries are guaranteed
+/// to have valid metadata objects attached.
 ///
 /// The iterator can be constructed with the [`list_dir`] function.
-///
-/// [`list_dir`]: fn.list_dir.html
 pub struct ListDir {
     iter: std::fs::ReadDir,
 }
