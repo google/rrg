@@ -77,10 +77,6 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     let dev = std::os::unix::fs::MetadataExt::dev(&metadata);
 
     Ok(WalkDir {
-        root: Some(Entry {
-            path: root.as_ref().to_path_buf(),
-            metadata: metadata,
-        }),
         pending: pending,
         #[cfg(target_family = "unix")] dev: dev,
     })
@@ -133,7 +129,6 @@ pub fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
 ///
 /// The iterator can be constructed with the [`walk_dir`] function.
 pub struct WalkDir {
-    root: Option<Entry>,
     pending: Vec<ListDir>,
     #[cfg(target_family = "unix")] dev: u64,
 }
@@ -186,10 +181,6 @@ impl std::iter::Iterator for WalkDir {
     type Item = Entry;
 
     fn next(&mut self) -> Option<Entry> {
-        if self.root.is_some() {
-            return self.root.take();
-        }
-
         let entry = self.pop()?;
 
         if entry.metadata.is_dir() && self.same_dev(&entry) {
@@ -342,13 +333,8 @@ mod tests {
     fn test_walk_dir_empty() {
         let tempdir = tempfile::tempdir().unwrap();
 
-        let mut iter = walk_dir(&tempdir).unwrap();
-
-        let entry = iter.next().unwrap();
-        assert_eq!(entry.path, tempdir.path());
-        assert!(entry.metadata.is_dir());
-
-        assert!(iter.next().is_none());
+        let iter = walk_dir(&tempdir).unwrap();
+        assert_eq!(iter.count(), 0);
     }
 
     #[test]
@@ -361,19 +347,16 @@ mod tests {
         let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 4);
+        assert_eq!(results.len(), 3);
 
-        assert_eq!(results[0].path, tempdir.path());
-        assert!(results[0].metadata.is_dir());
+        assert_eq!(results[0].path, tempdir.path().join("abc"));
+        assert!(results[0].metadata.is_file());
 
-        assert_eq!(results[1].path, tempdir.path().join("abc"));
+        assert_eq!(results[1].path, tempdir.path().join("def"));
         assert!(results[1].metadata.is_file());
 
-        assert_eq!(results[2].path, tempdir.path().join("def"));
+        assert_eq!(results[2].path, tempdir.path().join("ghi"));
         assert!(results[2].metadata.is_file());
-
-        assert_eq!(results[3].path, tempdir.path().join("ghi"));
-        assert!(results[3].metadata.is_file());
     }
 
     #[test]
@@ -385,16 +368,13 @@ mod tests {
         let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 2);
 
-        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[0].path, tempdir.path().join("abc"));
         assert!(results[0].metadata.is_dir());
 
-        assert_eq!(results[1].path, tempdir.path().join("abc"));
+        assert_eq!(results[1].path, tempdir.path().join("def"));
         assert!(results[1].metadata.is_dir());
-
-        assert_eq!(results[2].path, tempdir.path().join("def"));
-        assert!(results[2].metadata.is_dir());
     }
 
     #[test]
@@ -406,16 +386,13 @@ mod tests {
         let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 2);
 
-        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[0].path, tempdir.path().join("abc"));
         assert!(results[0].metadata.is_dir());
 
-        assert_eq!(results[1].path, tempdir.path().join("abc"));
+        assert_eq!(results[1].path, tempdir.path().join("abc").join("def"));
         assert!(results[1].metadata.is_dir());
-
-        assert_eq!(results[2].path, tempdir.path().join("abc").join("def"));
-        assert!(results[2].metadata.is_dir());
     }
 
     // Both Windows and macOS have limits on the path length. Both of these
@@ -437,9 +414,9 @@ mod tests {
         let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 513);
+        assert_eq!(results.len(), 512);
 
-        for entry in &results[1..] {
+        for entry in &results {
             assert!(entry.path.starts_with(&tempdir));
             assert!(entry.path.ends_with("foo"));
             assert!(entry.metadata.is_dir());
@@ -456,19 +433,16 @@ mod tests {
         let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 4);
+        assert_eq!(results.len(), 3);
 
-        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[0].path, tempdir.path().join("foo"));
         assert!(results[0].metadata.is_dir());
 
-        assert_eq!(results[1].path, tempdir.path().join("foo"));
-        assert!(results[1].metadata.is_dir());
+        assert_eq!(results[1].path, tempdir.path().join("foo").join("abc"));
+        assert!(results[1].metadata.is_file());
 
-        assert_eq!(results[2].path, tempdir.path().join("foo").join("abc"));
+        assert_eq!(results[2].path, tempdir.path().join("foo").join("def"));
         assert!(results[2].metadata.is_file());
-
-        assert_eq!(results[3].path, tempdir.path().join("foo").join("def"));
-        assert!(results[3].metadata.is_file());
     }
 
     // Symlinking is supported only on Unix-like systems.
@@ -487,19 +461,16 @@ mod tests {
         let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 4);
+        assert_eq!(results.len(), 3);
 
-        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[0].path, dir);
         assert!(results[0].metadata.file_type().is_dir());
 
-        assert_eq!(results[1].path, dir);
-        assert!(results[1].metadata.file_type().is_dir());
+        assert_eq!(results[1].path, file);
+        assert!(results[1].metadata.file_type().is_file());
 
-        assert_eq!(results[2].path, file);
-        assert!(results[2].metadata.file_type().is_file());
-
-        assert_eq!(results[3].path, symlink);
-        assert!(results[3].metadata.file_type().is_symlink());
+        assert_eq!(results[2].path, symlink);
+        assert!(results[2].metadata.file_type().is_symlink());
     }
 
     // Symlinking is supported only on Unix-like systems.
@@ -516,16 +487,13 @@ mod tests {
         let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 2);
 
-        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[0].path, dir);
         assert!(results[0].metadata.file_type().is_dir());
 
-        assert_eq!(results[1].path, dir);
-        assert!(results[1].metadata.file_type().is_dir());
-
-        assert_eq!(results[2].path, symlink);
-        assert!(results[2].metadata.file_type().is_symlink());
+        assert_eq!(results[1].path, symlink);
+        assert!(results[1].metadata.file_type().is_symlink());
     }
 
     // macOS mangles Unicode-specific characters in filenames.
@@ -538,9 +506,8 @@ mod tests {
         let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].path, tempdir.path());
-        assert_eq!(results[1].path, tempdir.path().join("zażółć gęślą jaźń"));
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].path, tempdir.path().join("zażółć gęślą jaźń"));
     }
 
     #[test]
@@ -551,7 +518,7 @@ mod tests {
         let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[1].metadata.len(), 9);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].metadata.len(), 9);
     }
 }

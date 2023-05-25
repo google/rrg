@@ -266,8 +266,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let entries = entries(&session);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(path(&entries[0]), Some(tempdir_path.clone()));
+        assert_eq!(entries.len(), 0);
     }
 
     #[test]
@@ -287,11 +286,10 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.get_path().to_owned());
 
-        assert_eq!(entries.len(), 4);
-        assert_eq!(path(&entries[0]), Some(tempdir.path().to_path_buf()));
-        assert_eq!(path(&entries[1]), Some(tempdir.path().join("a")));
-        assert_eq!(path(&entries[2]), Some(tempdir.path().join("b")));
-        assert_eq!(path(&entries[3]), Some(tempdir.path().join("c")));
+        assert_eq!(entries.len(), 3);
+        assert_eq!(path(&entries[0]), Some(tempdir.path().join("a")));
+        assert_eq!(path(&entries[1]), Some(tempdir.path().join("b")));
+        assert_eq!(path(&entries[2]), Some(tempdir.path().join("c")));
     }
 
     #[test]
@@ -311,10 +309,9 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.get_path().to_owned());
 
-        assert_eq!(entries.len(), 3);
-        assert_eq!(path(&entries[0]), Some(tempdir_path.clone()));
-        assert_eq!(path(&entries[1]), Some(tempdir_path.join("a")));
-        assert_eq!(path(&entries[2]), Some(tempdir_path.join("a").join("b")));
+        assert_eq!(entries.len(), 2);
+        assert_eq!(path(&entries[0]), Some(tempdir_path.join("a")));
+        assert_eq!(path(&entries[1]), Some(tempdir_path.join("a").join("b")));
     }
 
     // Symlinking is supported only on Unix-like systems.
@@ -340,10 +337,9 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.get_path().to_owned());
 
-        assert_eq!(entries.len(), 3);
-        assert_eq!(path(&entries[0]), Some(root_path));
-        assert_eq!(path(&entries[1]), Some(dir_path));
-        assert_eq!(path(&entries[2]), Some(symlink_path));
+        assert_eq!(entries.len(), 2);
+        assert_eq!(path(&entries[0]), Some(dir_path));
+        assert_eq!(path(&entries[1]), Some(symlink_path));
     }
 
     #[test]
@@ -367,14 +363,13 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.get_path().to_owned());
 
-        assert_eq!(entries.len(), 3);
+        assert_eq!(entries.len(), 2);
 
         // macOS mangles Unicode-specific characters in filenames.
         #[cfg(not(target_os = "macos"))]
         {
-            assert_eq!(path(&entries[0]), Some(root_path));
-            assert_eq!(path(&entries[1]), Some(file_path_1));
-            assert_eq!(path(&entries[2]), Some(file_path_2));
+            assert_eq!(path(&entries[0]), Some(file_path_1));
+            assert_eq!(path(&entries[1]), Some(file_path_2));
         }
     }
 
@@ -393,22 +388,22 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.get_path().to_owned());
 
-        assert_eq!(entries.len(), 2);
-        assert_eq!(path(&entries[1]), Some(tempdir.path().join("foo")));
-        assert_eq!(entries[1].get_size(), 9);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(path(&entries[0]), Some(tempdir.path().join("foo")));
+        assert_eq!(entries[0].get_size(), 9);
 
         // Information about the file mode, user and group identifiers is
         // available only on UNIX systems.
         #[cfg(target_family = "unix")]
         {
-            let mode = entries[1].get_mode() as libc::mode_t;
+            let mode = entries[0].get_mode() as libc::mode_t;
             assert_eq!(mode & libc::S_IFMT, libc::S_IFREG);
 
             let uid = unsafe { libc::getuid() };
-            assert_eq!(entries[1].get_uid(), uid.into());
+            assert_eq!(entries[0].get_uid(), uid.into());
 
             let gid = unsafe { libc::getgid() };
-            assert_eq!(entries[1].get_gid(), gid.into());
+            assert_eq!(entries[0].get_gid(), gid.into());
         }
     }
 
@@ -433,13 +428,13 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.get_path().to_owned());
 
-        assert_eq!(entries.len(), 3);
-        assert_eq!(path(&entries[1]), Some(file_path));
-        assert_eq!(path(&entries[2]), Some(hardlink_path));
+        assert_eq!(entries.len(), 2);
+        assert_eq!(path(&entries[0]), Some(file_path));
+        assert_eq!(path(&entries[1]), Some(hardlink_path));
 
         // Information about inode is not available on Windows.
         #[cfg(not(target_os = "windows"))]
-        assert_eq!(entries[1].get_ino(), entries[2].get_ino());
+        assert_eq!(entries[0].get_ino(), entries[1].get_ino());
     }
 
     /// Retrieves timeline entries from the given session object.
