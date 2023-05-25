@@ -90,16 +90,14 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
 /// ```no_run
 /// use std::path::PathBuf;
 ///
-/// let iter = rrg::fs::list_dir("/").unwrap();
-///
-/// let items = iter
+/// let paths = rrg::fs::list_dir("/").unwrap()
 ///     .filter_map(Result::ok)
 ///     .map(|entry| entry.path)
 ///     .collect::<Vec<_>>();
 ///
-/// assert!(items.contains(&PathBuf::from("/home")));
-/// assert!(items.contains(&PathBuf::from("/bin")));
-/// assert!(items.contains(&PathBuf::from("/tmp")));
+/// assert!(paths.contains(&PathBuf::from("/home")));
+/// assert!(paths.contains(&PathBuf::from("/bin")));
+/// assert!(paths.contains(&PathBuf::from("/tmp")));
 /// ```
 pub fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
     let iter = std::fs::read_dir(path)?;
