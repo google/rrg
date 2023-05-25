@@ -143,12 +143,12 @@ pub struct WalkDir {
 impl WalkDir {
 
     #[cfg(target_family = "unix")]
-    fn same_dev(&self, entry: &Entry) -> bool {
+    fn is_same_dev(&self, entry: &Entry) -> bool {
         self.dev == std::os::unix::fs::MetadataExt::dev(&entry.metadata)
     }
 
     #[cfg(target_family = "windows")]
-    fn same_dev(&self, _entry: &Entry) -> bool {
+    fn is_same_dev(&self, _entry: &Entry) -> bool {
         true
     }
 }
@@ -165,7 +165,7 @@ impl std::iter::Iterator for WalkDir {
                     Err(error) => return Some(Err(error)),
                 };
 
-                if entry.metadata.is_dir() && self.same_dev(&entry) {
+                if entry.metadata.is_dir() && self.is_same_dev(&entry) {
                     self.pending_iters.push(list_dir(&entry.path));
                 }
 
