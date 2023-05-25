@@ -60,15 +60,14 @@ impl TryFrom<std::fs::DirEntry> for Entry {
 /// ```no_run
 /// use std::path::PathBuf;
 ///
-/// let iter = rrg::fs::walk_dir("/").unwrap();
-///
-/// let items = iter
+/// let paths = rrg::fs::walk_dir("/").unwrap()
 ///     .filter_map(Result::ok)
 ///     .map(|entry| entry.path)
 ///     .collect::<Vec<_>>();
-/// assert!(items.contains(&PathBuf::from("/usr")));
-/// assert!(items.contains(&PathBuf::from("/usr/bin")));
-/// assert!(items.contains(&PathBuf::from("/usr/lib")));
+///
+/// assert!(paths.contains(&PathBuf::from("/usr")));
+/// assert!(paths.contains(&PathBuf::from("/usr/bin")));
+/// assert!(paths.contains(&PathBuf::from("/usr/lib")));
 /// ```
 pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     let root = root.as_ref();
