@@ -171,6 +171,13 @@ where
     S: Session,
 {
     let entries = crate::fs::walk_dir(&request.root).map_err(Error::WalkDir)?
+        .filter_map(|entry| match entry {
+            Ok(entry) => Some(entry),
+            Err(error) => {
+                log::warn!("failed to obtain directory entry: {}", error);
+                None
+            }
+        })
         .map(rrg_proto::timeline::TimelineEntry::from_lossy);
 
     let mut response = Response {
