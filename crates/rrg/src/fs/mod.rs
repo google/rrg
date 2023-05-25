@@ -17,7 +17,7 @@ use log::warn;
 /// A path to a filesystem item and associated metadata.
 ///
 /// This type is very similar to standard [`DirEntry`] but its metadata and path
-/// is guaranteed to always be there.
+/// is guaranteed to always be there and cheap to retrieve.
 ///
 /// [`DirEntry`]: std::fs::DirEntry
 pub struct Entry {
@@ -25,6 +25,20 @@ pub struct Entry {
     pub path: PathBuf,
     /// Metadata associated with the item.
     pub metadata: Metadata,
+}
+
+impl TryFrom<std::fs::DirEntry> for Entry {
+
+    type Error = std::io::Error;
+
+    fn try_from(entry: std::fs::DirEntry) -> std::io::Result<Entry> {
+        let metadata = entry.metadata()?;
+
+        return Ok(Entry {
+            path: entry.path(),
+            metadata,
+        });
+    }
 }
 
 /// Returns a deep iterator over entries within a directory.
@@ -201,24 +215,7 @@ impl std::iter::Iterator for ListDir {
     type Item = std::io::Result<Entry>;
 
     fn next(&mut self) -> Option<std::io::Result<Entry>> {
-        for entry in &mut self.iter {
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(error) => return Some(Err(error)),
-            };
-
-            let metadata = match entry.metadata() {
-                Ok(metadata) => metadata,
-                Err(error) => return Some(Err(error)),
-            };
-
-            return Some(Ok(Entry {
-                path: entry.path(),
-                metadata: metadata,
-            }));
-        }
-
-        None
+        self.iter.next().map(|entry| Entry::try_from(entry?))
     }
 }
 
