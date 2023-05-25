@@ -73,14 +73,14 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
 /// Returns a shallow iterator over entries within a directory.
 ///
 /// This function is very similar to the standard `std::fs::read_dir`, except
-/// that the returned iterator always returns valid entries and entry-related
-/// errors are simply ignored.
+/// that the returned iterator always returns entries with valid metadata and
+/// path.
 ///
 /// # Errors
 ///
-/// While all entry-related errors are ignored, constructing the iterator itself
-/// can still fail. This can happen when e.g. when the specified path does not
-/// represent a directory or does not exist.
+/// This function will fail if the specified path does not represent a directory
+/// or does not exist. Note that items returned by the iterator can also contain
+/// errors in case there was an issue with a particular directory entry.
 ///
 /// # Examples
 ///
@@ -89,7 +89,11 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
 ///
 /// let iter = rrg::fs::list_dir("/").unwrap();
 ///
-/// let items = iter.map(|entry| entry.path).collect::<Vec<_>>();
+/// let items = iter
+///     .filter_map(Result::ok)
+///     .map(|entry| entry.path)
+///     .collect::<Vec<_>>();
+///
 /// assert!(items.contains(&PathBuf::from("/home")));
 /// assert!(items.contains(&PathBuf::from("/bin")));
 /// assert!(items.contains(&PathBuf::from("/tmp")));
@@ -137,7 +141,14 @@ impl WalkDir {
     fn pop(&mut self) -> Option<Entry> {
         while let Some(iter) = self.pending.last_mut() {
             for entry in iter {
-                return Some(entry);
+                // TODO(@panhania): Push error handling to the caller.
+                match entry {
+                    Ok(entry) => return Some(entry),
+                    Err(error) => {
+                        warn!("directory iteration error: {error}");
+                        continue;
+                    },
+                }
             }
 
             self.pending.pop();
@@ -178,10 +189,6 @@ impl std::iter::Iterator for WalkDir {
 
 /// Iterator over the entries in a directory.
 ///
-/// This iterator is very similar to the standard `ReadDir` iterator, except
-/// that it is swallows errors and only yields entries that did not cause any
-/// errors.
-///
 /// Unlike the `ReadDir` iterator entries, `ListDir` entries are guaranteed to
 /// have valid metadata objects attached.
 ///
@@ -194,31 +201,24 @@ pub struct ListDir {
 
 impl std::iter::Iterator for ListDir {
 
-    type Item = Entry;
+    type Item = std::io::Result<Entry>;
 
-    fn next(&mut self) -> Option<Entry> {
+    fn next(&mut self) -> Option<std::io::Result<Entry>> {
         for entry in &mut self.iter {
             let entry = match entry {
                 Ok(entry) => entry,
-                Err(error) => {
-                    warn!("directory iteration error: {}", error);
-                    continue
-                },
+                Err(error) => return Some(Err(error)),
             };
 
-            let path = entry.path();
             let metadata = match entry.metadata() {
                 Ok(metadata) => metadata,
-                Err(error) => {
-                    warn!("failed to stat '{}': {}", path.display(), error);
-                    continue
-                },
+                Err(error) => return Some(Err(error)),
             };
 
-            return Some(Entry {
-                path: path,
+            return Some(Ok(Entry {
+                path: entry.path(),
                 metadata: metadata,
-            });
+            }));
         }
 
         None
@@ -256,7 +256,9 @@ mod tests {
         File::create(tempdir.path().join("def")).unwrap();
         File::create(tempdir.path().join("ghi")).unwrap();
 
-        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 3);
@@ -277,7 +279,9 @@ mod tests {
         std::fs::create_dir(tempdir.path().join("abc")).unwrap();
         std::fs::create_dir(tempdir.path().join("def")).unwrap();
 
-        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
@@ -300,7 +304,9 @@ mod tests {
         File::create(&source).unwrap();
         std::os::unix::fs::symlink(&source, &target).unwrap();
 
-        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
@@ -320,7 +326,9 @@ mod tests {
         File::create(tempdir.path().join("zażółć gęślą jaźń")).unwrap();
         File::create(tempdir.path().join("што й па мору")).unwrap();
 
-        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
