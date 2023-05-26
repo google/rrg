@@ -68,7 +68,14 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::v2::get_filesystem_timeline::Ent
             proto.set_ctime_ns(entry.metadata.ctime_nsec());
         }
 
-        // TODO: Export file attributes on Windows.
+        #[cfg(target_family = "windows")]
+        {
+            use std::os::windows::fs::MetadataExt as _;
+
+            let attributes = entry.metadata.file_attributes();
+            proto.set_attributes(u64::from(attributes));
+        }
+
         proto
     }
 }
@@ -306,6 +313,48 @@ mod tests {
             let gid = unsafe { libc::getgid() };
             assert_eq!(entries[0].get_gid(), gid.into());
         }
+    }
+
+    #[test]
+    // Attributes are supported only on Windows.
+    #[cfg(target_family = "windows")]
+    fn test_file_attributes() {
+        use std::os::windows::ffi::OsStrExt as _;
+        use windows_sys::Win32::Storage::FileSystem::*;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let temp_path = temp_dir.path().join("foo");
+        std::fs::write(&temp_path, b"").unwrap();
+
+        // We want to use Windows API to set file attributes. But for this we
+        // first need to convert Rust type to something more digestible by the
+        // Windows API.
+        let mut temp_path_wstr = temp_path.as_path().as_os_str()
+            .encode_wide()
+            .collect::<Vec<_>>();
+        temp_path_wstr.push(0);
+
+        // SAFETY: We encoded the path with 16-bit encoding and null-terminated
+        // it. We verify that the status is non-zero afterwards.
+        let status = unsafe {
+            SetFileAttributesW(temp_path_wstr.as_ptr(), FILE_ATTRIBUTE_HIDDEN)
+        };
+        assert!(status > 0);
+
+        let request = Args {
+            root: temp_dir.path().to_path_buf(),
+        };
+
+        let mut session = Session::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let entries = entries(&session);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(path(&entries[0]), Some(temp_path));
+
+        let attributes = entries[0].get_attributes() as u32;
+        assert_eq!(attributes & FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_HIDDEN);
     }
 
     #[test]
