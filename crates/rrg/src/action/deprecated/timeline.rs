@@ -145,7 +145,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_non_existent_path() {
+    fn handle_non_existent_path() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let request = Args {
@@ -157,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_dir() {
+    fn handle_empty_dir() {
         let tempdir = tempfile::tempdir().unwrap();
         let tempdir_path = tempdir.path().to_path_buf();
 
@@ -173,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dir_with_files() {
+    fn handle_dir_with_files() {
         let tempdir = tempfile::tempdir().unwrap();
         std::fs::File::create(tempdir.path().join("a")).unwrap();
         std::fs::File::create(tempdir.path().join("b")).unwrap();
@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dir_with_nested_dirs() {
+    fn handle_dir_with_nested_dirs() {
         let tempdir = tempfile::tempdir().unwrap();
         let tempdir_path = tempdir.path().to_path_buf();
 
@@ -220,7 +220,7 @@ mod tests {
     // Symlinking is supported only on Unix-like systems.
     #[cfg(target_family = "unix")]
     #[test]
-    fn test_dir_with_circular_symlinks() {
+    fn handle_dir_with_circular_symlinks() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let root_path = tempdir.path().to_path_buf();
@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dir_with_unicode_files() {
+    fn handle_dir_with_unicode_files() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let root_path = tempdir.path().to_path_buf();
@@ -277,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn test_file_metadata() {
+    fn handle_file_metadata() {
         let tempdir = tempfile::tempdir().unwrap();
         std::fs::write(tempdir.path().join("foo"), b"123456789").unwrap();
 
@@ -313,7 +313,7 @@ mod tests {
     #[test]
     // Attributes are supported only on Windows.
     #[cfg(target_family = "windows")]
-    fn test_file_attributes() {
+    fn handle_file_attributes() {
         use std::os::windows::ffi::OsStrExt as _;
         use windows_sys::Win32::Storage::FileSystem::*;
 
@@ -353,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hardlink_metadata() {
+    fn handle_hardlink_metadata() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let root_path = tempdir.path().to_path_buf();
