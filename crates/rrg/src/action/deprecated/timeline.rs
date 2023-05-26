@@ -6,11 +6,8 @@
 //! A handler and associated types for the timeline action.
 
 use std::path::PathBuf;
-use std::result::Result;
 
 use rrg_proto::convert::FromLossy;
-
-use crate::session::{self, Session};
 
 /// Arguments of the `get_filesystem_timeline` action.
 pub struct Args {
@@ -25,9 +22,9 @@ pub struct Item {
 }
 
 /// Handles requests for the timeline action.
-pub fn handle<S>(session: &mut S, args: Args) -> session::Result<()>
+pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
-    S: Session,
+    S: crate::session::Session,
 {
     use sha2::Digest as _;
 
@@ -147,8 +144,6 @@ mod tests {
 
     use super::*;
 
-    use session::FakeSession as Session;
-
     #[test]
     fn test_non_existent_path() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -157,7 +152,7 @@ mod tests {
             root: tempdir.path().join("foo")
         };
 
-        let mut session = Session::new();
+        let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, request).is_err());
     }
 
@@ -170,7 +165,7 @@ mod tests {
             root: tempdir_path.clone(),
         };
 
-        let mut session = Session::new();
+        let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let entries = entries(&session);
@@ -188,7 +183,7 @@ mod tests {
             root: tempdir.path().to_path_buf(),
         };
 
-        let mut session = Session::new();
+        let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
@@ -211,7 +206,7 @@ mod tests {
             root: tempdir_path.clone(),
         };
 
-        let mut session = Session::new();
+        let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
@@ -239,7 +234,7 @@ mod tests {
             root: root_path.clone(),
         };
 
-        let mut session = Session::new();
+        let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
@@ -265,7 +260,7 @@ mod tests {
             root: root_path.clone(),
         };
 
-        let mut session = Session::new();
+        let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
@@ -290,7 +285,7 @@ mod tests {
             root: tempdir.path().to_path_buf(),
         };
 
-        let mut session = Session::new();
+        let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
@@ -346,7 +341,7 @@ mod tests {
             root: temp_dir.path().to_path_buf(),
         };
 
-        let mut session = Session::new();
+        let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let entries = entries(&session);
@@ -372,7 +367,7 @@ mod tests {
             root: root_path.clone(),
         };
 
-        let mut session = Session::new();
+        let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
@@ -388,7 +383,9 @@ mod tests {
     }
 
     /// Retrieves timeline entries from the given session object.
-    fn entries(session: &Session) -> Vec<rrg_proto::v2::get_filesystem_timeline::Entry> {
+    fn entries(
+        session: &crate::session::FakeSession,
+    ) -> Vec<rrg_proto::v2::get_filesystem_timeline::Entry> {
         let blob_count = session.parcel_count(crate::Sink::Blob);
         let reply_count = session.reply_count();
         assert_eq!(blob_count, reply_count);
@@ -401,7 +398,9 @@ mod tests {
     }
 
     /// Constructs a path for the given timeline entry.
-    fn path(entry: &rrg_proto::v2::get_filesystem_timeline::Entry) -> Option<PathBuf> {
+    fn path(
+        entry: &rrg_proto::v2::get_filesystem_timeline::Entry,
+    ) -> Option<PathBuf> {
         rrg_proto::path::from_bytes(entry.get_path().to_owned()).ok()
     }
 }
