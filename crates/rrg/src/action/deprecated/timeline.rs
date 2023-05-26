@@ -311,6 +311,36 @@ mod tests {
     }
 
     #[test]
+    fn handle_hardlink_metadata() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let root_path = tempdir.path().to_path_buf();
+        let file_path = root_path.join("file");
+        let hardlink_path = root_path.join("hardlink");
+
+        std::fs::File::create(&file_path).unwrap();
+        std::fs::hard_link(&file_path, &hardlink_path).unwrap();
+
+        let request = Args {
+            root: root_path.clone(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let mut entries = entries(&session);
+        entries.sort_by_key(|entry| entry.get_path().to_owned());
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(path(&entries[0]), Some(file_path));
+        assert_eq!(path(&entries[1]), Some(hardlink_path));
+
+        // Information about inode is not available on Windows.
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(entries[0].get_unix_ino(), entries[1].get_unix_ino());
+    }
+
+    #[test]
     // Attributes are supported only on Windows.
     #[cfg(target_family = "windows")]
     fn handle_file_attributes() {
@@ -350,36 +380,6 @@ mod tests {
 
         let attributes = entries[0].get_windows_attributes() as u32;
         assert_eq!(attributes & FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_HIDDEN);
-    }
-
-    #[test]
-    fn handle_hardlink_metadata() {
-        let tempdir = tempfile::tempdir().unwrap();
-
-        let root_path = tempdir.path().to_path_buf();
-        let file_path = root_path.join("file");
-        let hardlink_path = root_path.join("hardlink");
-
-        std::fs::File::create(&file_path).unwrap();
-        std::fs::hard_link(&file_path, &hardlink_path).unwrap();
-
-        let request = Args {
-            root: root_path.clone(),
-        };
-
-        let mut session = crate::session::FakeSession::new();
-        assert!(handle(&mut session, request).is_ok());
-
-        let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.get_path().to_owned());
-
-        assert_eq!(entries.len(), 2);
-        assert_eq!(path(&entries[0]), Some(file_path));
-        assert_eq!(path(&entries[1]), Some(hardlink_path));
-
-        // Information about inode is not available on Windows.
-        #[cfg(not(target_os = "windows"))]
-        assert_eq!(entries[0].get_unix_ino(), entries[1].get_unix_ino());
     }
 
     /// Retrieves timeline entries from the given session object.
