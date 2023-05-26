@@ -388,7 +388,7 @@ mod tests {
     }
 
     /// Retrieves timeline entries from the given session object.
-    fn entries(session: &Session) -> Vec<rrg_proto::timeline::TimelineEntry> {
+    fn entries(session: &Session) -> Vec<rrg_proto::v2::get_filesystem_timeline::Entry> {
         let blob_count = session.parcel_count(crate::Sink::Blob);
         let reply_count = session.reply_count();
         assert_eq!(blob_count, reply_count);
@@ -401,7 +401,7 @@ mod tests {
     }
 
     /// Constructs a path for the given timeline entry.
-    fn path(entry: &rrg_proto::timeline::TimelineEntry) -> Option<PathBuf> {
+    fn path(entry: &rrg_proto::v2::get_filesystem_timeline::Entry) -> Option<PathBuf> {
         rrg_proto::path::from_bytes(entry.get_path().to_owned()).ok()
     }
 }
