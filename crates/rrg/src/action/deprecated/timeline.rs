@@ -37,35 +37,35 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::v2::get_filesystem_timeline::Ent
 
         let atime_nanos = entry.metadata.accessed().ok().and_then(nanos);
         if let Some(atime_nanos) = atime_nanos {
-            proto.set_atime_ns(atime_nanos);
+            proto.set_atime_nanos(atime_nanos);
         }
 
         let mtime_nanos = entry.metadata.modified().ok().and_then(nanos);
         if let Some(mtime_nanos) = mtime_nanos {
-            proto.set_mtime_ns(mtime_nanos);
+            proto.set_mtime_nanos(mtime_nanos);
         }
 
         let btime_nanos = entry.metadata.created().ok().and_then(nanos);
         if let Some(btime_nanos) = btime_nanos {
-            proto.set_btime_ns(btime_nanos);
+            proto.set_btime_nanos(btime_nanos);
         }
 
         #[cfg(target_family = "unix")]
         {
             use std::os::unix::fs::MetadataExt as _;
 
-            proto.set_mode(i64::from(entry.metadata.mode()));
-            proto.set_ino(entry.metadata.ino());
+            proto.set_unix_mode(i64::from(entry.metadata.mode()));
+            proto.set_unix_ino(entry.metadata.ino());
             if let Some(dev) = i64::try_from(entry.metadata.dev()).ok() {
-                proto.set_dev(dev);
+                proto.set_unix_dev(dev);
             }
             if let Some(uid) = i64::try_from(entry.metadata.uid()).ok() {
-                proto.set_uid(uid);
+                proto.set_unix_uid(uid);
             }
             if let Some(gid) = i64::try_from(entry.metadata.gid()).ok() {
-                proto.set_gid(gid);
+                proto.set_unix_gid(gid);
             }
-            proto.set_ctime_ns(entry.metadata.ctime_nsec());
+            proto.set_ctime_nanos(entry.metadata.ctime_nsec());
         }
 
         #[cfg(target_family = "windows")]
@@ -73,7 +73,7 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::v2::get_filesystem_timeline::Ent
             use std::os::windows::fs::MetadataExt as _;
 
             let attributes = entry.metadata.file_attributes();
-            proto.set_attributes(u64::from(attributes));
+            proto.set_windows_attributes(u64::from(attributes));
         }
 
         proto
@@ -304,14 +304,14 @@ mod tests {
         // available only on UNIX systems.
         #[cfg(target_family = "unix")]
         {
-            let mode = entries[0].get_mode() as libc::mode_t;
+            let mode = entries[0].get_unix_mode() as libc::mode_t;
             assert_eq!(mode & libc::S_IFMT, libc::S_IFREG);
 
             let uid = unsafe { libc::getuid() };
-            assert_eq!(entries[0].get_uid(), uid.into());
+            assert_eq!(entries[0].get_unix_uid(), uid.into());
 
             let gid = unsafe { libc::getgid() };
-            assert_eq!(entries[0].get_gid(), gid.into());
+            assert_eq!(entries[0].get_unix_gid(), gid.into());
         }
     }
 
@@ -353,7 +353,7 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(path(&entries[0]), Some(temp_path));
 
-        let attributes = entries[0].get_attributes() as u32;
+        let attributes = entries[0].get_windows_attributes() as u32;
         assert_eq!(attributes & FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_HIDDEN);
     }
 
@@ -384,7 +384,7 @@ mod tests {
 
         // Information about inode is not available on Windows.
         #[cfg(not(target_os = "windows"))]
-        assert_eq!(entries[0].get_ino(), entries[1].get_ino());
+        assert_eq!(entries[0].get_unix_ino(), entries[1].get_unix_ino());
     }
 
     /// Retrieves timeline entries from the given session object.

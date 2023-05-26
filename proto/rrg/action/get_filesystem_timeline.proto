@@ -57,35 +57,47 @@ message Entry {
   optional bytes path = 1;
 
   // Mode of the file defined as standard POSIX bitmask.
-  optional int64 mode = 2;
+  //
+  // Unix-only.
+  optional int64 unix_mode = 2;
 
   // Size of the file in bytes.
   optional uint64 size = 3;
 
   // Identifier of the device containing the file.
-  optional int64 dev = 4;
+  //
+  // Unix-only.
+  optional int64 unix_dev = 4;
 
   // Serial number of the file.
-  optional uint64 ino = 5;
+  //
+  // This field is set only on Unix-like systems.
+  optional uint64 unix_ino = 5;
 
   // Identifier of the user owning the file.
-  optional int64 uid = 6;
+  //
+  // Unix-only.
+  optional int64 unix_uid = 6;
 
   // Identifier of the group owning the file.
-  optional int64 gid = 7;
+  //
+  // Unix-only.
+  optional int64 unix_gid = 7;
 
   // Time of the last access of the file in nanoseconds since epoch.
-  optional int64 atime_ns = 8;
+  optional int64 atime_nanos = 8;
 
   // Time of the last data change of the file in nanoseconds since epoch.
-  optional int64 mtime_ns = 9;
+  optional int64 mtime_nanos = 9;
 
   // Time of the last status change of the file in nanoseconds since epoch.
-  optional int64 ctime_ns = 10;
+  optional int64 ctime_nanos = 10;
 
   // Time of the file creation in nanoseconds since epoch.
-  optional int64 btime_ns = 11;
+  optional int64 btime_nanos = 11;
 
   // Extra file attributes.
-  optional uint64 attributes = 12;
+  //
+  // Windows-only.
+  optional uint64 windows_attributes = 12;
 }
