@@ -115,7 +115,3 @@ version = "0.8.5"
 
 [dev-dependencies.tempfile]
 version = "3.3.0"
-
-[[example]]
-name = "timeline"
-required-features = ["action-timeline"]
