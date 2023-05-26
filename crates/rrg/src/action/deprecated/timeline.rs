@@ -27,50 +27,6 @@ pub struct Item {
     // TODO(@panhania): Add support for `entry_count`.
 }
 
-/// An error type for failures that can occur during the timeline action.
-#[derive(Debug)]
-enum Error {
-    /// A failure occurred during an attempt to start the recursive walk.
-    WalkDir(std::io::Error),
-    /// A failure occurred during encoding of the timeline entries.
-    Encode(std::io::Error),
-}
-
-impl std::error::Error for Error {
-
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use Error::*;
-
-        match *self {
-            WalkDir(ref error) => Some(error),
-            Encode(ref error) => Some(error),
-        }
-    }
-}
-
-impl std::fmt::Display for Error {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use Error::*;
-
-        match *self {
-            WalkDir(ref error) => {
-                write!(fmt, "failed to start the recursive walk: {}", error)
-            },
-            Encode(ref error) => {
-                write!(fmt, "failed to encode timeline entries: {}", error)
-            },
-        }
-    }
-}
-
-impl From<Error> for session::Error {
-
-    fn from(error: Error) -> session::Error {
-        session::Error::action(error)
-    }
-}
-
 /// A type representing unique identifier of a given chunk.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ChunkId {
@@ -172,7 +128,8 @@ pub fn handle<S>(session: &mut S, args: Args) -> session::Result<()>
 where
     S: Session,
 {
-    let entries = crate::fs::walk_dir(&args.root).map_err(Error::WalkDir)?
+    let entries = crate::fs::walk_dir(&args.root)
+        .map_err(crate::session::Error::action)?
         .filter_map(|entry| match entry {
             Ok(entry) => Some(entry),
             Err(error) => {
@@ -183,7 +140,8 @@ where
         .map(rrg_proto::timeline::TimelineEntry::from_lossy);
 
     for part in crate::gzchunked::encode(entries) {
-        let part = part.map_err(Error::Encode)?;
+        let part = part
+            .map_err(crate::session::Error::action)?;
 
         let chunk = Chunk::from_bytes(part);
         let chunk_id = chunk.id();
