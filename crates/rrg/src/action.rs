@@ -27,6 +27,9 @@ pub mod get_file_metadata;
 #[cfg(feature = "action-get_file_contents")]
 pub mod get_file_contents;
 
+#[cfg(feature = "action-get_filesystem_timeline")]
+pub mod get_filesystem_timeline;
+
 /// Dispatches the given `request` to an appropriate action handler.
 ///
 /// This method is a mapping between action names (as specified in the protocol)

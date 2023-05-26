@@ -10,6 +10,7 @@ default = [
     "action-get_system_metadata",
     "action-get_file_metadata",
     "action-get_file_contents",
+    "action-get_filesystem_timeline",
 
     # These actions are deprecated (awaiting migration to the new protocol).
     "action-insttime",
@@ -20,12 +21,12 @@ default = [
     "action-metadata",
     "action-network",
     "action-stat",
-    "action-timeline",
 ]
 
 action-get_system_metadata = []
 action-get_file_metadata = []
 action-get_file_contents = ["dep:sha2"]
+action-get_filesystem_timeline = ["dep:flate2", "dep:sha2"]
 
 # These actions are deprecated (awaiting migration to the new protocol).
 action-insttime = []
@@ -36,7 +37,6 @@ action-listdir = []
 action-metadata = []
 action-network = []
 action-stat = []
-action-timeline = ["dep:flate2", "dep:sha2"]
 
 test-setfattr = []
 test-chattr = []
