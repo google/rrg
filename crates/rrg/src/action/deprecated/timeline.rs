@@ -15,14 +15,16 @@ use rrg_proto::convert::FromLossy;
 
 use crate::session::{self, Session};
 
-/// A request type for the timeline action.
-pub struct Request {
-    pub root: PathBuf,
+/// Arguments of the `get_filesystem_timeline` action.
+pub struct Args {
+    root: PathBuf,
 }
 
-/// A response type for the timeline action.
-pub struct Response {
-    pub chunk_ids: Vec<ChunkId>,
+/// Result of the `get_filesystem_timeline` action.
+pub struct Item {
+    /// SHA-256 digest of the timeline batch sent to the blob sink.
+    blob_sha256: [u8; 32],
+    // TODO(@panhania): Add support for `entry_count`.
 }
 
 /// An error type for failures that can occur during the timeline action.
@@ -166,11 +168,11 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::timeline::TimelineEntry {
 }
 
 /// Handles requests for the timeline action.
-pub fn handle<S>(session: &mut S, request: Request) -> session::Result<()>
+pub fn handle<S>(session: &mut S, args: Args) -> session::Result<()>
 where
     S: Session,
 {
-    let entries = crate::fs::walk_dir(&request.root).map_err(Error::WalkDir)?
+    let entries = crate::fs::walk_dir(&args.root).map_err(Error::WalkDir)?
         .filter_map(|entry| match entry {
             Ok(entry) => Some(entry),
             Err(error) => {
@@ -180,64 +182,48 @@ where
         })
         .map(rrg_proto::timeline::TimelineEntry::from_lossy);
 
-    let mut response = Response {
-        chunk_ids: vec!(),
-    };
-
     for part in crate::gzchunked::encode(entries) {
         let part = part.map_err(Error::Encode)?;
 
         let chunk = Chunk::from_bytes(part);
         let chunk_id = chunk.id();
 
-        session.send(crate::Sink::Blob, chunk)?;
-        response.chunk_ids.push(chunk_id);
-    }
+        let blob = crate::blob::Blob::from(chunk.data);
 
-    session.reply(response)?;
+        session.send(crate::Sink::Blob, blob)?;
+        session.reply(Item {
+            blob_sha256: chunk_id.sha256,
+        })?;
+    }
 
     Ok(())
 }
 
-impl crate::request::Args for Request {
+impl crate::request::Args for Args {
 
-    type Proto = rrg_proto::timeline::TimelineArgs;
+    type Proto = rrg_proto::v2::get_filesystem_timeline::Args;
 
-    fn from_proto(mut proto: Self::Proto) -> Result<Request, crate::request::ParseArgsError> {
-        let root = rrg_proto::path::from_bytes(proto.take_root())
-            .map_err(|error| {
-                crate::request::ParseArgsError::invalid_field("root", error)
-            })?;
+    fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
+        use crate::request::ParseArgsError;
 
-        Ok(Request {
+        let root = PathBuf::try_from(proto.take_root())
+            .map_err(|error| ParseArgsError::invalid_field("root", error))?;
+
+        Ok(Args {
             root: root,
         })
     }
 }
 
-impl crate::response::Item for Response {
+impl crate::response::Item for Item {
 
-    type Proto = rrg_proto::timeline::TimelineResult;
+    type Proto = rrg_proto::v2::get_filesystem_timeline::Result;
 
-    fn into_proto(self) -> rrg_proto::timeline::TimelineResult {
-        let chunk_ids = self.chunk_ids
-            .into_iter()
-            .map(ChunkId::to_sha256_bytes)
-            .collect();
-
-        let mut proto = rrg_proto::timeline::TimelineResult::new();
-        proto.set_entry_batch_blob_ids(chunk_ids);
+    fn into_proto(self) -> Self::Proto {
+        let mut proto = Self::Proto::default();
+        proto.set_blob_sha256(self.blob_sha256.into());
 
         proto
-    }
-}
-
-impl crate::response::Item for Chunk {
-
-    type Proto = rrg_proto::jobs::DataBlob;
-
-    fn into_proto(self) -> rrg_proto::jobs::DataBlob {
-        self.data.into()
     }
 }
 
@@ -252,7 +238,7 @@ mod tests {
     fn test_non_existent_path() {
         let tempdir = tempfile::tempdir().unwrap();
 
-        let request = Request {
+        let request = Args {
             root: tempdir.path().join("foo")
         };
 
@@ -265,7 +251,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let tempdir_path = tempdir.path().to_path_buf();
 
-        let request = Request {
+        let request = Args {
             root: tempdir_path.clone(),
         };
 
@@ -283,7 +269,7 @@ mod tests {
         std::fs::File::create(tempdir.path().join("b")).unwrap();
         std::fs::File::create(tempdir.path().join("c")).unwrap();
 
-        let request = Request {
+        let request = Args {
             root: tempdir.path().to_path_buf(),
         };
 
@@ -306,7 +292,7 @@ mod tests {
 
         std::fs::create_dir_all(tempdir_path.join("a").join("b")).unwrap();
 
-        let request = Request {
+        let request = Args {
             root: tempdir_path.clone(),
         };
 
@@ -334,7 +320,7 @@ mod tests {
         std::fs::create_dir(&dir_path).unwrap();
         std::os::unix::fs::symlink(&dir_path, &symlink_path).unwrap();
 
-        let request = Request {
+        let request = Args {
             root: root_path.clone(),
         };
 
@@ -360,7 +346,7 @@ mod tests {
         std::fs::File::create(&file_path_1).unwrap();
         std::fs::File::create(&file_path_2).unwrap();
 
-        let request = Request {
+        let request = Args {
             root: root_path.clone(),
         };
 
@@ -385,7 +371,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         std::fs::write(tempdir.path().join("foo"), b"123456789").unwrap();
 
-        let request = Request {
+        let request = Args {
             root: tempdir.path().to_path_buf(),
         };
 
@@ -425,7 +411,7 @@ mod tests {
         std::fs::File::create(&file_path).unwrap();
         std::fs::hard_link(&file_path, &hardlink_path).unwrap();
 
-        let request = Request {
+        let request = Args {
             root: root_path.clone(),
         };
 
@@ -446,19 +432,19 @@ mod tests {
 
     /// Retrieves timeline entries from the given session object.
     fn entries(session: &Session) -> Vec<rrg_proto::timeline::TimelineEntry> {
-        use std::collections::HashMap;
+        let blob_count = session.parcel_count(crate::Sink::Blob);
+        let reply_count = session.reply_count();
+        assert_eq!(blob_count, reply_count);
 
-        let chunk_count = session.parcel_count(crate::Sink::Blob);
-        assert_eq!(session.reply_count(), 1);
-        assert_eq!(session.reply::<Response>(0).chunk_ids.len(), chunk_count);
+        let blobs = session.parcels::<crate::blob::Blob>(crate::Sink::Blob);
+        let items = session.replies::<Item>();
 
-        let chunks_by_id = session.parcels::<Chunk>(crate::Sink::Blob)
-            .map(|chunk| (chunk.id(), chunk))
-            .collect::<HashMap<_, _>>();
-
-        let chunks = session.reply::<Response>(0).chunk_ids
-            .iter()
-            .map(|chunk_id| &chunks_by_id[chunk_id].data[..]);
+        let chunks = blobs.zip(items)
+            .inspect(|(blob, item)| {
+                let blob_sha256 = Chunk::from_bytes(blob.as_bytes().into()).id().sha256;
+                assert_eq!(blob_sha256, item.blob_sha256);
+            })
+            .map(|(blob, _)| blob.as_bytes());
 
         crate::gzchunked::decode(chunks)
             .map(Result::unwrap)
