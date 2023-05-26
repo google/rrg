@@ -19,7 +19,7 @@ message Result {
   // Because the entire timeline can easily have millions of entries, it could
   // quickly exceed the maximum allowed size for a message. This is why entries
   // are batched, gzipped and then send as blobs to the blobstore.
-  bytes blob_sha256 = 3;
+  bytes blob_sha256 = 1;
 
   // The total number of entries in the chunk.
   //
