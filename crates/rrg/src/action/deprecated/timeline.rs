@@ -25,10 +25,10 @@ pub struct Item {
     // TODO(@panhania): Add support for `entry_count`.
 }
 
-impl FromLossy<crate::fs::Entry> for rrg_proto::timeline::TimelineEntry {
+impl FromLossy<crate::fs::Entry> for rrg_proto::v2::get_filesystem_timeline::Entry {
 
-    fn from_lossy(entry: crate::fs::Entry) -> rrg_proto::timeline::TimelineEntry {
-        let mut proto = rrg_proto::timeline::TimelineEntry::new();
+    fn from_lossy(entry: crate::fs::Entry) -> Self {
+        let mut proto = Self::default();
         proto.set_path(rrg_proto::path::into_bytes(entry.path));
         proto.set_size(entry.metadata.len());
 
@@ -95,7 +95,7 @@ where
                 None
             }
         })
-        .map(rrg_proto::timeline::TimelineEntry::from_lossy);
+        .map(rrg_proto::v2::get_filesystem_timeline::Entry::from_lossy);
 
     for batch in crate::gzchunked::encode(entries) {
         let batch = batch
