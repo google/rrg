@@ -24,62 +24,6 @@ pub struct Item {
     // TODO(@panhania): Add support for `entry_count`.
 }
 
-impl FromLossy<crate::fs::Entry> for rrg_proto::v2::get_filesystem_timeline::Entry {
-
-    fn from_lossy(entry: crate::fs::Entry) -> Self {
-        let mut proto = Self::default();
-        proto.set_path(rrg_proto::path::into_bytes(entry.path));
-        proto.set_size(entry.metadata.len());
-
-        fn nanos(time: std::time::SystemTime) -> Option<i64> {
-            i64::try_from(rrg_proto::nanos(time).ok()?).ok()
-        }
-
-        let atime_nanos = entry.metadata.accessed().ok().and_then(nanos);
-        if let Some(atime_nanos) = atime_nanos {
-            proto.set_atime_nanos(atime_nanos);
-        }
-
-        let mtime_nanos = entry.metadata.modified().ok().and_then(nanos);
-        if let Some(mtime_nanos) = mtime_nanos {
-            proto.set_mtime_nanos(mtime_nanos);
-        }
-
-        let btime_nanos = entry.metadata.created().ok().and_then(nanos);
-        if let Some(btime_nanos) = btime_nanos {
-            proto.set_btime_nanos(btime_nanos);
-        }
-
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::fs::MetadataExt as _;
-
-            proto.set_unix_mode(i64::from(entry.metadata.mode()));
-            proto.set_unix_ino(entry.metadata.ino());
-            if let Some(dev) = i64::try_from(entry.metadata.dev()).ok() {
-                proto.set_unix_dev(dev);
-            }
-            if let Some(uid) = i64::try_from(entry.metadata.uid()).ok() {
-                proto.set_unix_uid(uid);
-            }
-            if let Some(gid) = i64::try_from(entry.metadata.gid()).ok() {
-                proto.set_unix_gid(gid);
-            }
-            proto.set_ctime_nanos(entry.metadata.ctime_nsec());
-        }
-
-        #[cfg(target_family = "windows")]
-        {
-            use std::os::windows::fs::MetadataExt as _;
-
-            let attributes = entry.metadata.file_attributes();
-            proto.set_windows_attributes(u64::from(attributes));
-        }
-
-        proto
-    }
-}
-
 /// Handles requests for the timeline action.
 pub fn handle<S>(session: &mut S, args: Args) -> session::Result<()>
 where
@@ -137,6 +81,62 @@ impl crate::response::Item for Item {
     fn into_proto(self) -> Self::Proto {
         let mut proto = Self::Proto::default();
         proto.set_blob_sha256(self.blob_sha256.into());
+
+        proto
+    }
+}
+
+impl FromLossy<crate::fs::Entry> for rrg_proto::v2::get_filesystem_timeline::Entry {
+
+    fn from_lossy(entry: crate::fs::Entry) -> Self {
+        let mut proto = Self::default();
+        proto.set_path(rrg_proto::path::into_bytes(entry.path));
+        proto.set_size(entry.metadata.len());
+
+        fn nanos(time: std::time::SystemTime) -> Option<i64> {
+            i64::try_from(rrg_proto::nanos(time).ok()?).ok()
+        }
+
+        let atime_nanos = entry.metadata.accessed().ok().and_then(nanos);
+        if let Some(atime_nanos) = atime_nanos {
+            proto.set_atime_nanos(atime_nanos);
+        }
+
+        let mtime_nanos = entry.metadata.modified().ok().and_then(nanos);
+        if let Some(mtime_nanos) = mtime_nanos {
+            proto.set_mtime_nanos(mtime_nanos);
+        }
+
+        let btime_nanos = entry.metadata.created().ok().and_then(nanos);
+        if let Some(btime_nanos) = btime_nanos {
+            proto.set_btime_nanos(btime_nanos);
+        }
+
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+
+            proto.set_unix_mode(i64::from(entry.metadata.mode()));
+            proto.set_unix_ino(entry.metadata.ino());
+            if let Some(dev) = i64::try_from(entry.metadata.dev()).ok() {
+                proto.set_unix_dev(dev);
+            }
+            if let Some(uid) = i64::try_from(entry.metadata.uid()).ok() {
+                proto.set_unix_uid(uid);
+            }
+            if let Some(gid) = i64::try_from(entry.metadata.gid()).ok() {
+                proto.set_unix_gid(gid);
+            }
+            proto.set_ctime_nanos(entry.metadata.ctime_nsec());
+        }
+
+        #[cfg(target_family = "windows")]
+        {
+            use std::os::windows::fs::MetadataExt as _;
+
+            let attributes = entry.metadata.file_attributes();
+            proto.set_windows_attributes(u64::from(attributes));
+        }
 
         proto
     }
