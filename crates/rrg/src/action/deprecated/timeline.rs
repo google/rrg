@@ -8,7 +8,6 @@
 use std::path::PathBuf;
 use std::result::Result;
 
-use rrg_macro::ack;
 use rrg_proto::convert::FromLossy;
 
 use crate::session::{self, Session};
@@ -32,26 +31,21 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::v2::get_filesystem_timeline::Ent
         proto.set_path(rrg_proto::path::into_bytes(entry.path));
         proto.set_size(entry.metadata.len());
 
-        let atime_nanos = entry.metadata.accessed().ok().and_then(|atime| ack! {
-            rrg_proto::nanos(atime),
-            error: "failed to convert access time to seconds"
-        }).and_then(|nanos| i64::try_from(nanos).ok());
+        fn nanos(time: std::time::SystemTime) -> Option<i64> {
+            i64::try_from(rrg_proto::nanos(time).ok()?).ok()
+        }
+
+        let atime_nanos = entry.metadata.accessed().ok().and_then(nanos);
         if let Some(atime_nanos) = atime_nanos {
             proto.set_atime_ns(atime_nanos);
         }
 
-        let mtime_nanos = entry.metadata.modified().ok().and_then(|mtime| ack! {
-            rrg_proto::nanos(mtime),
-            error: "failed to convert modification time to seconds"
-        }).and_then(|nanos| i64::try_from(nanos).ok());
+        let mtime_nanos = entry.metadata.modified().ok().and_then(nanos);
         if let Some(mtime_nanos) = mtime_nanos {
             proto.set_mtime_ns(mtime_nanos);
         }
 
-        let btime_nanos = entry.metadata.created().ok().and_then(|btime| ack! {
-            rrg_proto::nanos(btime),
-            error: "failed to convert creation time to seconds"
-        }).and_then(|nanos| i64::try_from(nanos).ok());
+        let btime_nanos = entry.metadata.created().ok().and_then(nanos);
         if let Some(btime_nanos) = btime_nanos {
             proto.set_btime_ns(btime_nanos);
         }
