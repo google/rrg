@@ -7,9 +7,7 @@
 
 use std::path::PathBuf;
 use std::result::Result;
-use std::vec::Vec;
 
-use sha2::{Digest, Sha256};
 use rrg_macro::ack;
 use rrg_proto::convert::FromLossy;
 
@@ -25,48 +23,6 @@ pub struct Item {
     /// SHA-256 digest of the timeline batch sent to the blob sink.
     blob_sha256: [u8; 32],
     // TODO(@panhania): Add support for `entry_count`.
-}
-
-/// A type representing unique identifier of a given chunk.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ChunkId {
-    /// A SHA-256 digest of the referenced chunk data.
-    pub sha256: [u8; 32],
-}
-
-impl ChunkId {
-
-    /// Creates a chunk identifier for the given chunk.
-    fn of(chunk: &Chunk) -> ChunkId {
-        ChunkId {
-            sha256: Sha256::digest(&chunk.data).into(),
-        }
-    }
-
-    /// Converts the chunk identifier into raw bytes of SHA-256 hash.
-    fn to_sha256_bytes(self) -> Vec<u8> {
-        self.sha256.to_vec()
-    }
-}
-
-/// A type representing a particular chunk of the returned timeline.
-pub struct Chunk {
-    pub data: Vec<u8>,
-}
-
-impl Chunk {
-
-    /// Constructs a chunk from the given blob of bytes.
-    fn from_bytes(data: Vec<u8>) -> Chunk {
-        Chunk {
-            data: data,
-        }
-    }
-
-    /// Returns an identifier of the chunk.
-    fn id(&self) -> ChunkId {
-        ChunkId::of(&self)
-    }
 }
 
 impl FromLossy<crate::fs::Entry> for rrg_proto::timeline::TimelineEntry {
@@ -128,6 +84,8 @@ pub fn handle<S>(session: &mut S, args: Args) -> session::Result<()>
 where
     S: Session,
 {
+    use sha2::Digest as _;
+
     let entries = crate::fs::walk_dir(&args.root)
         .map_err(crate::session::Error::action)?
         .filter_map(|entry| match entry {
@@ -139,18 +97,16 @@ where
         })
         .map(rrg_proto::timeline::TimelineEntry::from_lossy);
 
-    for part in crate::gzchunked::encode(entries) {
-        let part = part
+    for batch in crate::gzchunked::encode(entries) {
+        let batch = batch
             .map_err(crate::session::Error::action)?;
 
-        let chunk = Chunk::from_bytes(part);
-        let chunk_id = chunk.id();
-
-        let blob = crate::blob::Blob::from(chunk.data);
+        let blob = crate::blob::Blob::from(batch);
+        let blob_sha256 = sha2::Sha256::digest(blob.as_bytes()).into();
 
         session.send(crate::Sink::Blob, blob)?;
         session.reply(Item {
-            blob_sha256: chunk_id.sha256,
+            blob_sha256,
         })?;
     }
 
@@ -395,16 +351,8 @@ mod tests {
         assert_eq!(blob_count, reply_count);
 
         let blobs = session.parcels::<crate::blob::Blob>(crate::Sink::Blob);
-        let items = session.replies::<Item>();
 
-        let chunks = blobs.zip(items)
-            .inspect(|(blob, item)| {
-                let blob_sha256 = Chunk::from_bytes(blob.as_bytes().into()).id().sha256;
-                assert_eq!(blob_sha256, item.blob_sha256);
-            })
-            .map(|(blob, _)| blob.as_bytes());
-
-        crate::gzchunked::decode(chunks)
+        crate::gzchunked::decode(blobs.map(|blob| blob.as_bytes()))
             .map(Result::unwrap)
             .collect()
     }
