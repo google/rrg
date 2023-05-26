@@ -68,6 +68,10 @@ where
         GetFileContents => {
             handle(session, request, self::get_file_contents::handle)
         }
+        #[cfg(feature = "action-get_filesystem_timeline")]
+        GetFilesystemTimeline => {
+            handle(session, request, self::get_file_contents::handle)
+        }
         // We allow `unreachable_patterns` because otherwise we get a warning if
         // we compile with all the actions enabled.
         #[allow(unreachable_patterns)]
