@@ -18,7 +18,8 @@ pub struct Args {
 pub struct Item {
     /// SHA-256 digest of the timeline batch sent to the blob sink.
     blob_sha256: [u8; 32],
-    // TODO(@panhania): Add support for `entry_count`.
+    // Number of entries in the batch sent to the blob sink.
+    entry_count: usize,
 }
 
 /// Handles requests for the timeline action.
@@ -28,6 +29,17 @@ where
 {
     use sha2::Digest as _;
 
+    // `entry_count` keeps track of the number of entries that are included in
+    // each batch. Each time the `entries` iterator (defined below) yields an
+    // entry, we increase the count (through `Iterator::inspect`). We read the
+    // of `entry_count` when we are about to send a batch and reset the counter
+    // so that we start from 0 for the next batch.
+    //
+    // Note that `entry_count` has to be a cell because it is mutably borrowed
+    // by the `entries` iterator but we still want to be able to also modify it
+    // when we process batches.
+    let entry_count = std::cell::Cell::new(0);
+
     let entries = crate::fs::walk_dir(&args.root)
         .map_err(crate::session::Error::action)?
         .filter_map(|entry| match entry {
@@ -36,6 +48,9 @@ where
                 log::warn!("failed to obtain directory entry: {}", error);
                 None
             }
+        })
+        .inspect(|_| {
+            entry_count.set(entry_count.get() + 1);
         })
         .map(rrg_proto::v2::get_filesystem_timeline::Entry::from_lossy);
 
@@ -49,7 +64,10 @@ where
         session.send(crate::Sink::Blob, blob)?;
         session.reply(Item {
             blob_sha256,
+            entry_count: entry_count.get(),
         })?;
+
+        entry_count.set(0);
     }
 
     Ok(())
@@ -78,6 +96,7 @@ impl crate::response::Item for Item {
     fn into_proto(self) -> Self::Proto {
         let mut proto = Self::Proto::default();
         proto.set_blob_sha256(self.blob_sha256.into());
+        proto.set_entry_count(self.entry_count as u64);
 
         proto
     }
@@ -390,11 +409,20 @@ mod tests {
         let reply_count = session.reply_count();
         assert_eq!(blob_count, reply_count);
 
-        let blobs = session.parcels::<crate::blob::Blob>(crate::Sink::Blob);
+        let chunks = session.parcels::<crate::blob::Blob>(crate::Sink::Blob)
+            .map(crate::blob::Blob::as_bytes);
 
-        crate::gzchunked::decode(blobs.map(|blob| blob.as_bytes()))
+        let entries = crate::gzchunked::decode(chunks)
             .map(Result::unwrap)
-            .collect()
+            .collect::<Vec<_>>();
+
+        let total_entry_count = session.replies::<Item>()
+            .map(|item| item.entry_count)
+            .sum();
+
+        assert_eq!(entries.len(), total_entry_count);
+
+        entries
     }
 
     /// Constructs a path for the given timeline entry.
