@@ -30,6 +30,3 @@ pub mod network;
 
 #[cfg(feature = "action-stat")]
 pub mod stat;
-
-#[cfg(feature = "action-timeline")]
-pub mod timeline;

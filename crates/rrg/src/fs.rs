@@ -12,17 +12,31 @@
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 
-use log::warn;
-
 /// A path to a filesystem item and associated metadata.
 ///
-/// This type is very similar to standard `DirEntry` but its `metadata` property
-/// is guaranteed to always be there.
+/// This type is very similar to standard [`DirEntry`] but its metadata and path
+/// is guaranteed to always be there and cheap to retrieve.
+///
+/// [`DirEntry`]: std::fs::DirEntry
 pub struct Entry {
     /// A path to the filesystem item.
     pub path: PathBuf,
     /// Metadata associated with the item.
     pub metadata: Metadata,
+}
+
+impl TryFrom<std::fs::DirEntry> for Entry {
+
+    type Error = std::io::Error;
+
+    fn try_from(entry: std::fs::DirEntry) -> std::io::Result<Entry> {
+        let metadata = entry.metadata()?;
+
+        return Ok(Entry {
+            path: entry.path(),
+            metadata,
+        });
+    }
 }
 
 /// Returns a deep iterator over entries within a directory.
@@ -46,53 +60,60 @@ pub struct Entry {
 /// ```no_run
 /// use std::path::PathBuf;
 ///
-/// let iter = rrg::fs::walk_dir("/").unwrap();
+/// let paths = rrg::fs::walk_dir("/").unwrap()
+///     .filter_map(Result::ok)
+///     .map(|entry| entry.path)
+///     .collect::<Vec<_>>();
 ///
-/// let items = iter.map(|entry| entry.path).collect::<Vec<_>>();
-/// assert!(items.contains(&PathBuf::from("/usr")));
-/// assert!(items.contains(&PathBuf::from("/usr/bin")));
-/// assert!(items.contains(&PathBuf::from("/usr/lib")));
+/// assert!(paths.contains(&PathBuf::from("/usr")));
+/// assert!(paths.contains(&PathBuf::from("/usr/bin")));
+/// assert!(paths.contains(&PathBuf::from("/usr/lib")));
 /// ```
 pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
-    let metadata = std::fs::symlink_metadata(&root)?;
-    let pending = vec!(list_dir(&root)?);
+    let root = root.as_ref();
+
+    let iter = list_dir(root)?;
 
     #[cfg(target_family = "unix")]
-    let dev = std::os::unix::fs::MetadataExt::dev(&metadata);
+    let dev = {
+        let metadata = std::fs::metadata(root)?;
+        std::os::unix::fs::MetadataExt::dev(&metadata)
+    };
 
     Ok(WalkDir {
-        root: Some(Entry {
-            path: root.as_ref().to_path_buf(),
-            metadata: metadata,
-        }),
-        pending: pending,
-        #[cfg(target_family = "unix")] dev: dev,
+        iter,
+        pending_iters: vec![],
+        #[cfg(target_family = "unix")]
+        dev: dev,
     })
 }
 
 /// Returns a shallow iterator over entries within a directory.
 ///
-/// This function is very similar to the standard `std::fs::read_dir`, except
-/// that the returned iterator always returns valid entries and entry-related
-/// errors are simply ignored.
+/// This function is very similar to the standard [`read_dir`], except that the
+/// returned iterator always returns entries with valid metadata and a path.
+///
+/// [`read_dir`]: std::fs::read_dir
 ///
 /// # Errors
 ///
-/// While all entry-related errors are ignored, constructing the iterator itself
-/// can still fail. This can happen when e.g. when the specified path does not
-/// represent a directory or does not exist.
+/// This function will fail if the specified path does not represent a directory
+/// or does not exist. Note that items returned by the iterator can also contain
+/// errors in case there was an issue with a particular directory entry.
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use std::path::PathBuf;
 ///
-/// let iter = rrg::fs::list_dir("/").unwrap();
+/// let paths = rrg::fs::list_dir("/").unwrap()
+///     .filter_map(Result::ok)
+///     .map(|entry| entry.path)
+///     .collect::<Vec<_>>();
 ///
-/// let items = iter.map(|entry| entry.path).collect::<Vec<_>>();
-/// assert!(items.contains(&PathBuf::from("/home")));
-/// assert!(items.contains(&PathBuf::from("/bin")));
-/// assert!(items.contains(&PathBuf::from("/tmp")));
+/// assert!(paths.contains(&PathBuf::from("/home")));
+/// assert!(paths.contains(&PathBuf::from("/bin")));
+/// assert!(paths.contains(&PathBuf::from("/tmp")));
 /// ```
 pub fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
     let iter = std::fs::read_dir(path)?;
@@ -113,115 +134,76 @@ pub fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
 /// swallowed.
 ///
 /// The iterator can be constructed with the [`walk_dir`] function.
-///
-/// [`walk_dir`]: fn.walk_dir.html
 pub struct WalkDir {
-    root: Option<Entry>,
-    pending: Vec<ListDir>,
+    iter: ListDir,
+    pending_iters: Vec<std::io::Result<ListDir>>,
     #[cfg(target_family = "unix")] dev: u64,
 }
 
 impl WalkDir {
 
-    fn push(&mut self, entry: &Entry) {
-        match list_dir(&entry.path) {
-            Ok(iter) => {
-                self.pending.push(iter);
-            },
-            Err(error) => {
-                warn!("failed to read '{}': {}", entry.path.display(), error);
-            },
-        }
-    }
-
-    fn pop(&mut self) -> Option<Entry> {
-        while let Some(iter) = self.pending.last_mut() {
-            for entry in iter {
-                return Some(entry);
-            }
-
-            self.pending.pop();
-        }
-
-        None
-    }
-
     #[cfg(target_family = "unix")]
-    fn same_dev(&self, entry: &Entry) -> bool {
+    fn is_same_dev(&self, entry: &Entry) -> bool {
         self.dev == std::os::unix::fs::MetadataExt::dev(&entry.metadata)
     }
 
     #[cfg(target_family = "windows")]
-    fn same_dev(&self, _entry: &Entry) -> bool {
+    fn is_same_dev(&self, _entry: &Entry) -> bool {
         true
     }
 }
 
 impl std::iter::Iterator for WalkDir {
 
-    type Item = Entry;
+    type Item = std::io::Result<Entry>;
 
-    fn next(&mut self) -> Option<Entry> {
-        if self.root.is_some() {
-            return self.root.take();
+    fn next(&mut self) -> Option<std::io::Result<Entry>> {
+        loop {
+            if let Some(entry) = self.iter.next() {
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(error) => return Some(Err(error)),
+                };
+
+                if entry.metadata.is_dir() && self.is_same_dev(&entry) {
+                    self.pending_iters.push(list_dir(&entry.path));
+                }
+
+                return Some(Ok(entry));
+            }
+
+            let iter = match self.pending_iters.pop() {
+                Some(iter) => iter,
+                None => return None,
+            };
+
+            match iter {
+                Ok(iter) => {
+                    self.iter = iter;
+                    continue;
+                },
+                Err(error) => return Some(Err(error)),
+            }
         }
-
-        let entry = self.pop()?;
-
-        if entry.metadata.is_dir() && self.same_dev(&entry) {
-            self.push(&entry);
-        }
-
-        Some(entry)
     }
 }
 
 /// Iterator over the entries in a directory.
 ///
-/// This iterator is very similar to the standard `ReadDir` iterator, except
-/// that it is swallows errors and only yields entries that did not cause any
-/// errors.
-///
-/// Unlike the `ReadDir` iterator entries, `ListDir` entries are guaranteed to
-/// have valid metadata objects attached.
+/// Unlike the [`ReadDir`] iterator entries, [`ListDir`] entries are guaranteed
+/// to have valid metadata objects attached.
 ///
 /// The iterator can be constructed with the [`list_dir`] function.
-///
-/// [`list_dir`]: fn.list_dir.html
 pub struct ListDir {
     iter: std::fs::ReadDir,
 }
 
 impl std::iter::Iterator for ListDir {
 
-    type Item = Entry;
+    type Item = std::io::Result<Entry>;
 
-    fn next(&mut self) -> Option<Entry> {
-        for entry in &mut self.iter {
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(error) => {
-                    warn!("directory iteration error: {}", error);
-                    continue
-                },
-            };
-
-            let path = entry.path();
-            let metadata = match entry.metadata() {
-                Ok(metadata) => metadata,
-                Err(error) => {
-                    warn!("failed to stat '{}': {}", path.display(), error);
-                    continue
-                },
-            };
-
-            return Some(Entry {
-                path: path,
-                metadata: metadata,
-            });
-        }
-
-        None
+    fn next(&mut self) -> Option<std::io::Result<Entry>> {
+        self.iter.next().map(|entry| Entry::try_from(entry?))
     }
 }
 
@@ -256,7 +238,9 @@ mod tests {
         File::create(tempdir.path().join("def")).unwrap();
         File::create(tempdir.path().join("ghi")).unwrap();
 
-        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 3);
@@ -277,7 +261,9 @@ mod tests {
         std::fs::create_dir(tempdir.path().join("abc")).unwrap();
         std::fs::create_dir(tempdir.path().join("def")).unwrap();
 
-        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
@@ -300,7 +286,9 @@ mod tests {
         File::create(&source).unwrap();
         std::os::unix::fs::symlink(&source, &target).unwrap();
 
-        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
@@ -320,7 +308,9 @@ mod tests {
         File::create(tempdir.path().join("zażółć gęślą jaźń")).unwrap();
         File::create(tempdir.path().join("што й па мору")).unwrap();
 
-        let mut results = list_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = list_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
         assert_eq!(results.len(), 2);
@@ -340,13 +330,8 @@ mod tests {
     fn test_walk_dir_empty() {
         let tempdir = tempfile::tempdir().unwrap();
 
-        let mut iter = walk_dir(&tempdir).unwrap();
-
-        let entry = iter.next().unwrap();
-        assert_eq!(entry.path, tempdir.path());
-        assert!(entry.metadata.is_dir());
-
-        assert!(iter.next().is_none());
+        let iter = walk_dir(&tempdir).unwrap();
+        assert_eq!(iter.count(), 0);
     }
 
     #[test]
@@ -356,22 +341,21 @@ mod tests {
         File::create(tempdir.path().join("def")).unwrap();
         File::create(tempdir.path().join("ghi")).unwrap();
 
-        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 4);
+        assert_eq!(results.len(), 3);
 
-        assert_eq!(results[0].path, tempdir.path());
-        assert!(results[0].metadata.is_dir());
+        assert_eq!(results[0].path, tempdir.path().join("abc"));
+        assert!(results[0].metadata.is_file());
 
-        assert_eq!(results[1].path, tempdir.path().join("abc"));
+        assert_eq!(results[1].path, tempdir.path().join("def"));
         assert!(results[1].metadata.is_file());
 
-        assert_eq!(results[2].path, tempdir.path().join("def"));
+        assert_eq!(results[2].path, tempdir.path().join("ghi"));
         assert!(results[2].metadata.is_file());
-
-        assert_eq!(results[3].path, tempdir.path().join("ghi"));
-        assert!(results[3].metadata.is_file());
     }
 
     #[test]
@@ -380,19 +364,18 @@ mod tests {
         std::fs::create_dir(tempdir.path().join("abc")).unwrap();
         std::fs::create_dir(tempdir.path().join("def")).unwrap();
 
-        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 2);
 
-        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[0].path, tempdir.path().join("abc"));
         assert!(results[0].metadata.is_dir());
 
-        assert_eq!(results[1].path, tempdir.path().join("abc"));
+        assert_eq!(results[1].path, tempdir.path().join("def"));
         assert!(results[1].metadata.is_dir());
-
-        assert_eq!(results[2].path, tempdir.path().join("def"));
-        assert!(results[2].metadata.is_dir());
     }
 
     #[test]
@@ -401,19 +384,18 @@ mod tests {
         std::fs::create_dir(tempdir.path().join("abc")).unwrap();
         std::fs::create_dir(tempdir.path().join("abc").join("def")).unwrap();
 
-        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 2);
 
-        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[0].path, tempdir.path().join("abc"));
         assert!(results[0].metadata.is_dir());
 
-        assert_eq!(results[1].path, tempdir.path().join("abc"));
+        assert_eq!(results[1].path, tempdir.path().join("abc").join("def"));
         assert!(results[1].metadata.is_dir());
-
-        assert_eq!(results[2].path, tempdir.path().join("abc").join("def"));
-        assert!(results[2].metadata.is_dir());
     }
 
     // Both Windows and macOS have limits on the path length. Both of these
@@ -432,12 +414,14 @@ mod tests {
             std::fs::create_dir(&dir).unwrap();
         }
 
-        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 513);
+        assert_eq!(results.len(), 512);
 
-        for entry in &results[1..] {
+        for entry in &results {
             assert!(entry.path.starts_with(&tempdir));
             assert!(entry.path.ends_with("foo"));
             assert!(entry.metadata.is_dir());
@@ -451,22 +435,21 @@ mod tests {
         File::create(tempdir.path().join("foo").join("abc")).unwrap();
         File::create(tempdir.path().join("foo").join("def")).unwrap();
 
-        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 4);
+        assert_eq!(results.len(), 3);
 
-        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[0].path, tempdir.path().join("foo"));
         assert!(results[0].metadata.is_dir());
 
-        assert_eq!(results[1].path, tempdir.path().join("foo"));
-        assert!(results[1].metadata.is_dir());
+        assert_eq!(results[1].path, tempdir.path().join("foo").join("abc"));
+        assert!(results[1].metadata.is_file());
 
-        assert_eq!(results[2].path, tempdir.path().join("foo").join("abc"));
+        assert_eq!(results[2].path, tempdir.path().join("foo").join("def"));
         assert!(results[2].metadata.is_file());
-
-        assert_eq!(results[3].path, tempdir.path().join("foo").join("def"));
-        assert!(results[3].metadata.is_file());
     }
 
     // Symlinking is supported only on Unix-like systems.
@@ -482,22 +465,21 @@ mod tests {
         File::create(&file).unwrap();
         std::os::unix::fs::symlink(&dir, &symlink).unwrap();
 
-        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 4);
+        assert_eq!(results.len(), 3);
 
-        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[0].path, dir);
         assert!(results[0].metadata.file_type().is_dir());
 
-        assert_eq!(results[1].path, dir);
-        assert!(results[1].metadata.file_type().is_dir());
+        assert_eq!(results[1].path, file);
+        assert!(results[1].metadata.file_type().is_file());
 
-        assert_eq!(results[2].path, file);
-        assert!(results[2].metadata.file_type().is_file());
-
-        assert_eq!(results[3].path, symlink);
-        assert!(results[3].metadata.file_type().is_symlink());
+        assert_eq!(results[2].path, symlink);
+        assert!(results[2].metadata.file_type().is_symlink());
     }
 
     // Symlinking is supported only on Unix-like systems.
@@ -511,19 +493,18 @@ mod tests {
         std::fs::create_dir(&dir).unwrap();
         std::os::unix::fs::symlink(&dir, &symlink).unwrap();
 
-        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 2);
 
-        assert_eq!(results[0].path, tempdir.path());
+        assert_eq!(results[0].path, dir);
         assert!(results[0].metadata.file_type().is_dir());
 
-        assert_eq!(results[1].path, dir);
-        assert!(results[1].metadata.file_type().is_dir());
-
-        assert_eq!(results[2].path, symlink);
-        assert!(results[2].metadata.file_type().is_symlink());
+        assert_eq!(results[1].path, symlink);
+        assert!(results[1].metadata.file_type().is_symlink());
     }
 
     // macOS mangles Unicode-specific characters in filenames.
@@ -533,12 +514,13 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         File::create(tempdir.path().join("zażółć gęślą jaźń")).unwrap();
 
-        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].path, tempdir.path());
-        assert_eq!(results[1].path, tempdir.path().join("zażółć gęślą jaźń"));
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].path, tempdir.path().join("zażółć gęślą jaźń"));
     }
 
     #[test]
@@ -546,10 +528,12 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         std::fs::write(tempdir.path().join("foo"), b"123456789").unwrap();
 
-        let mut results = walk_dir(&tempdir).unwrap().collect::<Vec<_>>();
+        let mut results = walk_dir(&tempdir).unwrap()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         results.sort_by_key(|entry| entry.path.clone());
 
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[1].metadata.len(), 9);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].metadata.len(), 9);
     }
 }

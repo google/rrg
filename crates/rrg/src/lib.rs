@@ -14,16 +14,14 @@ pub mod session;
 
 mod blob;
 mod request;
-// TOOD(@panhania): Hide this module once the `timeline` example is removed or
-// refactored.
-pub mod response;
+mod response;
 
 pub mod startup; // TODO(@panhania): Hide this module.
 
-// Consider moving these to a separate submodule.
-#[cfg(feature = "action-timeline")]
+// TODO(@panhania): Consider moving these to a separate submodule.
+#[cfg(feature = "action-get_filesystem_timeline")]
 pub mod chunked;
-#[cfg(feature = "action-timeline")]
+#[cfg(feature = "action-get_filesystem_timeline")]
 pub mod gzchunked;
 
 pub use request::{Request, RequestId};

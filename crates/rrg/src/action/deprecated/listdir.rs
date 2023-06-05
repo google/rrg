@@ -80,6 +80,14 @@ where
         .map_err(Error::ListDir)?;
 
     for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                log::warn!("failed to obtain directory entry: {error}");
+                continue;
+            },
+        };
+
         session.reply(Response {
             path: entry.path,
             metadata: entry.metadata,
