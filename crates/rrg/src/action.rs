@@ -16,7 +16,7 @@
 //! instances of the corresponding response type.
 
 #[allow(dead_code)]
-pub mod deprecated; // TODO(@panhania): Unexpose this module.
+mod deprecated; // TODO(@panhania): Delete this module.
 
 #[cfg(feature = "action-get_system_metadata")]
 pub mod get_system_metadata;
