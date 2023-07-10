@@ -54,7 +54,7 @@ impl<I: Item> Reply<I> {
     /// [`Session::reply`] instead.
     ///
     /// [`Session::reply`]: crate::session::Session::reply
-    pub fn send_unaccounted(self) -> Result<(), fleetspeak::WriteError> {
+    pub fn send_unaccounted(self) {
         use protobuf::Message as _;
 
         let data = rrg_proto::v2::rrg::Response::from(self).write_to_bytes()
@@ -66,7 +66,7 @@ impl<I: Item> Reply<I> {
             service: String::from("GRR"),
             kind: Some(String::from("rrg.Response")),
             data,
-        })
+        });
     }
 }
 
@@ -94,7 +94,7 @@ impl Status {
     /// accounted version of this function see [`Session::send`].
     ///
     /// [`Session::send`]: crate::session::Session::send
-    pub fn send_unaccounted(self) -> Result<(), fleetspeak::WriteError> {
+    pub fn send_unaccounted(self) {
         use protobuf::Message as _;
 
         let data = rrg_proto::v2::rrg::Response::from(self).write_to_bytes()
@@ -106,7 +106,7 @@ impl Status {
             service: String::from("GRR"),
             kind: Some(String::from("rrg.Response")),
             data,
-        })
+        });
     }
 }
 
@@ -230,7 +230,7 @@ impl<I: crate::response::Item> Parcel<I> {
     ///
     /// [session]: crate::session::Session
     /// [`Session::send`]: crate::session::Session::send
-    pub fn send_unaccounted(self) -> Result<(), fleetspeak::WriteError> {
+    pub fn send_unaccounted(self) {
         use protobuf::Message as _;
 
         let data = rrg_proto::v2::rrg::Parcel::from(self).write_to_bytes()
@@ -242,7 +242,7 @@ impl<I: crate::response::Item> Parcel<I> {
             service: String::from("GRR"),
             kind: Some(String::from("rrg.Parcel")),
             data,
-        })
+        });
     }
 }
 

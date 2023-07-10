@@ -193,11 +193,7 @@ impl Request {
     /// irrecoverable error like Fleetspeak connection issue as it makes little
     /// sense to continue running in such a state.
     pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ParseRequestError> {
-        let message = fleetspeak::receive_with_heartbeat(heartbeat_rate)
-            // If we fail to receive a message from Fleetspeak, our connection
-            // is most likely broken and we should die. In general, this should
-            // not happen.
-            .expect("failed to receive a message from Fleetspeak");
+        let message = fleetspeak::receive_with_heartbeat(heartbeat_rate);
 
         if message.service != "GRR" {
             let service = message.service;

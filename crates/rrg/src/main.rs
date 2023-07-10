@@ -10,12 +10,10 @@ fn main() {
     rrg::init(&args);
 
     info!("sending Fleetspeak startup information");
-    fleetspeak::startup(env!("CARGO_PKG_VERSION"))
-        .expect("failed to initialize Fleetspeak connection");
+    fleetspeak::startup(env!("CARGO_PKG_VERSION"));
 
     info!("sending RRG startup information");
-    rrg::startup()
-        .expect("failed to send RRG startup information");
+    rrg::startup();
 
     info!("listening for messages");
     rrg::listen(&args);

@@ -6,7 +6,7 @@
 // TODO(panhania): Add support for binary paths in the `Metadata` object.
 
 /// Sends a system message with startup information to the GRR server.
-pub fn startup() -> Result<(), fleetspeak::WriteError> {
+pub fn startup() {
     let startup = Startup::now();
 
     crate::response::Parcel::new(crate::Sink::Startup, startup)

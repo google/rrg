@@ -71,14 +71,6 @@ pub fn listen(args: &crate::args::Args) {
 /// This function should be called only once at the beginning of RRG's process
 /// lifetime. It communicates to the GRR server that the agent has been started
 /// and sends some basic information like agent metadata.
-///
-/// # Errors
-///
-/// In case we fail to send startup information, this function will report an
-/// error. Note that by "send" we just mean pushing the message to Fleetspeak,
-/// whether Fleetspeak manages to reach the GRR server with it is a separate
-/// issue. Failure to push the message to Fleetspeak means that the pipe used
-/// for communication is most likely broken and we should quit.
-pub fn startup() -> Result<(), fleetspeak::WriteError> {
+pub fn startup() {
     startup::startup()
 }
