@@ -9,19 +9,14 @@ pub struct FleetspeakSession {
 
 impl FleetspeakSession {
 
-    /// Creates a new Fleetspeak session for the given `request` object.
-    fn new(request_id: crate::RequestId) -> FleetspeakSession {
-        FleetspeakSession {
-            response_builder: crate::ResponseBuilder::new(request_id),
-        }
-    }
-
     /// Dispatches the given `request` to an appropriate action handler.
     ///
     /// This is the main entry point of the session. It processes the request
     /// and sends the execution status back to the server.
     pub fn dispatch(request: crate::Request) {
-        let mut session = FleetspeakSession::new(request.id());
+        let mut session = FleetspeakSession {
+            response_builder: crate::ResponseBuilder::new(request.id()),
+        };
 
         let result = crate::action::dispatch(&mut session, request);
         let status = session.response_builder.status(result);
