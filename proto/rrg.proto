@@ -60,7 +60,7 @@ message Request {
   // A limit on number of bytes sent by the action over the network.
   //
   // If the limit is reached, action execution is aborted.
-  uint64 network_bytes_sent_limit = 5;
+  uint64 network_bytes_limit = 5;
 
   // A limit of CPU time spent on executing the action.
   //
