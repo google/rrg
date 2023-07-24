@@ -145,9 +145,9 @@ pub struct Request {
     /// Maximum number of bytes to send to the server when handling the request.
     network_bytes_limit: Option<u64>,
     /// Maximum CPU time to spend when handling the request.
-    cpu_time_limit: Result<Option<std::time::Duration>, rrg_proto::ParseDurationError>,
+    cpu_time_limit: Option<std::time::Duration>,
     /// Maximum real (wall) time to spend when handling the request.
-    real_time_limit: Result<Option<std::time::Duration>, rrg_proto::ParseDurationError>,
+    real_time_limit: Option<std::time::Duration>,
 }
 
 impl Request {
@@ -192,19 +192,13 @@ impl Request {
     }
 
     /// Gets the limit on the CPU time the request handler can spend.
-    pub fn cpu_time_limit(&self) -> Result<Option<std::time::Duration>, rrg_proto::ParseDurationError> {
-        match &self.cpu_time_limit {
-            Ok(limit) => Ok(*limit),
-            Err(error) => Err(error.clone()),
-        }
+    pub fn cpu_time_limit(&self) -> Option<std::time::Duration> {
+        self.cpu_time_limit
     }
 
     /// Gets the limit on the real (wall) time the request handler can spend.
-    pub fn real_time_limit(&self) -> Result<Option<std::time::Duration>, rrg_proto::ParseDurationError> {
-        match &self.real_time_limit {
-            Ok(limit) => Ok(*limit),
-            Err(error) => Err(error.clone()),
-        }
+    pub fn real_time_limit(&self) -> Option<std::time::Duration> {
+        self.real_time_limit
     }
 
     /// Awaits for a new request message from Fleetspeak.
@@ -251,32 +245,40 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
     fn try_from(mut proto: rrg_proto::v2::rrg::Request) -> Result<Request, ParseRequestError> {
         use rrg_proto::try_from_duration;
 
+        let request_id = RequestId {
+            flow_id: proto.get_flow_id(),
+            request_id: proto.get_request_id(),
+        };
+
         let network_bytes_limit = match proto.get_network_bytes_limit() {
             0 => None,
             limit => Some(limit),
         };
 
-        let cpu_time_limit = try_from_duration(proto.take_cpu_time_limit())
-            .map(|limit| if limit.is_zero() {
-                None
-            } else {
-                Some(limit)
-            });
+        let proto_cpu_time_limit = proto.take_cpu_time_limit();
+        let cpu_time_limit = match try_from_duration(proto_cpu_time_limit) {
+            Ok(limit) if limit.is_zero() => None,
+            Ok(limit) => Some(limit),
+            Err(error) => return Err(ParseRequestError {
+                request_id: Some(request_id),
+                kind: ParseRequestErrorKind::InvalidCpuTimeLimit,
+                error: Some(Box::new(error)),
+            }),
+        };
 
-        let real_time_limit = try_from_duration(proto.take_real_time_limit())
-            .map(|limit| if limit.is_zero() {
-                None
-            } else {
-                Some(limit)
-            });
+        let proto_real_time_limit = proto.take_real_time_limit();
+        let real_time_limit = match try_from_duration(proto_real_time_limit) {
+            Ok(limit) if limit.is_zero() => None,
+            Ok(limit) => Some(limit),
+            Err(error) => return Err(ParseRequestError {
+                request_id: Some(request_id),
+                kind: ParseRequestErrorKind::InvalidRealTimeLimit,
+                error: Some(Box::new(error)),
+            }),
+        };
 
         Ok(Request {
-            // TODO(@panhania): Verify that `request_id` and `flow_id` are
-            // actually set.
-            id: RequestId {
-                flow_id: proto.get_flow_id(),
-                request_id: proto.get_request_id(),
-            },
+            id: request_id,
             action: proto.get_action().try_into(),
             serialized_args: proto.take_args().take_value(),
             network_bytes_limit,
@@ -345,6 +347,10 @@ impl std::error::Error for ParseRequestError {
 pub enum ParseRequestErrorKind {
     /// The serialized message with request was impossible to deserialize.
     MalformedBytes,
+    /// The CPU time limit in the request is invalid.
+    InvalidCpuTimeLimit,
+    /// The real (wall) time limit in the request is invalid.
+    InvalidRealTimeLimit,
 }
 
 impl std::fmt::Display for ParseRequestErrorKind {
@@ -354,6 +360,8 @@ impl std::fmt::Display for ParseRequestErrorKind {
 
         match self {
             MalformedBytes => write!(fmt, "malformed protobuf message bytes"),
+            InvalidCpuTimeLimit => write!(fmt, "invalid CPU time limit"),
+            InvalidRealTimeLimit => write!(fmt, "invalid real time limit"),
         }
     }
 }
