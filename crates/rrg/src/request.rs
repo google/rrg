@@ -142,6 +142,12 @@ pub struct Request {
     action: Result<Action, UnknownAction>,
     /// Serialized protobuf message with arguments to invoke the action with.
     serialized_args: Vec<u8>,
+    /// Maximum number of bytes to send to the server when handling the request.
+    network_bytes_limit: Option<u64>,
+    /// Maximum CPU time to spend when handling the request.
+    cpu_time_limit: Result<Option<std::time::Duration>, rrg_proto::ParseDurationError>,
+    /// Maximum real (wall) time to spend when handling the request.
+    real_time_limit: Result<Option<std::time::Duration>, rrg_proto::ParseDurationError>,
 }
 
 impl Request {
@@ -178,6 +184,27 @@ impl Request {
             })?;
 
         A::from_proto(args_proto)
+    }
+
+    /// Gets the limit on the number of bytes the request handler can send.
+    pub fn network_bytes_limit(&self) -> Option<u64> {
+        self.network_bytes_limit
+    }
+
+    /// Gets the limit on the CPU time the request handler can spend.
+    pub fn cpu_time_limit(&self) -> Result<Option<std::time::Duration>, rrg_proto::ParseDurationError> {
+        match &self.cpu_time_limit {
+            Ok(limit) => Ok(*limit),
+            Err(error) => Err(error.clone()),
+        }
+    }
+
+    /// Gets the limit on the real (wall) time the request handler can spend.
+    pub fn real_time_limit(&self) -> Result<Option<std::time::Duration>, rrg_proto::ParseDurationError> {
+        match &self.real_time_limit {
+            Ok(limit) => Ok(*limit),
+            Err(error) => Err(error.clone()),
+        }
     }
 
     /// Awaits for a new request message from Fleetspeak.
@@ -222,6 +249,27 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
     type Error = ParseRequestError;
 
     fn try_from(mut proto: rrg_proto::v2::rrg::Request) -> Result<Request, ParseRequestError> {
+        use rrg_proto::try_from_duration;
+
+        let network_bytes_limit = match proto.get_network_bytes_limit() {
+            0 => None,
+            limit => Some(limit),
+        };
+
+        let cpu_time_limit = try_from_duration(proto.take_cpu_time_limit())
+            .map(|limit| if limit.is_zero() {
+                None
+            } else {
+                Some(limit)
+            });
+
+        let real_time_limit = try_from_duration(proto.take_real_time_limit())
+            .map(|limit| if limit.is_zero() {
+                None
+            } else {
+                Some(limit)
+            });
+
         Ok(Request {
             id: RequestId {
                 flow_id: proto.get_flow_id(),
@@ -229,6 +277,9 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
             },
             action: proto.get_action().try_into(),
             serialized_args: proto.take_args().take_value(),
+            network_bytes_limit,
+            cpu_time_limit,
+            real_time_limit,
         })
     }
 }
