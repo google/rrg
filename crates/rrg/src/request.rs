@@ -271,6 +271,8 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
             });
 
         Ok(Request {
+            // TODO(@panhania): Verify that `request_id` and `flow_id` are
+            // actually set.
             id: RequestId {
                 flow_id: proto.get_flow_id(),
                 request_id: proto.get_request_id(),
@@ -287,6 +289,8 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
 /// The error type for cases when parsing a request fails.
 #[derive(Debug)]
 pub struct ParseRequestError {
+    /// A unique identifier of the request that we failed to parse.
+    request_id: Option<RequestId>,
     /// A corresponding [`ParseRequestErrorKind`] of the error.
     kind: ParseRequestErrorKind,
     /// A more datailed cause of the error.
@@ -301,9 +305,19 @@ impl ParseRequestError {
         E: Into<Box<dyn std::error::Error>>
     {
         ParseRequestError {
+            request_id: None,
             kind,
             error: Some(error.into()),
         }
+    }
+
+    /// Gets the unique identifier of the request that we failed to parse.
+    ///
+    /// Note that the identifier might not be available. This can happen because
+    /// it was missing in the request or because we failed to deserialize the
+    /// Protocol Buffers message with the request.
+    pub fn request_id(&self) -> Option<RequestId> {
+        self.request_id
     }
 }
 
@@ -344,10 +358,13 @@ impl std::fmt::Display for ParseRequestErrorKind {
     }
 }
 
+// TODO(@panhania): Consider removing this `impl` (the `ParseRequestError::new`
+// should be sufficient enough).
 impl From<ParseRequestErrorKind> for ParseRequestError {
 
     fn from(kind: ParseRequestErrorKind) -> ParseRequestError {
         ParseRequestError {
+            request_id: None,
             kind,
             error: None,
         }

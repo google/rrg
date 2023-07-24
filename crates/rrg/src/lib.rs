@@ -24,7 +24,7 @@ pub mod chunked;
 #[cfg(feature = "action-get_filesystem_timeline")]
 pub mod gzchunked;
 
-pub use request::{Request, RequestId};
+pub use request::{ParseRequestError, Request, RequestId};
 pub use response::{ResponseBuilder, ResponseId, Sink};
 
 /// Initializes the RRG subsystems.
@@ -49,20 +49,8 @@ pub fn init(args: &crate::args::Args) {
 /// appropriate.
 pub fn listen(args: &crate::args::Args) {
     loop {
-        use ::log::{info, error};
-
-        let request = match Request::receive(args.heartbeat_rate) {
-            Ok(request) => request,
-            Err(error) => {
-                error!("failed to receive a request: {}", error);
-                continue
-            }
-        };
-        let request_id = request.id();
-        info!("received request '{}': {:?}", request_id, request.action());
-
+        let request = Request::receive(args.heartbeat_rate);
         session::FleetspeakSession::dispatch(request);
-        info!("finished handling request '{}'", request_id);
     }
 }
 

@@ -1,3 +1,5 @@
+use log::{error, info};
+
 /// A session implementation that uses real Fleetspeak connection.
 ///
 /// This is a normal session type that that is associated with some flow on the
@@ -13,13 +15,44 @@ impl FleetspeakSession {
     ///
     /// This is the main entry point of the session. It processes the request
     /// and sends the execution status back to the server.
-    pub fn dispatch(request: crate::Request) {
-        let mut session = FleetspeakSession {
-            response_builder: crate::ResponseBuilder::new(request.id()),
+    ///
+    /// Note that the function accepts a `Result`. This is because we want to
+    /// send the error (in case on occurred) back to the server. But this we can
+    /// do only within a sesssion, so we have to create a session from a perhaps
+    /// invalid request.
+    pub fn dispatch(request: Result<crate::Request, crate::ParseRequestError>) {
+        let request_id = match &request {
+            Ok(request) => request.id(),
+            Err(error) => match error.request_id() {
+                Some(request_id) => request_id,
+                None => {
+                    error!("invalid request: {}", error);
+                    return;
+                }
+            }
         };
 
-        let result = crate::action::dispatch(&mut session, request);
-        let status = session.response_builder.status(result);
+        info!("received request '{request_id}'");
+
+        let response_builder = crate::ResponseBuilder::new(request_id);
+
+        let status = match request {
+            Ok(request) => {
+                let mut session = FleetspeakSession {
+                    response_builder,
+                };
+
+                let result = crate::action::dispatch(&mut session, request);
+                session.response_builder.status(result)
+            },
+            Err(error) => {
+                error!("invalid request '{request_id}': {error}");
+                // TODO: Instead of returning, send an error status.
+                return;
+            }
+        };
+
+        info!("finished dispatching request '{request_id}'");
 
         status.send_unaccounted();
     }

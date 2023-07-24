@@ -30,6 +30,8 @@ pub mod get_file_contents;
 #[cfg(feature = "action-get_filesystem_timeline")]
 pub mod get_filesystem_timeline;
 
+use log::info;
+
 /// Dispatches the given `request` to an appropriate action handler.
 ///
 /// This method is a mapping between action names (as specified in the protocol)
@@ -54,6 +56,8 @@ where
             return Err(crate::session::Error::unknown_action(action));
         }
     };
+
+    info!("dispatching request '{}': {:?}", request.id(), action);
 
     match action {
         #[cfg(feature = "action-get_system_metadata")]
