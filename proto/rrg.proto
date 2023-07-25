@@ -105,6 +105,9 @@ message Response {
 message Status {
   // Information about action invocation failure.
   message Error {
+    // TODO(@panhania): Add more details about circumstances in which the errors
+    // of specific type can be raised.
+
     // List of all possible error types that can occur.
     enum Type {
       UNSET = 0;
