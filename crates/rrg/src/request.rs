@@ -330,6 +330,11 @@ impl ParseRequestError {
     pub fn request_id(&self) -> Option<RequestId> {
         self.request_id
     }
+
+    /// Returns the corresponding [`ParseRequestErrorKind`] of this error.
+    pub fn kind(&self) -> ParseRequestErrorKind {
+        self.kind
+    }
 }
 
 impl std::fmt::Display for ParseRequestError {
@@ -387,6 +392,24 @@ impl From<ParseRequestErrorKind> for ParseRequestError {
             request_id: None,
             kind,
             error: None,
+        }
+    }
+}
+
+impl From<ParseRequestErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
+
+    fn from(kind: ParseRequestErrorKind) -> rrg_proto::v2::rrg::Status_Error_Type {
+        use ParseRequestErrorKind::*;
+
+        match kind {
+            // Note that `MalformedBytes` error indicates that we couldn't parse
+            // the request and thus we do not have anything to send back to the
+            // server. Therefore, there is no corresponding status error type in
+            // the Protocol Buffers enum and we just leave it unset.
+            MalformedBytes => Self::UNSET,
+            UnknownAction(_) => Self::UNKNOWN_ACTION,
+            InvalidCpuTimeLimit => Self::INVALID_CPU_TIME_LIMIT,
+            InvalidRealTimeLimit => Self::INVALID_REAL_TIME_LIMIT,
         }
     }
 }

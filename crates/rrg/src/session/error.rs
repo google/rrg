@@ -15,6 +15,8 @@ pub struct Error {
 /// Kinds of errors that can happen during a session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ErrorKind {
+    /// The action request was invalid.
+    InvalidRequest(crate::request::ParseRequestErrorKind),
     /// The requested action is not supported.
     UnsupportedAction,
     /// The arguments given for the action were malformed.
@@ -55,8 +57,14 @@ impl std::fmt::Display for Error {
         use ErrorKind::*;
 
         match self.kind {
+            InvalidRequest(_) => {
+                // `self.error` is an instance of `ParseRequestError` which
+                // contains meaningful message, we don't need to provide it
+                // ourselves here.
+                write!(fmt, "{}", self.error)
+            }
             UnsupportedAction => {
-                // Same as with `UnknownAction` variant, the `self.error` is an
+                // Same as with `InvalidRequest` variant, the `self.error` is an
                 // instance of `UnsupportedActionError` and has enough details.
                 write!(fmt, "{}", self.error)
             }
@@ -74,6 +82,16 @@ impl std::error::Error for Error {
 
     fn cause(&self) -> Option<&dyn std::error::Error> {
         Some(self.error.as_ref())
+    }
+}
+
+impl From<crate::request::ParseRequestError> for Error {
+
+    fn from(error: crate::request::ParseRequestError) -> Error {
+        Error {
+            kind: ErrorKind::InvalidRequest(error.kind()),
+            error: Box::new(error),
+        }
     }
 }
 
@@ -104,6 +122,7 @@ impl From<ErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
         use ErrorKind::*;
 
         match kind {
+            InvalidRequest(kind) => kind.into(),
             UnsupportedAction => Self::UNSUPPORTED_ACTION,
             InvalidArgs => Self::INVALID_ARGS,
             ActionFailure => Self::ACTION_FAILURE,
