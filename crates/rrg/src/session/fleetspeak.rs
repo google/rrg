@@ -7,6 +7,8 @@ use log::{error, info};
 /// about network and runtime utilization to kill the action if it is needed.
 pub struct FleetspeakSession {
     response_builder: crate::ResponseBuilder,
+    network_bytes_sent: u64,
+    network_bytes_limit: Option<u64>,
 }
 
 impl FleetspeakSession {
@@ -40,6 +42,8 @@ impl FleetspeakSession {
             Ok(request) => {
                 let mut session = FleetspeakSession {
                     response_builder,
+                    network_bytes_sent: 0,
+                    network_bytes_limit: request.network_bytes_limit(),
                 };
 
                 let result = crate::action::dispatch(&mut session, request);
@@ -55,6 +59,24 @@ impl FleetspeakSession {
     }
 }
 
+impl FleetspeakSession {
+
+    fn check_network_bytes_limit(&self) -> crate::session::Result<()> {
+        use crate::session::error::NetworkBytesLimitExceededError;
+
+        if let Some(network_bytes_limit) = self.network_bytes_limit {
+            if self.network_bytes_sent > network_bytes_limit {
+                return Err(NetworkBytesLimitExceededError {
+                    network_bytes_sent: self.network_bytes_sent,
+                    network_bytes_limit,
+                }.into());
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl crate::session::Session for FleetspeakSession {
 
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>
@@ -64,7 +86,8 @@ impl crate::session::Session for FleetspeakSession {
         // TODO(panhania@): Enforce limits.
         let reply = self.response_builder.reply(item);
 
-        reply.send_unaccounted();
+        self.network_bytes_sent += reply.send_unaccounted() as u64;
+        self.check_network_bytes_limit()?;
 
         Ok(())
     }
@@ -75,7 +98,8 @@ impl crate::session::Session for FleetspeakSession {
     {
         let parcel = crate::response::Parcel::new(sink, item);
 
-        parcel.send_unaccounted();
+        self.network_bytes_sent += parcel.send_unaccounted() as u64;
+        self.check_network_bytes_limit()?;
 
         Ok(())
     }
