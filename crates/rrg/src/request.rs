@@ -139,7 +139,7 @@ pub struct Request {
     /// A unique identifier of the request.
     id: RequestId,
     /// An action to invoke.
-    action: Result<Action, UnknownAction>,
+    action: Action,
     /// Serialized protobuf message with arguments to invoke the action with.
     serialized_args: Vec<u8>,
     /// Maximum number of bytes to send to the server when handling the request.
@@ -157,7 +157,7 @@ impl Request {
     }
 
     /// Gets the action this request should invoke.
-    pub fn action(&self) -> Result<Action, UnknownAction> {
+    pub fn action(&self) -> Action {
         self.action
     }
 
@@ -250,6 +250,15 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
             request_id: proto.get_request_id(),
         };
 
+        let action = match proto.get_action().try_into() {
+            Ok(action) => action,
+            Err(action) => return Err(ParseRequestError {
+                request_id: Some(request_id),
+                kind: ParseRequestErrorKind::UnknownAction(action),
+                error: None,
+            }),
+        };
+
         let network_bytes_limit = match proto.get_network_bytes_limit() {
             0 => None,
             limit => Some(limit),
@@ -279,7 +288,7 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
 
         Ok(Request {
             id: request_id,
-            action: proto.get_action().try_into(),
+            action,
             serialized_args: proto.take_args().take_value(),
             network_bytes_limit,
             cpu_time_limit,
@@ -347,6 +356,8 @@ impl std::error::Error for ParseRequestError {
 pub enum ParseRequestErrorKind {
     /// The serialized message with request was impossible to deserialize.
     MalformedBytes,
+    /// The action in the request is not known.
+    UnknownAction(UnknownAction),
     /// The CPU time limit in the request is invalid.
     InvalidCpuTimeLimit,
     /// The real (wall) time limit in the request is invalid.
@@ -360,6 +371,7 @@ impl std::fmt::Display for ParseRequestErrorKind {
 
         match self {
             MalformedBytes => write!(fmt, "malformed protobuf message bytes"),
+            UnknownAction(action) => write!(fmt, "uknown action: {action}"),
             InvalidCpuTimeLimit => write!(fmt, "invalid CPU time limit"),
             InvalidRealTimeLimit => write!(fmt, "invalid real time limit"),
         }
