@@ -26,6 +26,8 @@ pub enum ErrorKind {
     ActionFailure,
     /// Action execution crossed the allowed network bytes limit.
     NetworkBytesLimitExceeded,
+    /// Action execution crossed the allowed real (wall) time limit.
+    RealTimeLimitExceeded,
 }
 
 impl Error {
@@ -78,6 +80,9 @@ impl std::fmt::Display for Error {
             }
             NetworkBytesLimitExceeded => {
                 write!(fmt, "network bytes limit exceeded: {}", self.error)
+            }
+            RealTimeLimitExceeded => {
+                write!(fmt, "real time limit exceeded: {}", self.error)
             }
         }
     }
@@ -132,6 +137,7 @@ impl From<ErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
             InvalidArgs => Self::INVALID_ARGS,
             ActionFailure => Self::ACTION_FAILURE,
             NetworkBytesLimitExceeded => Self::NETWORK_BYTES_SENT_LIMIT_EXCEEDED,
+            RealTimeLimitExceeded => Self::REAL_TIME_LIMIT_EXCEEDED,
         }
     }
 }
@@ -181,6 +187,40 @@ impl From<NetworkBytesLimitExceededError> for Error {
     fn from(error: NetworkBytesLimitExceededError) -> Error {
         Error {
             kind: ErrorKind::NetworkBytesLimitExceeded,
+            error: Box::new(error),
+        }
+    }
+}
+
+/// An error type raised when the real (wall) time limit has been exceeded.
+#[derive(Debug)]
+pub struct RealTimeLimitExceededError {
+    /// Amount of real time we actually spent on executing the action.
+    pub real_time_spent: std::time::Duration,
+    /// Amount of real time we were allowed to spend on executing the action.
+    pub real_time_limit: std::time::Duration,
+}
+
+impl std::fmt::Display for RealTimeLimitExceededError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write! {
+            fmt,
+            "spent real time {} out of allowed {}",
+            humantime::format_duration(self.real_time_spent),
+            humantime::format_duration(self.real_time_limit),
+        }
+    }
+}
+
+impl std::error::Error for RealTimeLimitExceededError {
+}
+
+impl From<RealTimeLimitExceededError> for Error {
+
+    fn from(error: RealTimeLimitExceededError) -> Error {
+        Error {
+            kind: ErrorKind::RealTimeLimitExceeded,
             error: Box::new(error),
         }
     }
