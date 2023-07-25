@@ -50,9 +50,12 @@ where
 {
     use crate::request::Action::*;
 
-    info!("dispatching request '{}': {:?}", request.id(), request.action());
+    let request_id = request.id();
+    let action = request.action();
 
-    match request.action() {
+    info!("dispatching request '{request_id}': {action}");
+
+    let result = match request.action() {
         #[cfg(feature = "action-get_system_metadata")]
         GetSystemMetadata => {
             handle(session, request, self::get_system_metadata::handle)
@@ -75,7 +78,11 @@ where
         action => {
             return Err(crate::session::Error::unsupported_action(action));
         },
-    }
+    };
+
+    info!("finished dispatching request '{request_id}'");
+
+    result
 }
 
 /// Handles a `request` using the specified `handler`.

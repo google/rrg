@@ -51,8 +51,6 @@ impl FleetspeakSession {
             }
         };
 
-        info!("finished dispatching request '{request_id}'");
-
         status.send_unaccounted();
     }
 }
