@@ -9,6 +9,8 @@ pub struct FleetspeakSession {
     response_builder: crate::ResponseBuilder,
     network_bytes_sent: u64,
     network_bytes_limit: Option<u64>,
+    real_time_start: std::time::Instant,
+    real_time_limit: Option<std::time::Duration>,
 }
 
 impl FleetspeakSession {
@@ -44,6 +46,8 @@ impl FleetspeakSession {
                     response_builder,
                     network_bytes_sent: 0,
                     network_bytes_limit: request.network_bytes_limit(),
+                    real_time_start: std::time::Instant::now(),
+                    real_time_limit: request.real_time_limit(),
                 };
 
                 let result = crate::action::dispatch(&mut session, request);
@@ -75,6 +79,22 @@ impl FleetspeakSession {
 
         Ok(())
     }
+
+    fn check_real_time_limit(&self) -> crate::session::Result<()> {
+        use crate::session::error::RealTimeLimitExceededError;
+
+        if let Some(real_time_limit) = self.real_time_limit {
+            let real_time_spent = self.real_time_start.elapsed();
+            if real_time_spent > real_time_limit {
+                return Err(RealTimeLimitExceededError {
+                    real_time_spent,
+                    real_time_limit,
+                }.into());
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl crate::session::Session for FleetspeakSession {
@@ -89,6 +109,8 @@ impl crate::session::Session for FleetspeakSession {
         self.network_bytes_sent += reply.send_unaccounted() as u64;
         self.check_network_bytes_limit()?;
 
+        self.check_real_time_limit()?;
+
         Ok(())
     }
 
@@ -100,6 +122,8 @@ impl crate::session::Session for FleetspeakSession {
 
         self.network_bytes_sent += parcel.send_unaccounted() as u64;
         self.check_network_bytes_limit()?;
+
+        self.check_real_time_limit()?;
 
         Ok(())
     }
