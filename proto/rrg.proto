@@ -122,6 +122,10 @@ message Status {
       REAL_TIME_LIMIT_EXCEEDED = 6;
       // Action-specific error occurred.
       ACTION_FAILURE = 7;
+      // CPU time usage treshhold specified in the request is invalid.
+      INVALID_CPU_TIME_LIMIT = 8;
+      // Real (wall) time usage treshhold specified in the request is invalid.
+      INVALID_REAL_TIME_LIMIT = 9;
     }
 
     // Type of the error.
