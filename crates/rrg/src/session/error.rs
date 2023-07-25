@@ -9,7 +9,7 @@ pub struct Error {
     /// A corresponding [`ErrorKind`] of this error.
     kind: ErrorKind,
     /// A detailed error object.
-    error: Box<dyn std::error::Error + Send + Sync>,
+    error: Box<dyn std::error::Error>,
 }
 
 /// Kinds of errors that can happen during a session.
@@ -32,7 +32,7 @@ impl Error {
     /// specific error types and propagate them further in the session pipeline.
     pub fn action<E>(error: E) -> Error
     where
-        E: std::error::Error + Send + Sync + 'static,
+        E: std::error::Error + 'static,
     {
         Error {
             kind: ErrorKind::ActionFailure,
