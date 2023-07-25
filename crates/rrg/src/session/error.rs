@@ -24,6 +24,8 @@ pub enum ErrorKind {
     // strictly necessary, we can be consistent here and rename this variant.
     /// The action execution failed.
     ActionFailure,
+    /// Action execution crossed the allowed network bytes limit.
+    NetworkBytesLimitExceeded,
 }
 
 impl Error {
@@ -73,6 +75,9 @@ impl std::fmt::Display for Error {
             }
             ActionFailure => {
                 write!(fmt, "action execution failed: {}", self.error)
+            }
+            NetworkBytesLimitExceeded => {
+                write!(fmt, "network bytes limit exceeded: {}", self.error)
             }
         }
     }
@@ -126,6 +131,7 @@ impl From<ErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
             UnsupportedAction => Self::UNSUPPORTED_ACTION,
             InvalidArgs => Self::INVALID_ARGS,
             ActionFailure => Self::ACTION_FAILURE,
+            NetworkBytesLimitExceeded => Self::NETWORK_BYTES_SENT_LIMIT_EXCEEDED,
         }
     }
 }
@@ -144,4 +150,38 @@ impl std::fmt::Display for UnsupportedActionError {
 }
 
 impl std::error::Error for UnsupportedActionError {
+}
+
+/// An error type raised when the network bytes limit has been exceeded.
+#[derive(Debug)]
+pub struct NetworkBytesLimitExceededError {
+    /// Number of bytes we actually sent.
+    pub network_bytes_sent: u64,
+    /// Number of bytes we were allowed to send.
+    pub network_bytes_limit: u64,
+}
+
+impl std::fmt::Display for NetworkBytesLimitExceededError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write! {
+            fmt,
+            "sent {} bytes out of allowed {}",
+            self.network_bytes_sent,
+            self.network_bytes_limit,
+        }
+    }
+}
+
+impl std::error::Error for NetworkBytesLimitExceededError {
+}
+
+impl From<NetworkBytesLimitExceededError> for Error {
+
+    fn from(error: NetworkBytesLimitExceededError) -> Error {
+        Error {
+            kind: ErrorKind::NetworkBytesLimitExceeded,
+            error: Box::new(error),
+        }
+    }
 }
