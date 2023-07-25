@@ -229,9 +229,10 @@ impl Request {
 
         use protobuf::Message as _;
         let proto = rrg_proto::v2::rrg::Request::parse_from_bytes(&message.data[..])
-            .map_err(|error| {
-                use ParseRequestErrorKind::*;
-                ParseRequestError::new(MalformedBytes, error)
+            .map_err(|error| ParseRequestError {
+                request_id: None,
+                kind: ParseRequestErrorKind::MalformedBytes,
+                error: Some(Box::new(error)),
             })?;
 
         Ok(Request::try_from(proto)?)
@@ -310,18 +311,6 @@ pub struct ParseRequestError {
 
 impl ParseRequestError {
 
-    /// Creates a new error from a known kind and its cause.
-    pub fn new<E>(kind: ParseRequestErrorKind, error: E) -> ParseRequestError
-    where
-        E: Into<Box<dyn std::error::Error>>
-    {
-        ParseRequestError {
-            request_id: None,
-            kind,
-            error: Some(error.into()),
-        }
-    }
-
     /// Gets the unique identifier of the request that we failed to parse.
     ///
     /// Note that the identifier might not be available. This can happen because
@@ -379,19 +368,6 @@ impl std::fmt::Display for ParseRequestErrorKind {
             UnknownAction(action) => write!(fmt, "uknown action: {action}"),
             InvalidCpuTimeLimit => write!(fmt, "invalid CPU time limit"),
             InvalidRealTimeLimit => write!(fmt, "invalid real time limit"),
-        }
-    }
-}
-
-// TODO(@panhania): Consider removing this `impl` (the `ParseRequestError::new`
-// should be sufficient enough).
-impl From<ParseRequestErrorKind> for ParseRequestError {
-
-    fn from(kind: ParseRequestErrorKind) -> ParseRequestError {
-        ParseRequestError {
-            request_id: None,
-            kind,
-            error: None,
         }
     }
 }
