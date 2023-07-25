@@ -47,8 +47,7 @@ impl FleetspeakSession {
             },
             Err(error) => {
                 error!("invalid request '{request_id}': {error}");
-                // TODO: Instead of returning, send an error status.
-                return;
+                response_builder.status(Err(error.into()))
             }
         };
 
