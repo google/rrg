@@ -43,7 +43,7 @@ pub fn installed() -> std::io::Result<SystemTime> {
 ///
 /// [`Kind`]: crate::os::Kind
 pub fn kind() -> crate::os::Kind {
-    crate::os::Kind::Linux
+    crate::os::Kind::Windows
 }
 
 /// Returns the version string of the currently running operating system.
