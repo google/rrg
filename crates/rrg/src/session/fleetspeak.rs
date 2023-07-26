@@ -6,10 +6,15 @@ use log::{error, info};
 /// server. It keeps track of the responses it sends and collects statistics
 /// about network and runtime utilization to kill the action if it is needed.
 pub struct FleetspeakSession {
+    /// A builder for responses sent through Fleetspeak to the GRR server.
     response_builder: crate::ResponseBuilder,
+    /// Number of bytes sent since the session was created.
     network_bytes_sent: u64,
+    /// Number of bytes we are allowed to send within the session.
     network_bytes_limit: Option<u64>,
+    /// Time at which the session was created.
     real_time_start: std::time::Instant,
+    /// Time which we are allowed to spend within the session.
     real_time_limit: Option<std::time::Duration>,
 }
 
@@ -65,6 +70,9 @@ impl FleetspeakSession {
 
 impl FleetspeakSession {
 
+    /// Checks whether the network bytes limit was crossed.
+    ///
+    /// This function will return an error if it was.
     fn check_network_bytes_limit(&self) -> crate::session::Result<()> {
         use crate::session::error::NetworkBytesLimitExceededError;
 
@@ -80,6 +88,9 @@ impl FleetspeakSession {
         Ok(())
     }
 
+    /// Checks whether the real (wall) time limit was crossed.
+    ///
+    /// This function will return an error if it was.
     fn check_real_time_limit(&self) -> crate::session::Result<()> {
         use crate::session::error::RealTimeLimitExceededError;
 
@@ -103,12 +114,12 @@ impl crate::session::Session for FleetspeakSession {
     where
         I: crate::response::Item,
     {
-        // TODO(panhania@): Enforce limits.
         let reply = self.response_builder.reply(item);
 
         self.network_bytes_sent += reply.send_unaccounted() as u64;
         self.check_network_bytes_limit()?;
 
+        // TODO(@panhania): Enforce CPU time limits.
         self.check_real_time_limit()?;
 
         Ok(())
@@ -123,6 +134,7 @@ impl crate::session::Session for FleetspeakSession {
         self.network_bytes_sent += parcel.send_unaccounted() as u64;
         self.check_network_bytes_limit()?;
 
+        // TODO(@panhania): Enforce CPU time limits.
         self.check_real_time_limit()?;
 
         Ok(())
