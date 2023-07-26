@@ -21,7 +21,6 @@ pub enum ErrorKind {
     UnsupportedAction,
     /// The arguments given for the action were malformed.
     InvalidArgs,
-    // strictly necessary, we can be consistent here and rename this variant.
     /// The action execution failed.
     ActionFailure,
     /// Action execution crossed the allowed network bytes limit.
