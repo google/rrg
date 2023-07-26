@@ -53,8 +53,11 @@ impl<I: Item> Reply<I> {
     /// should not be used in general. One should almost always prefer to use
     /// [`Session::reply`] instead.
     ///
+    /// This function returns number of bytes in the serialized reply sent to
+    /// Fleetspeak.
+    ///
     /// [`Session::reply`]: crate::session::Session::reply
-    pub fn send_unaccounted(self) {
+    pub fn send_unaccounted(self) -> usize {
         use protobuf::Message as _;
 
         let data = rrg_proto::v2::rrg::Response::from(self).write_to_bytes()
@@ -62,11 +65,15 @@ impl<I: Item> Reply<I> {
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a result response");
 
+        let data_len = data.len();
+
         fleetspeak::send(fleetspeak::Message {
             service: String::from("GRR"),
             kind: Some(String::from("rrg.Response")),
             data,
         });
+
+        data_len
     }
 }
 
@@ -93,8 +100,11 @@ impl Status {
     /// Note that this function will not do any network traffic accounting. For
     /// accounted version of this function see [`Session::send`].
     ///
+    /// This function returns number of bytes in the serialized status sent to
+    /// Fleetspeak.
+    ///
     /// [`Session::send`]: crate::session::Session::send
-    pub fn send_unaccounted(self) {
+    pub fn send_unaccounted(self) -> usize {
         use protobuf::Message as _;
 
         let data = rrg_proto::v2::rrg::Response::from(self).write_to_bytes()
@@ -102,11 +112,15 @@ impl Status {
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a status response");
 
+        let data_len = data.len();
+
         fleetspeak::send(fleetspeak::Message {
             service: String::from("GRR"),
             kind: Some(String::from("rrg.Response")),
             data,
         });
+
+        data_len
     }
 }
 
@@ -228,9 +242,12 @@ impl<I: crate::response::Item> Parcel<I> {
     /// of some [session], otherwise network usage might not be correctly
     /// accounted for. Prefer to use [`Session::send`] for such cases.
     ///
+    /// This function returns number of bytes in the serialized parcel sent to
+    /// Fleetspeak.
+    ///
     /// [session]: crate::session::Session
     /// [`Session::send`]: crate::session::Session::send
-    pub fn send_unaccounted(self) {
+    pub fn send_unaccounted(self) -> usize {
         use protobuf::Message as _;
 
         let data = rrg_proto::v2::rrg::Parcel::from(self).write_to_bytes()
@@ -238,11 +255,15 @@ impl<I: crate::response::Item> Parcel<I> {
             // almost certainly not (and if we are, we have bigger issue).
             .unwrap();
 
+        let data_len = data.len();
+
         fleetspeak::send(fleetspeak::Message {
             service: String::from("GRR"),
             kind: Some(String::from("rrg.Parcel")),
             data,
         });
+
+        data_len
     }
 }
 

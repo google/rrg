@@ -9,21 +9,24 @@ pub struct Error {
     /// A corresponding [`ErrorKind`] of this error.
     kind: ErrorKind,
     /// A detailed error object.
-    error: Box<dyn std::error::Error + Send + Sync>,
+    error: Box<dyn std::error::Error>,
 }
 
 /// Kinds of errors that can happen during a session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ErrorKind {
-    /// The requested action is not known.
-    UnknownAction,
+    /// The action request was invalid.
+    InvalidRequest(crate::request::ParseRequestErrorKind),
     /// The requested action is not supported.
     UnsupportedAction,
     /// The arguments given for the action were malformed.
     InvalidArgs,
-    // strictly necessary, we can be consistent here and rename this variant.
     /// The action execution failed.
     ActionFailure,
+    /// Action execution crossed the allowed network bytes limit.
+    NetworkBytesLimitExceeded,
+    /// Action execution crossed the allowed real (wall) time limit.
+    RealTimeLimitExceeded,
 }
 
 impl Error {
@@ -34,19 +37,11 @@ impl Error {
     /// specific error types and propagate them further in the session pipeline.
     pub fn action<E>(error: E) -> Error
     where
-        E: std::error::Error + Send + Sync + 'static,
+        E: std::error::Error + 'static,
     {
         Error {
             kind: ErrorKind::ActionFailure,
             error: Box::new(error),
-        }
-    }
-
-    /// Converts an unknown action value to a session error.
-    pub fn unknown_action(action: crate::request::UnknownAction) -> Error {
-        Error {
-            kind: ErrorKind::UnknownAction,
-            error: Box::new(UnknownActionError { action }),
         }
     }
 
@@ -65,14 +60,14 @@ impl std::fmt::Display for Error {
         use ErrorKind::*;
 
         match self.kind {
-            UnknownAction => {
-                // `self.error` is an instance of `UnknownActionError` which
+            InvalidRequest(_) => {
+                // `self.error` is an instance of `ParseRequestError` which
                 // contains meaningful message, we don't need to provide it
                 // ourselves here.
                 write!(fmt, "{}", self.error)
             }
             UnsupportedAction => {
-                // Same as with `UnknownAction` variant, the `self.error` is an
+                // Same as with `InvalidRequest` variant, the `self.error` is an
                 // instance of `UnsupportedActionError` and has enough details.
                 write!(fmt, "{}", self.error)
             }
@@ -82,6 +77,12 @@ impl std::fmt::Display for Error {
             ActionFailure => {
                 write!(fmt, "action execution failed: {}", self.error)
             }
+            NetworkBytesLimitExceeded => {
+                write!(fmt, "network bytes limit exceeded: {}", self.error)
+            }
+            RealTimeLimitExceeded => {
+                write!(fmt, "real time limit exceeded: {}", self.error)
+            }
         }
     }
 }
@@ -90,6 +91,16 @@ impl std::error::Error for Error {
 
     fn cause(&self) -> Option<&dyn std::error::Error> {
         Some(self.error.as_ref())
+    }
+}
+
+impl From<crate::request::ParseRequestError> for Error {
+
+    fn from(error: crate::request::ParseRequestError) -> Error {
+        Error {
+            kind: ErrorKind::InvalidRequest(error.kind()),
+            error: Box::new(error),
+        }
     }
 }
 
@@ -120,28 +131,14 @@ impl From<ErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
         use ErrorKind::*;
 
         match kind {
-            UnknownAction => Self::UNKNOWN_ACTION,
+            InvalidRequest(kind) => kind.into(),
             UnsupportedAction => Self::UNSUPPORTED_ACTION,
             InvalidArgs => Self::INVALID_ARGS,
             ActionFailure => Self::ACTION_FAILURE,
+            NetworkBytesLimitExceeded => Self::NETWORK_BYTES_SENT_LIMIT_EXCEEDED,
+            RealTimeLimitExceeded => Self::REAL_TIME_LIMIT_EXCEEDED,
         }
     }
-}
-
-/// An error type for cases when the action specified in the request is unknown.
-#[derive(Debug)]
-struct UnknownActionError {
-    action: crate::request::UnknownAction,
-}
-
-impl std::fmt::Display for UnknownActionError {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "unknown action '{}'", self.action)
-    }
-}
-
-impl std::error::Error for UnknownActionError {
 }
 
 /// An error type for when the action specified in the request is not supported.
@@ -158,4 +155,72 @@ impl std::fmt::Display for UnsupportedActionError {
 }
 
 impl std::error::Error for UnsupportedActionError {
+}
+
+/// An error type raised when the network bytes limit has been exceeded.
+#[derive(Debug)]
+pub struct NetworkBytesLimitExceededError {
+    /// Number of bytes we actually sent.
+    pub network_bytes_sent: u64,
+    /// Number of bytes we were allowed to send.
+    pub network_bytes_limit: u64,
+}
+
+impl std::fmt::Display for NetworkBytesLimitExceededError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write! {
+            fmt,
+            "sent {} bytes out of allowed {}",
+            self.network_bytes_sent,
+            self.network_bytes_limit,
+        }
+    }
+}
+
+impl std::error::Error for NetworkBytesLimitExceededError {
+}
+
+impl From<NetworkBytesLimitExceededError> for Error {
+
+    fn from(error: NetworkBytesLimitExceededError) -> Error {
+        Error {
+            kind: ErrorKind::NetworkBytesLimitExceeded,
+            error: Box::new(error),
+        }
+    }
+}
+
+/// An error type raised when the real (wall) time limit has been exceeded.
+#[derive(Debug)]
+pub struct RealTimeLimitExceededError {
+    /// Amount of real time we actually spent on executing the action.
+    pub real_time_spent: std::time::Duration,
+    /// Amount of real time we were allowed to spend on executing the action.
+    pub real_time_limit: std::time::Duration,
+}
+
+impl std::fmt::Display for RealTimeLimitExceededError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write! {
+            fmt,
+            "spent real time {} out of allowed {}",
+            humantime::format_duration(self.real_time_spent),
+            humantime::format_duration(self.real_time_limit),
+        }
+    }
+}
+
+impl std::error::Error for RealTimeLimitExceededError {
+}
+
+impl From<RealTimeLimitExceededError> for Error {
+
+    fn from(error: RealTimeLimitExceededError) -> Error {
+        Error {
+            kind: ErrorKind::RealTimeLimitExceeded,
+            error: Box::new(error),
+        }
+    }
 }

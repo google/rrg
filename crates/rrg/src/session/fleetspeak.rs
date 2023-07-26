@@ -1,32 +1,110 @@
+use log::{error, info};
+
 /// A session implementation that uses real Fleetspeak connection.
 ///
 /// This is a normal session type that that is associated with some flow on the
 /// server. It keeps track of the responses it sends and collects statistics
 /// about network and runtime utilization to kill the action if it is needed.
 pub struct FleetspeakSession {
+    /// A builder for responses sent through Fleetspeak to the GRR server.
     response_builder: crate::ResponseBuilder,
+    /// Number of bytes sent since the session was created.
+    network_bytes_sent: u64,
+    /// Number of bytes we are allowed to send within the session.
+    network_bytes_limit: Option<u64>,
+    /// Time at which the session was created.
+    real_time_start: std::time::Instant,
+    /// Time which we are allowed to spend within the session.
+    real_time_limit: Option<std::time::Duration>,
 }
 
 impl FleetspeakSession {
-
-    /// Creates a new Fleetspeak session for the given `request` object.
-    fn new(request_id: crate::RequestId) -> FleetspeakSession {
-        FleetspeakSession {
-            response_builder: crate::ResponseBuilder::new(request_id),
-        }
-    }
 
     /// Dispatches the given `request` to an appropriate action handler.
     ///
     /// This is the main entry point of the session. It processes the request
     /// and sends the execution status back to the server.
-    pub fn dispatch(request: crate::Request) {
-        let mut session = FleetspeakSession::new(request.id());
+    ///
+    /// Note that the function accepts a `Result`. This is because we want to
+    /// send the error (in case on occurred) back to the server. But this we can
+    /// do only within a sesssion, so we have to create a session from a perhaps
+    /// invalid request.
+    pub fn dispatch(request: Result<crate::Request, crate::ParseRequestError>) {
+        let request_id = match &request {
+            Ok(request) => request.id(),
+            Err(error) => match error.request_id() {
+                Some(request_id) => request_id,
+                None => {
+                    error!("invalid request: {}", error);
+                    return;
+                }
+            }
+        };
 
-        let result = crate::action::dispatch(&mut session, request);
-        let status = session.response_builder.status(result);
+        info!("received request '{request_id}'");
+
+        let response_builder = crate::ResponseBuilder::new(request_id);
+
+        let status = match request {
+            Ok(request) => {
+                let mut session = FleetspeakSession {
+                    response_builder,
+                    network_bytes_sent: 0,
+                    network_bytes_limit: request.network_bytes_limit(),
+                    real_time_start: std::time::Instant::now(),
+                    real_time_limit: request.real_time_limit(),
+                };
+
+                let result = crate::action::dispatch(&mut session, request);
+                session.response_builder.status(result)
+            },
+            Err(error) => {
+                error!("invalid request '{request_id}': {error}");
+                response_builder.status(Err(error.into()))
+            }
+        };
 
         status.send_unaccounted();
+    }
+}
+
+impl FleetspeakSession {
+
+    /// Checks whether the network bytes limit was crossed.
+    ///
+    /// This function will return an error if it was.
+    fn check_network_bytes_limit(&self) -> crate::session::Result<()> {
+        use crate::session::error::NetworkBytesLimitExceededError;
+
+        if let Some(network_bytes_limit) = self.network_bytes_limit {
+            if self.network_bytes_sent > network_bytes_limit {
+                return Err(NetworkBytesLimitExceededError {
+                    network_bytes_sent: self.network_bytes_sent,
+                    network_bytes_limit,
+                }.into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Checks whether the real (wall) time limit was crossed.
+    ///
+    /// This function will return an error if it was.
+    fn check_real_time_limit(&self) -> crate::session::Result<()> {
+        use crate::session::error::RealTimeLimitExceededError;
+
+        if let Some(real_time_limit) = self.real_time_limit {
+            let real_time_spent = self.real_time_start.elapsed();
+            if real_time_spent > real_time_limit {
+                return Err(RealTimeLimitExceededError {
+                    real_time_spent,
+                    real_time_limit,
+                }.into());
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -36,10 +114,13 @@ impl crate::session::Session for FleetspeakSession {
     where
         I: crate::response::Item,
     {
-        // TODO(panhania@): Enforce limits.
         let reply = self.response_builder.reply(item);
 
-        reply.send_unaccounted();
+        self.network_bytes_sent += reply.send_unaccounted() as u64;
+        self.check_network_bytes_limit()?;
+
+        // TODO(@panhania): Enforce CPU time limits.
+        self.check_real_time_limit()?;
 
         Ok(())
     }
@@ -50,7 +131,11 @@ impl crate::session::Session for FleetspeakSession {
     {
         let parcel = crate::response::Parcel::new(sink, item);
 
-        parcel.send_unaccounted();
+        self.network_bytes_sent += parcel.send_unaccounted() as u64;
+        self.check_network_bytes_limit()?;
+
+        // TODO(@panhania): Enforce CPU time limits.
+        self.check_real_time_limit()?;
 
         Ok(())
     }

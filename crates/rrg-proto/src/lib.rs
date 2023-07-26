@@ -544,3 +544,88 @@ pub fn into_timestamp(time: std::time::SystemTime) -> protobuf::well_known_types
 
     proto
 }
+
+/// Converts a protobuf [`Duration`] message to [`std::time::Duration`].
+///
+/// [`Duration`]: protobuf::well_known_types::Duration
+///
+/// # Examples
+///
+/// ```
+/// let mut proto = protobuf::well_known_types::Duration::default();
+/// proto.set_seconds(123);
+/// proto.set_nanos(456789000);
+///
+/// let duration = rrg_proto::try_from_duration(proto)
+///     .unwrap();
+/// assert_eq!(duration, std::time::Duration::from_micros(123456789));
+/// ```
+///
+/// ```
+/// let mut proto = protobuf::well_known_types::Duration::default();
+/// proto.set_seconds(-1337);
+///
+/// let error = rrg_proto::try_from_duration(proto)
+///     .unwrap_err();
+/// assert_eq!(error.kind(), rrg_proto::ParseDurationErrorKind::NegativeSecs);
+/// ```
+pub fn try_from_duration(
+    duration: protobuf::well_known_types::Duration,
+) -> Result<std::time::Duration, ParseDurationError>
+{
+    let secs = u64::try_from(duration.get_seconds())
+        .map_err(|_| ParseDurationError {
+            kind: ParseDurationErrorKind::NegativeSecs,
+        })?;
+
+    let nanos = u64::try_from(duration.get_nanos())
+        .map_err(|_| ParseDurationError {
+            kind: ParseDurationErrorKind::NegativeNanos,
+        })?;
+
+    let duration_secs = std::time::Duration::from_secs(secs);
+    let duration_nanos = std::time::Duration::from_nanos(nanos);
+    Ok(duration_secs + duration_nanos)
+}
+
+/// Error type for cases when parsing a protobuf [`Duration`] messages.
+///
+/// [`Duration`]: protobuf::well_known_types::Duration
+#[derive(Debug, Clone)]
+pub struct ParseDurationError {
+    /// A corresponding [`ParseDurationErrorKind`] of the error.
+    kind: ParseDurationErrorKind,
+}
+
+impl ParseDurationError {
+
+    /// Returns the corresponding [`ParseDurationErrorKind`] of this error.
+    pub fn kind(&self) -> ParseDurationErrorKind {
+        self.kind
+    }
+}
+
+impl std::fmt::Display for ParseDurationError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ParseDurationErrorKind::*;
+        match self.kind {
+            NegativeSecs => write!(fmt, "negative seconds"),
+            NegativeNanos => write!(fmt, "negative nanoseconds"),
+        }
+    }
+}
+
+impl std::error::Error for ParseDurationError {
+}
+
+/// Kinds of errors that can happen when parsing protobuf [`Duration`] messages.
+///
+/// [`Duration`]: protobuf::well_known_types::Duration
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum ParseDurationErrorKind {
+    /// Value of the `seconds` field was negative.
+    NegativeSecs,
+    /// Value of the `nanos` field was negative.
+    NegativeNanos,
+}

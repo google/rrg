@@ -139,9 +139,15 @@ pub struct Request {
     /// A unique identifier of the request.
     id: RequestId,
     /// An action to invoke.
-    action: Result<Action, UnknownAction>,
+    action: Action,
     /// Serialized protobuf message with arguments to invoke the action with.
     serialized_args: Vec<u8>,
+    /// Maximum number of bytes to send to the server when handling the request.
+    network_bytes_limit: Option<u64>,
+    /// Maximum CPU time to spend when handling the request.
+    cpu_time_limit: Option<std::time::Duration>,
+    /// Maximum real (wall) time to spend when handling the request.
+    real_time_limit: Option<std::time::Duration>,
 }
 
 impl Request {
@@ -151,7 +157,7 @@ impl Request {
     }
 
     /// Gets the action this request should invoke.
-    pub fn action(&self) -> Result<Action, UnknownAction> {
+    pub fn action(&self) -> Action {
         self.action
     }
 
@@ -178,6 +184,21 @@ impl Request {
             })?;
 
         A::from_proto(args_proto)
+    }
+
+    /// Gets the limit on the number of bytes the request handler can send.
+    pub fn network_bytes_limit(&self) -> Option<u64> {
+        self.network_bytes_limit
+    }
+
+    /// Gets the limit on the CPU time the request handler can spend.
+    pub fn cpu_time_limit(&self) -> Option<std::time::Duration> {
+        self.cpu_time_limit
+    }
+
+    /// Gets the limit on the real (wall) time the request handler can spend.
+    pub fn real_time_limit(&self) -> Option<std::time::Duration> {
+        self.real_time_limit
     }
 
     /// Awaits for a new request message from Fleetspeak.
@@ -208,9 +229,10 @@ impl Request {
 
         use protobuf::Message as _;
         let proto = rrg_proto::v2::rrg::Request::parse_from_bytes(&message.data[..])
-            .map_err(|error| {
-                use ParseRequestErrorKind::*;
-                ParseRequestError::new(MalformedBytes, error)
+            .map_err(|error| ParseRequestError {
+                request_id: None,
+                kind: ParseRequestErrorKind::MalformedBytes,
+                error: Some(Box::new(error)),
             })?;
 
         Ok(Request::try_from(proto)?)
@@ -222,13 +244,56 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
     type Error = ParseRequestError;
 
     fn try_from(mut proto: rrg_proto::v2::rrg::Request) -> Result<Request, ParseRequestError> {
+        use rrg_proto::try_from_duration;
+
+        let request_id = RequestId {
+            flow_id: proto.get_flow_id(),
+            request_id: proto.get_request_id(),
+        };
+
+        let action = match proto.get_action().try_into() {
+            Ok(action) => action,
+            Err(action) => return Err(ParseRequestError {
+                request_id: Some(request_id),
+                kind: ParseRequestErrorKind::UnknownAction(action),
+                error: None,
+            }),
+        };
+
+        let network_bytes_limit = match proto.get_network_bytes_limit() {
+            0 => None,
+            limit => Some(limit),
+        };
+
+        let proto_cpu_time_limit = proto.take_cpu_time_limit();
+        let cpu_time_limit = match try_from_duration(proto_cpu_time_limit) {
+            Ok(limit) if limit.is_zero() => None,
+            Ok(limit) => Some(limit),
+            Err(error) => return Err(ParseRequestError {
+                request_id: Some(request_id),
+                kind: ParseRequestErrorKind::InvalidCpuTimeLimit,
+                error: Some(Box::new(error)),
+            }),
+        };
+
+        let proto_real_time_limit = proto.take_real_time_limit();
+        let real_time_limit = match try_from_duration(proto_real_time_limit) {
+            Ok(limit) if limit.is_zero() => None,
+            Ok(limit) => Some(limit),
+            Err(error) => return Err(ParseRequestError {
+                request_id: Some(request_id),
+                kind: ParseRequestErrorKind::InvalidRealTimeLimit,
+                error: Some(Box::new(error)),
+            }),
+        };
+
         Ok(Request {
-            id: RequestId {
-                flow_id: proto.get_flow_id(),
-                request_id: proto.get_request_id(),
-            },
-            action: proto.get_action().try_into(),
+            id: request_id,
+            action,
             serialized_args: proto.take_args().take_value(),
+            network_bytes_limit,
+            cpu_time_limit,
+            real_time_limit,
         })
     }
 }
@@ -236,6 +301,8 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
 /// The error type for cases when parsing a request fails.
 #[derive(Debug)]
 pub struct ParseRequestError {
+    /// A unique identifier of the request that we failed to parse.
+    request_id: Option<RequestId>,
     /// A corresponding [`ParseRequestErrorKind`] of the error.
     kind: ParseRequestErrorKind,
     /// A more datailed cause of the error.
@@ -244,15 +311,18 @@ pub struct ParseRequestError {
 
 impl ParseRequestError {
 
-    /// Creates a new error from a known kind and its cause.
-    pub fn new<E>(kind: ParseRequestErrorKind, error: E) -> ParseRequestError
-    where
-        E: Into<Box<dyn std::error::Error>>
-    {
-        ParseRequestError {
-            kind,
-            error: Some(error.into()),
-        }
+    /// Gets the unique identifier of the request that we failed to parse.
+    ///
+    /// Note that the identifier might not be available. This can happen because
+    /// it was missing in the request or because we failed to deserialize the
+    /// Protocol Buffers message with the request.
+    pub fn request_id(&self) -> Option<RequestId> {
+        self.request_id
+    }
+
+    /// Returns the corresponding [`ParseRequestErrorKind`] of this error.
+    pub fn kind(&self) -> ParseRequestErrorKind {
+        self.kind
     }
 }
 
@@ -280,6 +350,12 @@ impl std::error::Error for ParseRequestError {
 pub enum ParseRequestErrorKind {
     /// The serialized message with request was impossible to deserialize.
     MalformedBytes,
+    /// The action in the request is not known.
+    UnknownAction(UnknownAction),
+    /// The CPU time limit in the request is invalid.
+    InvalidCpuTimeLimit,
+    /// The real (wall) time limit in the request is invalid.
+    InvalidRealTimeLimit,
 }
 
 impl std::fmt::Display for ParseRequestErrorKind {
@@ -289,16 +365,27 @@ impl std::fmt::Display for ParseRequestErrorKind {
 
         match self {
             MalformedBytes => write!(fmt, "malformed protobuf message bytes"),
+            UnknownAction(action) => write!(fmt, "uknown action: {action}"),
+            InvalidCpuTimeLimit => write!(fmt, "invalid CPU time limit"),
+            InvalidRealTimeLimit => write!(fmt, "invalid real time limit"),
         }
     }
 }
 
-impl From<ParseRequestErrorKind> for ParseRequestError {
+impl From<ParseRequestErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
 
-    fn from(kind: ParseRequestErrorKind) -> ParseRequestError {
-        ParseRequestError {
-            kind,
-            error: None,
+    fn from(kind: ParseRequestErrorKind) -> rrg_proto::v2::rrg::Status_Error_Type {
+        use ParseRequestErrorKind::*;
+
+        match kind {
+            // Note that `MalformedBytes` error indicates that we couldn't parse
+            // the request and thus we do not have anything to send back to the
+            // server. Therefore, there is no corresponding status error type in
+            // the Protocol Buffers enum and we just leave it unset.
+            MalformedBytes => Self::UNSET,
+            UnknownAction(_) => Self::UNKNOWN_ACTION,
+            InvalidCpuTimeLimit => Self::INVALID_CPU_TIME_LIMIT,
+            InvalidRealTimeLimit => Self::INVALID_REAL_TIME_LIMIT,
         }
     }
 }

@@ -10,7 +10,7 @@ pub fn startup() {
     let startup = Startup::now();
 
     crate::response::Parcel::new(crate::Sink::Startup, startup)
-        .send_unaccounted()
+        .send_unaccounted();
 }
 
 /// Information about the agent startup.
