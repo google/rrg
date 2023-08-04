@@ -148,6 +148,8 @@ pub struct Request {
     cpu_time_limit: Option<std::time::Duration>,
     /// Maximum real (wall) time to spend when handling the request.
     real_time_limit: Option<std::time::Duration>,
+    /// Minimum level at which logs are going to be sent to the server.
+    log_level: log::LevelFilter,
 }
 
 impl Request {
@@ -199,6 +201,11 @@ impl Request {
     /// Gets the limit on the real (wall) time the request handler can spend.
     pub fn real_time_limit(&self) -> Option<std::time::Duration> {
         self.real_time_limit
+    }
+
+    /// Gets the minimum level at which log messages are sent to the server.
+    pub fn log_level(&self) -> log::LevelFilter {
+        self.log_level
     }
 
     /// Awaits for a new request message from Fleetspeak.
@@ -294,6 +301,7 @@ impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
             network_bytes_limit,
             cpu_time_limit,
             real_time_limit,
+            log_level: proto.get_log_level().into(),
         })
     }
 }
