@@ -222,6 +222,31 @@ impl ResponseBuilder {
     }
 }
 
+/// Log factory for building many log responses to a single request.
+pub struct LogBuilder {
+    /// A unique request identifier for which we build log responses.
+    request_id: RequestId,
+}
+
+impl LogBuilder {
+
+    /// Creates a new log response builder for the specified request.
+    pub fn new(request_id: RequestId) -> LogBuilder {
+        LogBuilder {
+            request_id,
+        }
+    }
+
+    /// Builds a new log response for the given log record.
+    pub fn log<'r, 'a>(&self, record: &'r log::Record<'a>) -> Log<'r, 'a> {
+        Log {
+            request_id: self.request_id,
+            timestamp: std::time::SystemTime::now(),
+            record,
+        }
+    }
+}
+
 /// Handle to a specific sink.
 ///
 /// Sinks ("well-known flows" or "message handlers" in GRR nomenclature) are
