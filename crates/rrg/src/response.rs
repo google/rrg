@@ -124,6 +124,51 @@ impl Status {
     }
 }
 
+/// An action execution log message.
+///
+/// Whenever an actions logs a message (through the [`log`] crate), all entries
+/// with a level higher than the logging threshold specified in the request are
+/// going to be sent to the server as responses.
+///
+/// These responses can be useful for debugging action behaviour but are should
+/// not be used "by default" not to induce too much traffic on the server.
+///
+/// Note that even though log messages are responses they do not have a unique
+/// identifier (unlike [`Status`] and [`Reply`] instances).
+pub struct Log<'r, 'a> {
+    /// A unique identifier of the request that casued the log message.
+    request_id: RequestId,
+    /// The time at which the message was logged.
+    timestamp: std::time::SystemTime,
+    /// The actual record that was logged.
+    record: &'r log::Record<'a>,
+}
+
+impl<'r, 'a> Log<'r, 'a> {
+
+    /// Sends the log message through Fleetspeak to the GRR server.
+    ///
+    /// This function consumes the item to ensure that it is not sent twice.
+    ///
+    /// Note that unlike for [`Status`] and [`Reply`], there is no corresponding
+    /// "accounted" method for sending logs as they should not contribute to the
+    /// network usage statistics.
+    pub fn send_unaccounted(self) {
+        use protobuf::Message as _;
+
+        let data = rrg_proto::v2::rrg::Response::from(self).write_to_bytes()
+            // This should only fail in case we are out of memory, which we are
+            // almost certainly not (and if we are, we have bigger issue).
+            .expect("failed to serialize a log response");
+
+        fleetspeak::send(fleetspeak::Message {
+            service: String::from("GRR"),
+            kind: Some(String::from("rrg.Response")),
+            data,
+        });
+    }
+}
+
 /// A unique identifier of a response.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ResponseId(pub(super) u64);
@@ -313,6 +358,30 @@ impl From<Status> for rrg_proto::v2::rrg::Status {
         if let Err(error) = status.result {
             proto.set_error(error.into());
         }
+
+        proto
+    }
+}
+
+impl<'r, 'a> From<Log<'r, 'a>> for rrg_proto::v2::rrg::Response {
+
+    fn from(log: Log<'r, 'a>) -> rrg_proto::v2::rrg::Response {
+        let mut proto = rrg_proto::v2::rrg::Response::new();
+        proto.set_flow_id(log.request_id.flow_id());
+        proto.set_request_id(log.request_id.request_id());
+        proto.set_log(log.into());
+
+        proto
+    }
+}
+
+impl<'r, 'a> From<Log<'r, 'a>> for rrg_proto::v2::rrg::Log {
+
+    fn from(log: Log<'r, 'a>) -> rrg_proto::v2::rrg::Log {
+        let mut proto = rrg_proto::v2::rrg::Log::new();
+        proto.set_level(log.record.level().into());
+        proto.set_timestamp(rrg_proto::into_timestamp(log.timestamp));
+        proto.set_message(log.record.args().to_string());
 
         proto
     }
