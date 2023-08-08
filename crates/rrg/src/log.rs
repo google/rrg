@@ -8,9 +8,9 @@
 /// This function should be called only once at the beginning of the process
 /// startup.
 pub fn init(args: &crate::args::Args) {
-    let mut logger = MultiLog::new();
+    let mut logger = MultiLog::default();
     if args.log_to_stdout {
-        logger.push(WriterLog::new(std::io::stdout()));
+        logger.stdout_logger = Some(WriterLog::new(std::io::stdout()));
     }
     if let Some(ref path) = args.log_to_file {
         let file = std::fs::OpenOptions::new()
@@ -19,7 +19,7 @@ pub fn init(args: &crate::args::Args) {
             .open(path)
             .expect("failed to open the log file");
 
-        logger.push(WriterLog::new(file));
+        logger.file_logger = Some(WriterLog::new(file));
     }
 
     log::set_boxed_logger(Box::new(logger))
@@ -30,39 +30,55 @@ pub fn init(args: &crate::args::Args) {
 
 /// A wrapper for logging to multiple destinations.
 struct MultiLog {
-    /// A list of all registered loggers.
-    loggers: Vec<Box<dyn log::Log>>,
+    /// Logger instance that writes messages to standard output.
+    stdout_logger: Option<WriterLog<std::io::Stdout>>,
+    /// Logger instance that writes messages to a file.
+    file_logger: Option<WriterLog<std::fs::File>>,
 }
 
 impl MultiLog {
 
-    /// Creates a new wrapper with no registered loggers.
-    fn new() -> MultiLog {
-        MultiLog {
-            loggers: Vec::new(),
-        }
-    }
+    /// Returns an iterator over all registered loggers.
+    #[inline]
+    fn loggers(&self) -> impl Iterator<Item = &dyn log::Log> {
+        let stdout_logger_iter = self.stdout_logger
+            .iter()
+            .map(|logger| logger as &dyn log::Log);
 
-    /// Registers a new destination to log to.
-    fn push<L: log::Log + 'static>(&mut self, logger: L) {
-        self.loggers.push(Box::new(logger));
+        let file_logger_iter = self.file_logger
+            .iter()
+            .map(|logger| logger as &dyn log::Log);
+
+        std::iter::empty()
+            .chain(stdout_logger_iter)
+            .chain(file_logger_iter)
+    }
+}
+
+impl Default for MultiLog {
+
+    fn default() -> MultiLog {
+        MultiLog {
+            stdout_logger: None,
+            file_logger: None,
+        }
     }
 }
 
 impl log::Log for MultiLog {
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        self.loggers.iter().any(|logger| logger.enabled(metadata))
+        self.loggers().any(|logger| logger.enabled(metadata))
     }
 
     fn log(&self, record: &log::Record) {
-        for log in &self.loggers {
-            log.log(record);
+        for logger in self.loggers() {
+            logger.log(record);
         }
     }
 
     fn flush(&self) {
-        for logger in &self.loggers {
+        for logger in self.loggers() {
             logger.flush();
         }
     }
