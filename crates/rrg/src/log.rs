@@ -12,7 +12,8 @@ use lazy_static::lazy_static;
 pub fn init(args: &crate::args::Args) {
     let mut logger = MultiLog::default();
     if args.log_to_stdout {
-        logger.stdout_logger = Some(WriterLog::new(std::io::stdout()));
+        let stdout = std::io::stdout();
+        logger.stdout_logger = Some(WriterLog::new(stdout, args.verbosity));
     }
     if let Some(ref path) = args.log_to_file {
         let file = std::fs::OpenOptions::new()
@@ -21,15 +22,22 @@ pub fn init(args: &crate::args::Args) {
             .open(path)
             .expect("failed to open the log file");
 
-        logger.file_logger = Some(WriterLog::new(file));
+        logger.file_logger = Some(WriterLog::new(file, args.verbosity));
     }
 
     log::set_boxed_logger(Box::new(logger))
         .expect("failed to initialize logger");
 
-    // TODO(@panhania): This will affect logs sent to the server which should
-    // use completely independent verbosity level.
-    log::set_max_level(args.verbosity);
+    // Note that individual loggers have their own logging levels:
+    //
+    //   * The standard output logger and file loggers use `args.verbosity`.
+    //   * The response logger uses the level specified in the request.
+    //
+    // If we were to set the global max level to `args.verbosity` it would make
+    // it impossible to send to the server logs with lower level even if the
+    // request mandates it. This is why we initialize it to `Trace` (which is
+    // the maximum available level).
+    log::set_max_level(log::LevelFilter::Trace);
 }
 
 /// A wrapper for logging to multiple destinations.
@@ -98,21 +106,27 @@ impl log::Log for MultiLog {
 
 /// A simple logger implementation for logging to writable streams (e.g. files).
 struct WriterLog<W: std::io::Write + Send + Sync> {
+    /// Stream to write the log messages to.
     writer: std::sync::Mutex<W>,
+    /// Minimum level at which messages are written to the stream.
+    log_level: log::LevelFilter,
 }
 
 impl<W: std::io::Write + Send + Sync> WriterLog<W> {
 
     /// Create a new logger for the given writable stream.
-    fn new(writer: W) -> WriterLog<W> {
-        WriterLog { writer: std::sync::Mutex::new(writer) }
+    fn new(writer: W, log_level: log::LevelFilter) -> WriterLog<W> {
+        WriterLog {
+            writer: std::sync::Mutex::new(writer),
+            log_level,
+        }
     }
 }
 
 impl<W: std::io::Write + Send + Sync> log::Log for WriterLog<W> {
 
-    fn enabled(&self, _metadata: &log::Metadata) -> bool {
-        true
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= self.log_level
     }
 
     fn log(&self, record: &log::Record) {
