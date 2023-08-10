@@ -167,8 +167,8 @@ lazy_static! {
     /// This instance is `None` normally and is set to `Some` only when we are
     /// processing a request. To set the logger instance one should use the
     /// [`ResponseLog::context`] method.
-    static ref RESPONSE_LOGGER: std::sync::Mutex<Option<ResponseLog>> = {
-        std::sync::Mutex::new(None)
+    static ref RESPONSE_LOGGER: std::sync::RwLock<Option<ResponseLog>> = {
+        std::sync::RwLock::new(None)
     };
 }
 
@@ -179,7 +179,7 @@ struct GlobalResponseLog;
 impl log::Log for GlobalResponseLog {
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        let logger = RESPONSE_LOGGER.lock()
+        let logger = RESPONSE_LOGGER.read()
             .expect("failed to acquire response logger lock");
 
         match logger.as_ref() {
@@ -189,7 +189,7 @@ impl log::Log for GlobalResponseLog {
     }
 
     fn log(&self, record: &log::Record) {
-        let logger = RESPONSE_LOGGER.lock()
+        let logger = RESPONSE_LOGGER.read()
             .expect("failed to acquire response logger lock");
 
         match logger.as_ref() {
@@ -199,7 +199,7 @@ impl log::Log for GlobalResponseLog {
     }
 
     fn flush(&self) {
-        let logger = RESPONSE_LOGGER.lock()
+        let logger = RESPONSE_LOGGER.read()
             .expect("failed to acquire reponse logger lock");
 
         match logger.as_ref() {
@@ -228,18 +228,17 @@ impl ResponseLog {
     }
 
     /// Runs the specified function in a context with this logger enabled.
+    ///
+    /// # Panics
+    ///
+    /// This function might panic or deadlock if called on a thread already
+    /// running within a response logger context.
     pub fn context<F, T>(self, func: F) -> T
     where
         F: FnOnce() -> T,
     {
-        let mut logger = RESPONSE_LOGGER.lock()
+        let mut logger = RESPONSE_LOGGER.write()
             .expect("failed to acquire response logger lock");
-
-        // TODO(@panhania): Verify that we panic and not deadlock on nested
-        // `ResponseLog::context` calls.
-        if logger.is_some() {
-            panic!("response logger already set");
-        }
 
         *logger = Some(self);
         let result = func();
