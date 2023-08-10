@@ -3,6 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+use log::Log;
 use lazy_static::lazy_static;
 
 /// Initializes the logging submodule.
@@ -54,17 +55,17 @@ impl MultiLog {
 
     /// Returns an iterator over all registered loggers.
     #[inline]
-    fn loggers(&self) -> impl Iterator<Item = &dyn log::Log> {
+    fn loggers(&self) -> impl Iterator<Item = &dyn Log> {
         let stdout_logger_iter = self.stdout_logger
             .iter()
-            .map(|logger| logger as &dyn log::Log);
+            .map(|logger| logger as &dyn Log);
 
         let file_logger_iter = self.file_logger
             .iter()
-            .map(|logger| logger as &dyn log::Log);
+            .map(|logger| logger as &dyn Log);
 
         let response_logger_iter = {
-            std::iter::once(&self.response_logger as &dyn log::Log)
+            std::iter::once(&self.response_logger as &dyn Log)
         };
 
         std::iter::empty()
@@ -85,7 +86,7 @@ impl Default for MultiLog {
     }
 }
 
-impl log::Log for MultiLog {
+impl Log for MultiLog {
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         self.loggers().any(|logger| logger.enabled(metadata))
@@ -123,7 +124,7 @@ impl<W: std::io::Write + Send + Sync> WriterLog<W> {
     }
 }
 
-impl<W: std::io::Write + Send + Sync> log::Log for WriterLog<W> {
+impl<W: std::io::Write + Send + Sync> Log for WriterLog<W> {
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         metadata.level() <= self.log_level
@@ -187,10 +188,10 @@ lazy_static! {
 }
 
 
-/// [`log::Log`] implementation that uses global instance of [`ResponseLog`].
+/// [`Log`] implementation that uses global instance of [`ResponseLog`].
 struct GlobalResponseLog;
 
-impl log::Log for GlobalResponseLog {
+impl Log for GlobalResponseLog {
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         let logger = RESPONSE_LOGGER.read()
@@ -223,7 +224,7 @@ impl log::Log for GlobalResponseLog {
     }
 }
 
-/// [`log::Log`] implementation that sends logs to the GRR server.
+/// [`Log`] implementation that sends logs to the GRR server.
 pub struct ResponseLog {
     /// Builder used to construct [`crate::response::Log`] objects.
     log_builder: crate::LogBuilder,
@@ -262,7 +263,7 @@ impl ResponseLog {
     }
 }
 
-impl log::Log for ResponseLog {
+impl Log for ResponseLog {
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         metadata.level() <= self.log_level
