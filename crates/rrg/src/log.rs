@@ -11,10 +11,10 @@ use lazy_static::lazy_static;
 /// This function should be called only once at the beginning of the process
 /// startup.
 pub fn init(args: &crate::args::Args) {
-    let mut logger = MultiLog::default();
+    let mut logger = Logger::default();
     if args.log_to_stdout {
         let stdout = std::io::stdout();
-        logger.stdout_logger = Some(WriterLog::new(stdout, args.verbosity));
+        logger.stdout_logger = Some(WriterLogger::new(stdout, args.verbosity));
     }
     if let Some(ref path) = args.log_to_file {
         let file = std::fs::OpenOptions::new()
@@ -23,7 +23,7 @@ pub fn init(args: &crate::args::Args) {
             .open(path)
             .expect("failed to open the log file");
 
-        logger.file_logger = Some(WriterLog::new(file, args.verbosity));
+        logger.file_logger = Some(WriterLogger::new(file, args.verbosity));
     }
 
     log::set_boxed_logger(Box::new(logger))
@@ -41,17 +41,17 @@ pub fn init(args: &crate::args::Args) {
     log::set_max_level(log::LevelFilter::Trace);
 }
 
-/// A wrapper for logging to multiple destinations.
-struct MultiLog {
+/// [`Log`] implementation that aggregates all supported loggers.
+struct Logger {
     /// Logger instance that writes messages to standard output.
-    stdout_logger: Option<WriterLog<std::io::Stdout>>,
+    stdout_logger: Option<WriterLogger<std::io::Stdout>>,
     /// Logger instance that writes messages to a file.
-    file_logger: Option<WriterLog<std::fs::File>>,
+    file_logger: Option<WriterLogger<std::fs::File>>,
     /// Logger instance that sends messages to the GRR server.
-    response_logger: GlobalResponseLog,
+    response_logger: GlobalResponseLogger,
 }
 
-impl MultiLog {
+impl Logger {
 
     /// Returns an iterator over all registered loggers.
     #[inline]
@@ -75,18 +75,18 @@ impl MultiLog {
     }
 }
 
-impl Default for MultiLog {
+impl Default for Logger {
 
-    fn default() -> MultiLog {
-        MultiLog {
+    fn default() -> Logger {
+        Logger {
             stdout_logger: None,
             file_logger: None,
-            response_logger: GlobalResponseLog,
+            response_logger: GlobalResponseLogger,
         }
     }
 }
 
-impl Log for MultiLog {
+impl Log for Logger {
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         self.loggers().any(|logger| logger.enabled(metadata))
@@ -105,26 +105,26 @@ impl Log for MultiLog {
     }
 }
 
-/// A simple logger implementation for logging to writable streams (e.g. files).
-struct WriterLog<W: std::io::Write + Send + Sync> {
+/// [`Log`] implementation for logging to writable streams (e.g. files).
+struct WriterLogger<W: std::io::Write + Send + Sync> {
     /// Stream to write the log messages to.
     writer: std::sync::Mutex<W>,
     /// Minimum level at which messages are written to the stream.
     log_level: log::LevelFilter,
 }
 
-impl<W: std::io::Write + Send + Sync> WriterLog<W> {
+impl<W: std::io::Write + Send + Sync> WriterLogger<W> {
 
     /// Create a new logger for the given writable stream.
-    fn new(writer: W, log_level: log::LevelFilter) -> WriterLog<W> {
-        WriterLog {
+    fn new(writer: W, log_level: log::LevelFilter) -> WriterLogger<W> {
+        WriterLogger {
             writer: std::sync::Mutex::new(writer),
             log_level,
         }
     }
 }
 
-impl<W: std::io::Write + Send + Sync> Log for WriterLog<W> {
+impl<W: std::io::Write + Send + Sync> Log for WriterLogger<W> {
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         metadata.level() <= self.log_level
@@ -182,16 +182,16 @@ lazy_static! {
     /// This instance is `None` normally and is set to `Some` only when we are
     /// processing a request. To set the logger instance one should use the
     /// [`ResponseLog::context`] method.
-    static ref RESPONSE_LOGGER: std::sync::RwLock<Option<ResponseLog>> = {
+    static ref RESPONSE_LOGGER: std::sync::RwLock<Option<ResponseLogger>> = {
         std::sync::RwLock::new(None)
     };
 }
 
 
-/// [`Log`] implementation that uses global instance of [`ResponseLog`].
-struct GlobalResponseLog;
+/// [`Log`] implementation that uses global instance of [`ResponseLogger`].
+struct GlobalResponseLogger;
 
-impl Log for GlobalResponseLog {
+impl Log for GlobalResponseLogger {
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         let logger = RESPONSE_LOGGER.read()
@@ -225,18 +225,18 @@ impl Log for GlobalResponseLog {
 }
 
 /// [`Log`] implementation that sends logs to the GRR server.
-pub struct ResponseLog {
+pub struct ResponseLogger {
     /// Builder used to construct [`crate::response::Log`] objects.
     log_builder: crate::LogBuilder,
     /// Minimum level at which messages are sent to the server.
     log_level: log::LevelFilter,
 }
 
-impl ResponseLog {
+impl ResponseLogger {
 
     /// Constructs a new logger instance for the given [`crate::Request`].
-    pub fn new(request: &crate::Request) -> ResponseLog {
-        ResponseLog {
+    pub fn new(request: &crate::Request) -> ResponseLogger {
+        ResponseLogger {
             log_builder: crate::LogBuilder::new(request.id()),
             log_level: request.log_level(),
         }
@@ -263,7 +263,7 @@ impl ResponseLog {
     }
 }
 
-impl Log for ResponseLog {
+impl Log for ResponseLogger {
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         metadata.level() <= self.log_level
