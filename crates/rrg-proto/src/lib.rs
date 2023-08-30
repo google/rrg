@@ -105,6 +105,32 @@ pub mod v2 {
         }
     }
 
+    impl From<rrg::Log_Level> for log::LevelFilter {
+
+        fn from(level: rrg::Log_Level) -> log::LevelFilter {
+            match level {
+               rrg::Log_Level::UNSET => log::LevelFilter::Off,
+               rrg::Log_Level::ERROR => log::LevelFilter::Error,
+               rrg::Log_Level::WARN => log::LevelFilter::Warn,
+               rrg::Log_Level::INFO => log::LevelFilter::Info,
+               rrg::Log_Level::DEBUG => log::LevelFilter::Debug,
+            }
+        }
+    }
+
+    impl From<log::Level> for rrg::Log_Level {
+
+        fn from(level: log::Level) -> rrg::Log_Level {
+            match level {
+                log::Level::Error => rrg::Log_Level::ERROR,
+                log::Level::Warn => rrg::Log_Level::WARN,
+                log::Level::Info => rrg::Log_Level::INFO,
+                log::Level::Debug => rrg::Log_Level::DEBUG,
+                log::Level::Trace => rrg::Log_Level::DEBUG,
+            }
+        }
+    }
+
     /// A type representing errors that can occur when parsing paths.
     #[derive(Debug, PartialEq, Eq)]
     pub struct ParsePathError(crate::path::ParseError);

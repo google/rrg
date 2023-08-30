@@ -55,7 +55,9 @@ impl FleetspeakSession {
                     real_time_limit: request.real_time_limit(),
                 };
 
-                let result = crate::action::dispatch(&mut session, request);
+                let result = crate::log::ResponseLogger::new(&request)
+                    .context(|| crate::action::dispatch(&mut session, request));
+
                 session.response_builder.status(result)
             },
             Err(error) => {

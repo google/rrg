@@ -25,7 +25,7 @@ pub mod chunked;
 pub mod gzchunked;
 
 pub use request::{ParseRequestError, Request, RequestId};
-pub use response::{ResponseBuilder, ResponseId, Sink};
+pub use response::{LogBuilder, ResponseBuilder, ResponseId, Sink};
 
 /// Initializes the RRG subsystems.
 ///
