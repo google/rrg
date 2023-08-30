@@ -254,10 +254,15 @@ impl ResponseLogger {
     {
         let mut logger = RESPONSE_LOGGER.write()
             .expect("failed to acquire response logger lock");
-
         *logger = Some(self);
+        drop(logger);
+
         let result = func();
+
+        let mut logger = RESPONSE_LOGGER.write()
+            .expect("failed to acquire response logger lock");
         *logger = None;
+        drop(logger);
 
         result
     }
