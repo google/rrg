@@ -74,6 +74,22 @@ impl Interface {
         self.ip_addrs.as_slice()
     }
 
+    /// Returns the IPv4 addresses associated with this interface.
+    pub fn ipv4_addrs(&self) -> impl Iterator<Item = std::net::Ipv4Addr> + '_ {
+        self.ip_addrs().iter().filter_map(|ip_addr| match ip_addr {
+            std::net::IpAddr::V4(ipv4) => Some(*ipv4),
+            std::net::IpAddr::V6(_) => None,
+        })
+    }
+
+    /// Returns the IPv6 addresses associated with this interface.
+    pub fn ipv6_addrs(&self) -> impl Iterator<Item = std::net::Ipv6Addr> + '_ {
+        self.ip_addrs().iter().filter_map(|ip_addr| match ip_addr {
+            std::net::IpAddr::V4(_) => None,
+            std::net::IpAddr::V6(ipv6) => Some(*ipv6),
+        })
+    }
+
     /// Returns the MAC address associated with this interface (if any).
     pub fn mac_addr(&self) -> Option<&MacAddr> {
         self.mac_addr.as_ref()
