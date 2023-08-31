@@ -70,23 +70,23 @@ impl Interface {
     }
 
     /// Returns the IP addresses associated with this interface.
-    pub fn ip_addrs(&self) -> &[std::net::IpAddr] {
-        self.ip_addrs.as_slice()
+    pub fn ip_addrs(&self) -> impl Iterator<Item = &std::net::IpAddr> + '_ {
+        self.ip_addrs.iter()
     }
 
     /// Returns the IPv4 addresses associated with this interface.
-    pub fn ipv4_addrs(&self) -> impl Iterator<Item = std::net::Ipv4Addr> + '_ {
-        self.ip_addrs().iter().filter_map(|ip_addr| match ip_addr {
-            std::net::IpAddr::V4(ipv4) => Some(*ipv4),
+    pub fn ipv4_addrs(&self) -> impl Iterator<Item = &std::net::Ipv4Addr> + '_ {
+        self.ip_addrs().filter_map(|ip_addr| match ip_addr {
+            std::net::IpAddr::V4(ipv4_addr) => Some(ipv4_addr),
             std::net::IpAddr::V6(_) => None,
         })
     }
 
     /// Returns the IPv6 addresses associated with this interface.
-    pub fn ipv6_addrs(&self) -> impl Iterator<Item = std::net::Ipv6Addr> + '_ {
-        self.ip_addrs().iter().filter_map(|ip_addr| match ip_addr {
+    pub fn ipv6_addrs(&self) -> impl Iterator<Item = &std::net::Ipv6Addr> + '_ {
+        self.ip_addrs().filter_map(|ip_addr| match ip_addr {
             std::net::IpAddr::V4(_) => None,
-            std::net::IpAddr::V6(ipv6) => Some(*ipv6),
+            std::net::IpAddr::V6(ipv6_addr) => Some(ipv6_addr),
         })
     }
 
@@ -112,7 +112,7 @@ impl Interface {
 /// let ifaces = ospect::net::interfaces().unwrap();
 /// for iface in ifaces {
 ///     let name = iface.name().to_string_lossy();
-///     println!("{} ({} IP addresses)", name, iface.ip_addrs().len());
+///     println!("{} ({} IP addresses)", name, iface.ip_addrs().count());
 /// }
 /// ```
 pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {

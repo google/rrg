@@ -90,7 +90,7 @@ mod tests {
         // former one will return `true` for interfaces with no known addresses.
         // Since this feels awkward, we lean towards the "all" option.
         fn is_loopback(iface: &ospect::net::Interface) -> bool {
-            iface.ip_addrs().iter().all(std::net::IpAddr::is_loopback)
+            iface.ip_addrs().all(std::net::IpAddr::is_loopback)
         }
 
         assert! {

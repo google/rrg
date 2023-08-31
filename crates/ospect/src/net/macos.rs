@@ -219,9 +219,7 @@ mod tests {
         // we do not make such specific assertions.
         assert! {
             ifaces.any(|iface| {
-                iface.ip_addrs().iter().any(|ip_addr| {
-                    ip_addr.is_loopback()
-                })
+                iface.ip_addrs().any(std::net::IpAddr::is_loopback)
             })
         };
     }

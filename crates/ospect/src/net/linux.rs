@@ -198,10 +198,10 @@ mod tests {
         // be considered traditional loopback. So we verify that there is at
         // least one such traditional address for IPv4 and one for IPv6.
         assert! {
-            loopback.ipv4_addrs().any(|ip_addr| ip_addr.is_loopback())
+            loopback.ipv4_addrs().any(std::net::Ipv4Addr::is_loopback)
         };
         assert! {
-            loopback.ipv6_addrs().any(|ip_addr| ip_addr.is_loopback())
+            loopback.ipv6_addrs().any(std::net::Ipv6Addr::is_loopback)
         };
 
         assert_eq! {
