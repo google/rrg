@@ -193,9 +193,17 @@ mod tests {
             .find(|iface| iface.name() == "lo")
             .unwrap();
 
+        // Note that the loopback interface might be associated with many IP
+        // addresses (not only one per IP version) and not all of them need to
+        // be considered traditional loopback. So we verify that there is at
+        // least one such traditional address for IPv4 and one for IPv6.
         assert! {
-            loopback.ip_addrs().iter().all(|ip_addr| ip_addr.is_loopback())
+            loopback.ipv4_addrs().any(|ip_addr| ip_addr.is_loopback())
         };
+        assert! {
+            loopback.ipv6_addrs().any(|ip_addr| ip_addr.is_loopback())
+        };
+
         assert_eq! {
             loopback.mac_addr(), Some(&MacAddr::from([0, 0, 0, 0, 0, 0]))
         };
