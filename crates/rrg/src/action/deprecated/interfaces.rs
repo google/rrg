@@ -84,13 +84,11 @@ mod tests {
         let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
-        // We have a choice: either require any of the addresses to be the loop-
-        // back address or require all of them for it to be considered loopback.
-        // Both of these options feel equally wrong and equally right but the
-        // former one will return `true` for interfaces with no known addresses.
-        // Since this feels awkward, we lean towards the "all" option.
+        // A single network interface can be associated with many IP addresses,
+        // some of which might not be traditional loopback addresses. Therefore,
+        // we use `any` instead of `all`.
         fn is_loopback(iface: &ospect::net::Interface) -> bool {
-            iface.ip_addrs().all(std::net::IpAddr::is_loopback)
+            iface.ip_addrs().any(std::net::IpAddr::is_loopback)
         }
 
         assert! {
