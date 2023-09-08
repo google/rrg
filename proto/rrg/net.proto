@@ -14,6 +14,15 @@ message IpAddress {
   bytes octets = 1;
 }
 
+// Socket address (either IPv4 or IPv6).
+message SocketAddress {
+  // IP address associated with this socket address.
+  IpAddress ip_address = 1;
+
+  // Port number associated with this socket address.
+  uint32 port = 2;
+}
+
 // MAC address as defined in the IEEE 802 standard [1].
 //
 // [1]: https://standards.ieee.org/wp-content/uploads/import/documents/tutorials/macgrp.pdf
