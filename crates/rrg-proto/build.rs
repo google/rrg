@@ -23,6 +23,7 @@ const PROTOS_V2: &'static [&'static str] = &[
     "../../proto/rrg.proto",
     "../../proto/rrg/blob.proto",
     "../../proto/rrg/fs.proto",
+    "../../proto/rrg/net.proto",
     "../../proto/rrg/os.proto",
     "../../proto/rrg/startup.proto",
     "../../proto/rrg/action/get_file_contents.proto",
