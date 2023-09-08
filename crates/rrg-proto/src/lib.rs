@@ -135,6 +135,38 @@ pub mod v2 {
         }
     }
 
+    impl From<std::net::SocketAddrV4> for net::SocketAddress {
+
+        fn from(addr: std::net::SocketAddrV4) -> net::SocketAddress {
+            let mut proto = net::SocketAddress::default();
+            proto.set_ip_address(net::IpAddress::from(*addr.ip()));
+            proto.set_port(u32::from(addr.port()));
+
+            proto
+        }
+    }
+
+    impl From<std::net::SocketAddrV6> for net::SocketAddress {
+
+        fn from(addr: std::net::SocketAddrV6) -> net::SocketAddress {
+            let mut proto = net::SocketAddress::default();
+            proto.set_ip_address(net::IpAddress::from(*addr.ip()));
+            proto.set_port(u32::from(addr.port()));
+
+            proto
+        }
+    }
+
+    impl From<std::net::SocketAddr> for net::SocketAddress {
+
+        fn from(addr: std::net::SocketAddr) -> net::SocketAddress {
+            match addr {
+                std::net::SocketAddr::V4(addr) => addr.into(),
+                std::net::SocketAddr::V6(addr) => addr.into(),
+            }
+        }
+    }
+
     impl From<ospect::net::MacAddr> for net::MacAddress {
 
         fn from(addr: ospect::net::MacAddr) -> net::MacAddress {
