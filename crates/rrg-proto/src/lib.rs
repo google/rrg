@@ -105,6 +105,46 @@ pub mod v2 {
         }
     }
 
+    impl From<std::net::Ipv4Addr> for net::IpAddress {
+
+        fn from(addr: std::net::Ipv4Addr) -> net::IpAddress {
+            let mut proto = net::IpAddress::default();
+            proto.set_octets(Vec::from(addr.octets()));
+
+            proto
+        }
+    }
+
+    impl From<std::net::Ipv6Addr> for net::IpAddress {
+
+        fn from(addr: std::net::Ipv6Addr) -> net::IpAddress {
+            let mut proto = net::IpAddress::default();
+            proto.set_octets(Vec::from(addr.octets()));
+
+            proto
+        }
+    }
+
+    impl From<std::net::IpAddr> for net::IpAddress {
+
+        fn from(addr: std::net::IpAddr) -> net::IpAddress {
+            match addr {
+                std::net::IpAddr::V4(addr) => addr.into(),
+                std::net::IpAddr::V6(addr) => addr.into(),
+            }
+        }
+    }
+
+    impl From<ospect::net::MacAddr> for net::MacAddress {
+
+        fn from(addr: ospect::net::MacAddr) -> net::MacAddress {
+            let mut proto = net::MacAddress::default();
+            proto.set_octets(Vec::from(addr.octets()));
+
+            proto
+        }
+    }
+
     impl From<rrg::Log_Level> for log::LevelFilter {
 
         fn from(level: rrg::Log_Level) -> log::LevelFilter {
