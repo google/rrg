@@ -14,6 +14,9 @@ pub mod macos;
 #[cfg(target_os = "windows")]
 pub mod windows;
 
+#[cfg(target_family = "unix")]
+pub mod unix;
+
 mod sys {
     #[cfg(target_os = "linux")]
     pub use crate::net::linux::*;
@@ -549,6 +552,85 @@ pub fn connections(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Re
     Ok(tcp.chain(udp))
 }
 
+/// Returns an iterator over IPv4 TCP connections of all processes.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+pub fn all_tcp_v4_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV4>>> {
+    self::sys::all_tcp_v4_connections()
+}
+
+/// Returns an iterator over IPv6 TCP connections of all processes.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+pub fn all_tcp_v6_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV6>>> {
+    self::sys::all_tcp_v6_connections()
+}
+
+/// Returns an iterator over IPv4 UDP connections of all processes.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+pub fn all_udp_v4_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV4>>> {
+    self::sys::all_udp_v4_connections()
+}
+
+/// Returns an iterator over IPv6 UDP connections of all processes.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+pub fn all_udp_v6_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
+    self::sys::all_udp_v6_connections()
+}
+
+/// Returns an iterator over TCP connections of all processes.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+pub fn all_tcp_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnection>>> {
+    let v4 = all_tcp_v4_connections()?.map(|conn| conn.map(TcpConnection::V4));
+    let v6 = all_tcp_v6_connections()?.map(|conn| conn.map(TcpConnection::V6));
+
+    Ok(v4.chain(v6))
+}
+
+/// Returns an iterator over UDP connections of all processes.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+pub fn all_udp_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnection>>> {
+    let v4 = all_udp_v4_connections()?.map(|conn| conn.map(UdpConnection::V4));
+    let v6 = all_udp_v6_connections()?.map(|conn| conn.map(UdpConnection::V6));
+
+    Ok(v4.chain(v6))
+}
+
+/// Returns an iterator over UDP connections of all processes.
+///
+/// # Errors
+///
+/// This function will fail if there was some kind of issue (e.g. insufficient
+/// permissions to make certain system calls) during information collection.
+pub fn all_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<Connection>>> {
+    let tcp = all_tcp_connections()?.map(|conn| conn.map(Connection::Tcp));
+    let udp = all_udp_connections()?.map(|conn| conn.map(Connection::Udp));
+
+    Ok(tcp.chain(udp))
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -638,5 +720,38 @@ mod tests {
             .unwrap();
 
         assert_eq!(server_conn.pid(), std::process::id());
+    }
+
+    #[test]
+    fn all_connections_local_connections() {
+        use std::net::Ipv4Addr;
+
+        let tcp_server = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .unwrap();
+        let tcp_server_addr = tcp_server.local_addr()
+            .unwrap();
+
+        let udp_socket = std::net::UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
+            .unwrap();
+        let udp_socket_addr = udp_socket.local_addr()
+            .unwrap();
+
+        let mut conns = all_connections()
+            .unwrap()
+            .filter_map(Result::ok);
+
+        assert! {
+            conns.find(|conn| {
+                conn.pid() == std::process::id() &&
+                conn.local_addr() == tcp_server_addr
+            }).is_some()
+        }
+
+        assert! {
+            conns.find(|conn| {
+                conn.pid() == std::process::id() &&
+                conn.local_addr() == udp_socket_addr
+            }).is_some()
+        }
     }
 }
