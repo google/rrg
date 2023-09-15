@@ -411,6 +411,14 @@ pub enum Connection {
 
 impl Connection {
 
+    /// Returns the local address of the connection.
+    pub fn local_addr(&self) -> std::net::SocketAddr {
+        match self {
+            Connection::Tcp(conn) => conn.local_addr(),
+            Connection::Udp(conn) => conn.local_addr(),
+        }
+    }
+
     /// Returns the identifier of the process that owns the connection.
     pub fn pid(&self) -> u32 {
         match self {
