@@ -177,6 +177,111 @@ pub mod v2 {
         }
     }
 
+    impl From<ospect::net::TcpState> for net::TcpState {
+
+        fn from(state: ospect::net::TcpState) -> net::TcpState {
+            use ospect::net::TcpState::*;
+            match state {
+                Listen => net::TcpState::LISTEN,
+                SynSent => net::TcpState::SYN_SENT,
+                SynReceived => net::TcpState::SYN_RECEIVED,
+                Established => net::TcpState::ESTABLISHED,
+                FinWait1 => net::TcpState::FIN_WAIT_1,
+                FinWait2 => net::TcpState::FIN_WAIT_2,
+                CloseWait => net::TcpState::CLOSE_WAIT,
+                Closing => net::TcpState::CLOSING,
+                LastAck => net::TcpState::LAST_ACK,
+                TimeWait => net::TcpState::TIME_WAIT,
+                Closed => net::TcpState::CLOSED,
+            }
+        }
+    }
+
+    impl From<ospect::net::TcpConnectionV4> for net::TcpConnection {
+
+        fn from(conn: ospect::net::TcpConnectionV4) -> net::TcpConnection {
+            let mut proto = net::TcpConnection::default();
+            proto.set_pid(conn.pid());
+            proto.set_local_address(conn.local_addr().into());
+            proto.set_remote_address(conn.remote_addr().into());
+            proto.set_state(conn.state().into());
+
+            proto
+        }
+    }
+
+    impl From<ospect::net::TcpConnectionV6> for net::TcpConnection {
+
+        fn from(conn: ospect::net::TcpConnectionV6) -> net::TcpConnection {
+            let mut proto = net::TcpConnection::default();
+            proto.set_pid(conn.pid());
+            proto.set_local_address(conn.local_addr().into());
+            proto.set_remote_address(conn.remote_addr().into());
+            proto.set_state(conn.state().into());
+
+            proto
+        }
+    }
+
+    impl From<ospect::net::TcpConnection> for net::TcpConnection {
+
+        fn from(conn: ospect::net::TcpConnection) -> net::TcpConnection {
+            match conn {
+                ospect::net::TcpConnection::V4(conn) => conn.into(),
+                ospect::net::TcpConnection::V6(conn) => conn.into(),
+            }
+        }
+    }
+
+    impl From<ospect::net::UdpConnectionV4> for net::UdpConnection {
+
+        fn from(conn: ospect::net::UdpConnectionV4) -> net::UdpConnection {
+            let mut proto = net::UdpConnection::default();
+            proto.set_pid(conn.pid());
+            proto.set_local_address(conn.local_addr().into());
+
+            proto
+        }
+    }
+
+    impl From<ospect::net::UdpConnectionV6> for net::UdpConnection {
+
+        fn from(conn: ospect::net::UdpConnectionV6) -> net::UdpConnection {
+            let mut proto = net::UdpConnection::default();
+            proto.set_pid(conn.pid());
+            proto.set_local_address(conn.local_addr().into());
+
+            proto
+        }
+    }
+
+    impl From<ospect::net::UdpConnection> for net::UdpConnection {
+
+        fn from(conn: ospect::net::UdpConnection) -> net::UdpConnection {
+            match conn {
+                ospect::net::UdpConnection::V4(conn) => conn.into(),
+                ospect::net::UdpConnection::V6(conn) => conn.into(),
+            }
+        }
+    }
+
+    impl From<ospect::net::Connection> for net::Connection {
+
+        fn from(conn: ospect::net::Connection) -> net::Connection {
+            let mut proto = net::Connection::default();
+            match conn {
+                ospect::net::Connection::Tcp(conn) => {
+                    proto.set_tcp(conn.into());
+                }
+                ospect::net::Connection::Udp(conn) => {
+                    proto.set_udp(conn.into());
+                }
+            }
+
+            proto
+        }
+    }
+
     impl From<rrg::Log_Level> for log::LevelFilter {
 
         fn from(level: rrg::Log_Level) -> log::LevelFilter {
