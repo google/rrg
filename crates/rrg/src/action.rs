@@ -30,6 +30,9 @@ pub mod get_file_contents;
 #[cfg(feature = "action-get_filesystem_timeline")]
 pub mod get_filesystem_timeline;
 
+#[cfg(feature = "action-list_connections")]
+pub mod list_connections;
+
 use log::info;
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -71,6 +74,10 @@ where
         #[cfg(feature = "action-get_filesystem_timeline")]
         GetFilesystemTimeline => {
             handle(session, request, self::get_filesystem_timeline::handle)
+        }
+        #[cfg(feature = "action-list_connections")]
+        ListConnections => {
+            handle(session, request, self::list_connections::handle)
         }
         // We allow `unreachable_patterns` because otherwise we get a warning if
         // we compile with all the actions enabled.
