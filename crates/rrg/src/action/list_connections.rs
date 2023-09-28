@@ -47,3 +47,51 @@ impl crate::response::Item for Item {
         proto
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn handle_local_tcp_connection() {
+        use std::net::Ipv4Addr;
+
+        let server = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .unwrap();
+        let server_addr = server.local_addr()
+            .unwrap();
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        let item = session.replies::<Item>().find(|item| {
+            item.conn.local_addr() == server_addr
+        }).unwrap();
+
+        if let ospect::net::Connection::Tcp(conn) = item.conn {
+            assert_eq!(conn.state(), ospect::net::TcpState::Listen);
+        } else {
+            panic!();
+        }
+    }
+
+    #[test]
+    fn handle_local_udp_connection() {
+        use std::net::Ipv4Addr;
+
+        let socket = std::net::UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
+            .unwrap();
+        let socket_addr = socket.local_addr()
+            .unwrap();
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, ()).is_ok());
+
+        let item = session.replies::<Item>().find(|item| {
+            item.conn.local_addr() == socket_addr
+        }).unwrap();
+
+        assert!(matches!(item.conn, ospect::net::Connection::Udp(_)));
+    }
+}
