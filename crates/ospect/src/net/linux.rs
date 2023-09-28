@@ -182,6 +182,26 @@ pub fn udp_v6_connections(pid: u32) -> std::io::Result<impl Iterator<Item = std:
     self::conn::udp_v6(pid)
 }
 
+/// Returns an iterator over IPv4 TCP connections of all processes.
+pub fn all_tcp_v4_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV4>>> {
+    crate::net::unix::all_tcp_v4_connections()
+}
+
+/// Returns an iterator over IPv6 TCP connections of all processes.
+pub fn all_tcp_v6_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV6>>> {
+    crate::net::unix::all_tcp_v6_connections()
+}
+
+/// Returns an iterator over IPv4 UDP connections of all processes.
+pub fn all_udp_v4_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV4>>> {
+    crate::net::unix::all_udp_v4_connections()
+}
+
+/// Returns an iterator over IPv6 UDP connections of all processes.
+pub fn all_udp_v6_connections() -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
+    crate::net::unix::all_udp_v6_connections()
+}
+
 #[cfg(test)]
 mod tests {
 
