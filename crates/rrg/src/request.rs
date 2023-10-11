@@ -31,6 +31,8 @@ pub enum Action {
     ListConnections,
     /// List named pipes available on the system (Windows-only).
     ListNamedPipes,
+    /// List network interfaces available on the system.
+    ListInterfaces,
     /// List users available on the system.
     ListUsers,
     /// Get the snapshot of the entire filesystem.
@@ -49,6 +51,7 @@ impl std::fmt::Display for Action {
             Action::ListProcesses => write!(fmt, "list_processes"),
             Action::ListConnections => write!(fmt, "list_connections"),
             Action::ListNamedPipes => write!(fmt, "list_named_pipes"),
+            Action::ListInterfaces => write!(fmt, "list_interfaces"),
             Action::ListUsers => write!(fmt, "list_users"),
             Action::GetFilesystemTimeline => write!(fmt, "get_filesystem_timeline"),
         }
@@ -91,6 +94,7 @@ impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
             LIST_PROCESSES => Ok(Action::ListProcesses),
             LIST_CONNECTIONS => Ok(Action::ListConnections),
             LIST_NAMED_PIPES => Ok(Action::ListNamedPipes),
+            LIST_INTERFACES => Ok(Action::ListInterfaces),
             LIST_USERS => Ok(Action::ListUsers),
             GET_FILESYSTEM_TIMELINE => Ok(Action::GetFilesystemTimeline),
             _ => {
