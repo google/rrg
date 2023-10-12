@@ -44,6 +44,8 @@ mod tests {
     use super::*;
 
     #[test]
+    // Loopback interface is not available on Windows.
+    #[cfg_attr(target_family = "windows", ignore)]
     fn handle_loopback_interface() {
         let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
