@@ -6,5 +6,9 @@ syntax = "proto3";
 
 package rrg.action.list_interfaces;
 
+import "rrg/net.proto";
+
 message Result {
+  // Information about the individual network interface.
+  rrg.net.Interface interface = 1;
 }

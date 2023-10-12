@@ -5,7 +5,8 @@
 
 /// A result of the `list_interfaces` action.
 struct Item {
-    // TODO(@panhania): Add the interface type.
+    // Information about the individual network interface.
+    iface: ospect::net::Interface,
 }
 
 // Handles invocations of the `list_interfaces` action.
@@ -13,8 +14,16 @@ pub fn handle<S>(session: &mut S, _: ()) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    let error = std::io::Error::from(std::io::ErrorKind::Unsupported);
-    Err(crate::session::Error::action(error))
+    let ifaces = ospect::net::interfaces()
+        .map_err(crate::session::Error::action)?;
+
+    for iface in ifaces {
+        session.reply(Item {
+            iface,
+        })?;
+    }
+
+    Ok(())
 }
 
 impl crate::response::Item for Item {
@@ -22,6 +31,9 @@ impl crate::response::Item for Item {
     type Proto = rrg_proto::v2::list_interfaces::Result;
 
     fn into_proto(self) -> rrg_proto::v2::list_interfaces::Result {
-        todo!()
+        let mut proto = rrg_proto::v2::list_interfaces::Result::default();
+        proto.set_interface(self.iface.into());
+
+        proto
     }
 }
