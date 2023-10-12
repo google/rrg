@@ -44,7 +44,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn loopback_exists() {
+    fn handle_loopback_interface() {
         let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
 
