@@ -282,6 +282,25 @@ pub mod v2 {
         }
     }
 
+    impl From<ospect::net::Interface> for net::Interface {
+
+        fn from(iface: ospect::net::Interface) -> net::Interface {
+            let mut proto = net::Interface::default();
+            proto.set_name(iface.name().to_string_lossy().into_owned());
+
+            if let Some(mac_addr) = iface.mac_addr() {
+                proto.set_mac_address((*mac_addr).into());
+            }
+
+            let ip_addrs = iface.ip_addrs()
+                .map(|ip_addr| net::IpAddress::from(*ip_addr))
+                .collect::<Vec<_>>();
+            proto.set_ip_addresses(ip_addrs.into());
+
+            proto
+        }
+    }
+
     impl From<rrg::Log_Level> for log::LevelFilter {
 
         fn from(level: rrg::Log_Level) -> log::LevelFilter {
