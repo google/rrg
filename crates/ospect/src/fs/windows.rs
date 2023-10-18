@@ -30,6 +30,7 @@ where
 }
 
 type VolumeNameBuf = [u16; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
+type VolumeFsTypeBuf = [u16; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
 
 /// An iterator over Windows volume names.
 struct VolumeNames {
@@ -167,6 +168,35 @@ impl Iterator for VolumeNames {
     }
 }
 
+/// Returns filesystem type for the given volume name.
+fn volume_fs_type(name_buf: &VolumeNameBuf) -> std::io::Result<VolumeFsTypeBuf> {
+    // TODO(rust-lang/rust#96097): Refactor with `MaybeUninit` once support
+    // for arrays is stabilized.
+    let mut fs_type_buf: VolumeFsTypeBuf = [0; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
+
+    // SAFETY: This is just a call to the unsafe function as described in
+    // the documentation [1]. As root path we pass the volume name and then
+    // only the buffer for filesystem type along with its size. All other
+    // values we leave empty (they are optional) as we are not interested.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumeinformationw
+    let status = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetVolumeInformationW(
+            name_buf.as_ptr(),
+            std::ptr::null_mut(), 0, // Volume name.
+            std::ptr::null_mut(), // Volume serial number.
+            std::ptr::null_mut(), // Component length limit.
+            std::ptr::null_mut(), // Filesystem flags.
+            fs_type_buf.as_mut_ptr(), fs_type_buf.len() as u32,
+        )
+    };
+    if status == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    Ok(fs_type_buf)
+}
+
 /// Returns an iterator over mounted filesystems information.
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
     use std::os::windows::ffi::OsStringExt as _;
@@ -190,28 +220,7 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
         let name_len = name_buf.iter().position(|tchar| *tchar == 0)
             .expect("volume name not null-terminated");
 
-        let mut fs_type_buf: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
-
-        // SAFETY: This is just a call to the unsafe function as described in
-        // the documentation [1]. As root path we pass the volume name and then
-        // only the buffer for filesystem type along with its size. All other
-        // values we leave empty (they are optional) as we are not interested.
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumeinformationw
-        let status = unsafe {
-            GetVolumeInformationW(
-                name_buf.as_ptr(),
-                std::ptr::null_mut(), 0, // Volume name.
-                std::ptr::null_mut(), // Volume serial number.
-                std::ptr::null_mut(), // Component length limit.
-                std::ptr::null_mut(), // Filesystem flags.
-                fs_type_buf.as_mut_ptr(), fs_type_buf.len() as u32,
-            )
-        };
-        if status == 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-
+        let fs_type_buf = volume_fs_type(&name_buf)?;
         let fs_type_len = fs_type_buf.iter().position(|tchar| *tchar == 0)
             .expect("volume filesystem name not null-terminated");
 
