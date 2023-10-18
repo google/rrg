@@ -29,43 +29,164 @@ where
     Err(std::io::ErrorKind::Unsupported.into())
 }
 
+type VolumeNameBuf = [u16; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
+
+/// An iterator over Windows volume names.
+struct VolumeNames {
+    /// Error to return next time the iterator is polled (if set).
+    error: Option<std::io::Error>,
+    /// Buffer with null-terminated volume name to be yielded.
+    name_buf: VolumeNameBuf,
+    /// Active handle for the underlying Windows API iterator.
+    handle: Option<windows_sys::Win32::Storage::FileSystem::FindVolumeHandle>,
+}
+
+impl VolumeNames {
+
+    /// Creates a new instance of the iterator.
+    fn new() -> std::io::Result<VolumeNames> {
+        // TODO(rust-lang/rust#96097): Refactor with `MaybeUninit` once support
+        // for arrays is stabilized.
+        let mut name_buf: VolumeNameBuf = [0; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
+
+        // SAFETY: This is just a call to the unsafe function as described in
+        // the documentation [1]. We pass the buffer and its size and verify the
+        // result of the call below.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-findfirstvolumew
+        let handle = unsafe {
+            windows_sys::Win32::Storage::FileSystem::FindFirstVolumeW(
+                name_buf.as_mut_ptr(), name_buf.len() as u32,
+            )
+        };
+        if handle == windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE {
+            return Err(std::io::Error::last_os_error());
+        }
+
+        Ok(VolumeNames {
+            error: None,
+            name_buf,
+            handle: Some(handle),
+        })
+    }
+
+    /// Closes the iterator.
+    ///
+    /// This is similar to `drop` but makes it possible to handle errors.
+    fn close(&mut self) -> std::io::Result<()> {
+        let Some(handle) = self.handle else {
+            return Ok(());
+        };
+
+        // We need to set the handle to `None` explicitly because this function
+        // is used in the `drop` implementation but `drop` is also implicitly
+        // called at the end of this function, ending with an endless loop
+        // otherwise. We also don't want to allow multiple calls of `close` in
+        // case closing fails.
+        self.handle = None;
+
+        // SAFETY: This is just a call to the unsafe function as described
+        // in the documentation [1]. We pass the handle that is guaranteed
+        // to be valid and verify the result of the call below.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-findvolumeclose
+        let status = unsafe {
+            windows_sys::Win32::Storage::FileSystem::FindVolumeClose(handle)
+        };
+        if status == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for VolumeNames {
+
+    fn drop(&mut self) {
+        // Like with `drop` for `std::fs::File`, there is no way to handle
+        // errors and they have to be swallowed. If one has to handle errors,
+        // `close` can be used.
+        let _ = self.close();
+    }
+}
+
+impl Iterator for VolumeNames {
+
+    type Item = std::io::Result<VolumeNameBuf>;
+
+    fn next(&mut self) -> Option<std::io::Result<VolumeNameBuf>> {
+        // If we have a pending error to return, we do it. An error also means
+        // that further iteration makes no sense and we close the iterator.
+        if let Some(error) = self.error.take() {
+            match self.close() {
+                Ok(()) => (),
+                Err(error) => self.error = Some(error),
+            }
+            return Some(Err(error));
+        }
+
+        let Some(handle) = self.handle else {
+            return None;
+        };
+
+        let old_name_buf = self.name_buf;
+
+        // SAFETY: This is just a call to the unsafe function as described in
+        // the documentation [1]. We pass the handle that is guaranteed to be
+        // valid and buffer along with its size and verify the result of the
+        // call below.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-findnextvolumew
+        let status = unsafe {
+            windows_sys::Win32::Storage::FileSystem::FindNextVolumeW(
+                handle,
+                self.name_buf.as_mut_ptr(), self.name_buf.len() as u32,
+            )
+        };
+        if status == 0 {
+            // SAFETY: If `FindNextVolumeW` fails, it returns 0 and sets the
+            // last error to some value that we need to inspect.
+            let code = unsafe {
+                windows_sys::Win32::Foundation::GetLastError()
+            };
+            if code == windows_sys::Win32::Foundation::ERROR_NO_MORE_FILES {
+                match self.close() {
+                    Ok(()) => (),
+                    Err(error) => self.error = Some(error),
+                }
+            } else {
+                // TODO(rust-lang/rust#107792): Migrate cast to `as RawOsError`
+                // once it is stable.
+                let error = std::io::Error::from_raw_os_error(code as i32);
+                self.error = Some(error);
+            }
+        }
+
+        Some(Ok(old_name_buf))
+    }
+}
+
 /// Returns an iterator over mounted filesystems information.
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
     use std::os::windows::ffi::OsStringExt as _;
 
     use windows_sys::Win32::{
         Foundation::{
-            GetLastError, ERROR_MORE_DATA, ERROR_NO_MORE_FILES,
+            GetLastError, ERROR_MORE_DATA,
             MAX_PATH,
-            INVALID_HANDLE_VALUE,
         },
         Storage::FileSystem::{
-            FindFirstVolumeW, FindNextVolumeW, FindVolumeClose,
             GetVolumeInformationW, GetVolumePathNamesForVolumeNameW,
         },
     };
-
-    // TODO(rust-lang/rust#96097): Refactor with `MaybeUninit` once support for
-    // arrays is stabilized.
-    let mut name_buf: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
-
-    // SAFETY: This is just a call to the unsafe function as described in the
-    // documentation [1]. We pass the buffer and its size and verify the result
-    // of the call below.
-    //
-    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-findfirstvolumew
-    let handle = unsafe {
-        FindFirstVolumeW(name_buf.as_mut_ptr(), name_buf.len() as u32)
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return Err(std::io::Error::last_os_error());
-    }
 
     // TODO(@panhania): Rewrite this code to return an iterator that yields
     // results on demand.
     let mut results = Vec::new();
 
-    loop {
+    for name_buf in VolumeNames::new()? {
+        let name_buf = name_buf?;
         let name_len = name_buf.iter().position(|tchar| *tchar == 0)
             .expect("volume name not null-terminated");
 
@@ -189,41 +310,9 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
                 break;
             }
         }
-
-        // SAFETY: This is just a call to the unsafe function as described in
-        // the documentation [1]. We pass the handle that is guaranteed to be
-        // valid and buffer along with its size and verify the result of the
-        // call below.
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-findnextvolumew
-        let status = unsafe {
-            FindNextVolumeW(handle, name_buf.as_mut_ptr(), name_buf.len() as u32)
-        };
-        if status == 0 {
-            // SAFETY: If `FindNextVolumeW` fails, it returns 0 and sets the
-            // last error to some value that we need to inspect.
-            let code = unsafe { GetLastError() };
-            if code != ERROR_NO_MORE_FILES {
-                // TODO(rust-lang/rust#107792): Migrate cast to `as RawOsError`
-                // once it is stable.
-                return Err(std::io::Error::from_raw_os_error(code as i32));
-            }
-
-            // SAFETY: This is just a call to the unsafe function as described
-            // in the documentation [1]. We pass the handle that is guaranteed
-            // to be valid and verify the result of the call below.
-            //
-            // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-findvolumeclose
-            let status = unsafe {
-                FindVolumeClose(handle)
-            };
-            if status == 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-
-            // TODO(@panhania): Improve error handling once iterator approach
-            // is implemented.
-            return Ok(results.into_iter().map(Ok));
-        }
     }
+
+    // TODO(@panhania): Improve error handling once iterator approach
+    // is implemented.
+    Ok(results.into_iter().map(Ok))
 }
