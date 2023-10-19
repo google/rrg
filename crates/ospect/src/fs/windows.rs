@@ -356,32 +356,55 @@ fn volume_fs_type(name_buf: &VolumeNameBuf) -> std::io::Result<VolumeFsTypeBuf> 
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
     use std::os::windows::ffi::OsStringExt as _;
 
-    // TODO(@panhania): Rewrite this code to return an iterator that yields
-    // results on demand.
+    // TODO(@panhania): We collect all mount points into a vector and then make
+    // an iterator out of it. However, all individual methods return iterators
+    // so it should be possible to combine them. Ideally, this should be very
+    // easy to do with generators.
+    //
+    // One option is to use `itertools::flatten_ok` but that does not play nice
+    // with the iterator over volume mount points that creates self-references.
     let mut results = Vec::new();
 
     for name_buf in VolumeNames::new()? {
-        let name_buf = name_buf?;
+        let name_buf = match name_buf {
+            Ok(name_buf) => name_buf,
+            Err(error) => {
+                results.push(Err(error));
+                continue;
+            }
+        };
         let name_len = name_buf.iter().position(|tchar| *tchar == 0)
             .expect("volume name not null-terminated");
 
-        let fs_type_buf = volume_fs_type(&name_buf)?;
+        let fs_type_buf = match volume_fs_type(&name_buf) {
+            Ok(name_buf) => name_buf,
+            Err(error) => {
+                results.push(Err(error));
+                continue;
+            }
+        };
         let fs_type_len = fs_type_buf.iter().position(|tchar| *tchar == 0)
             .expect("volume filesystem name not null-terminated");
 
-        for mount_buf in &VolumeMountPoints::new(&name_buf)? {
-            results.push(Mount {
-                source: OsString::from_wide(&name_buf[0..name_len])
-                    .to_string_lossy().into_owned(),
-                target: OsString::from_wide(mount_buf)
-                    .into(),
-                fs_type: OsString::from_wide(&fs_type_buf[0..fs_type_len])
-                    .to_string_lossy().into_owned(),
-            });
+        match VolumeMountPoints::new(&name_buf) {
+            Ok(mount_points) => {
+                for mount_buf in &mount_points {
+                    results.push(Ok(Mount {
+                        source: OsString::from_wide(&name_buf[0..name_len])
+                            .to_string_lossy().into_owned(),
+                        target: OsString::from_wide(mount_buf)
+                            .into(),
+                        fs_type: OsString::from_wide(&fs_type_buf[0..fs_type_len])
+                            .to_string_lossy().into_owned(),
+                    }));
+                }
+            }
+            Err(error) => {
+                results.push(Err(error));
+                continue;
+            }
         }
     }
 
-    // TODO(@panhania): Improve error handling once iterator approach
-    // is implemented.
-    Ok(results.into_iter().map(Ok))
+    Ok(results.into_iter())
 }
