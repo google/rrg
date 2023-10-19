@@ -356,16 +356,6 @@ fn volume_fs_type(name_buf: &VolumeNameBuf) -> std::io::Result<VolumeFsTypeBuf> 
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
     use std::os::windows::ffi::OsStringExt as _;
 
-    use windows_sys::Win32::{
-        Foundation::{
-            GetLastError, ERROR_MORE_DATA,
-            MAX_PATH,
-        },
-        Storage::FileSystem::{
-            GetVolumeInformationW, GetVolumePathNamesForVolumeNameW,
-        },
-    };
-
     // TODO(@panhania): Rewrite this code to return an iterator that yields
     // results on demand.
     let mut results = Vec::new();
