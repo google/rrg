@@ -30,6 +30,7 @@ where
 }
 
 type VolumeNameBuf = [u16; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
+type VolumeMountPointBuf = [u16];
 type VolumeFsTypeBuf = [u16; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
 
 /// An iterator over Windows volume names.
@@ -168,6 +169,160 @@ impl Iterator for VolumeNames {
     }
 }
 
+/// An iterator over Windows volume mount points.
+///
+/// In case there are no mount points the iterator will yield a single result
+/// with empty mount point.
+///
+/// Note that because of borrowing limitations, this type does not implement
+/// the [`Iterator`] trait directly but can be converted to one using its
+/// [`IntoIterator`] implementation.
+struct VolumeMountPoints {
+    /// Buffer with null-terminated mount points list.
+    mounts_buf: Vec<u16>,
+}
+
+impl VolumeMountPoints {
+
+    /// Creates a new instance of the iterator for the given volume name.
+    fn new(name_buf: &VolumeNameBuf) -> std::io::Result<VolumeMountPoints> {
+        let mut mounts_buf_len = std::mem::MaybeUninit::uninit();
+
+        // SAFETY: This is the first call to `GetVolumePathNamesForVolumeNameW`
+        // (see [1] for its documentation) where we query for the size of the
+        // buffer needed to hold the actual result. We expect this call to fail
+        // and verify this below.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumepathnamesforvolumenamew
+        let status = unsafe {
+            windows_sys::Win32::Storage::FileSystem::GetVolumePathNamesForVolumeNameW(
+                name_buf.as_ptr(),
+                std::ptr::null_mut(), 0, mounts_buf_len.as_mut_ptr(),
+            )
+        };
+        if status != 0 {
+            // This should never happen because the call with no buffer should
+            // not succeed. But just to be on the safe side, we verify that.
+            return Err(std::io::ErrorKind::Other.into());
+        }
+
+        // SAFETY: We verified that the previous call failed (as expected),
+        // so we can read the error code. It should return `ERROR_MORE_DATA`,
+        // otherwise we rethrow the error.
+        let code = unsafe {
+            windows_sys::Win32::Foundation::GetLastError()
+        };
+        if code != windows_sys::Win32::Foundation::ERROR_MORE_DATA {
+            // TODO(rust-lang/rust#107792): Migrate cast to `as RawOsError`
+            // once it is stable.
+            return Err(std::io::Error::from_raw_os_error(code as i32));
+        }
+
+        // SAFETY: Call to `GetVolumePathNamesForVolumeNameW` failed with
+        // `ERROR_MORE_DATA`, so `mounts_buf_len` should now be set to the value
+        // of the needed buffer, we can assume it is initialized.
+        let mut mounts_buf_len = unsafe { mounts_buf_len.assume_init() };
+        let mut mounts_buf = Vec::with_capacity(mounts_buf_len as usize);
+
+        // SAFETY: We call `GetVolumePathNamesForVolumeNameW` again, this time
+        // with a real buffer. The buffer has been initialized to the expected
+        // size (returned by the previous call). We pass it along with its real
+        // length. It is hypothetically possible that in between calls the size
+        // of the needed buffer changed (although the chances are close to 0),
+        // but in this case the call will just fail and not cause any unsafety.
+        // We verify the call below.
+        let status = unsafe {
+            windows_sys::Win32::Storage::FileSystem::GetVolumePathNamesForVolumeNameW(
+                name_buf.as_ptr(),
+                mounts_buf.as_mut_ptr(), mounts_buf_len, &mut mounts_buf_len,
+            )
+        };
+        if status == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+
+        // SAFETY: The second call to `GetVolumePathNamesForVolumeNameW` and so
+        // the `mounts_buf_len` should be initialized to the length of the
+        // returned buffer. Note that this value might be hypothetically smaller
+        // than the value of this variable after the first call. We can set the
+        // length of the vector to this value.
+        unsafe {
+            mounts_buf.set_len(mounts_buf_len as usize);
+        }
+
+        Ok(VolumeMountPoints {
+            mounts_buf,
+        })
+    }
+}
+
+impl<'a> IntoIterator for &'a VolumeMountPoints {
+
+    type Item = &'a VolumeMountPointBuf;
+    type IntoIter = VolumeMountPointsIter<'a>;
+
+    fn into_iter(self) -> VolumeMountPointsIter<'a> {
+        VolumeMountPointsIter {
+            mounts_buf: &self.mounts_buf[..],
+        }
+    }
+
+}
+
+/// An iterator over Windows volume mount points.
+///
+/// In case there are no mount points the iterator will yield a single result
+/// with empty mount point.
+///
+/// This iterator can be created by using implementation of the [`IntoIterator`]
+/// trait for the [`VolumeMountPoints`] type.`
+struct VolumeMountPointsIter<'a> {
+    /// Subslice of the null-terminated buffer with mount points list.
+    mounts_buf: &'a [u16],
+}
+
+impl<'a> Iterator for VolumeMountPointsIter<'a> {
+
+    type Item = &'a VolumeMountPointBuf;
+
+    fn next(&mut self) -> Option<&'a VolumeMountPointBuf> {
+        // `self.mounts_buf` is empty only if we have nothing else to yield
+        // (and after we yielded an empty slice in case of empty mount list).
+        if self.mounts_buf.is_empty() {
+            return None;
+        }
+
+        // `self.mounts_buf` is a null-terminated list of mount point where each
+        // mount point is also null-terminated itself. We iterate over subslices
+        // delimited by the null character.
+        //
+        // Note that in case there are no known mount points, the buffer will
+        // only have a single null character. We still want to yield a mount
+        // point (empty one) in that case.
+        let mount_len = self.mounts_buf.iter().position(|tchar| *tchar == 0)
+            .expect("volume mount point is not null-terminated");
+
+        let mount_buf = &self.mounts_buf[..mount_len];
+
+        // We advance past the null character. In case we are at the end, the
+        // slice should point to a singular null character marking the end of
+        // the list. In such scenario, we advance further to empty the slice to
+        // avoid yielding empty result in next iteration (since this iteration
+        // is already guaranteed to yield a result).
+        self.mounts_buf = &self.mounts_buf[mount_len + 1..];
+        if self.mounts_buf.len() == 1 {
+            assert! {
+                self.mounts_buf[0] == 0,
+                "volume mount point list is not null-terminated"
+            };
+
+            self.mounts_buf = &self.mounts_buf[1..];
+        }
+
+        Some(mount_buf)
+    }
+}
+
 /// Returns filesystem type for the given volume name.
 fn volume_fs_type(name_buf: &VolumeNameBuf) -> std::io::Result<VolumeFsTypeBuf> {
     // TODO(rust-lang/rust#96097): Refactor with `MaybeUninit` once support
@@ -224,100 +379,15 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
         let fs_type_len = fs_type_buf.iter().position(|tchar| *tchar == 0)
             .expect("volume filesystem name not null-terminated");
 
-        let mut mounts_buf_len = std::mem::MaybeUninit::uninit();
-
-        // SAFETY: This is the first call to `GetVolumePathNamesForVolumeNameW`
-        // (see [1] for its documentation) where we query for the size of the
-        // buffer needed to hold the actual result. We expect this call to fail
-        // and verify this below.
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumepathnamesforvolumenamew
-        let status = unsafe {
-            GetVolumePathNamesForVolumeNameW(
-                name_buf.as_ptr(),
-                std::ptr::null_mut(), 0, mounts_buf_len.as_mut_ptr(),
-            )
-        };
-        if status != 0 {
-            // This should never happen because the call with no buffer should
-            // not succeed. But just to be on the safe side, we verify that.
-            return Err(std::io::ErrorKind::Other.into());
-        }
-
-        // SAFETY: We verified that the previous call failed (as expected),
-        // so we can read the error code. It should return `ERROR_MORE_DATA`,
-        // otherwise we rethrow the error.
-        let code = unsafe { GetLastError() };
-        if code != ERROR_MORE_DATA {
-            // TODO(rust-lang/rust#107792): Migrate cast to `as RawOsError`
-            // once it is stable.
-            return Err(std::io::Error::from_raw_os_error(code as i32));
-        }
-
-        // SAFETY: Call to `GetVolumePathNamesForVolumeNameW` failed with
-        // `ERROR_MORE_DATA`, so `mounts_buf_len` should now be set to the value
-        // of the needed buffer, we can assume it is initialized.
-        let mut mounts_buf_len = unsafe { mounts_buf_len.assume_init() };
-        let mut mounts_buf = Vec::with_capacity(mounts_buf_len as usize);
-
-        // SAFETY: We call `GetVolumePathNamesForVolumeNameW` again, this time
-        // with a real buffer. The buffer has been initialized to the expected
-        // size (returned by the previous call). We pass it along with its real
-        // length. It is hypothetically possible that in between calls the size
-        // of the needed buffer changed (although the chances are close to 0),
-        // but in this case the call will just fail and not cause any unsafety.
-        // We verify the call below.
-        let status = unsafe {
-            GetVolumePathNamesForVolumeNameW(
-                name_buf.as_ptr(),
-                mounts_buf.as_mut_ptr(), mounts_buf_len, &mut mounts_buf_len)
-        };
-        if status == 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-
-        // SAFETY: The second call to `GetVolumePathNamesForVolumeNameW` and so
-        // the `mounts_buf_len` should be initialized to the length of the
-        // returned buffer. Note that this value might be hypothetically smaller
-        // than the value of this variable after the first call. We can set the
-        // length of the vector to this value.
-        unsafe {
-            mounts_buf.set_len(mounts_buf_len as usize);
-        }
-
-        // `mounts_buf` is now a null-terminated list of mount point where each
-        // mount point is also null-terminated itself. We iterate over subslices
-        // delimited by the null character.
-        //
-        // Note that in case there are no known mount points, the buffer will
-        // only have a single null character. We still want to yield a mount
-        // point (for volume name and filesystem type), so we use a loop that
-        // is guaranteed to have at least one iteration.
-        let mut mounts_slice = &mounts_buf[..];
-        loop {
-            let mount_len = mounts_slice.iter().position(|tchar| *tchar == 0)
-                .expect("volume mount point is not null-terminated");
-
+        for mount_buf in &VolumeMountPoints::new(&name_buf)? {
             results.push(Mount {
                 source: OsString::from_wide(&name_buf[0..name_len])
                     .to_string_lossy().into_owned(),
-                target: OsString::from_wide(&mounts_slice[..mount_len])
+                target: OsString::from_wide(mount_buf)
                     .into(),
                 fs_type: OsString::from_wide(&fs_type_buf[0..fs_type_len])
                     .to_string_lossy().into_owned(),
             });
-
-            mounts_slice = &mounts_slice[mount_len + 1..];
-
-            // There are two end conditions:
-            //
-            // * If there were no mount points, the slice at this point should
-            //   be empty.
-            // * If there are and we are at the end it means that the slice must
-            //   point to the null character.
-            if mounts_slice.is_empty() || mounts_slice[0] == 0 {
-                break;
-            }
         }
     }
 
