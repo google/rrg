@@ -60,7 +60,7 @@ impl<I: Item> Reply<I> {
     pub fn send_unaccounted(self) -> usize {
         use protobuf::Message as _;
 
-        let data = rrg_proto::v2::rrg::Response::from(self).write_to_bytes()
+        let data = rrg_proto::rrg::Response::from(self).write_to_bytes()
             // This should only fail in case we are out of memory, which we are
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a result response");
@@ -107,7 +107,7 @@ impl Status {
     pub fn send_unaccounted(self) -> usize {
         use protobuf::Message as _;
 
-        let data = rrg_proto::v2::rrg::Response::from(self).write_to_bytes()
+        let data = rrg_proto::rrg::Response::from(self).write_to_bytes()
             // This should only fail in case we are out of memory, which we are
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a status response");
@@ -156,7 +156,7 @@ impl<'r, 'a> Log<'r, 'a> {
     pub fn send_unaccounted(self) {
         use protobuf::Message as _;
 
-        let data = rrg_proto::v2::rrg::Response::from(self).write_to_bytes()
+        let data = rrg_proto::rrg::Response::from(self).write_to_bytes()
             // This should only fail in case we are out of memory, which we are
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a log response");
@@ -265,12 +265,12 @@ pub enum Sink {
     Blob,
 }
 
-impl From<Sink> for rrg_proto::v2::rrg::Sink {
+impl From<Sink> for rrg_proto::rrg::Sink {
 
-    fn from(sink: Sink) -> rrg_proto::v2::rrg::Sink {
+    fn from(sink: Sink) -> rrg_proto::rrg::Sink {
         match sink {
-            Sink::Startup => rrg_proto::v2::rrg::Sink::STARTUP,
-            Sink::Blob => rrg_proto::v2::rrg::Sink::BLOB,
+            Sink::Startup => rrg_proto::rrg::Sink::STARTUP,
+            Sink::Blob => rrg_proto::rrg::Sink::BLOB,
         }
     }
 }
@@ -320,7 +320,7 @@ impl<I: crate::response::Item> Parcel<I> {
     pub fn send_unaccounted(self) -> usize {
         use protobuf::Message as _;
 
-        let data = rrg_proto::v2::rrg::Parcel::from(self).write_to_bytes()
+        let data = rrg_proto::rrg::Parcel::from(self).write_to_bytes()
             // This should only fail in case we are out of memory, which we are
             // almost certainly not (and if we are, we have bigger issue).
             .unwrap();
@@ -337,12 +337,12 @@ impl<I: crate::response::Item> Parcel<I> {
     }
 }
 
-impl<I> From<Reply<I>> for rrg_proto::v2::rrg::Response
+impl<I> From<Reply<I>> for rrg_proto::rrg::Response
 where
     I: Item,
 {
-    fn from(reply: Reply<I>) -> rrg_proto::v2::rrg::Response {
-        let mut proto = rrg_proto::v2::rrg::Response::new();
+    fn from(reply: Reply<I>) -> rrg_proto::rrg::Response {
+        let mut proto = rrg_proto::rrg::Response::new();
         proto.set_flow_id(reply.request_id.flow_id());
         proto.set_request_id(reply.request_id.request_id());
         proto.set_response_id(reply.response_id.0);
@@ -363,10 +363,10 @@ where
     }
 }
 
-impl From<Status> for rrg_proto::v2::rrg::Response {
+impl From<Status> for rrg_proto::rrg::Response {
 
-    fn from(status: Status) -> rrg_proto::v2::rrg::Response {
-        let mut proto = rrg_proto::v2::rrg::Response::new();
+    fn from(status: Status) -> rrg_proto::rrg::Response {
+        let mut proto = rrg_proto::rrg::Response::new();
         proto.set_flow_id(status.request_id.flow_id());
         proto.set_request_id(status.request_id.request_id());
         proto.set_response_id(status.response_id.0);
@@ -376,10 +376,10 @@ impl From<Status> for rrg_proto::v2::rrg::Response {
     }
 }
 
-impl From<Status> for rrg_proto::v2::rrg::Status {
+impl From<Status> for rrg_proto::rrg::Status {
 
-    fn from(status: Status) -> rrg_proto::v2::rrg::Status {
-        let mut proto = rrg_proto::v2::rrg::Status::new();
+    fn from(status: Status) -> rrg_proto::rrg::Status {
+        let mut proto = rrg_proto::rrg::Status::new();
         if let Err(error) = status.result {
             proto.set_error(error.into());
         }
@@ -388,10 +388,10 @@ impl From<Status> for rrg_proto::v2::rrg::Status {
     }
 }
 
-impl<'r, 'a> From<Log<'r, 'a>> for rrg_proto::v2::rrg::Response {
+impl<'r, 'a> From<Log<'r, 'a>> for rrg_proto::rrg::Response {
 
-    fn from(log: Log<'r, 'a>) -> rrg_proto::v2::rrg::Response {
-        let mut proto = rrg_proto::v2::rrg::Response::new();
+    fn from(log: Log<'r, 'a>) -> rrg_proto::rrg::Response {
+        let mut proto = rrg_proto::rrg::Response::new();
         proto.set_flow_id(log.request_id.flow_id());
         proto.set_request_id(log.request_id.request_id());
         proto.set_log(log.into());
@@ -400,10 +400,10 @@ impl<'r, 'a> From<Log<'r, 'a>> for rrg_proto::v2::rrg::Response {
     }
 }
 
-impl<'r, 'a> From<Log<'r, 'a>> for rrg_proto::v2::rrg::Log {
+impl<'r, 'a> From<Log<'r, 'a>> for rrg_proto::rrg::Log {
 
-    fn from(log: Log<'r, 'a>) -> rrg_proto::v2::rrg::Log {
-        let mut proto = rrg_proto::v2::rrg::Log::new();
+    fn from(log: Log<'r, 'a>) -> rrg_proto::rrg::Log {
+        let mut proto = rrg_proto::rrg::Log::new();
         proto.set_level(log.record.level().into());
         proto.set_timestamp(rrg_proto::into_timestamp(log.timestamp));
         proto.set_message(log.record.args().to_string());
@@ -412,11 +412,11 @@ impl<'r, 'a> From<Log<'r, 'a>> for rrg_proto::v2::rrg::Log {
     }
 }
 
-impl<I> From<Parcel<I>> for rrg_proto::v2::rrg::Parcel
+impl<I> From<Parcel<I>> for rrg_proto::rrg::Parcel
 where
     I: crate::response::Item,
 {
-    fn from(parcel: Parcel<I>) -> rrg_proto::v2::rrg::Parcel {
+    fn from(parcel: Parcel<I>) -> rrg_proto::rrg::Parcel {
         let payload_proto = parcel.payload.into_proto();
         let payload_any = protobuf::well_known_types::Any::pack(&payload_proto)
             // The should not really ever fail, assumming that the protobuf
@@ -424,7 +424,7 @@ where
             // memory.
             .unwrap();
 
-        let mut proto = rrg_proto::v2::rrg::Parcel::new();
+        let mut proto = rrg_proto::rrg::Parcel::new();
         proto.set_sink(parcel.sink.into());
         proto.set_payload(payload_any);
 

@@ -81,12 +81,12 @@ impl std::fmt::Display for UnknownAction {
     }
 }
 
-impl TryFrom<rrg_proto::v2::rrg::Action> for Action {
+impl TryFrom<rrg_proto::rrg::Action> for Action {
 
     type Error = UnknownAction;
 
-    fn try_from(proto: rrg_proto::v2::rrg::Action) -> Result<Action, UnknownAction> {
-        use rrg_proto::v2::rrg::Action::*;
+    fn try_from(proto: rrg_proto::rrg::Action) -> Result<Action, UnknownAction> {
+        use rrg_proto::rrg::Action::*;
 
         match proto {
             GET_SYSTEM_METADATA => Ok(Action::GetSystemMetadata),
@@ -243,7 +243,7 @@ impl Request {
         }
 
         use protobuf::Message as _;
-        let proto = rrg_proto::v2::rrg::Request::parse_from_bytes(&message.data[..])
+        let proto = rrg_proto::rrg::Request::parse_from_bytes(&message.data[..])
             .map_err(|error| ParseRequestError {
                 request_id: None,
                 kind: ParseRequestErrorKind::MalformedBytes,
@@ -254,11 +254,11 @@ impl Request {
     }
 }
 
-impl TryFrom<rrg_proto::v2::rrg::Request> for Request {
+impl TryFrom<rrg_proto::rrg::Request> for Request {
 
     type Error = ParseRequestError;
 
-    fn try_from(mut proto: rrg_proto::v2::rrg::Request) -> Result<Request, ParseRequestError> {
+    fn try_from(mut proto: rrg_proto::rrg::Request) -> Result<Request, ParseRequestError> {
         use rrg_proto::try_from_duration;
 
         let request_id = RequestId {
@@ -388,9 +388,9 @@ impl std::fmt::Display for ParseRequestErrorKind {
     }
 }
 
-impl From<ParseRequestErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
+impl From<ParseRequestErrorKind> for rrg_proto::rrg::Status_Error_Type {
 
-    fn from(kind: ParseRequestErrorKind) -> rrg_proto::v2::rrg::Status_Error_Type {
+    fn from(kind: ParseRequestErrorKind) -> rrg_proto::rrg::Status_Error_Type {
         use ParseRequestErrorKind::*;
 
         match kind {
@@ -507,8 +507,8 @@ mod tests {
     fn action_try_from_proto_all_known() {
         use protobuf::ProtobufEnum as _;
 
-        for action in rrg_proto::v2::rrg::Action::values() {
-            if *action == rrg_proto::v2::rrg::Action::UNKNOWN {
+        for action in rrg_proto::rrg::Action::values() {
+            if *action == rrg_proto::rrg::Action::UNKNOWN {
                 continue;
             }
 
@@ -518,6 +518,6 @@ mod tests {
 
     #[test]
     fn action_try_fromt_proto_unknown() {
-        assert!(Action::try_from(rrg_proto::v2::rrg::Action::UNKNOWN).is_err());
+        assert!(Action::try_from(rrg_proto::rrg::Action::UNKNOWN).is_err());
     }
 }

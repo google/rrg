@@ -36,10 +36,10 @@ where
 
 impl crate::response::Item for Item {
 
-    type Proto = rrg_proto::v2::list_mounts::Result;
+    type Proto = rrg_proto::list_mounts::Result;
 
-    fn into_proto(self) -> rrg_proto::v2::list_mounts::Result {
-        let mut proto = rrg_proto::v2::list_mounts::Result::default();
+    fn into_proto(self) -> rrg_proto::list_mounts::Result {
+        let mut proto = rrg_proto::list_mounts::Result::default();
         proto.set_mount(self.mount.into());
 
         proto

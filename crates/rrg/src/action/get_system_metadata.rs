@@ -36,12 +36,12 @@ impl Item {
 
 impl crate::response::Item for Item {
 
-    type Proto = rrg_proto::v2::get_system_metadata::Result;
+    type Proto = rrg_proto::get_system_metadata::Result;
 
-    fn into_proto(self) -> rrg_proto::v2::get_system_metadata::Result {
+    fn into_proto(self) -> rrg_proto::get_system_metadata::Result {
         use rrg_proto::into_timestamp;
 
-        let mut proto = rrg_proto::v2::get_system_metadata::Result::new();
+        let mut proto = rrg_proto::get_system_metadata::Result::new();
         proto.set_field_type(self.kind.into());
         proto.set_version(self.version);
         proto.set_arch(self.arch);

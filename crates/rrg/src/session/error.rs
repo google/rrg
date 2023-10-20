@@ -114,10 +114,10 @@ impl From<crate::request::ParseArgsError> for Error {
     }
 }
 
-impl From<Error> for rrg_proto::v2::rrg::Status_Error {
+impl From<Error> for rrg_proto::rrg::Status_Error {
 
-    fn from(error: Error) -> rrg_proto::v2::rrg::Status_Error {
-        let mut proto = rrg_proto::v2::rrg::Status_Error::new();
+    fn from(error: Error) -> rrg_proto::rrg::Status_Error {
+        let mut proto = rrg_proto::rrg::Status_Error::new();
         proto.set_field_type(error.kind.into());
         proto.set_message(error.to_string());
 
@@ -125,9 +125,9 @@ impl From<Error> for rrg_proto::v2::rrg::Status_Error {
     }
 }
 
-impl From<ErrorKind> for rrg_proto::v2::rrg::Status_Error_Type {
+impl From<ErrorKind> for rrg_proto::rrg::Status_Error_Type {
 
-    fn from(kind: ErrorKind) -> rrg_proto::v2::rrg::Status_Error_Type {
+    fn from(kind: ErrorKind) -> rrg_proto::rrg::Status_Error_Type {
         use ErrorKind::*;
 
         match kind {

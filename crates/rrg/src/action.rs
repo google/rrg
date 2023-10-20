@@ -15,9 +15,6 @@
 //! instance of the corresponding request type and send some (zero or more)
 //! instances of the corresponding response type.
 
-#[allow(dead_code)]
-mod deprecated; // TODO(@panhania): Delete this module.
-
 #[cfg(feature = "action-get_system_metadata")]
 pub mod get_system_metadata;
 

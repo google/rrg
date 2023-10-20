@@ -51,9 +51,9 @@ impl Startup {
 }
 
 impl crate::response::Item for Startup {
-    type Proto = rrg_proto::v2::startup::Startup;
+    type Proto = rrg_proto::startup::Startup;
 
-    fn into_proto(self) -> rrg_proto::v2::startup::Startup {
+    fn into_proto(self) -> rrg_proto::startup::Startup {
         self.into()
     }
 }
@@ -108,12 +108,12 @@ impl Version {
     }
 }
 
-impl Into<rrg_proto::v2::startup::Startup> for Startup {
+impl Into<rrg_proto::startup::Startup> for Startup {
 
-    fn into(self) -> rrg_proto::v2::startup::Startup {
+    fn into(self) -> rrg_proto::startup::Startup {
         use rrg_proto::into_timestamp;
 
-        let mut proto = rrg_proto::v2::startup::Startup::new();
+        let mut proto = rrg_proto::startup::Startup::new();
         proto.set_metadata(self.metadata.into());
         if let Some(path) = self.path {
             proto.set_path(path.into());
@@ -125,10 +125,10 @@ impl Into<rrg_proto::v2::startup::Startup> for Startup {
     }
 }
 
-impl Into<rrg_proto::v2::startup::Metadata> for Metadata {
+impl Into<rrg_proto::startup::Metadata> for Metadata {
 
-    fn into(self) -> rrg_proto::v2::startup::Metadata {
-        let mut proto = rrg_proto::v2::startup::Metadata::new();
+    fn into(self) -> rrg_proto::startup::Metadata {
+        let mut proto = rrg_proto::startup::Metadata::new();
         proto.set_name(self.name);
         // TODO(@panhania): Add support for remaining fields.
         proto.set_version(self.version.into());
@@ -137,10 +137,10 @@ impl Into<rrg_proto::v2::startup::Metadata> for Metadata {
     }
 }
 
-impl Into<rrg_proto::v2::startup::Version> for Version {
+impl Into<rrg_proto::startup::Version> for Version {
 
-    fn into(self) -> rrg_proto::v2::startup::Version {
-        let mut proto = rrg_proto::v2::startup::Version::new();
+    fn into(self) -> rrg_proto::startup::Version {
+        let mut proto = rrg_proto::startup::Version::new();
         proto.set_major(u32::from(self.major));
         proto.set_minor(u32::from(self.minor));
         proto.set_patch(u32::from(self.patch));

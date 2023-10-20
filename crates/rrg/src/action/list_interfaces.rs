@@ -28,10 +28,10 @@ where
 
 impl crate::response::Item for Item {
 
-    type Proto = rrg_proto::v2::list_interfaces::Result;
+    type Proto = rrg_proto::list_interfaces::Result;
 
-    fn into_proto(self) -> rrg_proto::v2::list_interfaces::Result {
-        let mut proto = rrg_proto::v2::list_interfaces::Result::default();
+    fn into_proto(self) -> rrg_proto::list_interfaces::Result {
+        let mut proto = rrg_proto::list_interfaces::Result::default();
         proto.set_interface(self.iface.into());
 
         proto

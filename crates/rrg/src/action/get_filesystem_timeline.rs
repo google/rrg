@@ -52,7 +52,7 @@ where
         .inspect(|_| {
             entry_count.set(entry_count.get() + 1);
         })
-        .map(rrg_proto::v2::get_filesystem_timeline::Entry::from_lossy);
+        .map(rrg_proto::get_filesystem_timeline::Entry::from_lossy);
 
     for batch in crate::gzchunked::encode(entries) {
         let batch = batch
@@ -75,7 +75,7 @@ where
 
 impl crate::request::Args for Args {
 
-    type Proto = rrg_proto::v2::get_filesystem_timeline::Args;
+    type Proto = rrg_proto::get_filesystem_timeline::Args;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
@@ -91,7 +91,7 @@ impl crate::request::Args for Args {
 
 impl crate::response::Item for Item {
 
-    type Proto = rrg_proto::v2::get_filesystem_timeline::Result;
+    type Proto = rrg_proto::get_filesystem_timeline::Result;
 
     fn into_proto(self) -> Self::Proto {
         let mut proto = Self::Proto::default();
@@ -102,7 +102,7 @@ impl crate::response::Item for Item {
     }
 }
 
-impl FromLossy<crate::fs::Entry> for rrg_proto::v2::get_filesystem_timeline::Entry {
+impl FromLossy<crate::fs::Entry> for rrg_proto::get_filesystem_timeline::Entry {
 
     fn from_lossy(entry: crate::fs::Entry) -> Self {
         let mut proto = Self::default();
@@ -404,7 +404,7 @@ mod tests {
     /// Retrieves timeline entries from the given session object.
     fn entries(
         session: &crate::session::FakeSession,
-    ) -> Vec<rrg_proto::v2::get_filesystem_timeline::Entry> {
+    ) -> Vec<rrg_proto::get_filesystem_timeline::Entry> {
         let blob_count = session.parcel_count(crate::Sink::Blob);
         let reply_count = session.reply_count();
         assert_eq!(blob_count, reply_count);
@@ -427,7 +427,7 @@ mod tests {
 
     /// Constructs a path for the given timeline entry.
     fn path(
-        entry: &rrg_proto::v2::get_filesystem_timeline::Entry,
+        entry: &rrg_proto::get_filesystem_timeline::Entry,
     ) -> Option<PathBuf> {
         rrg_proto::path::from_bytes(entry.get_path().to_owned()).ok()
     }
