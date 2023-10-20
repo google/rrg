@@ -52,9 +52,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_if_any_filesystem_exists() {
+    fn handle_some_mount() {
         let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, ()).is_ok());
-        assert_ne!(session.reply_count(), 0);
+
+        assert!(session.reply_count() > 0);
     }
 }
