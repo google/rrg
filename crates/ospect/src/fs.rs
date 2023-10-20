@@ -189,6 +189,7 @@ where
 }
 
 /// Information about a mounted filesystem.
+#[derive(Debug)]
 pub struct Mount {
     /// Name of the mounted device.
     pub source: String,
@@ -355,5 +356,24 @@ mod tests {
             .map(Result::unwrap);
 
         assert!(mounts.find(|mount| mount.target == Path::new("/")).is_some());
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn mounts_system_drive_exists() {
+        let mut mounts = mounts()
+            .unwrap()
+            .map(Result::unwrap);
+
+        let system_drive = std::env::var_os("SystemDrive")
+            .unwrap();
+
+        let mut system_drive_path = std::path::PathBuf::new();
+        system_drive_path.push(system_drive);
+        system_drive_path.push(std::path::MAIN_SEPARATOR_STR);
+
+        assert! {
+            mounts.find(|mount| &mount.target == &system_drive_path).is_some()
+        };
     }
 }
