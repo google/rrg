@@ -14,16 +14,6 @@ default = [
     "action-list_connections",
     "action-list_interfaces",
     "action-list_mounts",
-
-    # These actions are deprecated (awaiting migration to the new protocol).
-    "action-insttime",
-    "action-interfaces",
-    "action-filesystems",
-    "action-finder",
-    "action-listdir",
-    "action-metadata",
-    "action-network",
-    "action-stat",
 ]
 
 action-get_system_metadata = []
@@ -33,16 +23,6 @@ action-get_filesystem_timeline = ["dep:flate2", "dep:sha2"]
 action-list_connections = []
 action-list_interfaces = []
 action-list_mounts = []
-
-# These actions are deprecated (awaiting migration to the new protocol).
-action-insttime = []
-action-interfaces = []
-action-filesystems = []
-action-finder = ["dep:digest", "dep:md-5", "dep:sha1", "dep:sha2"]
-action-listdir = []
-action-metadata = []
-action-network = []
-action-stat = []
 
 test-setfattr = []
 test-chattr = []
