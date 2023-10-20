@@ -13,6 +13,7 @@ default = [
     "action-get_filesystem_timeline",
     "action-list_connections",
     "action-list_interfaces",
+    "action-list_mounts",
 
     # These actions are deprecated (awaiting migration to the new protocol).
     "action-insttime",
@@ -31,6 +32,7 @@ action-get_file_contents = ["dep:sha2"]
 action-get_filesystem_timeline = ["dep:flate2", "dep:sha2"]
 action-list_connections = []
 action-list_interfaces = []
+action-list_mounts = []
 
 # These actions are deprecated (awaiting migration to the new protocol).
 action-insttime = []

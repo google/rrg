@@ -36,6 +36,9 @@ pub mod list_connections;
 #[cfg(feature = "action-list_interfaces")]
 pub mod list_interfaces;
 
+#[cfg(feature = "action-list_mounts")]
+pub mod list_mounts;
+
 use log::info;
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -85,6 +88,10 @@ where
         #[cfg(feature = "action-list_interfaces")]
         ListInterfaces => {
             handle(session, request, self::list_interfaces::handle)
+        }
+        #[cfg(feature = "action-list_mounts")]
+        ListMounts => {
+            handle(session, request, self::list_mounts::handle)
         }
         // We allow `unreachable_patterns` because otherwise we get a warning if
         // we compile with all the actions enabled.
