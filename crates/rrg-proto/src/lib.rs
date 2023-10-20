@@ -55,8 +55,6 @@ impl From<std::fs::FileType> for fs::FileMetadata_Type {
 impl From<std::fs::Metadata> for fs::FileMetadata {
 
     fn from(metadata: std::fs::Metadata) -> fs::FileMetadata {
-        use crate::into_timestamp;
-
         let mut proto = fs::FileMetadata::default();
         proto.set_field_type(metadata.file_type().into());
         proto.set_size(metadata.len());
