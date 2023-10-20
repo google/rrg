@@ -5,15 +5,33 @@
 
 /// A result of the `list_mounts` action.
 struct Item {
-    // TODO(@panhania): Add actual data.
+    // Information about the individual filesystem mount.
+    mount: ospect::fs::Mount,
 }
 
 // Handles invocations of the `list_mounts` action.
-pub fn handle<S>(_session: &mut S, _: ()) -> crate::session::Result<()>
+pub fn handle<S>(session: &mut S, _: ()) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    todo!()
+    let mounts = ospect::fs::mounts()
+        .map_err(crate::session::Error::action)?;
+
+    for mount in mounts {
+        let mount = match mount {
+            Ok(mount) => mount,
+            Err(error) => {
+                log::warn!("failed to obtain mount information: {}", error);
+                continue;
+            }
+        };
+
+        session.reply(Item {
+            mount,
+        })?;
+    }
+
+    Ok(())
 }
 
 impl crate::response::Item for Item {
@@ -21,6 +39,9 @@ impl crate::response::Item for Item {
     type Proto = rrg_proto::v2::list_mounts::Result;
 
     fn into_proto(self) -> rrg_proto::v2::list_mounts::Result {
-        todo!()
+        let mut proto = rrg_proto::v2::list_mounts::Result::default();
+        proto.set_mount(self.mount.into());
+
+        proto
     }
 }

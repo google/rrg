@@ -6,6 +6,9 @@ syntax = "proto3";
 
 package rrg.action.list_mounts;
 
+import "rrg/fs.proto";
+
 message Result {
-  // TODO(@panhania): Add mount information.
+  // Information about the individual filesystem mount.
+  rrg.fs.Mount mount = 1;
 }
