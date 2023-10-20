@@ -1,6 +1,3 @@
-[submodule "proto/grr"]
-	path = vendor/grr
-	url = https://github.com/google/grr
 [submodule "proto/vendor/protobuf"]
 	path = vendor/protobuf
 	url = https://github.com/protocolbuffers/protobuf
