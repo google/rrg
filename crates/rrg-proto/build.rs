@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-const PROTOS_V2: &'static [&'static str] = &[
+const PROTOS: &'static [&'static str] = &[
     "../../proto/rrg.proto",
     "../../proto/rrg/blob.proto",
     "../../proto/rrg/fs.proto",
@@ -26,18 +26,18 @@ fn main() {
         .expect("no output directory")
         .into();
 
-    for proto in PROTOS_V2 {
+    for proto in PROTOS {
         println!("cargo:rerun-if-changed={}", proto);
     }
 
-    let proto_out_dir = outdir.join("proto-v2");
+    let proto_out_dir = outdir.join("proto");
     std::fs::create_dir_all(&proto_out_dir).unwrap();
 
     protobuf_codegen_pure::Codegen::new()
         .out_dir(&proto_out_dir)
         .include("../../vendor/protobuf/src")
         .include("../../proto")
-        .inputs(PROTOS_V2)
+        .inputs(PROTOS)
         .customize(protobuf_codegen_pure::Customize {
             gen_mod_rs: Some(true),
             ..Default::default()
