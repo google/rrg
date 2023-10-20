@@ -105,6 +105,18 @@ pub mod v2 {
         }
     }
 
+    impl From<ospect::fs::Mount> for fs::Mount {
+
+        fn from(mount: ospect::fs::Mount) -> fs::Mount {
+            let mut proto = fs::Mount::default();
+            proto.set_name(mount.name);
+            proto.set_path(mount.path.into());
+            proto.set_fs_type(mount.fs_type);
+
+            proto
+        }
+    }
+
     impl From<std::net::Ipv4Addr> for net::IpAddress {
 
         fn from(addr: std::net::Ipv4Addr) -> net::IpAddress {
