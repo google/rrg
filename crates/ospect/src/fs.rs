@@ -199,15 +199,16 @@ pub struct Mount {
     pub fs_type: String,
 }
 
-// TODO(@panhania): Add information about Windows once it is supported.
 /// Returns an iterator over mounted filesystems information.
 ///
 /// The exact behaviour is system specific:
 ///
 ///   * On Linux it parses `/proc/mounts` entries (or alternatives).
-///   * On macOS it uses the [`getmntinfo`] call.
+///   * On macOS it uses the [`getmntinfo`][1] call.
+///   * On Windows it uses [volume managemend functions][2].
 ///
-/// [`getmntinfo`]: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/getmntinfo.3.html
+/// [1]: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/getmntinfo.3.html
+/// [2]: https://learn.microsoft.com/en-us/windows/win32/fileio/volume-management-functions
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
     self::sys::mounts()
 }
