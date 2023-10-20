@@ -244,11 +244,11 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
         // safety invariants required by the `from_ptr` call are met. Note that
         // `statfs` is now on the stack, so the lifetime of this reference is
         // valid until the end of this scope.
-        let source = unsafe {
+        let name = unsafe {
             std::ffi::CStr::from_ptr(statfs.f_mntfromname.as_ptr())
         }.to_string_lossy();
         // SAFETY: Same as above.
-        let target = unsafe {
+        let path = unsafe {
             std::ffi::CStr::from_ptr(statfs.f_mntonname.as_ptr())
         }.to_bytes();
         // SAFETY: Same as above.
@@ -259,8 +259,8 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
         use std::os::unix::ffi::OsStrExt as _;
 
         mounts.push(Mount {
-            source: source.into_owned(),
-            target: PathBuf::from(OsStr::from_bytes(target)),
+            name: name.into_owned(),
+            path: PathBuf::from(OsStr::from_bytes(path)),
             fs_type: fs_type.into_owned(),
         });
     }

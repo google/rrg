@@ -90,8 +90,8 @@ impl crate::response::Item for Response {
         // when `mount_point` and `device` fields of `Filesystem` message
         // will have `bytes` type instead of `string`.
         let mut proto = rrg_proto::sysinfo::Filesystem::new();
-        proto.set_device(self.mount_info.source);
-        proto.set_mount_point(self.mount_info.target.to_string_lossy().into_owned());
+        proto.set_device(self.mount_info.name);
+        proto.set_mount_point(self.mount_info.path.to_string_lossy().into_owned());
         proto.set_field_type(self.mount_info.fs_type);
 
         proto

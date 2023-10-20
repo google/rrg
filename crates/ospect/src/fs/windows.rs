@@ -62,9 +62,9 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
 
             for mount_point in VolumeMountPoints::new(&name_buf)? {
                 results.push(Ok(Mount {
-                    source: OsString::from_wide(&name_buf[0..name_len])
+                    name: OsString::from_wide(&name_buf[0..name_len])
                         .to_string_lossy().into_owned(),
-                    target: mount_point,
+                    path: mount_point,
                     fs_type: OsString::from_wide(&fs_type_buf[0..fs_type_len])
                         .to_string_lossy().into_owned(),
                 }));
