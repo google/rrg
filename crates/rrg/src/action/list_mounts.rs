@@ -45,3 +45,16 @@ impl crate::response::Item for Item {
         proto
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_if_any_filesystem_exists() {
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, ()).is_ok());
+        assert_ne!(session.reply_count(), 0);
+    }
+}

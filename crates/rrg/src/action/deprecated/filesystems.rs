@@ -103,13 +103,6 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_if_any_filesystem_exists() {
-        let mut session = session::FakeSession::new();
-        assert!(handle(&mut session, ()).is_ok());
-        assert_ne!(session.reply_count(), 0);
-    }
-
     #[cfg(feature = "test-fuse")]
     #[test]
     fn test_fuse_filesystem() {
