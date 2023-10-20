@@ -222,16 +222,16 @@ impl<R: std::io::Read> Mounts<R> {
 
         // There is more data in the file but we don't care for the time being
         // and only "parse" the first three columns.
-        let source = cols.next()
+        let name = cols.next()
             .ok_or_else(|| std::io::ErrorKind::InvalidData)?;
-        let target = cols.next()
+        let path = cols.next()
             .ok_or_else(|| std::io::ErrorKind::InvalidData)?;
         let fs_type = cols.next()
             .ok_or_else(|| std::io::ErrorKind::InvalidData)?;
 
         Ok(Mount {
-            source: source.into(),
-            target: target.into(),
+            name: name.into(),
+            path: path.into(),
             fs_type: fs_type.into(),
         })
     }
@@ -414,23 +414,23 @@ proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
         let mut mounts = Mounts::new(MTAB.as_bytes());
 
         let mount = mounts.next().unwrap().unwrap();
-        assert_eq!(mount.source, "sysfs");
-        assert_eq!(mount.target, Path::new("/sys"));
+        assert_eq!(mount.name, "sysfs");
+        assert_eq!(mount.path, Path::new("/sys"));
         assert_eq!(mount.fs_type, "sysfs");
 
         let mount = mounts.next().unwrap().unwrap();
-        assert_eq!(mount.source, "proc");
-        assert_eq!(mount.target, Path::new("/proc"));
+        assert_eq!(mount.name, "proc");
+        assert_eq!(mount.path, Path::new("/proc"));
         assert_eq!(mount.fs_type, "proc");
 
         let mount = mounts.next().unwrap().unwrap();
-        assert_eq!(mount.source, "/dev/foobar");
-        assert_eq!(mount.target, Path::new("/"));
+        assert_eq!(mount.name, "/dev/foobar");
+        assert_eq!(mount.path, Path::new("/"));
         assert_eq!(mount.fs_type, "ext4");
 
         let mount = mounts.next().unwrap().unwrap();
-        assert_eq!(mount.source, "/dev/quux");
-        assert_eq!(mount.target, Path::new("/usr/quux"));
+        assert_eq!(mount.name, "/dev/quux");
+        assert_eq!(mount.path, Path::new("/usr/quux"));
         assert_eq!(mount.fs_type, "ext4");
 
         assert!(mounts.next().is_none());

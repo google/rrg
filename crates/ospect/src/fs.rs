@@ -192,9 +192,9 @@ where
 #[derive(Debug)]
 pub struct Mount {
     /// Name of the mounted device.
-    pub source: String,
+    pub name: String,
     /// Mount point, i.e., where the mounted filesystem is available.
-    pub target: std::path::PathBuf,
+    pub path: std::path::PathBuf,
     /// Type of the mounted filesystem (e.g. `ext4`, `ramfs`, `proc`).
     pub fs_type: String,
 }
@@ -356,7 +356,7 @@ mod tests {
             .unwrap()
             .map(Result::unwrap);
 
-        assert!(mounts.find(|mount| mount.target == Path::new("/")).is_some());
+        assert!(mounts.find(|mount| mount.path == Path::new("/")).is_some());
     }
 
     #[cfg(target_family = "windows")]
@@ -374,7 +374,7 @@ mod tests {
         system_drive_path.push(std::path::MAIN_SEPARATOR_STR);
 
         assert! {
-            mounts.find(|mount| &mount.target == &system_drive_path).is_some()
+            mounts.find(|mount| &mount.path == &system_drive_path).is_some()
         };
     }
 }

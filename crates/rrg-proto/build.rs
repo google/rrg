@@ -32,6 +32,7 @@ const PROTOS_V2: &'static [&'static str] = &[
     "../../proto/rrg/action/get_system_metadata.proto",
     "../../proto/rrg/action/list_connections.proto",
     "../../proto/rrg/action/list_interfaces.proto",
+    "../../proto/rrg/action/list_mounts.proto",
 ];
 
 fn main() {
