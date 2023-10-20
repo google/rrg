@@ -6,7 +6,8 @@
 //! Windows-specific filesystem inspection functionalities.
 
 use std::ffi::{OsStr, OsString};
-use std::path::Path;
+use std::os::windows::ffi::OsStringExt as _;
+use std::path::{Path, PathBuf};
 
 use super::*;
 
@@ -30,7 +31,6 @@ where
 }
 
 type VolumeNameBuf = [u16; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
-type VolumeMountPointBuf = [u16];
 type VolumeFsTypeBuf = [u16; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
 
 /// An iterator over Windows volume names.
@@ -173,13 +173,11 @@ impl Iterator for VolumeNames {
 ///
 /// In case there are no mount points the iterator will yield a single result
 /// with empty mount point.
-///
-/// Note that because of borrowing limitations, this type does not implement
-/// the [`Iterator`] trait directly but can be converted to one using its
-/// [`IntoIterator`] implementation.
 struct VolumeMountPoints {
     /// Buffer with null-terminated mount points list.
     mounts_buf: Vec<u16>,
+    /// Offset to the current mount point within the buffer.
+    offset: usize,
 }
 
 impl VolumeMountPoints {
@@ -252,43 +250,21 @@ impl VolumeMountPoints {
 
         Ok(VolumeMountPoints {
             mounts_buf,
+            offset: 0,
         })
     }
 }
 
-impl<'a> IntoIterator for &'a VolumeMountPoints {
+impl Iterator for VolumeMountPoints {
 
-    type Item = &'a VolumeMountPointBuf;
-    type IntoIter = VolumeMountPointsIter<'a>;
+    type Item = PathBuf;
 
-    fn into_iter(self) -> VolumeMountPointsIter<'a> {
-        VolumeMountPointsIter {
-            mounts_buf: &self.mounts_buf[..],
-        }
-    }
+    fn next(&mut self) -> Option<PathBuf> {
+        let mounts_buf = &self.mounts_buf[self.offset..];
 
-}
-
-/// An iterator over Windows volume mount points.
-///
-/// In case there are no mount points the iterator will yield a single result
-/// with empty mount point.
-///
-/// This iterator can be created by using implementation of the [`IntoIterator`]
-/// trait for the [`VolumeMountPoints`] type.`
-struct VolumeMountPointsIter<'a> {
-    /// Subslice of the null-terminated buffer with mount points list.
-    mounts_buf: &'a [u16],
-}
-
-impl<'a> Iterator for VolumeMountPointsIter<'a> {
-
-    type Item = &'a VolumeMountPointBuf;
-
-    fn next(&mut self) -> Option<&'a VolumeMountPointBuf> {
-        // `self.mounts_buf` is empty only if we have nothing else to yield
-        // (and after we yielded an empty slice in case of empty mount list).
-        if self.mounts_buf.is_empty() {
+        // `mounts_buf` is empty only if we have nothing else to yield (and
+        // after we yielded an empty slice in case of empty mount list).
+        if mounts_buf.is_empty() {
             return None;
         }
 
@@ -299,27 +275,27 @@ impl<'a> Iterator for VolumeMountPointsIter<'a> {
         // Note that in case there are no known mount points, the buffer will
         // only have a single null character. We still want to yield a mount
         // point (empty one) in that case.
-        let mount_len = self.mounts_buf.iter().position(|tchar| *tchar == 0)
+        let mount_len = mounts_buf.iter().position(|tchar| *tchar == 0)
             .expect("volume mount point is not null-terminated");
 
-        let mount_buf = &self.mounts_buf[..mount_len];
+        let mount_buf = &mounts_buf[..mount_len];
 
         // We advance past the null character. In case we are at the end, the
         // slice should point to a singular null character marking the end of
         // the list. In such scenario, we advance further to empty the slice to
         // avoid yielding empty result in next iteration (since this iteration
         // is already guaranteed to yield a result).
-        self.mounts_buf = &self.mounts_buf[mount_len + 1..];
-        if self.mounts_buf.len() == 1 {
+        self.offset += mount_len + 1;
+        if self.offset == self.mounts_buf.len() - 1 {
             assert! {
-                self.mounts_buf[0] == 0,
+                self.mounts_buf[self.offset] == 0,
                 "volume mount point list is not null-terminated"
             };
 
-            self.mounts_buf = &self.mounts_buf[1..];
+            self.offset += 1;
         }
 
-        Some(mount_buf)
+        Some(OsString::from_wide(mount_buf).into())
     }
 }
 
@@ -388,12 +364,11 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
 
         match VolumeMountPoints::new(&name_buf) {
             Ok(mount_points) => {
-                for mount_buf in &mount_points {
+                for mount_point in mount_points {
                     results.push(Ok(Mount {
                         source: OsString::from_wide(&name_buf[0..name_len])
                             .to_string_lossy().into_owned(),
-                        target: OsString::from_wide(mount_buf)
-                            .into(),
+                        target: mount_point,
                         fs_type: OsString::from_wide(&fs_type_buf[0..fs_type_len])
                             .to_string_lossy().into_owned(),
                     }));
