@@ -32,8 +32,6 @@ where
 
 /// Returns an iterator over mounted filesystems information.
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
-    use std::os::windows::ffi::OsStringExt as _;
-
     // We have a choice here: we can have a fully lazy iterator by combining
     // volume names and volume mount points iterators or collect into a vector
     // and convert it to an iterator itself.
