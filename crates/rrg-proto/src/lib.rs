@@ -6,355 +6,353 @@
 pub mod convert;
 pub mod path;
 
-pub mod v2 {
-    include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));
+include!(concat!(env!("OUT_DIR"), "/proto/mod.rs"));
 
-    impl From<ospect::os::Kind> for os::Type {
+impl From<ospect::os::Kind> for os::Type {
 
-        fn from(kind: ospect::os::Kind) -> os::Type {
-            match kind {
-                ospect::os::Kind::Linux => os::Type::LINUX,
-                ospect::os::Kind::Macos => os::Type::MACOS,
-                ospect::os::Kind::Windows => os::Type::WINDOWS,
+    fn from(kind: ospect::os::Kind) -> os::Type {
+        match kind {
+            ospect::os::Kind::Linux => os::Type::LINUX,
+            ospect::os::Kind::Macos => os::Type::MACOS,
+            ospect::os::Kind::Windows => os::Type::WINDOWS,
+        }
+    }
+}
+
+impl From<std::path::PathBuf> for fs::Path {
+
+    fn from(path: std::path::PathBuf) -> fs::Path {
+        let mut proto = fs::Path::default();
+        proto.set_raw_bytes(crate::path::into_bytes(path));
+
+        proto
+    }
+}
+
+
+impl TryFrom<fs::Path> for std::path::PathBuf {
+
+    type Error = ParsePathError;
+
+    fn try_from(mut proto: fs::Path) -> Result<std::path::PathBuf, ParsePathError> {
+        crate::path::from_bytes(proto.take_raw_bytes())
+            .map_err(ParsePathError)
+    }
+}
+
+impl From<std::fs::FileType> for fs::FileMetadata_Type {
+
+    fn from(file_type: std::fs::FileType) -> fs::FileMetadata_Type {
+        match () {
+            _ if file_type.is_file() => fs::FileMetadata_Type::FILE,
+            _ if file_type.is_dir() => fs::FileMetadata_Type::DIR,
+            _ if file_type.is_symlink() => fs::FileMetadata_Type::SYMLINK,
+            _ => fs::FileMetadata_Type::UNKNOWN,
+        }
+    }
+}
+
+impl From<std::fs::Metadata> for fs::FileMetadata {
+
+    fn from(metadata: std::fs::Metadata) -> fs::FileMetadata {
+        use crate::into_timestamp;
+
+        let mut proto = fs::FileMetadata::default();
+        proto.set_field_type(metadata.file_type().into());
+        proto.set_size(metadata.len());
+
+        match metadata.accessed() {
+            Ok(time) => proto.set_access_time(into_timestamp(time)),
+            Err(_) => (), // TODO(@panhania): Consider logging.
+        }
+        match metadata.modified() {
+            Ok(time) => proto.set_modification_time(into_timestamp(time)),
+            Err(_) => (), // TODO(@panhania): Consider logging.
+        }
+        match metadata.created() {
+            Ok(time) => proto.set_creation_time(into_timestamp(time)),
+            Err(_) => (), // TODO(@panhania): Consider logging.
+        }
+
+        proto
+    }
+}
+
+impl From<ospect::fs::ExtAttr> for fs::FileExtAttr {
+
+    fn from(ext_attr: ospect::fs::ExtAttr) -> fs::FileExtAttr {
+        let mut proto = fs::FileExtAttr::default();
+        proto.set_value(ext_attr.value);
+
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::ffi::OsStringExt as _;
+            proto.set_name(ext_attr.name.into_vec());
+        }
+
+        // Extended attributes are not supported on Windows, so technically
+        // we don't need to have this code. But in case somebody creates an
+        // aritficial extended attribute code it is better to be at least
+        // somewhat covered.
+        #[cfg(target_family = "windows")]
+        {
+            let name_str = ext_attr.name.to_string_lossy();
+            proto.set_name(name_str.as_bytes().into());
+        }
+
+        proto
+    }
+}
+
+impl From<ospect::fs::Mount> for fs::Mount {
+
+    fn from(mount: ospect::fs::Mount) -> fs::Mount {
+        let mut proto = fs::Mount::default();
+        proto.set_name(mount.name);
+        proto.set_path(mount.path.into());
+        proto.set_fs_type(mount.fs_type);
+
+        proto
+    }
+}
+
+impl From<std::net::Ipv4Addr> for net::IpAddress {
+
+    fn from(addr: std::net::Ipv4Addr) -> net::IpAddress {
+        let mut proto = net::IpAddress::default();
+        proto.set_octets(Vec::from(addr.octets()));
+
+        proto
+    }
+}
+
+impl From<std::net::Ipv6Addr> for net::IpAddress {
+
+    fn from(addr: std::net::Ipv6Addr) -> net::IpAddress {
+        let mut proto = net::IpAddress::default();
+        proto.set_octets(Vec::from(addr.octets()));
+
+        proto
+    }
+}
+
+impl From<std::net::IpAddr> for net::IpAddress {
+
+    fn from(addr: std::net::IpAddr) -> net::IpAddress {
+        match addr {
+            std::net::IpAddr::V4(addr) => addr.into(),
+            std::net::IpAddr::V6(addr) => addr.into(),
+        }
+    }
+}
+
+impl From<std::net::SocketAddrV4> for net::SocketAddress {
+
+    fn from(addr: std::net::SocketAddrV4) -> net::SocketAddress {
+        let mut proto = net::SocketAddress::default();
+        proto.set_ip_address(net::IpAddress::from(*addr.ip()));
+        proto.set_port(u32::from(addr.port()));
+
+        proto
+    }
+}
+
+impl From<std::net::SocketAddrV6> for net::SocketAddress {
+
+    fn from(addr: std::net::SocketAddrV6) -> net::SocketAddress {
+        let mut proto = net::SocketAddress::default();
+        proto.set_ip_address(net::IpAddress::from(*addr.ip()));
+        proto.set_port(u32::from(addr.port()));
+
+        proto
+    }
+}
+
+impl From<std::net::SocketAddr> for net::SocketAddress {
+
+    fn from(addr: std::net::SocketAddr) -> net::SocketAddress {
+        match addr {
+            std::net::SocketAddr::V4(addr) => addr.into(),
+            std::net::SocketAddr::V6(addr) => addr.into(),
+        }
+    }
+}
+
+impl From<ospect::net::MacAddr> for net::MacAddress {
+
+    fn from(addr: ospect::net::MacAddr) -> net::MacAddress {
+        let mut proto = net::MacAddress::default();
+        proto.set_octets(Vec::from(addr.octets()));
+
+        proto
+    }
+}
+
+impl From<ospect::net::TcpState> for net::TcpState {
+
+    fn from(state: ospect::net::TcpState) -> net::TcpState {
+        use ospect::net::TcpState::*;
+        match state {
+            Listen => net::TcpState::LISTEN,
+            SynSent => net::TcpState::SYN_SENT,
+            SynReceived => net::TcpState::SYN_RECEIVED,
+            Established => net::TcpState::ESTABLISHED,
+            FinWait1 => net::TcpState::FIN_WAIT_1,
+            FinWait2 => net::TcpState::FIN_WAIT_2,
+            CloseWait => net::TcpState::CLOSE_WAIT,
+            Closing => net::TcpState::CLOSING,
+            LastAck => net::TcpState::LAST_ACK,
+            TimeWait => net::TcpState::TIME_WAIT,
+            Closed => net::TcpState::CLOSED,
+        }
+    }
+}
+
+impl From<ospect::net::TcpConnectionV4> for net::TcpConnection {
+
+    fn from(conn: ospect::net::TcpConnectionV4) -> net::TcpConnection {
+        let mut proto = net::TcpConnection::default();
+        proto.set_pid(conn.pid());
+        proto.set_local_address(conn.local_addr().into());
+        proto.set_remote_address(conn.remote_addr().into());
+        proto.set_state(conn.state().into());
+
+        proto
+    }
+}
+
+impl From<ospect::net::TcpConnectionV6> for net::TcpConnection {
+
+    fn from(conn: ospect::net::TcpConnectionV6) -> net::TcpConnection {
+        let mut proto = net::TcpConnection::default();
+        proto.set_pid(conn.pid());
+        proto.set_local_address(conn.local_addr().into());
+        proto.set_remote_address(conn.remote_addr().into());
+        proto.set_state(conn.state().into());
+
+        proto
+    }
+}
+
+impl From<ospect::net::TcpConnection> for net::TcpConnection {
+
+    fn from(conn: ospect::net::TcpConnection) -> net::TcpConnection {
+        match conn {
+            ospect::net::TcpConnection::V4(conn) => conn.into(),
+            ospect::net::TcpConnection::V6(conn) => conn.into(),
+        }
+    }
+}
+
+impl From<ospect::net::UdpConnectionV4> for net::UdpConnection {
+
+    fn from(conn: ospect::net::UdpConnectionV4) -> net::UdpConnection {
+        let mut proto = net::UdpConnection::default();
+        proto.set_pid(conn.pid());
+        proto.set_local_address(conn.local_addr().into());
+
+        proto
+    }
+}
+
+impl From<ospect::net::UdpConnectionV6> for net::UdpConnection {
+
+    fn from(conn: ospect::net::UdpConnectionV6) -> net::UdpConnection {
+        let mut proto = net::UdpConnection::default();
+        proto.set_pid(conn.pid());
+        proto.set_local_address(conn.local_addr().into());
+
+        proto
+    }
+}
+
+impl From<ospect::net::UdpConnection> for net::UdpConnection {
+
+    fn from(conn: ospect::net::UdpConnection) -> net::UdpConnection {
+        match conn {
+            ospect::net::UdpConnection::V4(conn) => conn.into(),
+            ospect::net::UdpConnection::V6(conn) => conn.into(),
+        }
+    }
+}
+
+impl From<ospect::net::Connection> for net::Connection {
+
+    fn from(conn: ospect::net::Connection) -> net::Connection {
+        let mut proto = net::Connection::default();
+        match conn {
+            ospect::net::Connection::Tcp(conn) => {
+                proto.set_tcp(conn.into());
+            }
+            ospect::net::Connection::Udp(conn) => {
+                proto.set_udp(conn.into());
             }
         }
+
+        proto
     }
+}
 
-    impl From<std::path::PathBuf> for fs::Path {
+impl From<ospect::net::Interface> for net::Interface {
 
-        fn from(path: std::path::PathBuf) -> fs::Path {
-            let mut proto = fs::Path::default();
-            proto.set_raw_bytes(crate::path::into_bytes(path));
+    fn from(iface: ospect::net::Interface) -> net::Interface {
+        let mut proto = net::Interface::default();
+        proto.set_name(iface.name().to_string_lossy().into_owned());
 
-            proto
+        if let Some(mac_addr) = iface.mac_addr() {
+            proto.set_mac_address((*mac_addr).into());
+        }
+
+        let ip_addrs = iface.ip_addrs()
+            .map(|ip_addr| net::IpAddress::from(*ip_addr))
+            .collect::<Vec<_>>();
+        proto.set_ip_addresses(ip_addrs.into());
+
+        proto
+    }
+}
+
+impl From<rrg::Log_Level> for log::LevelFilter {
+
+    fn from(level: rrg::Log_Level) -> log::LevelFilter {
+        match level {
+            rrg::Log_Level::UNSET => log::LevelFilter::Off,
+            rrg::Log_Level::ERROR => log::LevelFilter::Error,
+            rrg::Log_Level::WARN => log::LevelFilter::Warn,
+            rrg::Log_Level::INFO => log::LevelFilter::Info,
+            rrg::Log_Level::DEBUG => log::LevelFilter::Debug,
         }
     }
+}
 
+impl From<log::Level> for rrg::Log_Level {
 
-    impl TryFrom<fs::Path> for std::path::PathBuf {
-
-        type Error = ParsePathError;
-
-        fn try_from(mut proto: fs::Path) -> Result<std::path::PathBuf, ParsePathError> {
-            crate::path::from_bytes(proto.take_raw_bytes())
-                .map_err(ParsePathError)
+    fn from(level: log::Level) -> rrg::Log_Level {
+        match level {
+            log::Level::Error => rrg::Log_Level::ERROR,
+            log::Level::Warn => rrg::Log_Level::WARN,
+            log::Level::Info => rrg::Log_Level::INFO,
+            log::Level::Debug => rrg::Log_Level::DEBUG,
+            log::Level::Trace => rrg::Log_Level::DEBUG,
         }
     }
+}
 
-    impl From<std::fs::FileType> for fs::FileMetadata_Type {
+/// A type representing errors that can occur when parsing paths.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParsePathError(crate::path::ParseError);
 
-        fn from(file_type: std::fs::FileType) -> fs::FileMetadata_Type {
-            match () {
-                _ if file_type.is_file() => fs::FileMetadata_Type::FILE,
-                _ if file_type.is_dir() => fs::FileMetadata_Type::DIR,
-                _ if file_type.is_symlink() => fs::FileMetadata_Type::SYMLINK,
-                _ => fs::FileMetadata_Type::UNKNOWN,
-            }
-        }
+impl std::fmt::Display for ParsePathError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.0.fmt(fmt)
     }
+}
 
-    impl From<std::fs::Metadata> for fs::FileMetadata {
+impl std::error::Error for ParsePathError {
 
-        fn from(metadata: std::fs::Metadata) -> fs::FileMetadata {
-            use crate::into_timestamp;
-
-            let mut proto = fs::FileMetadata::default();
-            proto.set_field_type(metadata.file_type().into());
-            proto.set_size(metadata.len());
-
-            match metadata.accessed() {
-                Ok(time) => proto.set_access_time(into_timestamp(time)),
-                Err(_) => (), // TODO(@panhania): Consider logging.
-            }
-            match metadata.modified() {
-                Ok(time) => proto.set_modification_time(into_timestamp(time)),
-                Err(_) => (), // TODO(@panhania): Consider logging.
-            }
-            match metadata.created() {
-                Ok(time) => proto.set_creation_time(into_timestamp(time)),
-                Err(_) => (), // TODO(@panhania): Consider logging.
-            }
-
-            proto
-        }
-    }
-
-    impl From<ospect::fs::ExtAttr> for fs::FileExtAttr {
-
-        fn from(ext_attr: ospect::fs::ExtAttr) -> fs::FileExtAttr {
-            let mut proto = fs::FileExtAttr::default();
-            proto.set_value(ext_attr.value);
-
-            #[cfg(target_family = "unix")]
-            {
-                use std::os::unix::ffi::OsStringExt as _;
-                proto.set_name(ext_attr.name.into_vec());
-            }
-
-            // Extended attributes are not supported on Windows, so technically
-            // we don't need to have this code. But in case somebody creates an
-            // aritficial extended attribute code it is better to be at least
-            // somewhat covered.
-            #[cfg(target_family = "windows")]
-            {
-                let name_str = ext_attr.name.to_string_lossy();
-                proto.set_name(name_str.as_bytes().into());
-            }
-
-            proto
-        }
-    }
-
-    impl From<ospect::fs::Mount> for fs::Mount {
-
-        fn from(mount: ospect::fs::Mount) -> fs::Mount {
-            let mut proto = fs::Mount::default();
-            proto.set_name(mount.name);
-            proto.set_path(mount.path.into());
-            proto.set_fs_type(mount.fs_type);
-
-            proto
-        }
-    }
-
-    impl From<std::net::Ipv4Addr> for net::IpAddress {
-
-        fn from(addr: std::net::Ipv4Addr) -> net::IpAddress {
-            let mut proto = net::IpAddress::default();
-            proto.set_octets(Vec::from(addr.octets()));
-
-            proto
-        }
-    }
-
-    impl From<std::net::Ipv6Addr> for net::IpAddress {
-
-        fn from(addr: std::net::Ipv6Addr) -> net::IpAddress {
-            let mut proto = net::IpAddress::default();
-            proto.set_octets(Vec::from(addr.octets()));
-
-            proto
-        }
-    }
-
-    impl From<std::net::IpAddr> for net::IpAddress {
-
-        fn from(addr: std::net::IpAddr) -> net::IpAddress {
-            match addr {
-                std::net::IpAddr::V4(addr) => addr.into(),
-                std::net::IpAddr::V6(addr) => addr.into(),
-            }
-        }
-    }
-
-    impl From<std::net::SocketAddrV4> for net::SocketAddress {
-
-        fn from(addr: std::net::SocketAddrV4) -> net::SocketAddress {
-            let mut proto = net::SocketAddress::default();
-            proto.set_ip_address(net::IpAddress::from(*addr.ip()));
-            proto.set_port(u32::from(addr.port()));
-
-            proto
-        }
-    }
-
-    impl From<std::net::SocketAddrV6> for net::SocketAddress {
-
-        fn from(addr: std::net::SocketAddrV6) -> net::SocketAddress {
-            let mut proto = net::SocketAddress::default();
-            proto.set_ip_address(net::IpAddress::from(*addr.ip()));
-            proto.set_port(u32::from(addr.port()));
-
-            proto
-        }
-    }
-
-    impl From<std::net::SocketAddr> for net::SocketAddress {
-
-        fn from(addr: std::net::SocketAddr) -> net::SocketAddress {
-            match addr {
-                std::net::SocketAddr::V4(addr) => addr.into(),
-                std::net::SocketAddr::V6(addr) => addr.into(),
-            }
-        }
-    }
-
-    impl From<ospect::net::MacAddr> for net::MacAddress {
-
-        fn from(addr: ospect::net::MacAddr) -> net::MacAddress {
-            let mut proto = net::MacAddress::default();
-            proto.set_octets(Vec::from(addr.octets()));
-
-            proto
-        }
-    }
-
-    impl From<ospect::net::TcpState> for net::TcpState {
-
-        fn from(state: ospect::net::TcpState) -> net::TcpState {
-            use ospect::net::TcpState::*;
-            match state {
-                Listen => net::TcpState::LISTEN,
-                SynSent => net::TcpState::SYN_SENT,
-                SynReceived => net::TcpState::SYN_RECEIVED,
-                Established => net::TcpState::ESTABLISHED,
-                FinWait1 => net::TcpState::FIN_WAIT_1,
-                FinWait2 => net::TcpState::FIN_WAIT_2,
-                CloseWait => net::TcpState::CLOSE_WAIT,
-                Closing => net::TcpState::CLOSING,
-                LastAck => net::TcpState::LAST_ACK,
-                TimeWait => net::TcpState::TIME_WAIT,
-                Closed => net::TcpState::CLOSED,
-            }
-        }
-    }
-
-    impl From<ospect::net::TcpConnectionV4> for net::TcpConnection {
-
-        fn from(conn: ospect::net::TcpConnectionV4) -> net::TcpConnection {
-            let mut proto = net::TcpConnection::default();
-            proto.set_pid(conn.pid());
-            proto.set_local_address(conn.local_addr().into());
-            proto.set_remote_address(conn.remote_addr().into());
-            proto.set_state(conn.state().into());
-
-            proto
-        }
-    }
-
-    impl From<ospect::net::TcpConnectionV6> for net::TcpConnection {
-
-        fn from(conn: ospect::net::TcpConnectionV6) -> net::TcpConnection {
-            let mut proto = net::TcpConnection::default();
-            proto.set_pid(conn.pid());
-            proto.set_local_address(conn.local_addr().into());
-            proto.set_remote_address(conn.remote_addr().into());
-            proto.set_state(conn.state().into());
-
-            proto
-        }
-    }
-
-    impl From<ospect::net::TcpConnection> for net::TcpConnection {
-
-        fn from(conn: ospect::net::TcpConnection) -> net::TcpConnection {
-            match conn {
-                ospect::net::TcpConnection::V4(conn) => conn.into(),
-                ospect::net::TcpConnection::V6(conn) => conn.into(),
-            }
-        }
-    }
-
-    impl From<ospect::net::UdpConnectionV4> for net::UdpConnection {
-
-        fn from(conn: ospect::net::UdpConnectionV4) -> net::UdpConnection {
-            let mut proto = net::UdpConnection::default();
-            proto.set_pid(conn.pid());
-            proto.set_local_address(conn.local_addr().into());
-
-            proto
-        }
-    }
-
-    impl From<ospect::net::UdpConnectionV6> for net::UdpConnection {
-
-        fn from(conn: ospect::net::UdpConnectionV6) -> net::UdpConnection {
-            let mut proto = net::UdpConnection::default();
-            proto.set_pid(conn.pid());
-            proto.set_local_address(conn.local_addr().into());
-
-            proto
-        }
-    }
-
-    impl From<ospect::net::UdpConnection> for net::UdpConnection {
-
-        fn from(conn: ospect::net::UdpConnection) -> net::UdpConnection {
-            match conn {
-                ospect::net::UdpConnection::V4(conn) => conn.into(),
-                ospect::net::UdpConnection::V6(conn) => conn.into(),
-            }
-        }
-    }
-
-    impl From<ospect::net::Connection> for net::Connection {
-
-        fn from(conn: ospect::net::Connection) -> net::Connection {
-            let mut proto = net::Connection::default();
-            match conn {
-                ospect::net::Connection::Tcp(conn) => {
-                    proto.set_tcp(conn.into());
-                }
-                ospect::net::Connection::Udp(conn) => {
-                    proto.set_udp(conn.into());
-                }
-            }
-
-            proto
-        }
-    }
-
-    impl From<ospect::net::Interface> for net::Interface {
-
-        fn from(iface: ospect::net::Interface) -> net::Interface {
-            let mut proto = net::Interface::default();
-            proto.set_name(iface.name().to_string_lossy().into_owned());
-
-            if let Some(mac_addr) = iface.mac_addr() {
-                proto.set_mac_address((*mac_addr).into());
-            }
-
-            let ip_addrs = iface.ip_addrs()
-                .map(|ip_addr| net::IpAddress::from(*ip_addr))
-                .collect::<Vec<_>>();
-            proto.set_ip_addresses(ip_addrs.into());
-
-            proto
-        }
-    }
-
-    impl From<rrg::Log_Level> for log::LevelFilter {
-
-        fn from(level: rrg::Log_Level) -> log::LevelFilter {
-            match level {
-               rrg::Log_Level::UNSET => log::LevelFilter::Off,
-               rrg::Log_Level::ERROR => log::LevelFilter::Error,
-               rrg::Log_Level::WARN => log::LevelFilter::Warn,
-               rrg::Log_Level::INFO => log::LevelFilter::Info,
-               rrg::Log_Level::DEBUG => log::LevelFilter::Debug,
-            }
-        }
-    }
-
-    impl From<log::Level> for rrg::Log_Level {
-
-        fn from(level: log::Level) -> rrg::Log_Level {
-            match level {
-                log::Level::Error => rrg::Log_Level::ERROR,
-                log::Level::Warn => rrg::Log_Level::WARN,
-                log::Level::Info => rrg::Log_Level::INFO,
-                log::Level::Debug => rrg::Log_Level::DEBUG,
-                log::Level::Trace => rrg::Log_Level::DEBUG,
-            }
-        }
-    }
-
-    /// A type representing errors that can occur when parsing paths.
-    #[derive(Debug, PartialEq, Eq)]
-    pub struct ParsePathError(crate::path::ParseError);
-
-    impl std::fmt::Display for ParsePathError {
-
-        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-            self.0.fmt(fmt)
-        }
-    }
-
-    impl std::error::Error for ParsePathError {
-
-        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-            self.0.source()
-        }
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
     }
 }
 

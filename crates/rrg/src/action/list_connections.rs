@@ -38,10 +38,10 @@ where
 
 impl crate::response::Item for Item {
 
-    type Proto = rrg_proto::v2::list_connections::Result;
+    type Proto = rrg_proto::list_connections::Result;
 
-    fn into_proto(self) -> rrg_proto::v2::list_connections::Result {
-        let mut proto = rrg_proto::v2::list_connections::Result::new();
+    fn into_proto(self) -> rrg_proto::list_connections::Result {
+        let mut proto = rrg_proto::list_connections::Result::new();
         proto.set_connection(self.conn.into());
 
         proto

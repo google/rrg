@@ -75,7 +75,7 @@ where
 
 impl crate::request::Args for Args {
 
-    type Proto = rrg_proto::v2::get_file_contents::Args;
+    type Proto = rrg_proto::get_file_contents::Args;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
@@ -103,7 +103,7 @@ impl crate::request::Args for Args {
 
 impl crate::response::Item for Item {
 
-    type Proto = rrg_proto::v2::get_file_contents::Result;
+    type Proto = rrg_proto::get_file_contents::Result;
 
     fn into_proto(self) -> Self::Proto {
         let mut proto = Self::Proto::default();

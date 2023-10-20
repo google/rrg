@@ -28,7 +28,7 @@ impl From<Vec<u8>> for Blob {
 
 impl crate::response::Item for Blob {
 
-    type Proto = rrg_proto::v2::blob::Blob;
+    type Proto = rrg_proto::blob::Blob;
 
     fn into_proto(self) -> Self::Proto {
         let mut proto = Self::Proto::default();
