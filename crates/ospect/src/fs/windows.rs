@@ -30,6 +30,60 @@ where
     Err(std::io::ErrorKind::Unsupported.into())
 }
 
+/// Returns an iterator over mounted filesystems information.
+pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
+    use std::os::windows::ffi::OsStringExt as _;
+
+    // We have a choice here: we can have a fully lazy iterator by combining
+    // volume names and volume mount points iterators or collect into a vector
+    // and convert it to an iterator itself.
+    //
+    // The first option requires us to refactor iterator not to return buffers
+    // by copy but to return a heap-allocated strings and then have a clone on
+    // each of them each time we yield a result. This is not too bad, but what
+    // is worse that there is no easy way to combine the iterators because of
+    // `std::io::Result`. For this we have to use `flatten_ok` currently only
+    // available in the `itertools` crate.
+    //
+    // The second option is that the iterator is not really lazy and we pay for
+    // vector allocations. Because we don't expect the number of mount points to
+    // be huge, this should not be a big deal and go with this approach until
+    // something like `flatten_ok` is available in the standard library.
+    let mut results = Vec::new();
+
+    for name_buf in VolumeNames::new()? {
+        // TODO(rust-lang/rust#31436): Refactor once `try_blocks` are stable.
+        let result = || -> std::io::Result<()> {
+            let name_buf = name_buf?;
+            let name_len = name_buf.iter().position(|tchar| *tchar == 0)
+                .expect("volume name not null-terminated");
+
+            let fs_type_buf = volume_fs_type(&name_buf)?;
+            let fs_type_len = fs_type_buf.iter().position(|tchar| *tchar == 0)
+                .expect("volume filesystem name not null-terminated");
+
+            for mount_point in VolumeMountPoints::new(&name_buf)? {
+                results.push(Ok(Mount {
+                    source: OsString::from_wide(&name_buf[0..name_len])
+                        .to_string_lossy().into_owned(),
+                    target: mount_point,
+                    fs_type: OsString::from_wide(&fs_type_buf[0..fs_type_len])
+                        .to_string_lossy().into_owned(),
+                }));
+            }
+
+            Ok(())
+        }();
+
+        match result {
+            Ok(()) => (),
+            Err(error) => results.push(Err(error)),
+        }
+    }
+
+    Ok(results.into_iter())
+}
+
 type VolumeNameBuf = [u16; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
 type VolumeFsTypeBuf = [u16; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
 
@@ -330,58 +384,4 @@ fn volume_fs_type(name_buf: &VolumeNameBuf) -> std::io::Result<VolumeFsTypeBuf> 
     }
 
     Ok(fs_type_buf)
-}
-
-/// Returns an iterator over mounted filesystems information.
-pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
-    use std::os::windows::ffi::OsStringExt as _;
-
-    // We have a choice here: we can have a fully lazy iterator by combining
-    // volume names and volume mount points iterators or collect into a vector
-    // and convert it to an iterator itself.
-    //
-    // The first option requires us to refactor iterator not to return buffers
-    // by copy but to return a heap-allocated strings and then have a clone on
-    // each of them each time we yield a result. This is not too bad, but what
-    // is worse that there is no easy way to combine the iterators because of
-    // `std::io::Result`. For this we have to use `flatten_ok` currently only
-    // available in the `itertools` crate.
-    //
-    // The second option is that the iterator is not really lazy and we pay for
-    // vector allocations. Because we don't expect the number of mount points to
-    // be huge, this should not be a big deal and go with this approach until
-    // something like `flatten_ok` is available in the standard library.
-    let mut results = Vec::new();
-
-    for name_buf in VolumeNames::new()? {
-        // TODO(rust-lang/rust#31436): Refactor once `try_blocks` are stable.
-        let result = || -> std::io::Result<()> {
-            let name_buf = name_buf?;
-            let name_len = name_buf.iter().position(|tchar| *tchar == 0)
-                .expect("volume name not null-terminated");
-
-            let fs_type_buf = volume_fs_type(&name_buf)?;
-            let fs_type_len = fs_type_buf.iter().position(|tchar| *tchar == 0)
-                .expect("volume filesystem name not null-terminated");
-
-            for mount_point in VolumeMountPoints::new(&name_buf)? {
-                results.push(Ok(Mount {
-                    source: OsString::from_wide(&name_buf[0..name_len])
-                        .to_string_lossy().into_owned(),
-                    target: mount_point,
-                    fs_type: OsString::from_wide(&fs_type_buf[0..fs_type_len])
-                        .to_string_lossy().into_owned(),
-                }));
-            }
-
-            Ok(())
-        }();
-
-        match result {
-            Ok(()) => (),
-            Err(error) => results.push(Err(error)),
-        }
-    }
-
-    Ok(results.into_iter())
 }
