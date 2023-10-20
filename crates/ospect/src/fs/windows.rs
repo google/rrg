@@ -49,7 +49,9 @@ impl VolumeNames {
     fn new() -> std::io::Result<VolumeNames> {
         // TODO(rust-lang/rust#96097): Refactor with `MaybeUninit` once support
         // for arrays is stabilized.
-        let mut name_buf: VolumeNameBuf = [0; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
+        let mut name_buf = {
+            [0; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize]
+        };
 
         // SAFETY: This is just a call to the unsafe function as described in
         // the documentation [1]. We pass the buffer and its size and verify the
@@ -303,7 +305,9 @@ impl Iterator for VolumeMountPoints {
 fn volume_fs_type(name_buf: &VolumeNameBuf) -> std::io::Result<VolumeFsTypeBuf> {
     // TODO(rust-lang/rust#96097): Refactor with `MaybeUninit` once support
     // for arrays is stabilized.
-    let mut fs_type_buf: VolumeFsTypeBuf = [0; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize];
+    let mut fs_type_buf = {
+        [0; (windows_sys::Win32::Foundation::MAX_PATH + 1) as usize]
+    };
 
     // SAFETY: This is just a call to the unsafe function as described in
     // the documentation [1]. As root path we pass the volume name and then
