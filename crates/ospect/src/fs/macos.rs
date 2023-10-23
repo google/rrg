@@ -166,84 +166,51 @@ where
 
 /// Returns an iterator over mounted filesystems information.
 pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>> {
-    // We slap a lock on this function to at least partially mitigate issues
-    // mentioned in multiple comments below. Note however, thay this lock does
-    // not magically mean that there are no issues with the code below. Because
-    // we cannot ensure that nobody else calls `getmntinfo` directly, all the
-    // concerns are still valid, this only prevents users of the safe library
-    // from shooting themselves in the foot.
-    static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let mutex = MUTEX.lock()
-        .unwrap();
-
-    let mut buf = std::mem::MaybeUninit::<*mut libc::statfs>::uninit();
-
-    // SAFETY: This is actually not safe as the `getmntinfo` is most likely not
-    // thread-safe (the documentation is pretty vague on this but since it works
-    // through a reusable buffer, it almost certainly is not unless thread-local
-    // storage is involved). But since possible issue happens not on the Rust
-    // side, the worst can happen is we will get garbage data. So as long as we
-    // put limited trust in the string buffers we parse later we should be good.
-    let len = unsafe {
-        libc::getmntinfo(buf.as_mut_ptr(), libc::MNT_NOWAIT)
+    // SAFETY: We do the first call to `getfsstat` with null-pointer only to get
+    // the length of the buffer needed, as described in the docs [1, 2]. We then
+    // verify the result below (a negative value is returned upon failure and
+    // `errno` is set).
+    //
+    // [1]: https://man.freebsd.org/cgi/man.cgi?query=getfsstat
+    // [2]: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/getfsstat.2.html
+    let init_len = unsafe {
+        libc::getfsstat(std::ptr::null_mut(), 0, libc::MNT_NOWAIT)
     };
-    if len == 0 {
+    if init_len < 0 {
         return Err(std::io::Error::last_os_error());
     }
 
-    // SAFETY: We verified that the function call succeeded, so the pointer to
-    // the buffer is now initialized but the content of the buffer itself should
-    // not be trusted. This is why we stay with the pointer and not convert it
-    // to a Rust reference (that has to adhere to non-aliasing principles).
-    let buf = unsafe {
-        buf.assume_init()
+    let mut buf = Vec::with_capacity(init_len as usize);
+
+    let buf_size = init_len as usize * std::mem::size_of::<libc::statfs>();
+    let buf_size_int = libc::c_int::try_from(buf_size)
+        .expect("buffer size out of range");
+
+    // SAFETY: We created a buffer of the length returned by the first call to
+    // `getfsstat` and we pass it in the second call along with the size. Note
+    // that the size is expressed in bytes, not the number of elements. We then
+    // verify the result below.
+    let final_len = unsafe {
+        libc::getfsstat(buf.as_mut_ptr(), buf_size_int, libc::MNT_NOWAIT)
     };
+    if final_len < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
 
-    let mut mounts = Vec::with_capacity(len as usize);
-    for i in 0..(len as usize) {
-        // SAFETY: This is the tricky part as we dereference pointer that can be
-        // theoretically invalid at this point if another thread did call the
-        // `getmntinfo` function. We treat this function as a black box and
-        // consider two cases (we know for a fact that the first one is the real
-        // one from studying the source code but since it is not documented, we
-        // should not rely on that).
-        //
-        // In the first case there is a static buffer that is shared among all
-        // threads. This is the reason why we don't convert the pointer to slice
-        // ealier and continue to work with raw pointers. And this is also the
-        // source of data race: by the time we do the dereference below another
-        // thread might have already overriden the data. But the buffer itself
-        // is static and all entries have constant size so in the worst case we
-        // read some garbage data but we will not cause any buffer overflow (as
-        // the pointer before was valid and the buffer is of the same length).
-        //
-        // In the second case, buffers are dynamically allocated (which should
-        // not be the case because we are explicitly told not to free the memory
-        // allocated for the buffer). But then we have no issue as each call to
-        // `getmntinfo` gets different buffer.
-        //
-        // Theoretically there is a possibility of a third option: there is a
-        // static pointer to a dynamically allocated buffer that is shrunk or
-        // grown depending on how much results are going to take. We ignore that
-        // this is possible as it means that such an operating system is beyond
-        // any salvation anyway and we should let the bad guys roam there free.
-        let mut statfs = unsafe {
-            *buf.offset(i as isize)
-        };
+    // SAFETY: The call to `getfsstat` succeeded, so now the vector contents is
+    // initialized. Note that between the calls to `getfsstat` the number of
+    // mounts might have changed so we should not assume that `init_len` and
+    // `final_len` are equal. Because the documentation does not explicitly
+    // mention whether the returned value value is the number of filled entries
+    // or the number of entries in total (and we miss some due to the buffer
+    // being too short), just to be on the safe side we assume that only the
+    // smaller of the two has been initialized.
+    unsafe {
+        buf.set_len(std::cmp::min(init_len, final_len) as usize);
+    }
 
-        // As mentioned before, the strings can contain garbage data, i.e. they
-        // do not have to be properly null-terminated. For this reason we patch
-        // them up by putting an artificial zero at the end. This means that we
-        // can still return garbage names from this function but at leats there
-        // is no memory safety issue.
-        *statfs.f_fstypename.last_mut().unwrap() = 0;
-        *statfs.f_mntonname.last_mut().unwrap() = 0;
-        *statfs.f_mntfromname.last_mut().unwrap() = 0;
-
-        // SAFETY: Because we patch the strings above we are sure that all the
-        // safety invariants required by the `from_ptr` call are met. Note that
-        // `statfs` is now on the stack, so the lifetime of this reference is
-        // valid until the end of this scope.
+    Ok(buf.into_iter().map(|statfs| {
+        // SAFETY: `statfs` is properly initialized, so strings are valid.
         let name = unsafe {
             std::ffi::CStr::from_ptr(statfs.f_mntfromname.as_ptr())
         }.to_string_lossy();
@@ -258,21 +225,12 @@ pub fn mounts() -> std::io::Result<impl Iterator<Item = std::io::Result<Mount>>>
 
         use std::os::unix::ffi::OsStrExt as _;
 
-        mounts.push(Mount {
+        Ok(Mount {
             name: name.into_owned(),
             path: PathBuf::from(OsStr::from_bytes(path)),
             fs_type: fs_type.into_owned(),
-        });
-    }
-
-    // All the relevant buffer data is already copied to our vector, we can
-    // release the lock now and the buffer can be safely overridden.
-    // TODO(@panhania): Replace with `Mutex::unlock` once it is stabilized [1].
-    //
-    // [1]: https://github.com/rust-lang/rust/issues/81872
-    drop(mutex);
-
-    Ok(mounts.into_iter().map(Ok))
+        })
+    }))
 }
 
 #[cfg(test)]
