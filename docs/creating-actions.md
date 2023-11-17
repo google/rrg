@@ -16,21 +16,23 @@ and `Result` and have an appropriate license header.
 For example, when implementing an action called `list_foo`, you should create
 a `proto/rrg/action/list_foo.proto` file that looks like this:
 
-    // Copyright 2023 Google LLC
-    //
-    // Use of this source code is governed by an MIT-style license that can be found
-    // in the LICENSE file or at https://opensource.org/licenses/MIT.
-    syntax = "proto3";
+  ~~~protobuf
+  // Copyright 2023 Google LLC
+  //
+  // Use of this source code is governed by an MIT-style license that can be found
+  // in the LICENSE file or at https://opensource.org/licenses/MIT.
+  syntax = "proto3";
 
-    package rrg.action.list_foo;
+  package rrg.action.list_foo;
 
-    message Args {
-      // TODO.
-    }
+  message Args {
+    // TODO.
+  }
 
-    message Result {
-      // TODO.
-    }
+  message Result {
+    // TODO.
+  }
+  ~~~
 
 The path to the created file needs to be added to the [build script][1] of the
 `rrg-proto` crate.
@@ -49,17 +51,19 @@ list of default features, if it makes sense for your action.
 If your action needs some third-party dependencies that are specific to it, make
 them optional and use feature dependencies to specify them, e.g.:
 
-    action-list_foo = ["dep:bar", "dep:baz"]
+  ~~~toml
+  action-list_foo = ["dep:bar", "dep:baz"]
 
-    (...)
+  (...)
 
-    [dependencies.bar]
-    version = "1.33.7"
-    optional = true
+  [dependencies.bar]
+  version = "1.33.7"
+  optional = true
 
-    [dependencies.baz]
-    version = "0.42.0"
-    optional = true
+  [dependencies.baz]
+  version = "0.42.0"
+  optional = true
+  ~~~
 
 ### Create a Rust module
 
@@ -76,52 +80,56 @@ should implement a `handle` method that executes the action.
 For example, when implementing an action called `list_foo`, you should create
 a `crates/rrg/src/action/list_foo.rs` file that looks like this:
 
-    // Copyright 2023 Google LLC
-    //
-    // Use of this source code is governed by an MIT-style license that can be found
-    // in the LICENSE file or at https://opensource.org/licenses/MIT.
+  ~~~rust
+  // Copyright 2023 Google LLC
+  //
+  // Use of this source code is governed by an MIT-style license that can be found
+  // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-    /// Arguments of the `list_foo` action.
-    pub struct Args {
-        // TODO.
-    }
+  /// Arguments of the `list_foo` action.
+  pub struct Args {
+      // TODO.
+  }
 
-    /// Result of the `list_foo` action.
-    pub struct Item {
-        // TODO.
-    }
+  /// Result of the `list_foo` action.
+  pub struct Item {
+      // TODO.
+  }
 
-    /// Handles invocations of the `list_foo` action.
-    pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
-    where
-        S: crate::session::Session,
-    {
-        todo!()
-    }
+  /// Handles invocations of the `list_foo` action.
+  pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
+  where
+      S: crate::session::Session,
+  {
+      todo!()
+  }
 
-    impl crate::request::Args for Args {
+  impl crate::request::Args for Args {
 
-        type Proto = rrg_proto::list_foo::Args;
+      type Proto = rrg_proto::list_foo::Args;
 
-        fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
-            todo!()
-        }
-    }
+      fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
+          todo!()
+      }
+  }
 
-    impl crate::response::Item for Item {
+  impl crate::response::Item for Item {
 
-        type Proto = rrg_proto::list_foo::Result;
+      type Proto = rrg_proto::list_foo::Result;
 
-        fn into_proto(self) -> Self::Proto {
-            todo!()
-        }
-    }
+      fn into_proto(self) -> Self::Proto {
+          todo!()
+      }
+  }
+  ~~~
 
 This file has to be declared as a child of the [`rrg::action`] module and should
 be hidden behind the feature declared earlier:
 
-    #[cfg(feature = "action-list_foo")]
-    pub mod list_foo;
+  ~~~rust
+  #[cfg(feature = "action-list_foo")]
+  pub mod list_foo;
+  ~~~
 
 ### Register the action
 
