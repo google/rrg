@@ -9,9 +9,9 @@ steps outlined in this guide for more details.
 
 Each action should define its arguments and result as Protocol Buffer messages
 in its own package using the `proto3` syntax. All `.proto` definitions live in
-the `proto/rrg/action` subfolder. The file (and package) should be named as the
-action it corresponds to and should contain at least two messages named `Args`
-and `Result` and have an appropriate license header.
+the [`proto/rrg/action`][1] subfolder. The file (and the package) should have
+the same name as the action it corresponds to and should contain at least two
+messages named `Args` and `Result` and have an appropriate license header.
 
 For example, when implementing an action called `list_foo`, you should create
 a `proto/rrg/action/list_foo.proto` file that looks like this:
@@ -34,7 +34,7 @@ a `proto/rrg/action/list_foo.proto` file that looks like this:
   }
   ~~~
 
-The path to the created file needs to be added to the [build script][1] of the
+The path to the created file needs to be added to the [build script][2] of the
 `rrg-proto` crate.
 
 ### Define a Cargo feature
@@ -43,7 +43,7 @@ Every action needs to be hidden behind a feature. This way actions that are
 irrelevant for specific deployments can be completely compiled-out from the
 agent executable making it smaller and potentially more secure.
 
-Action features are defined in the [Cargo manifest][2] of the main `rrg` crate
+Action features are defined in the [Cargo manifest][3] of the main `rrg` crate
 and should use `action-` prefix. For example, a feature flag for the `list_foo`
 action would be named `action-list_foo`. You can also add the feature to the
 list of default features, if it makes sense for your action.
@@ -136,7 +136,7 @@ be hidden behind the feature declared earlier:
 Finally, the action has to be registered so that requests can actually be routed
 to invoke it.
 
-First, you need to extend the [RRG protocol][3]. Add the new variant to the
+First, you need to extend the [RRG protocol][4]. Add the new variant to the
 `Action` enum that has the same name as the action. If you are contributing
 upstream, pick and use the first available field number. If you are developing
 an action that is internal to your deployment, use one of the field numbers from
@@ -153,9 +153,10 @@ branch with the corresponding feature to avoid issues when compiling with the
 feature disabled. 
 
 
-[1]: https://github.com/google/rrg/blob/master/crates/rrg-proto/build.rs
-[2]: https://github.com/google/rrg/blob/master/crates/rrg/Cargo.toml
-[3]: https://github.com/google/rrg/blob/master/proto/rrg.proto
+[1]: https://github.com/google/rrg/blob/master/proto/rrg/action
+[2]: https://github.com/google/rrg/blob/master/crates/rrg-proto/build.rs
+[3]: https://github.com/google/rrg/blob/master/crates/rrg/Cargo.toml
+[4]: https://github.com/google/rrg/blob/master/proto/rrg.proto
 
 [`rrg::action`]: https://github.com/google/rrg/blob/master/crates/rrg/src/action.rs
 [`rrg::request`]: https://github.com/google/rrg/blob/master/crates/rrg/src/request.rs
