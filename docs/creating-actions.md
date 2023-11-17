@@ -147,7 +147,7 @@ Once the Protocol Buffers enum has the new field, add a new variant to the Rust
 will guide you to towards updating the existing code to cover the new variant in
 all the required branches.
 
-As the last step, update the `dispatch` function in the [`rrg::request`] module
+As the last step, update the `dispatch` function in the [`rrg::action`] module
 and route the call to the `handle` function you defined. Remember to guard the
 branch with the corresponding feature to avoid issues when compiling with the
 feature disabled. 
