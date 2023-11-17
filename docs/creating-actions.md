@@ -2,8 +2,8 @@ Creating actions
 ================
 
 Creating new actions is easy but requires some boilerplate to be written first.
-You can take a look at commit 845c87b7c3373abacf41a17729ad95e1d6ab046a to see
-an example of that. Follow the steps outlined in this guide for more details.
+You can take a look at commit [`845c87b`] to see an example of that. Follow the
+steps outlined in this guide for more details.
 
 ### Define Protocol Buffers messages
 
@@ -151,3 +151,5 @@ feature disabled.
 
 [`rrg::action`]: https://github.com/google/rrg/blob/master/crates/rrg/src/action.rs
 [`rrg::request`]: https://github.com/google/rrg/blob/master/crates/rrg/src/request.rs
+
+[`845c87b`]: https://github.com/google/rrg/commit/845c87b7c3373abacf41a17729ad95e1d6ab046a
