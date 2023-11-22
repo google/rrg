@@ -40,14 +40,14 @@ impl TryFrom<fs::Path> for std::path::PathBuf {
     }
 }
 
-impl From<std::fs::FileType> for fs::FileMetadata_Type {
+impl From<std::fs::FileType> for fs::file_metadata::Type {
 
-    fn from(file_type: std::fs::FileType) -> fs::FileMetadata_Type {
+    fn from(file_type: std::fs::FileType) -> fs::file_metadata::Type {
         match () {
-            _ if file_type.is_file() => fs::FileMetadata_Type::FILE,
-            _ if file_type.is_dir() => fs::FileMetadata_Type::DIR,
-            _ if file_type.is_symlink() => fs::FileMetadata_Type::SYMLINK,
-            _ => fs::FileMetadata_Type::UNKNOWN,
+            _ if file_type.is_file() => fs::file_metadata::Type::FILE,
+            _ if file_type.is_dir() => fs::file_metadata::Type::DIR,
+            _ if file_type.is_symlink() => fs::file_metadata::Type::SYMLINK,
+            _ => fs::file_metadata::Type::UNKNOWN,
         }
     }
 }
@@ -56,7 +56,7 @@ impl From<std::fs::Metadata> for fs::FileMetadata {
 
     fn from(metadata: std::fs::Metadata) -> fs::FileMetadata {
         let mut proto = fs::FileMetadata::default();
-        proto.set_field_type(metadata.file_type().into());
+        proto.set_type(metadata.file_type().into());
         proto.set_size(metadata.len());
 
         match metadata.accessed() {
@@ -310,28 +310,28 @@ impl From<ospect::net::Interface> for net::Interface {
     }
 }
 
-impl From<rrg::Log_Level> for log::LevelFilter {
+impl From<rrg::log::Level> for log::LevelFilter {
 
-    fn from(level: rrg::Log_Level) -> log::LevelFilter {
+    fn from(level: rrg::log::Level) -> log::LevelFilter {
         match level {
-            rrg::Log_Level::UNSET => log::LevelFilter::Off,
-            rrg::Log_Level::ERROR => log::LevelFilter::Error,
-            rrg::Log_Level::WARN => log::LevelFilter::Warn,
-            rrg::Log_Level::INFO => log::LevelFilter::Info,
-            rrg::Log_Level::DEBUG => log::LevelFilter::Debug,
+            rrg::log::Level::UNSET => log::LevelFilter::Off,
+            rrg::log::Level::ERROR => log::LevelFilter::Error,
+            rrg::log::Level::WARN => log::LevelFilter::Warn,
+            rrg::log::Level::INFO => log::LevelFilter::Info,
+            rrg::log::Level::DEBUG => log::LevelFilter::Debug,
         }
     }
 }
 
-impl From<log::Level> for rrg::Log_Level {
+impl From<log::Level> for rrg::log::Level {
 
-    fn from(level: log::Level) -> rrg::Log_Level {
+    fn from(level: log::Level) -> rrg::log::Level {
         match level {
-            log::Level::Error => rrg::Log_Level::ERROR,
-            log::Level::Warn => rrg::Log_Level::WARN,
-            log::Level::Info => rrg::Log_Level::INFO,
-            log::Level::Debug => rrg::Log_Level::DEBUG,
-            log::Level::Trace => rrg::Log_Level::DEBUG,
+            log::Level::Error => rrg::log::Level::ERROR,
+            log::Level::Warn => rrg::log::Level::WARN,
+            log::Level::Info => rrg::log::Level::INFO,
+            log::Level::Debug => rrg::log::Level::DEBUG,
+            log::Level::Trace => rrg::log::Level::DEBUG,
         }
     }
 }
@@ -467,13 +467,13 @@ pub fn secs(time: std::time::SystemTime) -> Result<u64, TimeConversionError> {
 /// let timestamp = rrg_proto::into_timestamp(std::time::SystemTime::now());
 /// assert!(timestamp.seconds > 0);
 /// ```
-pub fn into_timestamp(time: std::time::SystemTime) -> protobuf::well_known_types::Timestamp {
+pub fn into_timestamp(time: std::time::SystemTime) -> protobuf::well_known_types::timestamp::Timestamp {
     let since_epoch = time.duration_since(std::time::UNIX_EPOCH)
         .expect("pre-epoch time");
 
-    let mut proto = protobuf::well_known_types::Timestamp::default();
-    proto.set_nanos(since_epoch.subsec_nanos() as i32);
-    proto.set_seconds(since_epoch.as_secs() as i64);
+    let mut proto = protobuf::well_known_types::timestamp::Timestamp::default();
+    proto.nanos = since_epoch.subsec_nanos() as i32;
+    proto.seconds = since_epoch.as_secs() as i64;
 
     proto
 }
@@ -485,9 +485,9 @@ pub fn into_timestamp(time: std::time::SystemTime) -> protobuf::well_known_types
 /// # Examples
 ///
 /// ```
-/// let mut proto = protobuf::well_known_types::Duration::default();
-/// proto.set_seconds(123);
-/// proto.set_nanos(456789000);
+/// let mut proto = protobuf::well_known_types::duration::Duration::default();
+/// proto.seconds = 123;
+/// proto.nanos = 456789000;
 ///
 /// let duration = rrg_proto::try_from_duration(proto)
 ///     .unwrap();
@@ -495,23 +495,23 @@ pub fn into_timestamp(time: std::time::SystemTime) -> protobuf::well_known_types
 /// ```
 ///
 /// ```
-/// let mut proto = protobuf::well_known_types::Duration::default();
-/// proto.set_seconds(-1337);
+/// let mut proto = protobuf::well_known_types::duration::Duration::default();
+/// proto.seconds = -1337;
 ///
 /// let error = rrg_proto::try_from_duration(proto)
 ///     .unwrap_err();
 /// assert_eq!(error.kind(), rrg_proto::ParseDurationErrorKind::NegativeSecs);
 /// ```
 pub fn try_from_duration(
-    duration: protobuf::well_known_types::Duration,
+    duration: protobuf::well_known_types::duration::Duration,
 ) -> Result<std::time::Duration, ParseDurationError>
 {
-    let secs = u64::try_from(duration.get_seconds())
+    let secs = u64::try_from(duration.seconds)
         .map_err(|_| ParseDurationError {
             kind: ParseDurationErrorKind::NegativeSecs,
         })?;
 
-    let nanos = u64::try_from(duration.get_nanos())
+    let nanos = u64::try_from(duration.nanos)
         .map_err(|_| ParseDurationError {
             kind: ParseDurationErrorKind::NegativeNanos,
         })?;

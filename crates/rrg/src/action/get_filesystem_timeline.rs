@@ -206,7 +206,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.get_path().to_owned());
+        entries.sort_by_key(|entry| entry.path().to_owned());
 
         assert_eq!(entries.len(), 3);
         assert_eq!(path(&entries[0]), Some(tempdir.path().join("a")));
@@ -229,7 +229,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.get_path().to_owned());
+        entries.sort_by_key(|entry| entry.path().to_owned());
 
         assert_eq!(entries.len(), 2);
         assert_eq!(path(&entries[0]), Some(tempdir_path.join("a")));
@@ -257,7 +257,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.get_path().to_owned());
+        entries.sort_by_key(|entry| entry.path().to_owned());
 
         assert_eq!(entries.len(), 2);
         assert_eq!(path(&entries[0]), Some(dir_path));
@@ -283,7 +283,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.get_path().to_owned());
+        entries.sort_by_key(|entry| entry.path().to_owned());
 
         assert_eq!(entries.len(), 2);
 
@@ -308,24 +308,24 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.get_path().to_owned());
+        entries.sort_by_key(|entry| entry.path().to_owned());
 
         assert_eq!(entries.len(), 1);
         assert_eq!(path(&entries[0]), Some(tempdir.path().join("foo")));
-        assert_eq!(entries[0].get_size(), 9);
+        assert_eq!(entries[0].size(), 9);
 
         // Information about the file mode, user and group identifiers is
         // available only on UNIX systems.
         #[cfg(target_family = "unix")]
         {
-            let mode = entries[0].get_unix_mode() as libc::mode_t;
+            let mode = entries[0].unix_mode() as libc::mode_t;
             assert_eq!(mode & libc::S_IFMT, libc::S_IFREG);
 
             let uid = unsafe { libc::getuid() };
-            assert_eq!(entries[0].get_unix_uid(), uid.into());
+            assert_eq!(entries[0].unix_uid(), uid.into());
 
             let gid = unsafe { libc::getgid() };
-            assert_eq!(entries[0].get_unix_gid(), gid.into());
+            assert_eq!(entries[0].unix_gid(), gid.into());
         }
     }
 
@@ -348,7 +348,7 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let mut entries = entries(&session);
-        entries.sort_by_key(|entry| entry.get_path().to_owned());
+        entries.sort_by_key(|entry| entry.path().to_owned());
 
         assert_eq!(entries.len(), 2);
         assert_eq!(path(&entries[0]), Some(file_path));
@@ -356,7 +356,7 @@ mod tests {
 
         // Information about inode is not available on Windows.
         #[cfg(not(target_os = "windows"))]
-        assert_eq!(entries[0].get_unix_ino(), entries[1].get_unix_ino());
+        assert_eq!(entries[0].unix_ino(), entries[1].unix_ino());
     }
 
     #[test]
@@ -397,7 +397,7 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(path(&entries[0]), Some(temp_path));
 
-        let attributes = entries[0].get_windows_attributes() as u32;
+        let attributes = entries[0].windows_attributes() as u32;
         assert_eq!(attributes & FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_HIDDEN);
     }
 
@@ -429,6 +429,6 @@ mod tests {
     fn path(
         entry: &rrg_proto::get_filesystem_timeline::Entry,
     ) -> Option<PathBuf> {
-        rrg_proto::path::from_bytes(entry.get_path().to_owned()).ok()
+        rrg_proto::path::from_bytes(entry.path().to_owned()).ok()
     }
 }

@@ -14,17 +14,17 @@ use crate::RequestId;
 /// include a bit of "impurity" to the conversion (e.g. logging).
 pub trait Item: Sized {
     /// Low-level Protocol Buffers type representing the action results.
-    type Proto: protobuf::Message + Default;
+    type Proto: protobuf::MessageFull + Default;
 
     /// Converts an action result ot its low-level representation.
     fn into_proto(self) -> Self::Proto;
 }
 
 impl Item for () {
-    type Proto = protobuf::well_known_types::Empty;
+    type Proto = protobuf::well_known_types::empty::Empty;
 
-    fn into_proto(self) -> protobuf::well_known_types::Empty {
-        protobuf::well_known_types::Empty::new()
+    fn into_proto(self) -> protobuf::well_known_types::empty::Empty {
+        protobuf::well_known_types::empty::Empty::new()
     }
 }
 
@@ -357,7 +357,7 @@ where
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a result");
 
-        proto.mut_result().set_value(result_bytes);
+        proto.mut_result().value = result_bytes;
 
         proto
     }
@@ -418,7 +418,7 @@ where
 {
     fn from(parcel: Parcel<I>) -> rrg_proto::rrg::Parcel {
         let payload_proto = parcel.payload.into_proto();
-        let payload_any = protobuf::well_known_types::Any::pack(&payload_proto)
+        let payload_any = protobuf::well_known_types::any::Any::pack(&payload_proto)
             // The should not really ever fail, assumming that the protobuf
             // message we are working with is well-formed and we are not out of
             // memory.

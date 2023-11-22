@@ -102,7 +102,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             LIST_USERS => Ok(Action::ListUsers),
             GET_FILESYSTEM_TIMELINE => Ok(Action::GetFilesystemTimeline),
             _ => {
-                let value = protobuf::ProtobufEnum::value(&proto);
+                let value = protobuf::Enum::value(&proto);
                 Err(UnknownAction { value })
             },
         }
@@ -262,11 +262,11 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
         use rrg_proto::try_from_duration;
 
         let request_id = RequestId {
-            flow_id: proto.get_flow_id(),
-            request_id: proto.get_request_id(),
+            flow_id: proto.flow_id(),
+            request_id: proto.request_id(),
         };
 
-        let action = match proto.get_action().try_into() {
+        let action = match proto.action().try_into() {
             Ok(action) => action,
             Err(action) => return Err(ParseRequestError {
                 request_id: Some(request_id),
@@ -275,7 +275,7 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
             }),
         };
 
-        let network_bytes_limit = match proto.get_network_bytes_limit() {
+        let network_bytes_limit = match proto.network_bytes_limit() {
             0 => None,
             limit => Some(limit),
         };
@@ -305,11 +305,11 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
         Ok(Request {
             id: request_id,
             action,
-            serialized_args: proto.take_args().take_value(),
+            serialized_args: proto.take_args().value,
             network_bytes_limit,
             cpu_time_limit,
             real_time_limit,
-            log_level: proto.get_log_level().into(),
+            log_level: proto.log_level().into(),
         })
     }
 }
@@ -388,9 +388,9 @@ impl std::fmt::Display for ParseRequestErrorKind {
     }
 }
 
-impl From<ParseRequestErrorKind> for rrg_proto::rrg::Status_Error_Type {
+impl From<ParseRequestErrorKind> for rrg_proto::rrg::status::error::Type {
 
-    fn from(kind: ParseRequestErrorKind) -> rrg_proto::rrg::Status_Error_Type {
+    fn from(kind: ParseRequestErrorKind) -> rrg_proto::rrg::status::error::Type {
         use ParseRequestErrorKind::*;
 
         match kind {
@@ -424,9 +424,9 @@ pub trait Args: Sized {
 
 impl Args for () {
 
-    type Proto = protobuf::well_known_types::Empty;
+    type Proto = protobuf::well_known_types::empty::Empty;
 
-    fn from_proto(_: protobuf::well_known_types::Empty) -> Result<(), ParseArgsError> {
+    fn from_proto(_: protobuf::well_known_types::empty::Empty) -> Result<(), ParseArgsError> {
         Ok(())
     }
 }
@@ -505,9 +505,9 @@ mod tests {
 
     #[test]
     fn action_try_from_proto_all_known() {
-        use protobuf::ProtobufEnum as _;
+        use protobuf::Enum as _;
 
-        for action in rrg_proto::rrg::Action::values() {
+        for action in rrg_proto::rrg::Action::VALUES {
             if *action == rrg_proto::rrg::Action::UNKNOWN {
                 continue;
             }

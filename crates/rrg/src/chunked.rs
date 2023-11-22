@@ -28,12 +28,12 @@ use byteorder::BigEndian;
 /// ```no_run
 /// use std::fs::File;
 ///
-/// fn string<S>(value: S) -> protobuf::well_known_types::StringValue
+/// fn string<S>(value: S) -> protobuf::well_known_types::wrappers::StringValue
 /// where
 ///     S: Into<String>,
 /// {
-///     let mut proto = protobuf::well_known_types::StringValue::new();
-///     proto.set_value(value.into());
+///     let mut proto = protobuf::well_known_types::wrappers::StringValue::new();
+///     proto.value = value.into();
 ///
 ///     proto
 /// }
@@ -74,8 +74,8 @@ where
 ///
 /// let file = File::open("input.chunked").unwrap();
 /// for (idx, msg) in rrg::chunked::decode(file).enumerate() {
-///     let msg: protobuf::well_known_types::StringValue = msg.unwrap();
-///     println!("message #{}: {:?}", idx, msg.get_value());
+///     let msg: protobuf::well_known_types::wrappers::StringValue = msg.unwrap();
+///     println!("message #{}: {:?}", idx, msg.value);
 /// }
 /// ```
 pub fn decode<R, M>(buf: R) -> Decode<R, M>
@@ -222,11 +222,14 @@ pub mod tests {
 
     use super::*;
 
-    use protobuf::well_known_types::{Empty, StringValue};
+    use protobuf::well_known_types::{
+        empty::Empty,
+        wrappers::StringValue,
+    };
 
     fn string<S: Into<String>>(value: S) -> StringValue {
         let mut proto = StringValue::new();
-        proto.set_value(value.into());
+        proto.value = value.into();
 
         proto
     }

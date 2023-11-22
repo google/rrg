@@ -246,11 +246,11 @@ mod tests {
 
     impl crate::response::Item for StringResponse {
 
-        type Proto = protobuf::well_known_types::StringValue;
+        type Proto = protobuf::well_known_types::wrappers::StringValue;
 
-        fn into_proto(self) -> protobuf::well_known_types::StringValue {
-            let mut proto = protobuf::well_known_types::StringValue::new();
-            proto.set_value(self.0);
+        fn into_proto(self) -> protobuf::well_known_types::wrappers::StringValue {
+            let mut proto = protobuf::well_known_types::wrappers::StringValue::new();
+            proto.value = self.0;
 
             proto
         }
