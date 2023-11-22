@@ -13,6 +13,7 @@ const PROTOS: &'static [&'static str] = &[
     "../../proto/rrg/os.proto",
     "../../proto/rrg/startup.proto",
     "../../proto/rrg/action/get_file_contents.proto",
+    "../../proto/rrg/action/get_file_hash.proto",
     "../../proto/rrg/action/get_file_metadata.proto",
     "../../proto/rrg/action/get_filesystem_timeline.proto",
     "../../proto/rrg/action/get_system_metadata.proto",
