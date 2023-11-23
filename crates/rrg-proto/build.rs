@@ -41,7 +41,6 @@ fn main() {
     protobuf_codegen::Codegen::new()
         .pure()
         .out_dir(&proto_out_dir)
-        .include("../../vendor/protobuf/src")
         .include("../../proto")
         .inputs(PROTOS)
         .customize(customize)
