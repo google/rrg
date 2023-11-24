@@ -342,17 +342,16 @@ where
     I: Item,
 {
     fn from(reply: Reply<I>) -> rrg_proto::rrg::Response {
-        let mut proto = rrg_proto::rrg::Response::new();
-        proto.set_flow_id(reply.request_id.flow_id());
-        proto.set_request_id(reply.request_id.request_id());
-        proto.set_response_id(reply.response_id.0);
-
         let result_proto = reply.item.into_proto();
         let result_any = protobuf::well_known_types::any::Any::pack(&result_proto)
             // This should only fail in case we are out of memory, which we are
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a result");
 
+        let mut proto = rrg_proto::rrg::Response::new();
+        proto.set_flow_id(reply.request_id.flow_id());
+        proto.set_request_id(reply.request_id.request_id());
+        proto.set_response_id(reply.response_id.0);
         proto.set_result(result_any);
 
         proto
