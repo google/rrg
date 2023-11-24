@@ -414,10 +414,9 @@ where
     fn from(parcel: Parcel<I>) -> rrg_proto::rrg::Parcel {
         let payload_proto = parcel.payload.into_proto();
         let payload_any = protobuf::well_known_types::any::Any::pack(&payload_proto)
-            // The should not really ever fail, assumming that the protobuf
-            // message we are working with is well-formed and we are not out of
-            // memory.
-            .unwrap();
+            // This should only fail in case we are out of memory, which we are
+            // almost certainly not (and if we are, we have bigger issue).
+            .expect("failed to serialize a parcel");
 
         let mut proto = rrg_proto::rrg::Parcel::new();
         proto.set_sink(parcel.sink.into());
