@@ -86,6 +86,7 @@ Structure
 ### Directories
 
   * `crates/` — All Rust crates that the project consists of live here.
+  * `docs/` — All non-code documentation and guides live here.
   * `proto/` — All Protocol Buffers definitions describing RRG's API live here.
 
 ### Crates
