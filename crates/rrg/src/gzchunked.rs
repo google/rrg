@@ -43,12 +43,12 @@
 /// use std::fs::File;
 /// use std::io::Write as _;
 ///
-/// fn string<S>(value: S) -> protobuf::well_known_types::StringValue
+/// fn string<S>(value: S) -> protobuf::well_known_types::wrappers::StringValue
 /// where
 ///     S: Into<String>,
 /// {
-///     let mut proto = protobuf::well_known_types::StringValue::new();
-///     proto.set_value(value.into());
+///     let mut proto = protobuf::well_known_types::wrappers::StringValue::new();
+///     proto.value = value.into();
 ///
 ///     proto
 /// }
@@ -101,8 +101,8 @@ where
 /// let files = paths.iter().map(|path| File::open(path).unwrap());
 ///
 /// for (idx, msg) in rrg::gzchunked::decode(files).enumerate() {
-///     let msg: protobuf::well_known_types::StringValue = msg.unwrap();
-///     println!("item #{}: {:?}", idx, msg.get_value());
+///     let msg: protobuf::well_known_types::wrappers::StringValue = msg.unwrap();
+///     println!("item #{}: {:?}", idx, msg.value);
 /// }
 /// ```
 pub fn decode<I, M>(iter: I) -> impl Iterator<Item=std::io::Result<M>>
@@ -231,18 +231,21 @@ mod tests {
 
     use super::*;
 
-    use protobuf::well_known_types::{Empty, BytesValue, StringValue};
+    use protobuf::well_known_types::{
+        empty::Empty,
+        wrappers::{BytesValue, StringValue},
+    };
 
     fn string<S: Into<String>>(value: S) -> StringValue {
         let mut proto = StringValue::new();
-        proto.set_value(value.into());
+        proto.value = value.into();
 
         proto
     }
 
     fn bytes<B: Into<Vec<u8>>>(value: B) -> BytesValue {
         let mut proto = BytesValue::new();
-        proto.set_value(value.into());
+        proto.value = value.into();
 
         proto
     }

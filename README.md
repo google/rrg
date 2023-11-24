@@ -38,13 +38,6 @@ it you also need to [setup Fleetspeak][fleetspeak-guide] and [GRR][grr-guide].
 [fleetspeak-guide]: https://github.com/google/fleetspeak/blob/master/docs/guide.md
 [grr-guide]: https://grr-doc.readthedocs.io/en/latest/fleetspeak/from-source.html
 
-### Cloning
-
-Because RRG repository vendors some of its dependencies as Git submodules, it
-has to be cloned appropriately:
-
-    $ git clone --recurse-submodules https://github.com/google/rrg
-
 ### Building
 
 RRG uses Cargo for everything, so building it is as easy as running:
@@ -94,7 +87,6 @@ Structure
 
   * `crates/` — All Rust crates that the project consists of live here.
   * `proto/` — All Protocol Buffers definitions describing RRG's API live here.
-  * `vendor/` — All non-Rust dependencies are vendored as Git submodules here.
 
 ### Crates
 

@@ -14,17 +14,17 @@ use crate::RequestId;
 /// include a bit of "impurity" to the conversion (e.g. logging).
 pub trait Item: Sized {
     /// Low-level Protocol Buffers type representing the action results.
-    type Proto: protobuf::Message + Default;
+    type Proto: protobuf::MessageFull + Default;
 
     /// Converts an action result ot its low-level representation.
     fn into_proto(self) -> Self::Proto;
 }
 
 impl Item for () {
-    type Proto = protobuf::well_known_types::Empty;
+    type Proto = protobuf::well_known_types::empty::Empty;
 
-    fn into_proto(self) -> protobuf::well_known_types::Empty {
-        protobuf::well_known_types::Empty::new()
+    fn into_proto(self) -> protobuf::well_known_types::empty::Empty {
+        protobuf::well_known_types::empty::Empty::new()
     }
 }
 
@@ -342,22 +342,17 @@ where
     I: Item,
 {
     fn from(reply: Reply<I>) -> rrg_proto::rrg::Response {
-        let mut proto = rrg_proto::rrg::Response::new();
-        proto.set_flow_id(reply.request_id.flow_id());
-        proto.set_request_id(reply.request_id.request_id());
-        proto.set_response_id(reply.response_id.0);
-
-        // TODO(@panhania): Migrate this code to use `Any::pack` once we upgrade
-        // the `protobuf` package.
-        use protobuf::Message as _;
-
         let result_proto = reply.item.into_proto();
-        let result_bytes = result_proto.write_to_bytes()
+        let result_any = protobuf::well_known_types::any::Any::pack(&result_proto)
             // This should only fail in case we are out of memory, which we are
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a result");
 
-        proto.mut_result().set_value(result_bytes);
+        let mut proto = rrg_proto::rrg::Response::new();
+        proto.set_flow_id(reply.request_id.flow_id());
+        proto.set_request_id(reply.request_id.request_id());
+        proto.set_response_id(reply.response_id.0);
+        proto.set_result(result_any);
 
         proto
     }
@@ -418,11 +413,10 @@ where
 {
     fn from(parcel: Parcel<I>) -> rrg_proto::rrg::Parcel {
         let payload_proto = parcel.payload.into_proto();
-        let payload_any = protobuf::well_known_types::Any::pack(&payload_proto)
-            // The should not really ever fail, assumming that the protobuf
-            // message we are working with is well-formed and we are not out of
-            // memory.
-            .unwrap();
+        let payload_any = protobuf::well_known_types::any::Any::pack(&payload_proto)
+            // This should only fail in case we are out of memory, which we are
+            // almost certainly not (and if we are, we have bigger issue).
+            .expect("failed to serialize a parcel");
 
         let mut proto = rrg_proto::rrg::Parcel::new();
         proto.set_sink(parcel.sink.into());

@@ -79,7 +79,7 @@ impl crate::response::Item for Item {
         use rrg_proto::into_timestamp;
 
         let mut proto = rrg_proto::get_system_metadata::Result::new();
-        proto.set_field_type(self.kind.into());
+        proto.set_type(self.kind.into());
         if let Some(version) = self.version {
             proto.set_version(version);
         }

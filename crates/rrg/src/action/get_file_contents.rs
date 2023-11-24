@@ -83,7 +83,7 @@ impl crate::request::Args for Args {
         let path = PathBuf::try_from(proto.take_path())
             .map_err(|error| ParseArgsError::invalid_field("path", error))?;
 
-        let len = match proto.get_length() {
+        let len = match proto.length() {
             0 => usize::MAX,
             len if len > MAX_BLOB_LEN as u64 => {
                 return Err(ParseArgsError::invalid_field("length", LenError {
@@ -95,7 +95,7 @@ impl crate::request::Args for Args {
 
         Ok(Args {
             path,
-            offset: proto.get_offset(),
+            offset: proto.offset(),
             len,
         })
     }

@@ -34,14 +34,15 @@ fn main() {
     let proto_out_dir = outdir.join("proto");
     std::fs::create_dir_all(&proto_out_dir).unwrap();
 
-    protobuf_codegen_pure::Codegen::new()
+    let customize = protobuf_codegen::Customize::default()
+        .gen_mod_rs(true)
+        .generate_accessors(true);
+
+    protobuf_codegen::Codegen::new()
+        .pure()
         .out_dir(&proto_out_dir)
-        .include("../../vendor/protobuf/src")
         .include("../../proto")
         .inputs(PROTOS)
-        .customize(protobuf_codegen_pure::Customize {
-            gen_mod_rs: Some(true),
-            ..Default::default()
-        })
+        .customize(customize)
         .run().unwrap();
 }
