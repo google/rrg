@@ -347,17 +347,13 @@ where
         proto.set_request_id(reply.request_id.request_id());
         proto.set_response_id(reply.response_id.0);
 
-        // TODO(@panhania): Migrate this code to use `Any::pack` once we upgrade
-        // the `protobuf` package.
-        use protobuf::Message as _;
-
         let result_proto = reply.item.into_proto();
-        let result_bytes = result_proto.write_to_bytes()
+        let result_any = protobuf::well_known_types::any::Any::pack(&result_proto)
             // This should only fail in case we are out of memory, which we are
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a result");
 
-        proto.mut_result().value = result_bytes;
+        proto.set_result(result_any);
 
         proto
     }
