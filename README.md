@@ -87,7 +87,6 @@ Structure
 
   * `crates/` — All Rust crates that the project consists of live here.
   * `proto/` — All Protocol Buffers definitions describing RRG's API live here.
-  * `vendor/` — All non-Rust dependencies are vendored as Git submodules here.
 
 ### Crates
 
