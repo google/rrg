@@ -29,10 +29,52 @@ pub struct Filter {
 ///
 /// See documentation for [`Filter`] for more details.
 struct Cond {
-    /// The variable denoted by 
-    var: Vec<u32>,
+    /// The variable to check the condition against.
+    var: CondVar,
     /// The operator to apply.
     op: CondFullOp,
+}
+
+/// Individual condition variable.
+/// 
+/// The variable is denoted by a non-empty sequence of message field numbers
+/// referring to a primitive value of arbitrary message.
+/// 
+/// Consider the following Protocol Buffers message definitions:
+/// 
+/// ```protobuf
+/// message Foo {
+///   Bar bar = 1;
+/// }
+/// 
+/// message Bar {
+///   Quux quux = 1;
+///   string thud = 2;
+/// }
+/// 
+/// message Quux {
+///   reserved 1;
+///   reserved 2;
+///   uint32 norf = 3;
+/// }
+/// ```
+/// 
+/// Variable `1.3` on `Foo` instance will refer to `bar.thud` of type `string`
+/// whereas the same variable on `Bar` instance will refer to field `quux.norf`
+/// of type `uint32`.
+struct CondVar {
+    top_field_num: u32,
+    nested_field_nums: Vec<u32>,
+}
+
+/// Borrowed reference to an individual condition variable.
+/// 
+/// This is essentially a non-owned variant of [`CondVar`] that makes working
+/// with it easier.
+#[derive(Clone, Copy)]
+struct CondVarRef<'a> {
+    top_field_num: u32,
+    nested_field_nums: &'a [u32],
 }
 
 /// Individual condition operator of the form _□ ⋄ l_ (including negation).
@@ -91,35 +133,21 @@ impl Filter {
 impl Cond {
 
     /// Verifies whether the given message passes the condition.
-    /// 
-    /// The message passes the condition if the condition operator applied to
-    /// the value of the condition field within the message.
     fn eval_message(
         &self,
         message: &dyn protobuf::MessageDyn,
     ) -> Result<bool, Error> {
-        let Some((head_num, tail_nums)) = self.var.split_first() else {
-            return Err(Error);
-        };
-
-        self.eval_message_at(message, *head_num, tail_nums)
+        self.eval_message_at(message, self.var.as_ref())
     }
 
     /// Verifies whether the message at certain field passes the condition.
-    /// 
-    /// The message passes the condition if the condition operator applied to
-    /// the value of the field within the message denoted by `head_num` and
-    /// `tail_nums`.
-    /// 
-    /// `head_num` stands for the field number of `message` with `tail_nums`
-    /// referring to submessages within it.
     fn eval_message_at(
         &self,
         message: &dyn protobuf::MessageDyn,
-        head_num: u32,
-        tail_nums: &[u32],
+        var: CondVarRef<'_>,
     ) -> Result<bool, Error> {
-        let field_desc = message.descriptor_dyn().field_by_number(head_num)
+        let message_desc = message.descriptor_dyn();
+        let field_desc = message_desc.field_by_number(var.top_field_num)
             .ok_or(Error)?;
 
         // We only support singular fields. The call below could panic if not
@@ -130,14 +158,14 @@ impl Cond {
 
         let field = field_desc.get_singular_field_or_default(message);
 
-        match tail_nums.split_first() {
+        match var.nested() {
             None => self.op.eval_value(field),
-            Some((new_head_num, new_tail_nums)) => {
+            Some(var) => {
                 let ReflectValueRef::Message(message) = field else {
                     return Err(Error);
                 };
 
-                self.eval_message_at(&*message, *new_head_num, new_tail_nums)
+                self.eval_message_at(&*message, var)
             }
         }
     }
@@ -220,6 +248,34 @@ impl CondOp {
     }
 }
 
+impl CondVar {
+
+    /// Converts the variable to its reference wrapper.
+    fn as_ref<'a>(&'a self) -> CondVarRef<'a> {
+        CondVarRef {
+            top_field_num: self.top_field_num,
+            nested_field_nums: &self.nested_field_nums,
+        }
+    }
+}
+
+impl<'a> CondVarRef<'a> {
+
+    /// Returns the variable referring to the immediate nested message.
+    /// 
+    /// In case this variable does not refer to any nested messages, [`None`] is
+    /// returned instead.
+    fn nested(self) -> Option<CondVarRef<'a>> {
+        match self.nested_field_nums.split_first() {
+            Some((top_field_num, nested_field_nums)) => Some(CondVarRef {
+                top_field_num: *top_field_num,
+                nested_field_nums,
+            }),
+            None => None,
+        }
+    }
+}
+
 impl std::fmt::Display for Filter {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -239,11 +295,24 @@ impl std::fmt::Display for Filter {
 impl std::fmt::Display for Cond {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "{}", self.var[0])?;
-        for field_num in &self.var[1..] {
-            write!(fmt, ".{}", field_num)?;
+        write!(fmt, "{} {}", self.var, self.op)
+    }
+}
+
+impl std::fmt::Display for CondVar {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{}", self.as_ref())
+    }
+}
+
+impl<'a> std::fmt::Display for CondVarRef<'a> {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{}", self.top_field_num)?;
+        for nested_field_num in self.nested_field_nums {
+            write!(fmt, ".{}", nested_field_num)?;
         }
-        write!(fmt, " {}", self.op)?;
 
         Ok(())
     }
