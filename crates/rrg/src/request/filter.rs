@@ -219,3 +219,72 @@ impl CondOp {
         }
     }
 }
+
+impl std::fmt::Display for Filter {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.conds.is_empty() {
+            return write!(fmt, "⊥");
+        }
+
+        write!(fmt, "{}", self.conds[0])?;
+        for cond in &self.conds {
+            write!(fmt, "{}", cond)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for Cond {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{}", self.var[0])?;
+        for field_num in &self.var[1..] {
+            write!(fmt, ".{}", field_num)?;
+        }
+        write!(fmt, " {}", self.op)?;
+
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for CondFullOp {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.negated {
+            use CondOp::*;
+            match &self.op {
+                BoolEqual(bool) => write!(fmt, "≠ {}", bool),
+                StringEqual(string) => write!(fmt, "≠ {:?}", string),
+                StringMatch(regex) => write!(fmt, "≄ {:?}", regex.as_str()),
+                BytesEqual(bytes) => write!(fmt, "≠ {:?}", bytes),
+                BytesMatch(regex) => write!(fmt, "≄ {:?}", regex.as_str()),
+                U64Equal(u64) => write!(fmt, "≠ {}", u64),
+                U64Less(u64) => write!(fmt, "≮ {}", u64),
+                I64Equal(i64) => write!(fmt, "≠ {}", i64),
+                I64Less(i64) => write!(fmt, "≮ {}", i64),
+            }
+        } else {
+            write!(fmt, "{}", self.op)
+        }
+    }
+}
+
+impl std::fmt::Display for CondOp {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use CondOp::*;
+        match self {
+            BoolEqual(bool) => write!(fmt, "= {}", bool),
+            StringEqual(string) => write!(fmt, "= {:?}", string),
+            StringMatch(regex) => write!(fmt, "≃ {:?}", regex.as_str()),
+            BytesEqual(bytes) => write!(fmt, "= {:?}", bytes),
+            BytesMatch(regex) => write!(fmt, "≃ {:?}", regex.as_str()),
+            U64Equal(u64) => write!(fmt, "= {}", u64),
+            U64Less(u64) => write!(fmt, "< {}", u64),
+            I64Equal(i64) => write!(fmt, "= {}", i64),
+            I64Less(i64) => write!(fmt, "< {}", i64),
+        }
+    }
+}
