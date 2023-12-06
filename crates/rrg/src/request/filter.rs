@@ -32,12 +32,20 @@ struct Cond {
     /// The variable denoted by 
     var: Vec<u32>,
     /// The operator to apply.
+    op: CondFullOp,
+}
+
+/// Individual condition operator of the form _□ ⋄ l_ (including negation).
+/// 
+/// See documentation for [`Filter`] for more details.
+struct CondFullOp {
+    /// The basic operator to apply.
     op: CondOp,
     /// Determines whether the operator result should be negated.
     negated: bool,
 }
 
-/// Individual condition operator of the filter of the form _⋄ l_.
+/// Individual basic condition operator of the form _□ ⋄ l_ (without negation.
 /// 
 /// See documentation for [`Filter`] for more details.
 enum CondOp {
@@ -123,7 +131,7 @@ impl Cond {
         let field = field_desc.get_singular_field_or_default(message);
 
         match tail_nums.split_first() {
-            None => self.eval_value(field),
+            None => self.op.eval_value(field),
             Some((new_head_num, new_tail_nums)) => {
                 let ReflectValueRef::Message(message) = field else {
                     return Err(Error);
@@ -133,11 +141,17 @@ impl Cond {
             }
         }
     }
+}
 
-    /// Verifies whether the given value passes the condition.
-    ///
-    /// The value passes the condition if the condition operator applied to it
-    /// evaluates to `true`.
+impl CondFullOp {
+
+    /// Verifies whether the given value passes the operator.
+    /// 
+    /// # Errors
+    /// 
+    /// This function will return an error if the operator cannot be applied
+    /// to the given value (e.g. `value` is a string and the operator is boolean
+    /// equality)
     fn eval_value(&self, value: ReflectValueRef) -> Result<bool, Error> {
         let mut result = self.op.eval_value(value)?;
 
@@ -147,7 +161,6 @@ impl Cond {
 
         Ok(result)
     }
-
 }
 
 impl CondOp {
