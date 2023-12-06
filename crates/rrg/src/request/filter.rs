@@ -357,3 +357,134 @@ impl std::fmt::Display for CondOp {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    macro_rules! var {
+        ($top_field_num:expr) => {
+            crate::request::filter::CondVar {
+                top_field_num: $top_field_num,
+                nested_field_nums: vec![],
+            }
+        };
+        ($top_field_num:expr, $($nested_field_num:expr),*) => {
+            crate::request::filter::CondVar {
+                top_field_num: $top_field_num,
+                nested_field_nums: vec![$($nested_field_num),*],
+            }
+        };
+    }
+
+    #[test]
+    fn to_string_filter() {
+        assert_eq! {
+            Filter {
+                conds: vec![],
+            }.to_string(),
+            "⊥"
+        }
+
+        assert_eq! {
+            Filter {
+                conds: vec![
+                    Cond {
+                        var: var!(1),
+                        op: CondFullOp {
+                            op: CondOp::StringEqual(String::from("foo")),
+                            negated: false,
+                        },
+                    },
+                ]
+            }.to_string(),
+            "1 = \"foo\""
+        }
+
+        assert_eq! {
+            Filter {
+                conds: vec![
+                    Cond {
+                        var: var!(4, 2),
+                        op: CondFullOp {
+                            op: CondOp::U64Less(42),
+                            negated: false,
+                        },
+                    },
+                    Cond {
+                        var: var!(1, 3, 3, 7),
+                        op: CondFullOp {
+                            op: CondOp::StringEqual(String::from("bar")),
+                            negated: false,
+                        },
+                    }
+                ]
+            }.to_string(),
+            "4.2 < 42 ∨ 1.3.3.7 = \"bar\""
+        }
+    }
+
+    #[test]
+    fn to_string_cond() {
+        assert_eq! {
+            Cond {
+                var: var!(1, 3, 3, 7),
+                op: CondFullOp {
+                    op: CondOp::StringEqual(String::from("foo")),
+                    negated: true,
+                },
+            }.to_string(),
+            "1.3.3.7 ≠ \"foo\""
+        }
+    }
+
+    #[test]
+    fn to_string_cond_var() {
+        assert_eq!(var!(1).to_string(), "1");
+        assert_eq!(var!(4, 2).to_string(), "4.2");
+        assert_eq!(var!(1, 3, 3, 7).to_string(), "1.3.3.7");
+    }
+
+    #[test]
+    fn to_string_cond_full_op() {
+        use CondOp::*;
+
+        assert_eq! {
+            CondFullOp { op: BoolEqual(true), negated: false }.to_string(),
+            "= true"
+        }
+        assert_eq! {
+            CondFullOp { op: BoolEqual(false), negated: true }.to_string(),
+            "≠ false",
+        }
+        assert_eq! {
+            CondFullOp { op: U64Equal(42), negated: true }.to_string(),
+            "≠ 42"
+        }
+        assert_eq! {
+            CondFullOp { op: U64Less(1337), negated: true }.to_string(),
+            "≮ 1337"
+        }
+    }
+
+    #[test]
+    fn to_string_cond_op() {
+        use CondOp::*;
+
+        assert_eq!(BoolEqual(true).to_string(), "= true");
+        assert_eq!(BoolEqual(false).to_string(), "= false");
+
+        assert_eq! {
+            StringEqual(String::from("foo")).to_string(),
+            "= \"foo\""
+        };
+        assert_eq! {
+            StringMatch(regex::Regex::new("foo+").unwrap()).to_string(),
+            "≃ \"foo+\""
+        };
+
+        assert_eq!(I64Equal(-42).to_string(), "= -42");
+        assert_eq!(I64Less(1337).to_string(), "< 1337");
+    }
+}
