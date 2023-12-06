@@ -284,8 +284,8 @@ impl std::fmt::Display for Filter {
         }
 
         write!(fmt, "{}", self.conds[0])?;
-        for cond in &self.conds {
-            write!(fmt, "{}", cond)?;
+        for cond in &self.conds[1..] {
+            write!(fmt, " ∨ {}", cond)?;
         }
 
         Ok(())
