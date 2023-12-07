@@ -364,13 +364,13 @@ mod tests {
     use super::*;
 
     macro_rules! var {
-        ($top_field_num:expr) => {
+        ($top_field_num:literal) => {
             crate::request::filter::CondVar {
                 top_field_num: $top_field_num,
                 nested_field_nums: vec![],
             }
         };
-        ($top_field_num:expr, $($nested_field_num:expr),*) => {
+        ($top_field_num:literal, $($nested_field_num:literal),*) => {
             crate::request::filter::CondVar {
                 top_field_num: $top_field_num,
                 nested_field_nums: vec![$($nested_field_num),*],
@@ -378,48 +378,86 @@ mod tests {
         };
     }
 
+    macro_rules! op {
+        (= true) => {
+            crate::request::filter::CondOp::BoolEqual(true)
+        };
+        (= false) => {
+            crate::request::filter::CondOp::BoolEqual(false)
+        };
+        (= str($val:literal)) => {
+            crate::request::filter::CondOp::StringEqual(String::from($val))
+        };
+        (~= str($val:literal)) => {
+            {
+                let regex = ::regex::Regex::new($val).unwrap();
+                crate::request::filter::CondOp::StringMatch(regex)
+            }
+        };
+        (= bytes($val:literal)) => {
+            crate::request::filter::CondOp::BytesEqual($val.to_vec()),
+        };
+        (~= bytes($val:literal)) => {
+            {
+                let regex = ::regex::bytes::Regex::new($val).unwrap();
+                crate::request::filter::CondOp::BytesMatch(regex)
+            }
+        };
+        (= u64($val:literal)) => {
+            crate::request::filter::CondOp::U64Equal($val)
+        };
+        (< u64($val:literal)) => {
+            crate::request::filter::CondOp::U64Less($val)
+        };
+        (= i64($val:literal)) => {
+            crate::request::filter::CondOp::I64Equal($val)
+        };
+        (< i64($val:literal)) => {
+            crate::request::filter::CondOp::I64Less($val)
+        };
+    }
+
+    macro_rules! cond {
+        (not $($cond:tt)*) => {
+            {
+                let mut cond = cond!($($cond)*);
+                cond.op.negated = !cond.op.negated;
+                cond
+            }
+        };
+        (var($($var:tt)*) $($op:tt)*) => {
+            crate::request::filter::Cond {
+                var: var!($($var)*),
+                op: crate::request::filter::CondFullOp {
+                    op: op!($($op)*),
+                    negated: false,
+                },
+            }
+        };
+    }
+
+    macro_rules! filter {
+        ($($conds:tt)*) => {
+            crate::request::filter::Filter {
+                conds: vec![$($conds)*],
+            }
+        }
+    }
+
     #[test]
     fn to_string_filter() {
         assert_eq! {
-            Filter {
-                conds: vec![],
-            }.to_string(),
+            filter!().to_string(),
             "⊥"
-        }
-
+        };
         assert_eq! {
-            Filter {
-                conds: vec![
-                    Cond {
-                        var: var!(1),
-                        op: CondFullOp {
-                            op: CondOp::StringEqual(String::from("foo")),
-                            negated: false,
-                        },
-                    },
-                ]
-            }.to_string(),
+            filter!(cond!(var(1) = str("foo"))).to_string(),
             "1 = \"foo\""
-        }
-
+        };
         assert_eq! {
-            Filter {
-                conds: vec![
-                    Cond {
-                        var: var!(4, 2),
-                        op: CondFullOp {
-                            op: CondOp::U64Less(42),
-                            negated: false,
-                        },
-                    },
-                    Cond {
-                        var: var!(1, 3, 3, 7),
-                        op: CondFullOp {
-                            op: CondOp::StringEqual(String::from("bar")),
-                            negated: false,
-                        },
-                    }
-                ]
+            filter! {
+                cond!(var(4, 2) < u64(42)),
+                cond!(var(1, 3, 3, 7) = str("bar"))
             }.to_string(),
             "4.2 < 42 ∨ 1.3.3.7 = \"bar\""
         }
@@ -428,13 +466,7 @@ mod tests {
     #[test]
     fn to_string_cond() {
         assert_eq! {
-            Cond {
-                var: var!(1, 3, 3, 7),
-                op: CondFullOp {
-                    op: CondOp::StringEqual(String::from("foo")),
-                    negated: true,
-                },
-            }.to_string(),
+            cond!(not var(1, 3, 3, 7) = str("foo")).to_string(),
             "1.3.3.7 ≠ \"foo\""
         }
     }
@@ -448,43 +480,33 @@ mod tests {
 
     #[test]
     fn to_string_cond_full_op() {
-        use CondOp::*;
-
         assert_eq! {
-            CondFullOp { op: BoolEqual(true), negated: false }.to_string(),
-            "= true"
+            cond!(var(0) = true).to_string(),
+            "0 = true"
         }
         assert_eq! {
-            CondFullOp { op: BoolEqual(false), negated: true }.to_string(),
-            "≠ false",
+            cond!(not var(0) = false).to_string(),
+            "0 ≠ false",
         }
         assert_eq! {
-            CondFullOp { op: U64Equal(42), negated: true }.to_string(),
-            "≠ 42"
+            cond!(not var(0) = u64(42)).to_string(),
+            "0 ≠ 42"
         }
         assert_eq! {
-            CondFullOp { op: U64Less(1337), negated: true }.to_string(),
-            "≮ 1337"
+            cond!(not var(0) < u64(1337)).to_string(),
+            "0 ≮ 1337"
         }
     }
 
     #[test]
     fn to_string_cond_op() {
-        use CondOp::*;
+        assert_eq!(op!(= true).to_string(), "= true");
+        assert_eq!(op!(= false).to_string(), "= false");
 
-        assert_eq!(BoolEqual(true).to_string(), "= true");
-        assert_eq!(BoolEqual(false).to_string(), "= false");
+        assert_eq!(op!(= str("foo")).to_string(), "= \"foo\"");
+        assert_eq!(op!(~= str("foo+")).to_string(), "≃ \"foo+\"");
 
-        assert_eq! {
-            StringEqual(String::from("foo")).to_string(),
-            "= \"foo\""
-        };
-        assert_eq! {
-            StringMatch(regex::Regex::new("foo+").unwrap()).to_string(),
-            "≃ \"foo+\""
-        };
-
-        assert_eq!(I64Equal(-42).to_string(), "= -42");
-        assert_eq!(I64Less(1337).to_string(), "< 1337");
+        assert_eq!(op!(= i64(-42)).to_string(), "= -42");
+        assert_eq!(op!(< i64(1337)).to_string(), "< 1337");
     }
 }
