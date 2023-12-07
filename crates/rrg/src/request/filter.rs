@@ -5,9 +5,6 @@
 
 use protobuf::reflect::ReflectValueRef;
 
-/// The error type for filter evaluation.
-pub struct Error; // TODO(@panhania): Add error details.
-
 /// A filter is a formula of the form _(x₁ ⋄₁ l₁) ∨ ⋯ ∨ (xₙ ⋄ₙ lₙ)_.
 ///
 /// Here, xᵢ means a _variable_ (to be substituted by particular value from the
@@ -144,12 +141,17 @@ impl Cond {
     ) -> Result<bool, Error> {
         let message_desc = message.descriptor_dyn();
         let field_desc = message_desc.field_by_number(var.top_field_num)
-            .ok_or(Error)?;
+            .ok_or(ErrorRepr::InvalidFieldNum {
+                message_name: message_desc.full_name().to_owned(),
+                field_num: var.top_field_num
+            })?;
 
         // We only support singular fields. The call below could panic if not
         // for this check.
         if !field_desc.is_singular() {
-            return Err(Error);
+            return Err(ErrorRepr::NonSingularField {
+                field_name: field_desc.full_name(),
+            }.into());
         }
 
         let field = field_desc.get_singular_field_or_default(message);
@@ -158,7 +160,9 @@ impl Cond {
             None => self.op.eval_value(field),
             Some(var) => {
                 let ReflectValueRef::Message(message) = field else {
-                    return Err(Error);
+                    return Err(ErrorRepr::NonMessageFieldAccess {
+                        field_name: field_desc.full_name(),
+                    }.into());
                 };
 
                 self.eval_message_at(&*message, var)
@@ -239,7 +243,26 @@ impl CondOp {
             (I64(value), CondOp::I64Less(i64)) => {
                 Ok(value < *i64)
             }
-            (_, _) => Err(Error)
+            (value, _) => Err(ErrorRepr::TypeMismatch {
+                var_type: value.get_type(),
+                op_type: self.runtime_type(),
+            }.into())
+        }
+    }
+
+    /// Returns the runtime type of values this operator works with.
+    fn runtime_type(&self) -> protobuf::reflect::RuntimeType {
+        use protobuf::reflect::RuntimeType;
+        match self {
+            CondOp::BoolEqual(_) => RuntimeType::Bool,
+            CondOp::StringEqual(_) => RuntimeType::String,
+            CondOp::StringMatch(_) => RuntimeType::String,
+            CondOp::BytesEqual(_) => RuntimeType::VecU8,
+            CondOp::BytesMatch(_) => RuntimeType::VecU8,
+            CondOp::U64Equal(_) => RuntimeType::U64,
+            CondOp::U64Less(_) => RuntimeType::U64,
+            CondOp::I64Equal(_) => RuntimeType::I64,
+            CondOp::I64Less(_) => RuntimeType::I64,
         }
     }
 }
@@ -352,6 +375,80 @@ impl std::fmt::Display for CondOp {
             U64Less(u64) => write!(fmt, "< {}", u64),
             I64Equal(i64) => write!(fmt, "= {}", i64),
             I64Less(i64) => write!(fmt, "< {}", i64),
+        }
+    }
+}
+
+/// The error type for filter evaluation.
+#[derive(Debug)]
+pub struct Error {
+    repr: ErrorRepr,
+}
+
+/// Internal representation of the error type for filter evaluation.
+#[derive(Debug)]
+enum ErrorRepr {
+    /// Message does not have field of the specified number.
+    InvalidFieldNum {
+        /// Full name of the message that caused the error.
+        message_name: String,
+        /// Number of the field that caused the error.
+        field_num: u32,
+    },
+    /// Specified field is not singular (e.g. it has `repeated` annotation).
+    NonSingularField {
+        /// Full name of the field that caused the error.
+        field_name: String,
+    },
+    /// Specified field is not a message but nested access was attempted.
+    NonMessageFieldAccess {
+        /// Full name of the field that caused the error.
+        field_name: String,
+    },
+    /// Operator was applied to a value of incorrect type.
+    TypeMismatch {
+        /// Runtime type of the applied value.
+        var_type: protobuf::reflect::RuntimeType,
+        /// Runtime type expected by the applied operator.
+        op_type: protobuf::reflect::RuntimeType,
+    },
+}
+
+impl From<ErrorRepr> for Error {
+
+    fn from(error: ErrorRepr) -> Error {
+        Error {
+            repr: error
+        }
+    }
+}
+
+impl std::fmt::Display for Error {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.repr)
+    }
+}
+
+impl std::error::Error for Error {
+}
+
+impl std::fmt::Display for ErrorRepr {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorRepr::InvalidFieldNum { message_name, field_num } => {
+                write!(f, "invalid field number '{field_num}' on `{message_name}`")
+            }
+            ErrorRepr::NonSingularField { field_name } => {
+                write!(f, "non-singular field `{field_name}`")
+            }
+            ErrorRepr::NonMessageFieldAccess { field_name } => {
+                write!(f, "access on non-message field `{field_name}`")
+            }
+            ErrorRepr::TypeMismatch { var_type, op_type } => {
+                write!(f, "comparison of `{var_type}` variable using `{op_type}` operator")
+            }
         }
     }
 }
