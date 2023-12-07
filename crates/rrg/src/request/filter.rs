@@ -370,7 +370,7 @@ mod tests {
                 nested_field_nums: vec![],
             }
         };
-        ($top_field_num:literal, $($nested_field_num:literal),*) => {
+        ($top_field_num:literal : $($nested_field_num:literal):*) => {
             crate::request::filter::CondVar {
                 top_field_num: $top_field_num,
                 nested_field_nums: vec![$($nested_field_num),*],
@@ -456,8 +456,8 @@ mod tests {
         };
         assert_eq! {
             filter! {
-                cond!(var(4, 2) < u64(42)),
-                cond!(var(1, 3, 3, 7) = str("bar"))
+                cond!(var(4:2) < u64(42)),
+                cond!(var(1:3:3:7) = str("bar"))
             }.to_string(),
             "4.2 < 42 ∨ 1.3.3.7 = \"bar\""
         }
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn to_string_cond() {
         assert_eq! {
-            cond!(not var(1, 3, 3, 7) = str("foo")).to_string(),
+            cond!(not var(1:3:3:7) = str("foo")).to_string(),
             "1.3.3.7 ≠ \"foo\""
         }
     }
@@ -474,8 +474,8 @@ mod tests {
     #[test]
     fn to_string_cond_var() {
         assert_eq!(var!(1).to_string(), "1");
-        assert_eq!(var!(4, 2).to_string(), "4.2");
-        assert_eq!(var!(1, 3, 3, 7).to_string(), "1.3.3.7");
+        assert_eq!(var!(4:2).to_string(), "4.2");
+        assert_eq!(var!(1:3:3:7).to_string(), "1.3.3.7");
     }
 
     #[test]
