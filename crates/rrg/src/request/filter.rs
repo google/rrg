@@ -120,13 +120,9 @@ impl Filter {
         &self,
         message: &dyn protobuf::MessageDyn,
     ) -> Result<bool, Error> {
-        let mut result = false;
- 
-        for cond in &self.conds {
-            result |= cond.eval_message(message)?;
-        }
-
-        Ok(result)
+        self.conds.iter().try_fold(false, |acc, cond| Ok({
+            acc || cond.eval_message(message)?
+        }))
     }
 }
 
