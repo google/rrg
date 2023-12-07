@@ -309,10 +309,12 @@ impl std::fmt::Display for CondVar {
 impl<'a> std::fmt::Display for CondVarRef<'a> {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "𝛸(")?;
         write!(fmt, "{}", self.top_field_num)?;
         for nested_field_num in self.nested_field_nums {
             write!(fmt, ".{}", nested_field_num)?;
         }
+        write!(fmt, ")")?;
 
         Ok(())
     }
@@ -452,14 +454,14 @@ mod tests {
         };
         assert_eq! {
             filter!(cond!(var(1) = str("foo"))).to_string(),
-            "1 = \"foo\""
+            "𝛸(1) = \"foo\""
         };
         assert_eq! {
             filter! {
                 cond!(var(4:2) < u64(42)),
                 cond!(var(1:3:3:7) = str("bar"))
             }.to_string(),
-            "4.2 < 42 ∨ 1.3.3.7 = \"bar\""
+            "𝛸(4.2) < 42 ∨ 𝛸(1.3.3.7) = \"bar\""
         }
     }
 
@@ -467,34 +469,34 @@ mod tests {
     fn to_string_cond() {
         assert_eq! {
             cond!(not var(1:3:3:7) = str("foo")).to_string(),
-            "1.3.3.7 ≠ \"foo\""
+            "𝛸(1.3.3.7) ≠ \"foo\""
         }
     }
 
     #[test]
     fn to_string_cond_var() {
-        assert_eq!(var!(1).to_string(), "1");
-        assert_eq!(var!(4:2).to_string(), "4.2");
-        assert_eq!(var!(1:3:3:7).to_string(), "1.3.3.7");
+        assert_eq!(var!(1).to_string(), "𝛸(1)");
+        assert_eq!(var!(4:2).to_string(), "𝛸(4.2)");
+        assert_eq!(var!(1:3:3:7).to_string(), "𝛸(1.3.3.7)");
     }
 
     #[test]
     fn to_string_cond_full_op() {
         assert_eq! {
             cond!(var(0) = true).to_string(),
-            "0 = true"
+            "𝛸(0) = true"
         }
         assert_eq! {
             cond!(not var(0) = false).to_string(),
-            "0 ≠ false",
+            "𝛸(0) ≠ false",
         }
         assert_eq! {
             cond!(not var(0) = u64(42)).to_string(),
-            "0 ≠ 42"
+            "𝛸(0) ≠ 42"
         }
         assert_eq! {
             cond!(not var(0) < u64(1337)).to_string(),
-            "0 ≮ 1337"
+            "𝛸(0) ≮ 1337"
         }
     }
 
