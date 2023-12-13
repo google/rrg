@@ -475,7 +475,7 @@ impl TryFrom<rrg_proto::rrg::Condition> for Cond {
     fn try_from(mut proto: rrg_proto::rrg::Condition) -> Result<Cond, ParseError> {
         let mut field_nums = proto.take_field();
         if field_nums.is_empty() {
-            return Err(ParseError);
+            return Err(ParseErrorRepr::NoField.into());
         }
 
         let top_field_num = field_nums[0];
@@ -495,7 +495,7 @@ impl TryFrom<rrg_proto::rrg::Condition> for Cond {
             }
             () if proto.has_string_match() => {
                 let regex = regex::Regex::new(proto.string_match())
-                    .map_err(|_| ParseError)?;
+                    .map_err(ParseErrorRepr::InvalidStringMatchRegex)?;
 
                 CondOp::StringMatch(regex)
             }
@@ -504,7 +504,7 @@ impl TryFrom<rrg_proto::rrg::Condition> for Cond {
             }
             () if proto.has_bytes_match() => {
                 let regex = regex::bytes::Regex::new(proto.bytes_match())
-                    .map_err(|_| ParseError)?;
+                    .map_err(ParseErrorRepr::InvalidBytesMatchRegex)?;
 
                 CondOp::BytesMatch(regex)
             }
@@ -520,7 +520,7 @@ impl TryFrom<rrg_proto::rrg::Condition> for Cond {
             () if proto.has_int64_less() => {
                 CondOp::I64Less(proto.int64_less())
             }
-            () => return Err(ParseError),
+            () => return Err(ParseErrorRepr::NoOperator.into()),
         };
 
         Ok(Cond {
@@ -533,10 +533,72 @@ impl TryFrom<rrg_proto::rrg::Condition> for Cond {
     }
 }
 
+/// The error type for parsing filters from Protocol Buffer messages.
 #[derive(Debug)]
-pub struct ParseError; // TODO(@panhania): Provide error details.
+pub struct ParseError {
+    repr: ParseErrorRepr,
+}
 
-// TODO(@panhania): Implement `std::error::Error` for `ParseError`.
+/// Internal representation of the error type for parsing filters.
+#[derive(Debug)]
+enum ParseErrorRepr {
+    /// Condition has no variable field specified.
+    NoField,
+    /// Condition has no operator specified.
+    NoOperator,
+    /// Regex in a string match operator is invalid.
+    InvalidStringMatchRegex(regex::Error),
+    /// Regex in a bytes match operator is invalid.
+    InvalidBytesMatchRegex(regex::Error),
+}
+
+impl From<ParseErrorRepr> for ParseError {
+
+    fn from(error: ParseErrorRepr) -> ParseError {
+        ParseError {
+            repr: error,
+        }
+    }
+}
+
+impl std::fmt::Display for ParseError {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.repr)
+    }
+}
+
+impl std::error::Error for ParseError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self.repr {
+            ParseErrorRepr::NoField => None,
+            ParseErrorRepr::NoOperator => None,
+            ParseErrorRepr::InvalidStringMatchRegex(ref error) => Some(error),
+            ParseErrorRepr::InvalidBytesMatchRegex(ref error) => Some(error),
+        }
+    }
+}
+
+impl std::fmt::Display for ParseErrorRepr {
+    
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseErrorRepr::InvalidStringMatchRegex(error) => {
+                write!(f, "invalid string match regex: {error}")
+            }
+            ParseErrorRepr::InvalidBytesMatchRegex(error) => {
+                write!(f, "invalid bytes match regex: {error}")
+            }
+            ParseErrorRepr::NoOperator => {
+                write!(f, "no operator")
+            }
+            ParseErrorRepr::NoField => {
+                write!(f, "no field")
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
