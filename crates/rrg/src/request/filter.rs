@@ -453,6 +453,91 @@ impl std::fmt::Display for ErrorRepr {
     }
 }
 
+impl TryFrom<rrg_proto::rrg::Filter> for Filter {
+
+    type Error = ParseError;
+
+    fn try_from(mut proto: rrg_proto::rrg::Filter) -> Result<Filter, ParseError> {
+        let conds = proto.take_conditions().into_iter()
+            .map(|cond| Cond::try_from(cond))
+            .collect::<Result<_, ParseError>>()?;
+
+        Ok(Filter {
+            conds,
+        })
+    }
+}
+
+impl TryFrom<rrg_proto::rrg::Condition> for Cond {
+
+    type Error = ParseError;
+
+    fn try_from(mut proto: rrg_proto::rrg::Condition) -> Result<Cond, ParseError> {
+        let mut field_nums = proto.take_field();
+        if field_nums.is_empty() {
+            return Err(ParseError);
+        }
+
+        let top_field_num = field_nums[0];
+        field_nums.remove(0);
+
+        let var = CondVar {
+            top_field_num,
+            nested_field_nums: field_nums,
+        };
+
+        let op = match () {
+            () if proto.has_bool_equal() => {
+                CondOp::BoolEqual(proto.bool_equal())
+            }
+            () if proto.has_string_equal() => {
+                CondOp::StringEqual(proto.take_string_equal())
+            }
+            () if proto.has_string_match() => {
+                let regex = regex::Regex::new(proto.string_match())
+                    .map_err(|_| ParseError)?;
+
+                CondOp::StringMatch(regex)
+            }
+            () if proto.has_bytes_match() => {
+                CondOp::BytesEqual(proto.take_bytes_equal())
+            }
+            () if proto.has_bytes_match() => {
+                let regex = regex::bytes::Regex::new(proto.bytes_match())
+                    .map_err(|_| ParseError)?;
+
+                CondOp::BytesMatch(regex)
+            }
+            () if proto.has_uint64_equal() => {
+                CondOp::U64Equal(proto.uint64_equal())
+            }
+            () if proto.has_uint64_less() => {
+                CondOp::U64Less(proto.uint64_less())
+            }
+            () if proto.has_int64_equal() => {
+                CondOp::I64Equal(proto.int64_equal())
+            }
+            () if proto.has_int64_less() => {
+                CondOp::I64Less(proto.int64_less())
+            }
+            () => return Err(ParseError),
+        };
+
+        Ok(Cond {
+            var,
+            op: CondFullOp {
+                op,
+                negated: proto.negated(),
+            }
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct ParseError; // TODO(@panhania): Provide error details.
+
+// TODO(@panhania): Implement `std::error::Error` for `ParseError`.
+
 #[cfg(test)]
 mod tests {
 
