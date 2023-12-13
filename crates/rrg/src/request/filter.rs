@@ -690,6 +690,281 @@ mod tests {
     }
 
     #[test]
+    fn eval_bool_equal() {
+        use protobuf::well_known_types::wrappers::BoolValue;
+        let mut message = BoolValue::default();
+
+        let filter = filter!(var(1) = true);
+
+        message.value = true;
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = false;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn eval_string_equal() {
+        use protobuf::well_known_types::wrappers::StringValue;
+        let mut message = StringValue::default();
+
+        let filter = filter!(var(1) = str("foo"));
+
+        message.value = String::from("foo");
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = String::from("bar");
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn eval_string_match() {
+        use protobuf::well_known_types::wrappers::StringValue;
+        let mut message = StringValue::default();
+
+        let filter = filter!(var(1) ~= str("^ba(r|z)$"));
+
+        message.value = String::from("foo");
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+
+        message.value = String::from("bar");
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = String::from("baz");
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+    }
+
+    #[test]
+    fn eval_bytes_equal() {
+        use protobuf::well_known_types::wrappers::BytesValue;
+        let mut message = BytesValue::default();
+
+        let filter = filter!(var(1) = bytes(b"\x00\x11\x00"));
+
+        message.value = b"\x00\x11\x00".to_vec();
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = b"\x11\x00\x11".to_vec();
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn eval_bytes_match() {
+        use protobuf::well_known_types::wrappers::BytesValue;
+        let mut message = BytesValue::default();
+
+        let filter = filter!(var(1) ~= bytes("^(\x00|\x11)+$"));
+
+        message.value = b"\x00\x00\x11\x00\x00".to_vec();
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = b"\x00\x11\x00\x11\x00".to_vec();
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = b"\x00\x22\x00".to_vec();
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn eval_u64_equal() {
+        use protobuf::well_known_types::wrappers::UInt64Value;
+        let mut message = UInt64Value::default();
+
+        let filter = filter!(var(1) = u64(42));
+
+        message.value = 42;
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = 1337;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn eval_u64_less() {
+        use protobuf::well_known_types::wrappers::UInt64Value;
+        let mut message = UInt64Value::default();
+
+        let filter = filter!(var(1) < u64(42));
+
+        message.value = 7;
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = 42;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+
+        message.value = 1337;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn eval_i64_equal() {
+        use protobuf::well_known_types::wrappers::Int64Value;
+        let mut message = Int64Value::default();
+
+        let filter = filter!(var(1) = i64(-42));
+
+        message.value = -42;
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = 42;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+
+        message.value = -1337;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn eval_i64_less() {
+        use protobuf::well_known_types::wrappers::Int64Value;
+        let mut message = Int64Value::default();
+
+        let filter = filter!(var(1) < i64(-42));
+
+        message.value = -1337;
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = -42;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+
+        message.value = 42;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn eval_negation() {
+        use protobuf::well_known_types::wrappers::BoolValue;
+        let mut message = BoolValue::default();
+
+        let filter = filter!(not var(1) = false);
+
+        message.value = true;
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = false;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn eval_u32_coercion() {
+        use protobuf::well_known_types::wrappers::UInt32Value;
+        let mut message = UInt32Value::default();
+
+        message.value = 42;
+        assert!(filter!(var(1) = u64(42)).eval_message(&message).unwrap());
+        assert!(filter!(var(1) < u64(1337)).eval_message(&message).unwrap());
+    }
+
+    #[test]
+    fn eval_i32_coercion() {
+        use protobuf::well_known_types::wrappers::Int32Value;
+        let mut message = Int32Value::default();
+
+        message.value = -42;
+        assert!(filter!(var(1) = i64(-42)).eval_message(&message).unwrap());
+        
+        message.value = -1337;
+        assert!(filter!(var(1) < i64(-42)).eval_message(&message).unwrap());
+    }
+
+    #[test]
+    fn eval_multi_cond() {
+        use protobuf::well_known_types::wrappers::Int64Value;
+        let mut message = Int64Value::default();
+
+        let filter = filter! {
+            (var(1) < i64(-42)) | (var(1) = i64(0)) | (not var(1) < i64(42))
+        };
+
+        message.value = -1337;
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = -42;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+
+        message.value = 0;
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = 11;
+        assert_eq!(filter.eval_message(&message).unwrap(), false);
+
+        message.value = 42;
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+
+        message.value = 1337;
+        assert_eq!(filter.eval_message(&message).unwrap(), true);
+    }
+
+    #[test]
+    fn eval_nested_message() {
+        let mut message = rrg_proto::startup::Startup::default();
+        message.mut_metadata().mut_version().set_major(3);
+        message.mut_metadata().mut_version().set_minor(2);
+        message.mut_metadata().mut_version().set_patch(1);
+
+        assert!(filter!(var(1:3:1) = u64(3)).eval_message(&message).unwrap());
+        assert!(filter!(var(1:3:2) = u64(2)).eval_message(&message).unwrap());
+        assert!(filter!(var(1:3:3) = u64(1)).eval_message(&message).unwrap());
+    }
+
+    #[test]
+    fn eval_invalid_field_num() {
+        let error = filter!(var(1:3:42) = u64(42))
+            .eval_message(&rrg_proto::startup::Startup::default())
+            .unwrap_err();
+
+        match error.repr {
+            ErrorRepr::InvalidFieldNum { message_name, field_num } => {
+                assert_eq!(message_name, "rrg.startup.Version");
+                assert_eq!(field_num, 42);
+            }
+            _ => panic!("unexpected error: {error}"),
+        }
+    }
+
+    #[test]
+    fn eval_non_singular_field() {
+        let error = filter!(var(2) = str("--foo"))
+            .eval_message(&rrg_proto::startup::Startup::default())
+            .unwrap_err();
+
+        match error.repr {
+            ErrorRepr::NonSingularField { field_name } => {
+                assert_eq!(field_name, "rrg.startup.Startup.args");
+            }
+            _ => panic!("unexpected error: {error}"),
+        }
+    }
+
+    #[test]
+    fn eval_non_message_field_access() {
+        let error = filter!(var(1:2:3) = u64(42))
+            .eval_message(&rrg_proto::startup::Version::default())
+            .unwrap_err();
+
+        match error.repr {
+            ErrorRepr::NonMessageFieldAccess { field_name } => {
+                assert_eq!(field_name, "rrg.startup.Version.major");
+            }
+            _ => panic!("unexpected error: {error}"),
+        }
+    }
+
+    #[test]
+    fn eval_type_mismatch() {
+        let error = filter!(var(1) = str("foo"))
+            .eval_message(&rrg_proto::startup::Version::default())
+            .unwrap_err();
+
+        match error.repr {
+            ErrorRepr::TypeMismatch { var_type, op_type } => {
+                assert_eq!(var_type, protobuf::reflect::RuntimeType::U32);
+                assert_eq!(op_type, protobuf::reflect::RuntimeType::String);
+            }
+            _ => panic!("unexpected error: {error}"),
+        }
+    }
+
+    #[test]
     fn filter_to_string_empty() {
         assert_eq! {
             filter!().to_string(),
