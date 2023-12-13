@@ -637,7 +637,7 @@ mod tests {
             }
         };
         (= bytes($val:literal)) => {
-            crate::request::filter::CondOp::BytesEqual($val.to_vec()),
+            crate::request::filter::CondOp::BytesEqual($val.to_vec())
         };
         (~= bytes($val:literal)) => {
             {
