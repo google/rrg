@@ -532,11 +532,14 @@ mod tests {
     }
 
     macro_rules! filter {
-        ($($conds:tt)*) => {
+        ($(($($cond:tt)*))|*) => {
             crate::request::filter::Filter {
-                conds: vec![$($conds)*],
+                conds: vec![$(cond!($($cond)*)),*]
             }
-        }
+        };
+        ($($cond:tt)*) => {
+            filter!(($($cond)*))
+        };
     }
 
     #[test]
@@ -546,13 +549,14 @@ mod tests {
             "⊥"
         };
         assert_eq! {
-            filter!(cond!(var(1) = str("foo"))).to_string(),
+            filter! {
+                var(1) = str("foo")
+            }.to_string(),
             "𝛸(1) = \"foo\""
         };
         assert_eq! {
             filter! {
-                cond!(var(4:2) < u64(42)),
-                cond!(var(1:3:3:7) = str("bar"))
+                (var(4:2) < u64(42)) | (var(1:3:3:7) = str("bar"))
             }.to_string(),
             "𝛸(4.2) < 42 ∨ 𝛸(1.3.3.7) = \"bar\""
         }
