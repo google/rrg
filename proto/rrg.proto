@@ -282,7 +282,7 @@ message Condition {
     //
     // The exact regex syntax and semantics are not specified but most typical
     // expressions found in popular regex engines should be supported.
-    bytes bytes_match = 7;
+    string bytes_match = 7;
 
     // The condition is satisfied if the field is equal to this integer.
     //
