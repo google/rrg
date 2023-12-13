@@ -543,62 +543,70 @@ mod tests {
     }
 
     #[test]
-    fn to_string_filter() {
+    fn filter_to_string_empty() {
         assert_eq! {
             filter!().to_string(),
             "⊥"
         };
+    }
+
+    #[test]
+    fn filter_to_string_single() {
         assert_eq! {
             filter! {
                 var(1) = str("foo")
             }.to_string(),
             "𝛸(1) = \"foo\""
         };
+    }
+
+    #[test]
+    fn filter_to_string_multiple() {
         assert_eq! {
             filter! {
                 (var(4:2) < u64(42)) | (var(1:3:3:7) = str("bar"))
             }.to_string(),
             "𝛸(4.2) < 42 ∨ 𝛸(1.3.3.7) = \"bar\""
-        }
+        };
     }
 
     #[test]
-    fn to_string_cond() {
+    fn cond_to_string() {
         assert_eq! {
             cond!(not var(1:3:3:7) = str("foo")).to_string(),
             "𝛸(1.3.3.7) ≠ \"foo\""
-        }
+        };
     }
 
     #[test]
-    fn to_string_cond_var() {
+    fn cond_var_to_string() {
         assert_eq!(var!(1).to_string(), "𝛸(1)");
         assert_eq!(var!(4:2).to_string(), "𝛸(4.2)");
         assert_eq!(var!(1:3:3:7).to_string(), "𝛸(1.3.3.7)");
     }
 
     #[test]
-    fn to_string_cond_full_op() {
+    fn cond_full_op_to_string() {
         assert_eq! {
             cond!(var(0) = true).to_string(),
             "𝛸(0) = true"
-        }
+        };
         assert_eq! {
             cond!(not var(0) = false).to_string(),
             "𝛸(0) ≠ false",
-        }
+        };
         assert_eq! {
             cond!(not var(0) = u64(42)).to_string(),
             "𝛸(0) ≠ 42"
-        }
+        };
         assert_eq! {
             cond!(not var(0) < u64(1337)).to_string(),
             "𝛸(0) ≮ 1337"
-        }
+        };
     }
 
     #[test]
-    fn to_string_cond_op() {
+    fn cond_op_to_string() {
         assert_eq!(op!(= true).to_string(), "= true");
         assert_eq!(op!(= false).to_string(), "= false");
 
