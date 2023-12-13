@@ -140,6 +140,8 @@ message Status {
       INVALID_CPU_TIME_LIMIT = 8;
       // Real (wall) time usage treshhold specified in the request is invalid.
       INVALID_REAL_TIME_LIMIT = 9;
+      // Filter specified in the request is invalid.
+      INVALID_FILTER = 10;
     }
 
     // Type of the error.

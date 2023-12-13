@@ -7,6 +7,8 @@ mod filter;
 
 use rrg_macro::warn;
 
+pub use filter::Filter;
+
 /// List of all actions known by the agent.
 ///
 /// An action is a "unit of execution" and is invoked by flows (created on the
@@ -160,6 +162,8 @@ pub struct Request {
     real_time_limit: Option<std::time::Duration>,
     /// Minimum level at which logs are going to be sent to the server.
     log_level: log::LevelFilter,
+    /// List of filters to apply to result messages.
+    filters: Vec<Filter>,
 }
 
 impl Request {
@@ -304,6 +308,15 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
             }),
         };
 
+        let filters = proto.take_filters().into_iter()
+            .map(|proto| Filter::try_from(proto))
+            .collect::<Result<_, self::filter::ParseError>>()
+            .map_err(|error| ParseRequestError {
+                request_id: Some(request_id),
+                kind: ParseRequestErrorKind::InvalidFilter,
+                error: Some(Box::new(error)),
+            })?;
+
         Ok(Request {
             id: request_id,
             action,
@@ -312,6 +325,7 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
             cpu_time_limit,
             real_time_limit,
             log_level: proto.log_level().into(),
+            filters,
         })
     }
 }
@@ -374,6 +388,8 @@ pub enum ParseRequestErrorKind {
     InvalidCpuTimeLimit,
     /// The real (wall) time limit in the request is invalid.
     InvalidRealTimeLimit,
+    /// A filter in the request is invalid.
+    InvalidFilter,
 }
 
 impl std::fmt::Display for ParseRequestErrorKind {
@@ -386,6 +402,7 @@ impl std::fmt::Display for ParseRequestErrorKind {
             UnknownAction(action) => write!(fmt, "uknown action: {action}"),
             InvalidCpuTimeLimit => write!(fmt, "invalid CPU time limit"),
             InvalidRealTimeLimit => write!(fmt, "invalid real time limit"),
+            InvalidFilter => write!(fmt, "invalid filter"),
         }
     }
 }
@@ -404,6 +421,7 @@ impl From<ParseRequestErrorKind> for rrg_proto::rrg::status::error::Type {
             UnknownAction(_) => Self::UNKNOWN_ACTION,
             InvalidCpuTimeLimit => Self::INVALID_CPU_TIME_LIMIT,
             InvalidRealTimeLimit => Self::INVALID_REAL_TIME_LIMIT,
+            InvalidFilter => Self::INVALID_FILTER,
         }
     }
 }
