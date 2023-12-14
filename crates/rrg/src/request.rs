@@ -222,6 +222,14 @@ impl Request {
         self.log_level
     }
 
+    /// Takes the filters secified in the request.
+    /// 
+    /// Note that calling this method will permanently clear filters contained
+    /// within the request.
+    pub fn take_filters(&mut self) -> Vec<Filter> {
+        std::mem::replace(&mut self.filters, Vec::new())
+    }
+
     /// Awaits for a new request message from Fleetspeak.
     ///
     /// This will suspend execution until the request is actually available.
