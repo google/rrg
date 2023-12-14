@@ -45,6 +45,40 @@ pub struct Reply<I: Item> {
 
 impl<I: Item> Reply<I> {
 
+    /// Converts the reply into [`PreparedReply`].
+    pub fn prepare(self) -> PreparedReply<I> {
+        PreparedReply {
+            request_id: self.request_id,
+            response_id: self.response_id,
+            item_proto: self.item.into_proto(),
+        }
+    }
+}
+
+/// A prepared action reply message.
+/// 
+/// This is a message wrapper around the raw Protocol Buffers message for some
+/// [`Item`] type but associated with a particular request.
+/// 
+/// To create an instance of this type, use the [`Reply::prepare`] method.
+/// 
+/// [`Item`]: crate::response::Item
+pub struct PreparedReply<I: Item> {
+    /// A unique request identifier for which this item was yielded.
+    request_id: RequestId,
+    /// A unique response identifier of this item.
+    response_id: ResponseId,
+    /// An actual Protocol Buffers message of the item that the action yielded.
+    item_proto: I::Proto,
+}
+
+impl<I: Item> PreparedReply<I> {
+
+    /// Returns the Protocol Buffers message of the item of the reply.
+    pub fn item_proto(&self) -> &I::Proto {
+        &self.item_proto
+    }
+
     /// Sends the reply message through Fleetspeak to the GRR server.
     ///
     /// This function consumes the item to ensure that it is not sent twice.
@@ -337,13 +371,13 @@ impl<I: crate::response::Item> Parcel<I> {
     }
 }
 
-impl<I> From<Reply<I>> for rrg_proto::rrg::Response
+impl<I> From<PreparedReply<I>> for rrg_proto::rrg::Response
 where
     I: Item,
 {
-    fn from(reply: Reply<I>) -> rrg_proto::rrg::Response {
-        let result_proto = reply.item.into_proto();
-        let result_any = protobuf::well_known_types::any::Any::pack(&result_proto)
+    fn from(reply: PreparedReply<I>) -> rrg_proto::rrg::Response {
+        let result_proto = reply.item_proto();
+        let result_any = protobuf::well_known_types::any::Any::pack(result_proto)
             // This should only fail in case we are out of memory, which we are
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a result");

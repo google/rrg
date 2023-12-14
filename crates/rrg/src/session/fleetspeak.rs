@@ -122,7 +122,7 @@ impl crate::session::Session for FleetspeakSession {
     where
         I: crate::response::Item,
     {
-        let reply = self.response_builder.reply(item);
+        let reply = self.response_builder.reply(item).prepare();
 
         self.network_bytes_sent += reply.send_unaccounted() as u64;
         self.check_network_bytes_limit()?;
