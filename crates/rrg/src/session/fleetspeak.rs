@@ -114,6 +114,31 @@ impl FleetspeakSession {
 
         Ok(())
     }
+
+    /// Evaluates filters on the given reply.
+    /// 
+    /// This function returns a boolean indicating whether the reply passes the
+    /// filters.
+    /// 
+    /// # Errors
+    /// 
+    /// The function will return an error if the filter cannot be evaluated on
+    /// the given message (e.g. the specified field is not available on the
+    /// message or there was a type issue).
+    fn eval_filters<I>(&self, reply: &crate::response::PreparedReply<I>) -> crate::session::Result<bool>
+    where
+        I: crate::response::Item,
+    {
+        for filter in &self.filters {
+            let item_proto = reply.item_proto();
+            if !filter.eval_message(item_proto)? {
+                log::debug!("result '{item_proto}' filtered out by: {filter}");
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
 }
 
 impl crate::session::Session for FleetspeakSession {
@@ -123,6 +148,11 @@ impl crate::session::Session for FleetspeakSession {
         I: crate::response::Item,
     {
         let reply = self.response_builder.reply(item).prepare();
+
+        if !self.eval_filters(&reply)? {
+            self.filtered_out_results += 1;
+            return Ok(());
+        }
 
         self.network_bytes_sent += reply.send_unaccounted() as u64;
         self.check_network_bytes_limit()?;
