@@ -23,6 +23,8 @@ pub enum ErrorKind {
     InvalidArgs,
     /// The action execution failed.
     ActionFailure,
+    /// Filter evaluation on action result failed.
+    FilterFailure,
     /// Action execution crossed the allowed network bytes limit.
     NetworkBytesLimitExceeded,
     /// Action execution crossed the allowed real (wall) time limit.
@@ -77,6 +79,9 @@ impl std::fmt::Display for Error {
             ActionFailure => {
                 write!(fmt, "action execution failed: {}", self.error)
             }
+            FilterFailure => {
+                write!(fmt, "filter evaluation failed: {}", self.error)
+            }
             NetworkBytesLimitExceeded => {
                 write!(fmt, "network bytes limit exceeded: {}", self.error)
             }
@@ -114,6 +119,16 @@ impl From<crate::request::ParseArgsError> for Error {
     }
 }
 
+impl From<crate::request::FilterError> for Error {
+
+    fn from(error: crate::request::FilterError) -> Error {
+        Error {
+            kind: ErrorKind::FilterFailure,
+            error: Box::new(error),
+        }
+    }
+}
+
 impl From<Error> for rrg_proto::rrg::status::Error {
 
     fn from(error: Error) -> rrg_proto::rrg::status::Error {
@@ -135,6 +150,7 @@ impl From<ErrorKind> for rrg_proto::rrg::status::error::Type {
             UnsupportedAction => Self::UNSUPPORTED_ACTION,
             InvalidArgs => Self::INVALID_ARGS,
             ActionFailure => Self::ACTION_FAILURE,
+            FilterFailure => Self::FILTER_FAILURE,
             NetworkBytesLimitExceeded => Self::NETWORK_BYTES_SENT_LIMIT_EXCEEDED,
             RealTimeLimitExceeded => Self::REAL_TIME_LIMIT_EXCEEDED,
         }

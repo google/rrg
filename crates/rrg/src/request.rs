@@ -7,7 +7,7 @@ mod filter;
 
 use rrg_macro::warn;
 
-pub use filter::Filter;
+pub use filter::{Filter, Error as FilterError};
 
 /// List of all actions known by the agent.
 ///

@@ -136,6 +136,8 @@ message Status {
       REAL_TIME_LIMIT_EXCEEDED = 6;
       // Action-specific error occurred.
       ACTION_FAILURE = 7;
+      // Filter evaluation on action result failed.
+      FILTER_FAILURE = 11;
       // CPU time usage treshhold specified in the request is invalid.
       INVALID_CPU_TIME_LIMIT = 8;
       // Real (wall) time usage treshhold specified in the request is invalid.
