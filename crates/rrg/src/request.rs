@@ -3,11 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-mod filter;
-
 use rrg_macro::warn;
-
-pub use filter::{Filter, Error as FilterError};
 
 /// List of all actions known by the agent.
 ///
@@ -163,7 +159,7 @@ pub struct Request {
     /// Minimum level at which logs are going to be sent to the server.
     log_level: log::LevelFilter,
     /// List of filters to apply to result messages.
-    filters: Vec<Filter>,
+    filters: Vec<crate::filter::Filter>,
 }
 
 impl Request {
@@ -226,7 +222,7 @@ impl Request {
     /// 
     /// Note that calling this method will permanently clear filters contained
     /// within the request.
-    pub fn take_filters(&mut self) -> Vec<Filter> {
+    pub fn take_filters(&mut self) -> Vec<crate::filter::Filter> {
         std::mem::replace(&mut self.filters, Vec::new())
     }
 
@@ -317,8 +313,8 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
         };
 
         let filters = proto.take_filters().into_iter()
-            .map(|proto| Filter::try_from(proto))
-            .collect::<Result<_, self::filter::ParseError>>()
+            .map(|proto| crate::filter::Filter::try_from(proto))
+            .collect::<Result<_, crate::filter::ParseError>>()
             .map_err(|error| ParseRequestError {
                 request_id: Some(request_id),
                 kind: ParseRequestErrorKind::InvalidFilter,

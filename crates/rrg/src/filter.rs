@@ -607,13 +607,13 @@ mod tests {
 
     macro_rules! var {
         ($top_field_num:literal) => {
-            crate::request::filter::CondVar {
+            crate::filter::CondVar {
                 top_field_num: $top_field_num,
                 nested_field_nums: vec![],
             }
         };
         ($top_field_num:literal : $($nested_field_num:literal):*) => {
-            crate::request::filter::CondVar {
+            crate::filter::CondVar {
                 top_field_num: $top_field_num,
                 nested_field_nums: vec![$($nested_field_num),*],
             }
@@ -622,40 +622,40 @@ mod tests {
 
     macro_rules! op {
         (= true) => {
-            crate::request::filter::CondOp::BoolEqual(true)
+            crate::filter::CondOp::BoolEqual(true)
         };
         (= false) => {
-            crate::request::filter::CondOp::BoolEqual(false)
+            crate::filter::CondOp::BoolEqual(false)
         };
         (= str($val:literal)) => {
-            crate::request::filter::CondOp::StringEqual(String::from($val))
+            crate::filter::CondOp::StringEqual(String::from($val))
         };
         (~= str($val:literal)) => {
             {
                 let regex = ::regex::Regex::new($val).unwrap();
-                crate::request::filter::CondOp::StringMatch(regex)
+                crate::filter::CondOp::StringMatch(regex)
             }
         };
         (= bytes($val:literal)) => {
-            crate::request::filter::CondOp::BytesEqual($val.to_vec())
+            crate::filter::CondOp::BytesEqual($val.to_vec())
         };
         (~= bytes($val:literal)) => {
             {
                 let regex = ::regex::bytes::Regex::new($val).unwrap();
-                crate::request::filter::CondOp::BytesMatch(regex)
+                crate::filter::CondOp::BytesMatch(regex)
             }
         };
         (= u64($val:literal)) => {
-            crate::request::filter::CondOp::U64Equal($val)
+            crate::filter::CondOp::U64Equal($val)
         };
         (< u64($val:literal)) => {
-            crate::request::filter::CondOp::U64Less($val)
+            crate::filter::CondOp::U64Less($val)
         };
         (= i64($val:literal)) => {
-            crate::request::filter::CondOp::I64Equal($val)
+            crate::filter::CondOp::I64Equal($val)
         };
         (< i64($val:literal)) => {
-            crate::request::filter::CondOp::I64Less($val)
+            crate::filter::CondOp::I64Less($val)
         };
     }
 
@@ -668,9 +668,9 @@ mod tests {
             }
         };
         (var($($var:tt)*) $($op:tt)*) => {
-            crate::request::filter::Cond {
+            crate::filter::Cond {
                 var: var!($($var)*),
-                op: crate::request::filter::CondFullOp {
+                op: crate::filter::CondFullOp {
                     op: op!($($op)*),
                     negated: false,
                 },
@@ -680,7 +680,7 @@ mod tests {
 
     macro_rules! filter {
         ($(($($cond:tt)*))|*) => {
-            crate::request::filter::Filter {
+            crate::filter::Filter {
                 conds: vec![$(cond!($($cond)*)),*]
             }
         };

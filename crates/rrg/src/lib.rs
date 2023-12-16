@@ -13,6 +13,7 @@ pub mod args;
 pub mod session;
 
 mod blob;
+mod filter;
 mod request;
 mod response;
 

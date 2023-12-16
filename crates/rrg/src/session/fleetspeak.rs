@@ -17,7 +17,7 @@ pub struct FleetspeakSession {
     /// Time which we are allowed to spend within the session.
     real_time_limit: Option<std::time::Duration>,
     /// List of filters to apply to result messages.
-    filters: Vec<crate::request::Filter>,
+    filters: Vec<crate::filter::Filter>,
 }
 
 impl FleetspeakSession {

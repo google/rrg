@@ -119,9 +119,9 @@ impl From<crate::request::ParseArgsError> for Error {
     }
 }
 
-impl From<crate::request::FilterError> for Error {
+impl From<crate::filter::Error> for Error {
 
-    fn from(error: crate::request::FilterError) -> Error {
+    fn from(error: crate::filter::Error) -> Error {
         Error {
             kind: ErrorKind::FilterFailure,
             error: Box::new(error),
