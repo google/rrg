@@ -121,6 +121,8 @@ pub struct Status {
     request_id: RequestId,
     /// A unique response identifier of this status.
     response_id: ResponseId,
+    /// Number of items that have been rejected by filters.
+    filtered_out_count: u32,
     /// The action execution status.
     result: Result<(), crate::session::Error>,
 }
@@ -214,7 +216,7 @@ pub struct ResponseBuilder {
     /// The response identifier assigned to the next generated response.
     next_response_id: ResponseId,
     /// Number of items that have been rejected by filters.
-    filtered_out_count: u64,
+    filtered_out_count: u32,
 }
 
 impl ResponseBuilder {
@@ -239,6 +241,7 @@ impl ResponseBuilder {
             // Because this method consumes the builder, we do not need to
             // increment the response id.
             response_id: self.next_response_id,
+            filtered_out_count: self.filtered_out_count,
             result,
         }
     }
@@ -425,6 +428,8 @@ impl From<Status> for rrg_proto::rrg::Status {
         if let Err(error) = status.result {
             proto.set_error(error.into());
         }
+
+        proto.set_filtered_out_count(status.filtered_out_count);
 
         proto
     }
