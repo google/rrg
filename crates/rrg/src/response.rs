@@ -213,6 +213,8 @@ pub struct ResponseBuilder {
     request_id: RequestId,
     /// The response identifier assigned to the next generated response.
     next_response_id: ResponseId,
+    /// Number of items that have been rejected by filters.
+    filtered_out_count: u64,
 }
 
 impl ResponseBuilder {
@@ -226,6 +228,7 @@ impl ResponseBuilder {
             // the status message is received. Thus, we have to replicate the
             // behaviour of the existing GRR agent and start at 1 as well.
             next_response_id: ResponseId(1),
+            filtered_out_count: 0,
         }
     }
 
@@ -253,6 +256,16 @@ impl ResponseBuilder {
             response_id,
             item,
         }
+    }
+
+    /// Marks the given reply as rejected by filters.
+    pub fn filter_out<I>(&mut self, reply: PreparedReply<I>)
+    where
+        I: Item,
+    {
+        drop(reply);
+
+        self.filtered_out_count += 1;
     }
 }
 
