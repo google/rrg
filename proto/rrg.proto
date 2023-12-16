@@ -166,7 +166,7 @@ message Status {
   google.protobuf.Duration real_time = 4;
 
   // Number of results that were not sent because they were rejected by filters.
-  repeated uint32 rejected_results_count = 5;
+  uint32 filtered_out_count = 5;
 }
 
 // Log message that agent can send to inform of certain events.
