@@ -129,7 +129,7 @@ impl FleetspeakSession {
         for filter in &self.filters {
             let item_proto = reply.item_proto();
             if !filter.eval_message(item_proto)? {
-                log::debug!("result '{item_proto}' filtered out by: {filter}");
+                log::debug!("'{item_proto}' rejected by filter: {filter}");
                 return Ok(false);
             }
         }
