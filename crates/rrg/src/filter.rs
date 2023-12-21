@@ -5,6 +5,16 @@
 
 use protobuf::reflect::ReflectValueRef;
 
+/// Filter set is a formula of the form _𝜑₁ ∧ ⋯ ∧ 𝜑ₙ.
+/// 
+/// Here, individual 𝜑ᵢ is a [filter][Filter]. Thus, it is essentially a logic
+/// formula in [conjunctive normal form][1].
+///
+/// [1]: https://en.wikipedia.org/wiki/Conjunctive_normal_form
+pub struct FilterSet {
+    filters: Vec<Filter>,
+}
+
 /// A filter is a formula of the form _(x₁ ⋄₁ l₁) ∨ ⋯ ∨ (xₙ ⋄ₙ lₙ)_.
 ///
 /// Here, xᵢ means a _variable_ (to be substituted by particular value from the
@@ -106,6 +116,30 @@ enum CondOp {
     I64Equal(i64),
     /// Less-than check against an [`i64`] value.
     I64Less(i64),
+}
+
+impl FilterSet {
+
+    /// Constructs an empty filter set.
+    /// 
+    /// Every message always passes an empty filter set.
+    pub fn empty() -> FilterSet {
+        FilterSet {
+            filters: Vec::new(),
+        }
+    }
+
+    /// Verifies whether the given message passes the filter set.
+    /// 
+    /// The message passes the filter if it passes all filters in the set.
+    pub fn eval_message(
+        &self,
+        message: &dyn protobuf::MessageDyn,
+    ) -> Result<bool, Error> {
+        self.filters.iter().try_fold(true, |acc, filter| Ok({
+            acc && filter.eval_message(message)?
+        }))
+    }
 }
 
 impl Filter {
@@ -449,6 +483,18 @@ impl std::fmt::Display for ErrorRepr {
             ErrorRepr::TypeMismatch { var_type, op_type } => {
                 write!(f, "comparison of `{var_type}` variable using `{op_type}` operator")
             }
+        }
+    }
+}
+
+impl FromIterator<Filter> for FilterSet {
+
+    fn from_iter<I>(iter: I) -> FilterSet
+    where
+        I: IntoIterator<Item = Filter>,
+    {
+        FilterSet {
+            filters: iter.into_iter().collect(),
         }
     }
 }
@@ -962,6 +1008,50 @@ mod tests {
             }
             _ => panic!("unexpected error: {error}"),
         }
+    }
+
+    #[test]
+    fn eval_set_empty() {
+        use protobuf::well_known_types::wrappers::UInt64Value;
+        let mut message = UInt64Value::default();
+        message.value = 42;
+
+        assert_eq!(FilterSet::empty().eval_message(&message).unwrap(), true);
+    }
+
+    #[test]
+    fn eval_set_single() {
+        use protobuf::well_known_types::wrappers::UInt64Value;
+        let mut message = UInt64Value::default();
+
+        let filters = std::iter::once(filter!(var(1) = u64(42)))
+            .collect::<FilterSet>();
+
+        message.value = 42;
+        assert_eq!(filters.eval_message(&message).unwrap(), true);
+
+        message.value = 1337;
+        assert_eq!(filters.eval_message(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn eval_set_multiple() {
+        use protobuf::well_known_types::wrappers::UInt64Value;
+        let mut message = UInt64Value::default();
+
+        let filters = [
+            filter!(not var(1) < u64(42)),
+            filter!(var(1) < u64(1337)),
+        ].into_iter().collect::<FilterSet>();
+
+        message.value = 17;
+        assert_eq!(filters.eval_message(&message).unwrap(), false);
+
+        message.value = 42;
+        assert_eq!(filters.eval_message(&message).unwrap(), true);
+
+        message.value = 1337;
+        assert_eq!(filters.eval_message(&message).unwrap(), false);
     }
 
     #[test]
