@@ -16,8 +16,8 @@ pub struct FleetspeakSession {
     real_time_start: std::time::Instant,
     /// Time which we are allowed to spend within the session.
     real_time_limit: Option<std::time::Duration>,
-    /// List of filters to apply to result messages.
-    filters: Vec<crate::filter::Filter>,
+    /// Filters to apply to result messages.
+    filters: crate::filter::FilterSet,
 }
 
 impl FleetspeakSession {
@@ -111,31 +111,6 @@ impl FleetspeakSession {
 
         Ok(())
     }
-
-    /// Evaluates filters on the given reply.
-    /// 
-    /// This function returns a boolean indicating whether the reply passes the
-    /// filters.
-    /// 
-    /// # Errors
-    /// 
-    /// The function will return an error if the filter cannot be evaluated on
-    /// the given message (e.g. the specified field is not available on the
-    /// message or there was a type issue).
-    fn eval_filters<I>(&self, reply: &crate::response::PreparedReply<I>) -> crate::session::Result<bool>
-    where
-        I: crate::response::Item,
-    {
-        for filter in &self.filters {
-            let item_proto = reply.item_proto();
-            if !filter.eval_message(item_proto)? {
-                log::debug!("'{item_proto}' rejected by filter: {filter}");
-                return Ok(false);
-            }
-        }
-
-        Ok(true)
-    }
 }
 
 impl crate::session::Session for FleetspeakSession {
@@ -146,7 +121,7 @@ impl crate::session::Session for FleetspeakSession {
     {
         let reply = self.response_builder.reply(item).prepare();
 
-        if !self.eval_filters(&reply)? {
+        if !self.filters.eval_message(reply.item_proto())? {
             self.response_builder.filter_out(reply);
             return Ok(());
         }

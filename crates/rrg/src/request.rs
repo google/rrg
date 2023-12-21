@@ -158,8 +158,8 @@ pub struct Request {
     real_time_limit: Option<std::time::Duration>,
     /// Minimum level at which logs are going to be sent to the server.
     log_level: log::LevelFilter,
-    /// List of filters to apply to result messages.
-    filters: Vec<crate::filter::Filter>,
+    /// Filters to apply to result messages.
+    filters: crate::filter::FilterSet,
 }
 
 impl Request {
@@ -222,8 +222,8 @@ impl Request {
     /// 
     /// Note that calling this method will permanently clear filters contained
     /// within the request.
-    pub fn take_filters(&mut self) -> Vec<crate::filter::Filter> {
-        std::mem::replace(&mut self.filters, Vec::new())
+    pub fn take_filters(&mut self) -> crate::filter::FilterSet {
+        std::mem::replace(&mut self.filters, crate::filter::FilterSet::empty())
     }
 
     /// Awaits for a new request message from Fleetspeak.
