@@ -147,7 +147,7 @@ impl Filter {
     /// Verifies whether the given message passes the filter.
     ///
     /// The message passes the filter if passes any of its conditions.
-    pub fn eval_message(
+    fn eval_message(
         &self,
         message: &dyn protobuf::MessageDyn,
     ) -> Result<bool, Error> {
