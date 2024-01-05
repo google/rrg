@@ -132,12 +132,12 @@ impl FilterSet {
     /// Verifies whether the given message passes the filter set.
     /// 
     /// The message passes the filter if it passes all filters in the set.
-    pub fn eval_message(
+    pub fn eval(
         &self,
         message: &dyn protobuf::MessageDyn,
     ) -> Result<bool, Error> {
         self.filters.iter().try_fold(true, |acc, filter| Ok({
-            acc && filter.eval_message(message)?
+            acc && filter.eval(message)?
         }))
     }
 }
@@ -147,12 +147,12 @@ impl Filter {
     /// Verifies whether the given message passes the filter.
     ///
     /// The message passes the filter if passes any of its conditions.
-    fn eval_message(
+    fn eval(
         &self,
         message: &dyn protobuf::MessageDyn,
     ) -> Result<bool, Error> {
         self.conds.iter().try_fold(false, |acc, cond| Ok({
-            acc || cond.eval_message(message)?
+            acc || cond.eval(message)?
         }))
     }
 }
@@ -160,15 +160,15 @@ impl Filter {
 impl Cond {
 
     /// Verifies whether the given message passes the condition.
-    fn eval_message(
+    fn eval(
         &self,
         message: &dyn protobuf::MessageDyn,
     ) -> Result<bool, Error> {
-        self.eval_message_at(message, self.var.as_ref())
+        self.eval_at(message, self.var.as_ref())
     }
 
     /// Verifies whether the message at certain field passes the condition.
-    fn eval_message_at(
+    fn eval_at(
         &self,
         message: &dyn protobuf::MessageDyn,
         var: CondVarRef<'_>,
@@ -199,7 +199,7 @@ impl Cond {
                     }.into());
                 };
 
-                self.eval_message_at(&*message, var)
+                self.eval_at(&*message, var)
             }
         }
     }
@@ -743,10 +743,10 @@ mod tests {
         let filter = filter!(var(1) = true);
 
         message.value = true;
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = false;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
     }
 
     #[test]
@@ -757,10 +757,10 @@ mod tests {
         let filter = filter!(var(1) = str("foo"));
 
         message.value = String::from("foo");
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = String::from("bar");
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
     }
 
     #[test]
@@ -771,13 +771,13 @@ mod tests {
         let filter = filter!(var(1) ~= str("^ba(r|z)$"));
 
         message.value = String::from("foo");
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
 
         message.value = String::from("bar");
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = String::from("baz");
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
     }
 
     #[test]
@@ -788,10 +788,10 @@ mod tests {
         let filter = filter!(var(1) = bytes(b"\x00\x11\x00"));
 
         message.value = b"\x00\x11\x00".to_vec();
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = b"\x11\x00\x11".to_vec();
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
     }
 
     #[test]
@@ -802,13 +802,13 @@ mod tests {
         let filter = filter!(var(1) ~= bytes("^(\x00|\x11)+$"));
 
         message.value = b"\x00\x00\x11\x00\x00".to_vec();
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = b"\x00\x11\x00\x11\x00".to_vec();
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = b"\x00\x22\x00".to_vec();
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
     }
 
     #[test]
@@ -819,10 +819,10 @@ mod tests {
         let filter = filter!(var(1) = u64(42));
 
         message.value = 42;
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = 1337;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
     }
 
     #[test]
@@ -833,13 +833,13 @@ mod tests {
         let filter = filter!(var(1) < u64(42));
 
         message.value = 7;
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = 42;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
 
         message.value = 1337;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
     }
 
     #[test]
@@ -850,13 +850,13 @@ mod tests {
         let filter = filter!(var(1) = i64(-42));
 
         message.value = -42;
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = 42;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
 
         message.value = -1337;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
     }
 
     #[test]
@@ -867,13 +867,13 @@ mod tests {
         let filter = filter!(var(1) < i64(-42));
 
         message.value = -1337;
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = -42;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
 
         message.value = 42;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
     }
 
     #[test]
@@ -884,10 +884,10 @@ mod tests {
         let filter = filter!(not var(1) = false);
 
         message.value = true;
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = false;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
     }
 
     #[test]
@@ -896,8 +896,8 @@ mod tests {
         let mut message = UInt32Value::default();
 
         message.value = 42;
-        assert!(filter!(var(1) = u64(42)).eval_message(&message).unwrap());
-        assert!(filter!(var(1) < u64(1337)).eval_message(&message).unwrap());
+        assert!(filter!(var(1) = u64(42)).eval(&message).unwrap());
+        assert!(filter!(var(1) < u64(1337)).eval(&message).unwrap());
     }
 
     #[test]
@@ -906,10 +906,10 @@ mod tests {
         let mut message = Int32Value::default();
 
         message.value = -42;
-        assert!(filter!(var(1) = i64(-42)).eval_message(&message).unwrap());
+        assert!(filter!(var(1) = i64(-42)).eval(&message).unwrap());
         
         message.value = -1337;
-        assert!(filter!(var(1) < i64(-42)).eval_message(&message).unwrap());
+        assert!(filter!(var(1) < i64(-42)).eval(&message).unwrap());
     }
 
     #[test]
@@ -922,22 +922,22 @@ mod tests {
         };
 
         message.value = -1337;
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = -42;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
 
         message.value = 0;
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = 11;
-        assert_eq!(filter.eval_message(&message).unwrap(), false);
+        assert_eq!(filter.eval(&message).unwrap(), false);
 
         message.value = 42;
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
 
         message.value = 1337;
-        assert_eq!(filter.eval_message(&message).unwrap(), true);
+        assert_eq!(filter.eval(&message).unwrap(), true);
     }
 
     #[test]
@@ -947,15 +947,15 @@ mod tests {
         message.mut_metadata().mut_version().set_minor(2);
         message.mut_metadata().mut_version().set_patch(1);
 
-        assert!(filter!(var(1:3:1) = u64(3)).eval_message(&message).unwrap());
-        assert!(filter!(var(1:3:2) = u64(2)).eval_message(&message).unwrap());
-        assert!(filter!(var(1:3:3) = u64(1)).eval_message(&message).unwrap());
+        assert!(filter!(var(1:3:1) = u64(3)).eval(&message).unwrap());
+        assert!(filter!(var(1:3:2) = u64(2)).eval(&message).unwrap());
+        assert!(filter!(var(1:3:3) = u64(1)).eval(&message).unwrap());
     }
 
     #[test]
     fn eval_invalid_field_num() {
         let error = filter!(var(1:3:42) = u64(42))
-            .eval_message(&rrg_proto::startup::Startup::default())
+            .eval(&rrg_proto::startup::Startup::default())
             .unwrap_err();
 
         match error.repr {
@@ -970,7 +970,7 @@ mod tests {
     #[test]
     fn eval_non_singular_field() {
         let error = filter!(var(2) = str("--foo"))
-            .eval_message(&rrg_proto::startup::Startup::default())
+            .eval(&rrg_proto::startup::Startup::default())
             .unwrap_err();
 
         match error.repr {
@@ -984,7 +984,7 @@ mod tests {
     #[test]
     fn eval_non_message_field_access() {
         let error = filter!(var(1:2:3) = u64(42))
-            .eval_message(&rrg_proto::startup::Version::default())
+            .eval(&rrg_proto::startup::Version::default())
             .unwrap_err();
 
         match error.repr {
@@ -998,7 +998,7 @@ mod tests {
     #[test]
     fn eval_type_mismatch() {
         let error = filter!(var(1) = str("foo"))
-            .eval_message(&rrg_proto::startup::Version::default())
+            .eval(&rrg_proto::startup::Version::default())
             .unwrap_err();
 
         match error.repr {
@@ -1016,7 +1016,7 @@ mod tests {
         let mut message = UInt64Value::default();
         message.value = 42;
 
-        assert_eq!(FilterSet::empty().eval_message(&message).unwrap(), true);
+        assert_eq!(FilterSet::empty().eval(&message).unwrap(), true);
     }
 
     #[test]
@@ -1028,10 +1028,10 @@ mod tests {
             .collect::<FilterSet>();
 
         message.value = 42;
-        assert_eq!(filters.eval_message(&message).unwrap(), true);
+        assert_eq!(filters.eval(&message).unwrap(), true);
 
         message.value = 1337;
-        assert_eq!(filters.eval_message(&message).unwrap(), false);
+        assert_eq!(filters.eval(&message).unwrap(), false);
     }
 
     #[test]
@@ -1045,13 +1045,13 @@ mod tests {
         ].into_iter().collect::<FilterSet>();
 
         message.value = 17;
-        assert_eq!(filters.eval_message(&message).unwrap(), false);
+        assert_eq!(filters.eval(&message).unwrap(), false);
 
         message.value = 42;
-        assert_eq!(filters.eval_message(&message).unwrap(), true);
+        assert_eq!(filters.eval(&message).unwrap(), true);
 
         message.value = 1337;
-        assert_eq!(filters.eval_message(&message).unwrap(), false);
+        assert_eq!(filters.eval(&message).unwrap(), false);
     }
 
     #[test]

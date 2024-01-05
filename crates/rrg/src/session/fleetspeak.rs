@@ -121,7 +121,7 @@ impl crate::session::Session for FleetspeakSession {
     {
         let reply = self.response_builder.reply(item).prepare();
 
-        if !self.filters.eval_message(reply.item_proto())? {
+        if !self.filters.eval(reply.item_proto())? {
             self.response_builder.filter_out(reply);
             return Ok(());
         }
