@@ -219,7 +219,7 @@ impl Request {
     }
 
     /// Takes the filters secified in the request.
-    /// 
+    ///
     /// Note that calling this method will permanently clear filters contained
     /// within the request.
     pub fn take_filters(&mut self) -> crate::filter::FilterSet {

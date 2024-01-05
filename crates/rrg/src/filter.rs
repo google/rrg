@@ -6,7 +6,7 @@
 use protobuf::reflect::ReflectValueRef;
 
 /// Filter set is a formula of the form _𝜑₁ ∧ ⋯ ∧ 𝜑ₙ.
-/// 
+///
 /// Here, individual 𝜑ᵢ is a [filter][Filter]. Thus, it is essentially a logic
 /// formula in [conjunctive normal form][1].
 ///
@@ -43,29 +43,29 @@ struct Cond {
 }
 
 /// Individual condition variable.
-/// 
+///
 /// The variable is denoted by a non-empty sequence of message field numbers
 /// referring to a primitive value of arbitrary message.
-/// 
+///
 /// Consider the following Protocol Buffers message definitions:
-/// 
+///
 /// ```protobuf
 /// message Foo {
 ///   Bar bar = 1;
 /// }
-/// 
+///
 /// message Bar {
 ///   Quux quux = 1;
 ///   string thud = 2;
 /// }
-/// 
+///
 /// message Quux {
 ///   reserved 1;
 ///   reserved 2;
 ///   uint32 norf = 3;
 /// }
 /// ```
-/// 
+///
 /// Variable `1.3` on `Foo` instance will refer to `bar.thud` of type `string`
 /// whereas the same variable on `Bar` instance will refer to field `quux.norf`
 /// of type `uint32`.
@@ -75,7 +75,7 @@ struct CondVar {
 }
 
 /// Borrowed reference to an individual condition variable.
-/// 
+///
 /// This is essentially a non-owned variant of [`CondVar`] that makes working
 /// with it easier.
 #[derive(Clone, Copy)]
@@ -85,7 +85,7 @@ struct CondVarRef<'a> {
 }
 
 /// Individual condition operator of the form _□ ⋄ l_ (including negation).
-/// 
+///
 /// See documentation for [`Filter`] for more details.
 struct CondFullOp {
     /// The basic operator to apply.
@@ -95,7 +95,7 @@ struct CondFullOp {
 }
 
 /// Individual basic condition operator of the form _□ ⋄ l_ (without negation.
-/// 
+///
 /// See documentation for [`Filter`] for more details.
 enum CondOp {
     /// Equality check against a [`bool`] value.
@@ -121,7 +121,7 @@ enum CondOp {
 impl FilterSet {
 
     /// Constructs an empty filter set.
-    /// 
+    ///
     /// Every message always passes an empty filter set.
     pub fn empty() -> FilterSet {
         FilterSet {
@@ -130,7 +130,7 @@ impl FilterSet {
     }
 
     /// Verifies whether the given message passes the filter set.
-    /// 
+    ///
     /// The message passes the filter if it passes all filters in the set.
     pub fn eval(
         &self,
@@ -208,9 +208,9 @@ impl Cond {
 impl CondFullOp {
 
     /// Verifies whether the given value passes the operator.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// This function will return an error if the operator cannot be applied
     /// to the given value (e.g. `value` is a string and the operator is boolean
     /// equality)
@@ -228,9 +228,9 @@ impl CondFullOp {
 impl CondOp {
 
     /// Verifies whether the given value passes the operator.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// This function will return an error if the operator cannot be applied
     /// to the given value (e.g. `value` is a string and the operator is boolean
     /// equality)
@@ -315,7 +315,7 @@ impl CondVar {
 impl<'a> CondVarRef<'a> {
 
     /// Returns the variable referring to the immediate nested message.
-    /// 
+    ///
     /// In case this variable does not refer to any nested messages, [`None`] is
     /// returned instead.
     fn nested(self) -> Option<CondVarRef<'a>> {
@@ -627,7 +627,7 @@ impl std::error::Error for ParseError {
 }
 
 impl std::fmt::Display for ParseErrorRepr {
-    
+
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ParseErrorRepr::InvalidStringMatchRegex(error) => {
@@ -907,7 +907,7 @@ mod tests {
 
         message.value = -42;
         assert!(filter!(var(1) = i64(-42)).eval(&message).unwrap());
-        
+
         message.value = -1337;
         assert!(filter!(var(1) < i64(-42)).eval(&message).unwrap());
     }

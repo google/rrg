@@ -56,12 +56,12 @@ impl<I: Item> Reply<I> {
 }
 
 /// A prepared action reply message.
-/// 
+///
 /// This is a message wrapper around the raw Protocol Buffers message for some
 /// [`Item`] type but associated with a particular request.
-/// 
+///
 /// To create an instance of this type, use the [`Reply::prepare`] method.
-/// 
+///
 /// [`Item`]: crate::response::Item
 pub struct PreparedReply<I: Item> {
     /// A unique request identifier for which this item was yielded.

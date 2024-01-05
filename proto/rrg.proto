@@ -246,7 +246,7 @@ message Condition {
   //       Bar bar = 1;
   //       Baz baz = 2;
   //     }
-  //     
+  //
   //     message Bar {
   //       Baz baz = 1;
   //     }
@@ -263,7 +263,7 @@ message Condition {
   // Whether the result of applying the condition should be negated.
   //
   // Setting this to true effectively acts as putting `not` in front of the
-  // operator. 
+  // operator.
   bool negated = 2;
 
   oneof operator {
