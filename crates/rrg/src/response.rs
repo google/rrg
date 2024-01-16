@@ -205,6 +205,9 @@ impl<'r, 'a> Log<'r, 'a> {
     }
 }
 
+// TODO(@panhania): We should have some kind of end-to-end test that verifies
+// that all responses sent by RRG are consecutive integers.
+
 /// A unique identifier of a response.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ResponseId(pub(super) u64);
@@ -266,9 +269,13 @@ impl ResponseBuilder {
     where
         I: Item,
     {
-        drop(reply);
-
         self.filtered_out_count += 1;
+
+        // TODO(@panhania): Because the reply is not going to be sent, we need
+        // to rollback the identifier for the next response. However, this is
+        // going to break if two responses are generated first and only then one
+        // of them is filtered-out.
+        self.next_response_id = reply.response_id;
     }
 }
 
