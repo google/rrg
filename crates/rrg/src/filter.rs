@@ -545,7 +545,7 @@ impl TryFrom<rrg_proto::rrg::Condition> for Cond {
 
                 CondOp::StringMatch(regex)
             }
-            () if proto.has_bytes_match() => {
+            () if proto.has_bytes_equal() => {
                 CondOp::BytesEqual(proto.take_bytes_equal())
             }
             () if proto.has_bytes_match() => {
