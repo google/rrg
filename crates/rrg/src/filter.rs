@@ -760,6 +760,20 @@ mod tests {
         };
     }
 
+    macro_rules! filter_set {
+        ($(($($filter:tt)*)),*) => {
+            crate::filter::FilterSet {
+                filters: vec![$(filter!($($filter)*)),*]
+            }
+        };
+        ($(($($filter:tt)*)),*,) => {
+            filter_set!($(($($filter)*)),*)
+        };
+        ($($filter:tt)*) => {
+            filter_set!(($($filter)*))
+        };
+    }
+
     #[test]
     fn eval_bool_equal() {
         use protobuf::well_known_types::wrappers::BoolValue;
@@ -1041,7 +1055,7 @@ mod tests {
         let mut message = UInt64Value::default();
         message.value = 42;
 
-        assert_eq!(FilterSet::empty().eval(&message).unwrap(), true);
+        assert_eq!(filter_set!().eval(&message).unwrap(), true);
     }
 
     #[test]
@@ -1049,8 +1063,7 @@ mod tests {
         use protobuf::well_known_types::wrappers::UInt64Value;
         let mut message = UInt64Value::default();
 
-        let filters = std::iter::once(filter!(var(1) = u64(42)))
-            .collect::<FilterSet>();
+        let filters = filter_set!(var(1) = u64(42));
 
         message.value = 42;
         assert_eq!(filters.eval(&message).unwrap(), true);
@@ -1064,10 +1077,10 @@ mod tests {
         use protobuf::well_known_types::wrappers::UInt64Value;
         let mut message = UInt64Value::default();
 
-        let filters = [
-            filter!(not var(1) < u64(42)),
-            filter!(var(1) < u64(1337)),
-        ].into_iter().collect::<FilterSet>();
+        let filters = filter_set! {
+            (not var(1) < u64(42)),
+            (var(1) < u64(1337)),
+        };
 
         message.value = 17;
         assert_eq!(filters.eval(&message).unwrap(), false);
@@ -1082,45 +1095,39 @@ mod tests {
     #[test]
     fn filter_set_to_string_empty() {
         assert_eq! {
-            FilterSet::empty().to_string(),
+            filter_set!().to_string(),
             "⊤"
         }
     }
 
     #[test]
     fn filter_set_to_string_single() {
-        let filters = [
-            filter!(var(1) = str("foo")),
-        ].into_iter().collect::<FilterSet>();
-
         assert_eq! {
-            filters.to_string(),
+            filter_set! {
+                var(1) = str("foo")
+            }.to_string(),
             "𝛸(1) = \"foo\""
         }
     }
 
     #[test]
     fn filter_set_to_string_multiple() {
-        let filters = [
-            filter!(var(1) = str("foo")),
-            filter!(var(2) = u64(42)),
-        ].into_iter().collect::<FilterSet>();
-
         assert_eq! {
-            filters.to_string(),
+            filter_set! {
+                (var(1) = str("foo")),
+                (var(2) = u64(42)),
+            }.to_string(),
             "𝛸(1) = \"foo\" ∧ 𝛸(2) = 42"
         }
     }
 
     #[test]
     fn filter_set_to_string_multiple_grouped() {
-        let filters = [
-            filter!((var(1) = str("foo")) | (var(1) = str("bar"))),
-            filter!((var(2) = u64(42)) | (var(2) = u64(1337))),
-        ].into_iter().collect::<FilterSet>();
-
         assert_eq! {
-            filters.to_string(),
+            filter_set! {
+                ((var(1) = str("foo")) | (var(1) = str("bar"))),
+                ((var(2) = u64(42)) | (var(2) = u64(1337))),
+            }.to_string(),
             "(𝛸(1) = \"foo\" ∨ 𝛸(1) = \"bar\") ∧ (𝛸(2) = 42 ∨ 𝛸(2) = 1337)"
         }
     }
