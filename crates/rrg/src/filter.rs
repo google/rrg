@@ -329,6 +329,31 @@ impl<'a> CondVarRef<'a> {
     }
 }
 
+impl std::fmt::Display for FilterSet {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.filters.is_empty() {
+            return write!(fmt, "⊤");
+        }
+
+        if self.filters[0].conds.len() > 1 {
+            write!(fmt, "({})", self.filters[0])?;
+        } else {
+            write!(fmt, "{}", self.filters[0])?;
+        }
+
+        for filter in &self.filters[1..] {
+            if filter.conds.len() > 1 {
+                write!(fmt, " ∧ ({})", filter)?;
+            } else {
+                write!(fmt, " ∧ {}", filter)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl std::fmt::Display for Filter {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -1052,6 +1077,52 @@ mod tests {
 
         message.value = 1337;
         assert_eq!(filters.eval(&message).unwrap(), false);
+    }
+
+    #[test]
+    fn filter_set_to_string_empty() {
+        assert_eq! {
+            FilterSet::empty().to_string(),
+            "⊤"
+        }
+    }
+
+    #[test]
+    fn filter_set_to_string_single() {
+        let filters = [
+            filter!(var(1) = str("foo")),
+        ].into_iter().collect::<FilterSet>();
+
+        assert_eq! {
+            filters.to_string(),
+            "𝛸(1) = \"foo\""
+        }
+    }
+
+    #[test]
+    fn filter_set_to_string_multiple() {
+        let filters = [
+            filter!(var(1) = str("foo")),
+            filter!(var(2) = u64(42)),
+        ].into_iter().collect::<FilterSet>();
+
+        assert_eq! {
+            filters.to_string(),
+            "𝛸(1) = \"foo\" ∧ 𝛸(2) = 42"
+        }
+    }
+
+    #[test]
+    fn filter_set_to_string_multiple_grouped() {
+        let filters = [
+            filter!((var(1) = str("foo")) | (var(1) = str("bar"))),
+            filter!((var(2) = u64(42)) | (var(2) = u64(1337))),
+        ].into_iter().collect::<FilterSet>();
+
+        assert_eq! {
+            filters.to_string(),
+            "(𝛸(1) = \"foo\" ∨ 𝛸(1) = \"bar\") ∧ (𝛸(2) = 42 ∨ 𝛸(2) = 1337)"
+        }
     }
 
     #[test]
