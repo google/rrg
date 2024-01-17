@@ -3,6 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use crate::RequestId;
+use crate::filter::FilterSet;
 
 /// A response item that can be sent to the server.
 ///
@@ -28,6 +29,33 @@ impl Item for () {
     }
 }
 
+/// [`Item`] that has been prepared to be sent as a reply.
+///
+/// This type makes it possible to inspect the underlying Protocol Buffers
+/// message of the item (e.g. for the purpose of applying filters) while also
+/// abstracting packing items into replies.
+pub struct PreparedItem<I: Item> {
+    /// An actual Protocol Buffers message of the item.
+    proto: I::Proto,
+}
+
+impl<I: Item> PreparedItem<I> {
+
+    /// Returns the Protocol Buffers message of the item.
+    pub fn as_proto(&self) -> &I::Proto {
+        &self.proto
+    }
+}
+
+impl<I: Item> From<I> for PreparedItem<I> {
+
+    fn from(item: I) -> PreparedItem<I> {
+        PreparedItem {
+            proto: item.into_proto(),
+        }
+    }
+}
+
 /// An action reply message.
 ///
 /// This is a message wrapper around the [`Item`] type but associates it with a
@@ -40,7 +68,7 @@ pub struct Reply<I: Item> {
     /// A unique response identifier of this item.
     response_id: ResponseId,
     /// An actual item that the action yielded.
-    item: I,
+    item: PreparedItem<I>,
 }
 
 impl<I: Item> Reply<I> {
@@ -87,6 +115,8 @@ pub struct Status {
     request_id: RequestId,
     /// A unique response identifier of this status.
     response_id: ResponseId,
+    /// Number of items that have been rejected by filters.
+    filtered_out_count: u32,
     /// The action execution status.
     result: Result<(), crate::session::Error>,
 }
@@ -169,6 +199,19 @@ impl<'r, 'a> Log<'r, 'a> {
     }
 }
 
+/// An action reply message after applying filters to the contained item.
+pub enum FilteredReply<I: Item> {
+    /// Item passed the filters and can be sent as a reply.
+    Accepted(Reply<I>),
+    /// Item was rejected by the filters.
+    Rejected,
+    /// Error occured when applying filters to the item.
+    Error(crate::filter::Error),
+}
+
+// TODO(@panhania): We should have some kind of end-to-end test that verifies
+// that all responses sent by RRG are consecutive integers.
+
 /// A unique identifier of a response.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ResponseId(pub(super) u64);
@@ -179,6 +222,10 @@ pub struct ResponseBuilder {
     request_id: RequestId,
     /// The response identifier assigned to the next generated response.
     next_response_id: ResponseId,
+    /// Filters to apply to the results before they are sent.
+    filters: FilterSet,
+    /// Number of items that have been rejected by filters.
+    filtered_out_count: u32,
 }
 
 impl ResponseBuilder {
@@ -192,7 +239,15 @@ impl ResponseBuilder {
             // the status message is received. Thus, we have to replicate the
             // behaviour of the existing GRR agent and start at 1 as well.
             next_response_id: ResponseId(1),
+            filters: FilterSet::empty(),
+            filtered_out_count: 0,
         }
+    }
+
+    /// Creates a new response builder that will filter results.
+    pub fn with_filters(mut self, filters: FilterSet) -> ResponseBuilder {
+        self.filters = filters;
+        self
     }
 
     /// Builds a new status response for the given action outcome.
@@ -202,22 +257,32 @@ impl ResponseBuilder {
             // Because this method consumes the builder, we do not need to
             // increment the response id.
             response_id: self.next_response_id,
+            filtered_out_count: self.filtered_out_count,
             result,
         }
     }
 
     /// Builds a new reply response for the given action item.
-    pub fn reply<I>(&mut self, item: I) -> Reply<I>
+    pub fn reply<I: Item>(&mut self, item: PreparedItem<I>) -> FilteredReply<I>
     where
         I: Item,
     {
-        let response_id = self.next_response_id;
-        self.next_response_id.0 += 1;
+        match self.filters.eval(&item.proto) {
+            Ok(true) => {
+                let response_id = self.next_response_id;
+                self.next_response_id.0 += 1;
 
-        Reply {
-            request_id: self.request_id.clone(),
-            response_id,
-            item,
+                FilteredReply::Accepted(Reply {
+                    request_id: self.request_id.clone(),
+                    response_id,
+                    item,
+                })
+            }
+            Ok(false) => {
+                self.filtered_out_count += 1;
+                FilteredReply::Rejected
+            }
+            Err(error) => FilteredReply::Error(error),
         }
     }
 }
@@ -342,8 +407,8 @@ where
     I: Item,
 {
     fn from(reply: Reply<I>) -> rrg_proto::rrg::Response {
-        let result_proto = reply.item.into_proto();
-        let result_any = protobuf::well_known_types::any::Any::pack(&result_proto)
+        let result_proto = reply.item.as_proto();
+        let result_any = protobuf::well_known_types::any::Any::pack(result_proto)
             // This should only fail in case we are out of memory, which we are
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a result");
@@ -378,6 +443,8 @@ impl From<Status> for rrg_proto::rrg::Status {
         if let Err(error) = status.result {
             proto.set_error(error.into());
         }
+
+        proto.set_filtered_out_count(status.filtered_out_count);
 
         proto
     }

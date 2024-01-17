@@ -158,6 +158,8 @@ pub struct Request {
     real_time_limit: Option<std::time::Duration>,
     /// Minimum level at which logs are going to be sent to the server.
     log_level: log::LevelFilter,
+    /// Filters to apply to result messages.
+    filters: crate::filter::FilterSet,
 }
 
 impl Request {
@@ -214,6 +216,14 @@ impl Request {
     /// Gets the minimum level at which log messages are sent to the server.
     pub fn log_level(&self) -> log::LevelFilter {
         self.log_level
+    }
+
+    /// Takes the filters secified in the request.
+    ///
+    /// Note that calling this method will permanently clear filters contained
+    /// within the request.
+    pub fn take_filters(&mut self) -> crate::filter::FilterSet {
+        std::mem::replace(&mut self.filters, crate::filter::FilterSet::empty())
     }
 
     /// Awaits for a new request message from Fleetspeak.
@@ -302,6 +312,15 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
             }),
         };
 
+        let filters = proto.take_filters().into_iter()
+            .map(|proto| crate::filter::Filter::try_from(proto))
+            .collect::<Result<_, crate::filter::ParseError>>()
+            .map_err(|error| ParseRequestError {
+                request_id: Some(request_id),
+                kind: ParseRequestErrorKind::InvalidFilter,
+                error: Some(Box::new(error)),
+            })?;
+
         Ok(Request {
             id: request_id,
             action,
@@ -310,6 +329,7 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
             cpu_time_limit,
             real_time_limit,
             log_level: proto.log_level().into(),
+            filters,
         })
     }
 }
@@ -372,6 +392,8 @@ pub enum ParseRequestErrorKind {
     InvalidCpuTimeLimit,
     /// The real (wall) time limit in the request is invalid.
     InvalidRealTimeLimit,
+    /// A filter in the request is invalid.
+    InvalidFilter,
 }
 
 impl std::fmt::Display for ParseRequestErrorKind {
@@ -384,6 +406,7 @@ impl std::fmt::Display for ParseRequestErrorKind {
             UnknownAction(action) => write!(fmt, "uknown action: {action}"),
             InvalidCpuTimeLimit => write!(fmt, "invalid CPU time limit"),
             InvalidRealTimeLimit => write!(fmt, "invalid real time limit"),
+            InvalidFilter => write!(fmt, "invalid filter"),
         }
     }
 }
@@ -402,6 +425,7 @@ impl From<ParseRequestErrorKind> for rrg_proto::rrg::status::error::Type {
             UnknownAction(_) => Self::UNKNOWN_ACTION,
             InvalidCpuTimeLimit => Self::INVALID_CPU_TIME_LIMIT,
             InvalidRealTimeLimit => Self::INVALID_REAL_TIME_LIMIT,
+            InvalidFilter => Self::INVALID_FILTER,
         }
     }
 }
