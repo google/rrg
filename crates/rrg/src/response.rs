@@ -28,6 +28,33 @@ impl Item for () {
     }
 }
 
+/// [`Item`] that has been prepared to be sent as a reply.
+///
+/// This type makes it possible to inspect the underlying Protocol Buffers
+/// message of the item (e.g. for the purpose of applying filters) while also
+/// abstracting packing items into replies.
+pub struct PreparedItem<I: Item> {
+    /// An actual Protocol Buffers message of the item.
+    proto: I::Proto,
+}
+
+impl<I: Item> PreparedItem<I> {
+
+    /// Returns the Protocol Buffers message of the item.
+    pub fn as_proto(&self) -> &I::Proto {
+        &self.proto
+    }
+}
+
+impl<I: Item> From<I> for PreparedItem<I> {
+
+    fn from(item: I) -> PreparedItem<I> {
+        PreparedItem {
+            proto: item.into_proto(),
+        }
+    }
+}
+
 /// An action reply message.
 ///
 /// This is a message wrapper around the [`Item`] type but associates it with a
@@ -40,44 +67,10 @@ pub struct Reply<I: Item> {
     /// A unique response identifier of this item.
     response_id: ResponseId,
     /// An actual item that the action yielded.
-    item: I,
+    item: PreparedItem<I>,
 }
 
 impl<I: Item> Reply<I> {
-
-    /// Converts the reply into [`PreparedReply`].
-    pub fn prepare(self) -> PreparedReply<I> {
-        PreparedReply {
-            request_id: self.request_id,
-            response_id: self.response_id,
-            item_proto: self.item.into_proto(),
-        }
-    }
-}
-
-/// A prepared action reply message.
-///
-/// This is a message wrapper around the raw Protocol Buffers message for some
-/// [`Item`] type but associated with a particular request.
-///
-/// To create an instance of this type, use the [`Reply::prepare`] method.
-///
-/// [`Item`]: crate::response::Item
-pub struct PreparedReply<I: Item> {
-    /// A unique request identifier for which this item was yielded.
-    request_id: RequestId,
-    /// A unique response identifier of this item.
-    response_id: ResponseId,
-    /// An actual Protocol Buffers message of the item that the action yielded.
-    item_proto: I::Proto,
-}
-
-impl<I: Item> PreparedReply<I> {
-
-    /// Returns the Protocol Buffers message of the item of the reply.
-    pub fn item_proto(&self) -> &I::Proto {
-        &self.item_proto
-    }
 
     /// Sends the reply message through Fleetspeak to the GRR server.
     ///
@@ -250,7 +243,7 @@ impl ResponseBuilder {
     }
 
     /// Builds a new reply response for the given action item.
-    pub fn reply<I>(&mut self, item: I) -> Reply<I>
+    pub fn reply<I>(&mut self, item: PreparedItem<I>) -> Reply<I>
     where
         I: Item,
     {
@@ -265,17 +258,13 @@ impl ResponseBuilder {
     }
 
     /// Marks the given reply as rejected by filters.
-    pub fn filter_out<I>(&mut self, reply: PreparedReply<I>)
+    pub fn filter_out<I>(&mut self, item: PreparedItem<I>)
     where
         I: Item,
     {
-        self.filtered_out_count += 1;
+        drop(item);
 
-        // TODO(@panhania): Because the reply is not going to be sent, we need
-        // to rollback the identifier for the next response. However, this is
-        // going to break if two responses are generated first and only then one
-        // of them is filtered-out.
-        self.next_response_id = reply.response_id;
+        self.filtered_out_count += 1;
     }
 }
 
@@ -394,12 +383,12 @@ impl<I: crate::response::Item> Parcel<I> {
     }
 }
 
-impl<I> From<PreparedReply<I>> for rrg_proto::rrg::Response
+impl<I> From<Reply<I>> for rrg_proto::rrg::Response
 where
     I: Item,
 {
-    fn from(reply: PreparedReply<I>) -> rrg_proto::rrg::Response {
-        let result_proto = reply.item_proto();
+    fn from(reply: Reply<I>) -> rrg_proto::rrg::Response {
+        let result_proto = reply.item.as_proto();
         let result_any = protobuf::well_known_types::any::Any::pack(result_proto)
             // This should only fail in case we are out of memory, which we are
             // almost certainly not (and if we are, we have bigger issue).

@@ -119,12 +119,14 @@ impl crate::session::Session for FleetspeakSession {
     where
         I: crate::response::Item,
     {
-        let reply = self.response_builder.reply(item).prepare();
+        let item = crate::response::PreparedItem::from(item);
 
-        if !self.filters.eval(reply.item_proto())? {
-            self.response_builder.filter_out(reply);
+        if !self.filters.eval(item.as_proto())? {
+            self.response_builder.filter_out(item);
             return Ok(());
         }
+
+        let reply = self.response_builder.reply(item);
 
         self.network_bytes_sent += reply.send_unaccounted() as u64;
         self.check_network_bytes_limit()?;
