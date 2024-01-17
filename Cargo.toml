@@ -5,6 +5,7 @@ members = [
     "./crates/rrg-macro",
     "./crates/rrg-proto",
 ]
+resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
