@@ -199,6 +199,16 @@ impl<'r, 'a> Log<'r, 'a> {
     }
 }
 
+/// An action reply message after applying filters to the contained item.
+pub enum FilteredReply<I: Item> {
+    /// Item passed the filters and can be sent as a reply.
+    Accepted(Reply<I>),
+    /// Item was rejected by the filters.
+    Rejected,
+    /// Error occured when applying filters to the item.
+    Error(crate::filter::Error),
+}
+
 // TODO(@panhania): We should have some kind of end-to-end test that verifies
 // that all responses sent by RRG are consecutive integers.
 
@@ -253,34 +263,27 @@ impl ResponseBuilder {
     }
 
     /// Builds a new reply response for the given action item.
-    ///
-    /// This function will apply filters (if there are any to apply) and return
-    /// `None` if filter evaluates to false for the given item.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if filters of the response builder
-    /// cannot be applied to the item (e.g. due to a type mismatch).
-    pub fn reply<I: Item>(
-        &mut self,
-        item: PreparedItem<I>,
-    ) -> Result<Option<Reply<I>>, crate::filter::Error>
+    pub fn reply<I: Item>(&mut self, item: PreparedItem<I>) -> FilteredReply<I>
     where
         I: Item,
     {
-        if !self.filters.eval(&item.proto)? {
-            self.filtered_out_count += 1;
-            return Ok(None);
+        match self.filters.eval(&item.proto) {
+            Ok(true) => {
+                let response_id = self.next_response_id;
+                self.next_response_id.0 += 1;
+
+                FilteredReply::Accepted(Reply {
+                    request_id: self.request_id.clone(),
+                    response_id,
+                    item,
+                })
+            }
+            Ok(false) => {
+                self.filtered_out_count += 1;
+                FilteredReply::Rejected
+            }
+            Err(error) => FilteredReply::Error(error),
         }
-
-        let response_id = self.next_response_id;
-        self.next_response_id.0 += 1;
-
-        Ok(Some(Reply {
-            request_id: self.request_id.clone(),
-            response_id,
-            item,
-        }))
     }
 }
 

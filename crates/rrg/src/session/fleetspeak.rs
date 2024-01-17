@@ -118,8 +118,12 @@ impl crate::session::Session for FleetspeakSession {
         I: crate::response::Item,
     {
         let item = crate::response::PreparedItem::from(item);
-        let Some(reply) = self.response_builder.reply(item)? else {
-            return Ok(());
+
+        use crate::response::FilteredReply::*;
+        let reply = match self.response_builder.reply(item) {
+            Accepted(reply) => reply,
+            Rejected => return Ok(()),
+            Error(error) => return Err(error.into()),
         };
 
         self.network_bytes_sent += reply.send_unaccounted() as u64;
