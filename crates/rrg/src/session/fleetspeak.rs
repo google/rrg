@@ -16,8 +16,6 @@ pub struct FleetspeakSession {
     real_time_start: std::time::Instant,
     /// Time which we are allowed to spend within the session.
     real_time_limit: Option<std::time::Duration>,
-    /// Filters to apply to result messages.
-    filters: crate::filter::FilterSet,
 }
 
 impl FleetspeakSession {
@@ -49,13 +47,13 @@ impl FleetspeakSession {
 
         let status = match request {
             Ok(mut request) => {
+                let filters = request.take_filters();
                 let mut session = FleetspeakSession {
-                    response_builder,
+                    response_builder: response_builder.with_filters(filters),
                     network_bytes_sent: 0,
                     network_bytes_limit: request.network_bytes_limit(),
                     real_time_start: std::time::Instant::now(),
                     real_time_limit: request.real_time_limit(),
-                    filters: request.take_filters(),
                 };
 
                 let result = crate::log::ResponseLogger::new(&request)
@@ -120,13 +118,9 @@ impl crate::session::Session for FleetspeakSession {
         I: crate::response::Item,
     {
         let item = crate::response::PreparedItem::from(item);
-
-        if !self.filters.eval(item.as_proto())? {
-            self.response_builder.filter_out(item);
+        let Some(reply) = self.response_builder.reply(item)? else {
             return Ok(());
-        }
-
-        let reply = self.response_builder.reply(item);
+        };
 
         self.network_bytes_sent += reply.send_unaccounted() as u64;
         self.check_network_bytes_limit()?;

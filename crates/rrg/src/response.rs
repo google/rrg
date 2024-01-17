@@ -3,6 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use crate::RequestId;
+use crate::filter::FilterSet;
 
 /// A response item that can be sent to the server.
 ///
@@ -211,6 +212,8 @@ pub struct ResponseBuilder {
     request_id: RequestId,
     /// The response identifier assigned to the next generated response.
     next_response_id: ResponseId,
+    /// Filters to apply to the results before they are sent.
+    filters: FilterSet,
     /// Number of items that have been rejected by filters.
     filtered_out_count: u32,
 }
@@ -226,8 +229,15 @@ impl ResponseBuilder {
             // the status message is received. Thus, we have to replicate the
             // behaviour of the existing GRR agent and start at 1 as well.
             next_response_id: ResponseId(1),
+            filters: FilterSet::empty(),
             filtered_out_count: 0,
         }
+    }
+
+    /// Creates a new response builder that will filter results.
+    pub fn with_filters(mut self, filters: FilterSet) -> ResponseBuilder {
+        self.filters = filters;
+        self
     }
 
     /// Builds a new status response for the given action outcome.
@@ -243,28 +253,34 @@ impl ResponseBuilder {
     }
 
     /// Builds a new reply response for the given action item.
-    pub fn reply<I>(&mut self, item: PreparedItem<I>) -> Reply<I>
+    ///
+    /// This function will apply filters (if there are any to apply) and return
+    /// `None` if filter evaluates to false for the given item.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if filters of the response builder
+    /// cannot be applied to the item (e.g. due to a type mismatch).
+    pub fn reply<I: Item>(
+        &mut self,
+        item: PreparedItem<I>,
+    ) -> Result<Option<Reply<I>>, crate::filter::Error>
     where
         I: Item,
     {
+        if !self.filters.eval(&item.proto)? {
+            self.filtered_out_count += 1;
+            return Ok(None);
+        }
+
         let response_id = self.next_response_id;
         self.next_response_id.0 += 1;
 
-        Reply {
+        Ok(Some(Reply {
             request_id: self.request_id.clone(),
             response_id,
             item,
-        }
-    }
-
-    /// Marks the given reply as rejected by filters.
-    pub fn filter_out<I>(&mut self, item: PreparedItem<I>)
-    where
-        I: Item,
-    {
-        drop(item);
-
-        self.filtered_out_count += 1;
+        }))
     }
 }
 
