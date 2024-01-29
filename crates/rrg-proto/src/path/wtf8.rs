@@ -179,7 +179,7 @@ mod tests {
 
     use super::*;
 
-    use quickcheck_macros::quickcheck;
+    use quickcheck::quickcheck;
 
     #[test]
     fn from_empty() {
@@ -260,30 +260,33 @@ mod tests {
         assert_eq!(into_ill_formed_utf16(units), Err(IllegalByte(0xff)));
     }
 
-    #[quickcheck]
-    fn from_any_string(input: String) {
-        let units = input.encode_utf16();
+    quickcheck! {
 
-        let string_wtf8 = from_ill_formed_utf16(units);
-        let string_utf8 = input.as_bytes();
-        assert_eq!(string_wtf8, string_utf8);
-    }
+        fn from_any_string(input: String) -> bool {
+            let units = input.encode_utf16();
 
-    #[quickcheck]
-    fn into_from_any_string(input: String) {
-        let units = input.bytes();
+            let string_wtf8 = from_ill_formed_utf16(units);
+            let string_utf8 = input.as_bytes();
 
-        let string_utf16 = into_ill_formed_utf16(units).unwrap();
-        let string_wtf8 = from_ill_formed_utf16(string_utf16);
-        assert_eq!(String::from_utf8(string_wtf8).unwrap(), input);
-    }
+            string_wtf8 == string_utf8
+        }
 
-    #[quickcheck]
-    fn from_into_any_units(input: Vec<u16>) {
-        let units = input.iter().map(|unit| *unit);
+        fn into_from_any_string(input: String) -> bool {
+            let units = input.bytes();
 
-        let string_wtf8 = from_ill_formed_utf16(units);
-        let string_utf16 = into_ill_formed_utf16(string_wtf8).unwrap();
-        assert_eq!(string_utf16, input);
+            let string_utf16 = into_ill_formed_utf16(units).unwrap();
+            let string_wtf8 = from_ill_formed_utf16(string_utf16);
+
+            String::from_utf8(string_wtf8).unwrap() == input
+        }
+
+        fn from_into_any_units(input: Vec<u16>) -> bool {
+            let units = input.iter().map(|unit| *unit);
+
+            let string_wtf8 = from_ill_formed_utf16(units);
+            let string_utf16 = into_ill_formed_utf16(string_wtf8).unwrap();
+
+            string_utf16 == input
+        }
     }
 }
