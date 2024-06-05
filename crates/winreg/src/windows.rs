@@ -22,6 +22,13 @@ impl PredefinedKey {
             open_raw_key((*self).into(), subkey_name)
         }
     }
+
+    pub fn info(&self) -> std::io::Result<KeyInfo> {
+        // SAFETY: Predefined keys are guaranteed to be valid open keys.
+        unsafe {
+            query_raw_key_info((*self).into())
+        }
+    }
 }
 
 impl TryFrom<windows_sys::Win32::System::Registry::HKEY> for PredefinedKey {
@@ -94,6 +101,13 @@ impl OpenKey {
             open_raw_key(self.0, subkey_name)
         }
     }
+
+    pub fn info(&self) -> std::io::Result<KeyInfo> {
+        // SAFETY: The key is guaranteed to be open and valid.
+        unsafe {
+            query_raw_key_info(self.0)
+        }
+    }
 }
 
 impl Drop for OpenKey {
@@ -110,6 +124,17 @@ impl Drop for OpenKey {
             windows_sys::Win32::System::Registry::RegCloseKey(self.0)
         };
     }
+}
+
+pub struct KeyInfo {
+    // Registry key which this record describes.
+    key: windows_sys::Win32::System::Registry::HKEY,
+    // Maximum length of the subkey names (excluding trailing null byte).
+    max_subkey_name_len: u32,
+    // Maximum length of the value names (excluding trailing null byte).
+    max_value_name_len: u32,
+    // Maximum length of the value (in bytes).
+    max_value_len: u32,
 }
 
 /// Opens a subkey of the given raw registry key.
@@ -153,6 +178,62 @@ unsafe fn open_raw_key(
     }))
 }
 
+/// Queries information about the given raw registry key.
+///
+/// # Safety
+///
+/// `key` must be a valid open registry key.
+unsafe fn query_raw_key_info(
+    key: windows_sys::Win32::System::Registry::HKEY,
+) -> std::io::Result<KeyInfo> {
+    let mut max_subkey_name_len = std::mem::MaybeUninit::uninit();
+    let mut max_value_name_len = std::mem::MaybeUninit::uninit();
+    let mut max_value_len = std::mem::MaybeUninit::uninit();
+
+    // SAFETY: This is just an FFI call as described in the docs [1].
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryinfokeyw
+    let code = unsafe {
+        windows_sys::Win32::System::Registry::RegQueryInfoKeyW(
+            key,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            max_subkey_name_len.as_mut_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            max_value_name_len.as_mut_ptr(),
+            max_value_len.as_mut_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+
+    if code != windows_sys::Win32::Foundation::ERROR_SUCCESS {
+        return Err(std::io::Error::from_raw_os_error(code as i32));
+    }
+
+    Ok(KeyInfo {
+        key,
+        // SAFETY: We verified that the call above succeeded, the value is now
+        // initialized.
+        max_subkey_name_len: unsafe {
+            max_subkey_name_len.assume_init()
+        },
+        // SAFETY: We verified that the call above succeeded, the value is now
+        // initialized.
+        max_value_name_len: unsafe {
+            max_value_name_len.assume_init()
+        },
+        // SAFETY: We verified that the call above succeeded, the value is now
+        // initialized.
+        max_value_len: unsafe {
+            max_value_len.assume_init()
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -165,10 +246,23 @@ mod tests {
     }
 
     #[test]
+    fn predefined_key_info() {
+        PredefinedKey::LocalMachine
+            .info().unwrap();
+    }
+
+    #[test]
     fn open_key_open() {
         PredefinedKey::LocalMachine
             .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
             .open(std::ffi::OsStr::new("Microsoft")).unwrap()
             .open(std::ffi::OsStr::new("Windows NT")).unwrap();
+    }
+
+    #[test]
+    fn open_key_info() {
+        PredefinedKey::LocalMachine
+            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
+            .info().unwrap();
     }
 }
