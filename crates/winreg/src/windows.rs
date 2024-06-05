@@ -1,6 +1,7 @@
 /// [Predefined key][1] of the Windows registry.
 ///
 /// [1]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/predefined-keys
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PredefinedKey {
     ClassesRoot,
     CurrentConfig,
