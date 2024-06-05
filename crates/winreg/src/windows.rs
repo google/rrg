@@ -137,6 +137,84 @@ pub struct KeyInfo {
     max_value_len: u32,
 }
 
+impl KeyInfo {
+
+    pub fn subkeys(&self) -> Subkeys {
+        Subkeys {
+            key: self.key,
+            index: 0,
+            // We use `+ 1` because the buffer should be able to hold the null
+            // byte at the end which `max_subkey_name_len` does not account for.
+            name_buf: Vec::with_capacity(self.max_subkey_name_len as usize + 1),
+        }
+    }
+}
+
+pub struct Subkeys {
+    /// Registry key for which we yield subkeys.
+    key: windows_sys::Win32::System::Registry::HKEY,
+    /// Index of the key to retrieve next.
+    index: u32,
+    /// Buffer for the null-terminated name of the key.
+    name_buf: Vec<u16>,
+}
+
+impl Iterator for Subkeys {
+
+    type Item = std::io::Result<std::ffi::OsString>;
+
+    fn next(&mut self) -> Option<std::io::Result<std::ffi::OsString>> {
+        let mut name_len = self.name_buf.capacity() as u32;
+
+        // SAFETY: This is just an FFI call as described in the docs [1].
+        //
+        // Note that the exposed Windows API is not strictly thread-safe: we use
+        // `index` to advance iteration but a new key might have been added in-
+        // between the calls causing some keys to be added, index to become
+        // invalid or our buffer become too small. However, this will not end in
+        // any undefined behaviour: we can end up with duplicated or skipped
+        // items but in the worst case the API will return `ERROR_NO_MORE_ITEMS`
+        // or `ERROR_MORE_DATA` which we verify below.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumkeyexa
+        let code = unsafe {
+            windows_sys::Win32::System::Registry::RegEnumKeyExW(
+                self.key,
+                self.index,
+                self.name_buf.as_mut_ptr(),
+                &mut name_len,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+
+        match code {
+            windows_sys::Win32::Foundation::ERROR_SUCCESS => {
+                // Call succeeded, carry on.
+            }
+            windows_sys::Win32::Foundation::ERROR_NO_MORE_ITEMS => {
+                return None;
+            }
+            _ => {
+                return Some(Err(std::io::Error::from_raw_os_error(code as i32)));
+            }
+        }
+
+        self.index += 1;
+
+        // SAFETY: We verified that the call above succeded, `name_len` should
+        // now be set to the number of characters (16-bit numbers) in the bufer
+        // excluding the null one at the end.
+        unsafe {
+            self.name_buf.set_len(name_len as usize);
+        }
+
+        Some(Ok(std::os::windows::ffi::OsStringExt::from_wide(&self.name_buf)))
+    }
+}
+
 /// Opens a subkey of the given raw registry key.
 ///
 /// # Safety
@@ -252,6 +330,25 @@ mod tests {
     }
 
     #[test]
+    fn predefined_key_subkeys() {
+        let subkeys = PredefinedKey::LocalMachine
+            .info().unwrap()
+            .subkeys().map(Result::unwrap).collect::<Vec<_>>();
+
+        assert! {
+            subkeys.iter()
+                .find(|subkey| subkey.to_ascii_uppercase() == "SOFTWARE")
+                .is_some()
+        };
+
+        assert! {
+            subkeys.iter()
+                .find(|subkey| subkey.to_ascii_uppercase() == "HARDWARE")
+                .is_some()
+        };
+    }
+
+    #[test]
     fn open_key_open() {
         PredefinedKey::LocalMachine
             .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
@@ -264,5 +361,19 @@ mod tests {
         PredefinedKey::LocalMachine
             .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
             .info().unwrap();
+    }
+
+    #[test]
+    fn open_key_subkeys() {
+        let subkeys = PredefinedKey::LocalMachine
+            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
+            .info().unwrap()
+            .subkeys().map(Result::unwrap).collect::<Vec<_>>();
+
+        assert! {
+            subkeys.iter()
+                .find(|subkey| subkey.to_ascii_uppercase() == "MICROSOFT")
+                .is_some()
+        };
     }
 }
