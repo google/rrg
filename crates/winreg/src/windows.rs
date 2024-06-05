@@ -14,6 +14,16 @@ pub enum PredefinedKey {
     Users,
 }
 
+impl PredefinedKey {
+
+    pub fn open(&self, subkey_name: &std::ffi::OsStr) -> std::io::Result<OpenKey> {
+        // SAFETY: Predefined keys are guaranteed to be valid open keys.
+        unsafe {
+            open_raw_key((*self).into(), subkey_name)
+        }
+    }
+}
+
 impl TryFrom<windows_sys::Win32::System::Registry::HKEY> for PredefinedKey {
 
     type Error = InvalidPredefinedKeyError;
@@ -72,4 +82,93 @@ impl std::fmt::Display for InvalidPredefinedKeyError {
 }
 
 impl std::error::Error for InvalidPredefinedKeyError {
+}
+
+pub struct OpenKey(windows_sys::Win32::System::Registry::HKEY);
+
+impl OpenKey {
+
+    pub fn open(&self, subkey_name: &std::ffi::OsStr) -> std::io::Result<OpenKey> {
+        // SAFETY: The key is guaranteed to be open and valid.
+        unsafe {
+            open_raw_key(self.0, subkey_name)
+        }
+    }
+}
+
+impl Drop for OpenKey {
+
+    fn drop(&mut self) {
+        // SAFETY: This is just an FFI call as described in the docs [1].
+        //
+        // Note that the key is guaranteed to be open by the type system so this
+        // this call should not fail. There is no way to report an error from
+        // a `Drop` implementation anyway (e.g. see [`std::fs::File`]).
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regclosekey
+        let _ = unsafe {
+            windows_sys::Win32::System::Registry::RegCloseKey(self.0)
+        };
+    }
+}
+
+/// Opens a subkey of the given raw registry key.
+///
+/// # Safety
+///
+/// `key` must be a valid open registry key.
+unsafe fn open_raw_key(
+    key: windows_sys::Win32::System::Registry::HKEY,
+    subkey_name: &std::ffi::OsStr,
+) -> std::io::Result<OpenKey> {
+    // TODO(@panhania): Get rid of this encoding.
+    use std::os::windows::ffi::OsStrExt as _;
+    let mut subkey_name = subkey_name.encode_wide().collect::<Vec<u16>>();
+    subkey_name.push(0);
+
+    let mut subkey = std::mem::MaybeUninit::uninit();
+
+    // SAFETY: This is just an FFI call as described in the docs [1].
+    //
+    // We use `KEY_READ` mode because this library is intended only for
+    // querying registry data.
+    let code = unsafe {
+        windows_sys::Win32::System::Registry::RegOpenKeyExW(
+            key,
+            subkey_name.as_ptr(),
+            0,
+            windows_sys::Win32::System::Registry::KEY_READ,
+            subkey.as_mut_ptr(),
+        )
+    };
+
+    if code != windows_sys::Win32::Foundation::ERROR_SUCCESS {
+        return Err(std::io::Error::from_raw_os_error(code as i32));
+    }
+
+    // SAFETY: We verified that the call above succeeded, the subkey is now
+    // properly initialized.
+    Ok(OpenKey(unsafe {
+        subkey.assume_init()
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn predefined_key_open() {
+        PredefinedKey::LocalMachine
+            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap();
+    }
+
+    #[test]
+    fn open_key_open() {
+        PredefinedKey::LocalMachine
+            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
+            .open(std::ffi::OsStr::new("Microsoft")).unwrap()
+            .open(std::ffi::OsStr::new("Windows NT")).unwrap();
+    }
 }
