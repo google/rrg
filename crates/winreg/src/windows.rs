@@ -104,6 +104,17 @@ impl KeyInfo {
             name_buf: Vec::with_capacity(self.max_subkey_name_len as usize + 1),
         }
     }
+
+    pub fn values(&self) -> Values {
+        Values {
+            key: self.key,
+            index: 0,
+            // We use `+ 1` because the buffer should be able to hold the null
+            // byte at the end which `max_subkey_name_len` does not account for.
+            name_buf: Vec::with_capacity(self.max_value_name_len as usize + 1),
+            data_buf: Vec::with_capacity(self.max_value_data_len as usize),
+        }
+    }
 }
 
 pub struct Subkeys {
@@ -168,6 +179,248 @@ impl Iterator for Subkeys {
         }
 
         Some(Ok(std::os::windows::ffi::OsStringExt::from_wide(&self.name_buf)))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Value {
+    /// Name of the value.
+    name: std::ffi::OsString,
+    /// Data associated with the value.
+    data: ValueData,
+}
+
+/// Data associated with a [registry value][1].
+///
+/// [1]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ValueData {
+    /// No value.
+    None,
+    /// Byte string.
+    Bytes(Vec<u8>),
+    /// Unicode-ish string.
+    String(std::ffi::OsString),
+    /// Unicode0ish string with unexpanded references to environment variables.
+    ExpandString(std::ffi::OsString),
+    /// Sequence of unicode-ish strings.
+    MultiString(Vec<std::ffi::OsString>),
+    /// Symbolic link to another registry key.
+    Link(std::ffi::OsString),
+    /// 32-bit number.
+    U32(u32),
+    /// 64-bit number.
+    U64(u64),
+}
+
+pub struct Values {
+    /// Registry key for which we yield values.
+    key: windows_sys::Win32::System::Registry::HKEY,
+    /// Index of the value to retrieve next.
+    index: u32,
+    /// Buffer for the null-terminated name of the value.
+    name_buf: Vec<u16>,
+    /// Buffer for the actual data of the value.
+    data_buf: Vec<u8>,
+}
+
+impl Iterator for Values {
+
+    type Item = std::io::Result<Value>;
+
+    fn next(&mut self) -> Option<std::io::Result<Value>> {
+        let mut name_len = self.name_buf.capacity() as u32;
+        let mut data_len = self.data_buf.capacity() as u32;
+        let mut data_type = std::mem::MaybeUninit::uninit();
+
+        // SAFETY: This is just an FFI call as described in the docs [1].
+        //
+        // Note that the exposed Windows API is not strictly thread-safe: we use
+        // `index` to advance iteration but a new value might have been added
+        // in-between the calls. However, this will not end in any undefined
+        // behaviour: we can end up with duplicated or skipped items but in the
+        // worst case the API will return appropriate error code which we verify
+        // below.
+        let code = unsafe {
+            windows_sys::Win32::System::Registry::RegEnumValueW(
+                self.key,
+                self.index,
+                self.name_buf.as_mut_ptr(),
+                &mut name_len,
+                std::ptr::null_mut(),
+                data_type.as_mut_ptr(),
+                self.data_buf.as_mut_ptr(),
+                &mut data_len,
+            )
+        };
+
+        match code {
+            windows_sys::Win32::Foundation::ERROR_SUCCESS => {
+                // Call succeeded, carry on.
+            }
+            windows_sys::Win32::Foundation::ERROR_NO_MORE_ITEMS => {
+                return None;
+            }
+            _ => {
+                return Some(Err(std::io::Error::from_raw_os_error(code as i32)));
+            }
+        }
+
+        self.index += 1;
+
+        // SAFETY: We verified that the call above succeded, `name_len` should
+        // now be set to the number of characters (16-bit numbers) in the bufer
+        // excluding the null one at the end.
+        unsafe {
+            self.name_buf.set_len(name_len as usize);
+        }
+        // SAFETY: We verified that the call above succeeded, `data_len` should
+        // now be set to number of bytes of the value data.
+        unsafe {
+            self.data_buf.set_len(data_len as usize);
+        }
+        // SAFETY: We verified that the call above succeeded, `data_type` should
+        // now be properly initialized.
+        let data_type = unsafe {
+            data_type.assume_init()
+        };
+
+        use std::os::windows::ffi::OsStringExt as _;
+
+        let data = match data_type {
+            windows_sys::Win32::System::Registry::REG_NONE => {
+                ValueData::None
+            }
+            windows_sys::Win32::System::Registry::REG_BINARY => {
+                ValueData::Bytes(self.data_buf.clone())
+            }
+            windows_sys::Win32::System::Registry::REG_SZ => {
+                // SAFETY: The type is `REG_SZ` so we need to reinterpret the
+                // buffer as 16-bit codepoint string.
+                let mut data_buf_wide = unsafe {
+                    std::slice::from_raw_parts(
+                        self.data_buf.as_ptr().cast::<u16>(),
+                        self.data_buf.len() / std::mem::size_of::<u16>(),
+                    )
+                };
+
+                // The string may or may not be null-terminated [1, 2]. We
+                // remove that null byte if it is.
+                //
+                // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumvaluea#remarks
+                // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types#string-values
+                if let Some(0) = data_buf_wide.last() {
+                    data_buf_wide = &data_buf_wide[0..data_buf_wide.len() - 1];
+                }
+
+                ValueData::String(std::ffi::OsString::from_wide(data_buf_wide))
+            }
+            windows_sys::Win32::System::Registry::REG_EXPAND_SZ => {
+                // SAFETY: The type is `REG_EXPAND_SZ` so we need to reinterpret
+                // the buffer as 16-bit codepoint string.
+                let mut data_buf_wide = unsafe {
+                    std::slice::from_raw_parts(
+                        self.data_buf.as_ptr().cast::<u16>(),
+                        self.data_buf.len() / std::mem::size_of::<u16>(),
+                    )
+                };
+
+                // The string may or may not be null-terminated [1, 2]. We
+                // remove that null byte if it is.
+                //
+                // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumvaluea#remarks
+                // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types#string-values
+                if let Some(0) = data_buf_wide.last() {
+                    data_buf_wide = &data_buf_wide[0..data_buf_wide.len() - 1];
+                }
+
+                ValueData::ExpandString(std::ffi::OsString::from_wide(data_buf_wide))
+            }
+            windows_sys::Win32::System::Registry::REG_MULTI_SZ => {
+                // SAFETY: The type is `REG_MULTI_SZ` so we need to reinterpret
+                // the buffer as 16-bit codepoint string.
+                let data_buf_wide = unsafe {
+                    std::slice::from_raw_parts(
+                        self.data_buf.as_ptr().cast::<u16>(),
+                        self.data_buf.len() / std::mem::size_of::<u16>(),
+                    )
+                };
+
+                let mut strings = Vec::new();
+
+                for string in data_buf_wide.split(|byte| *byte == 0) {
+                    // The string may or may not be null-terminated [1, 2]. We
+                    // therefore be sure if we have a "genuine" empty string or
+                    // if it was just missing null byte at the end. Skipping
+                    // such string altogether does not seem to terrible given
+                    // they should not apprear in practice anyway.
+                    //
+                    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumvaluea#remarks
+                    // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types#string-values
+                    if string.is_empty() {
+                        continue;
+                    }
+
+                    strings.push(std::ffi::OsString::from_wide(data_buf_wide));
+                }
+
+                ValueData::MultiString(strings)
+            }
+            windows_sys::Win32::System::Registry::REG_LINK => {
+                // SAFETY: The type is `REG_LINK` so we need to reinterpret the
+                // buffer as 16-bit codepoint string.
+                let mut data_buf_wide = unsafe {
+                    std::slice::from_raw_parts(
+                        self.data_buf.as_ptr().cast::<u16>(),
+                        self.data_buf.len() / std::mem::size_of::<u16>(),
+                    )
+                };
+
+                // Note that unlike with `REG_MULTI_SZ`, `REG_EXPAND_SZ` and
+                // `REG_SZ` case, the documentation does not say anything about
+                // `REG_LINK` values not being properly null terminated (which
+                // makes sense as they can be created only by the system that
+                // should enforce that).
+                assert!(matches!(data_buf_wide.last(), Some(0)));
+                data_buf_wide = &data_buf_wide[0..data_buf_wide.len() - 1];
+
+                ValueData::Link(std::ffi::OsString::from_wide(data_buf_wide))
+            }
+            windows_sys::Win32::System::Registry::REG_DWORD_LITTLE_ENDIAN => {
+                assert!(self.data_buf.len() == 4);
+
+                let octets = <[u8; 4]>::try_from(&self.data_buf[..]).unwrap();
+                ValueData::U32(u32::from_le_bytes(octets))
+            }
+            windows_sys::Win32::System::Registry::REG_QWORD_LITTLE_ENDIAN => {
+                assert!(self.data_buf.len() == 8);
+
+                let octets = <[u8; 8]>::try_from(&self.data_buf[..]).unwrap();
+                ValueData::U64(u64::from_le_bytes(octets))
+            }
+            windows_sys::Win32::System::Registry::REG_DWORD_BIG_ENDIAN => {
+                assert!(self.data_buf.len() == 4);
+
+                let octets = <[u8; 4]>::try_from(&self.data_buf[..]).unwrap();
+                ValueData::U32(u32::from_be_bytes(octets))
+            }
+            _ => {
+                // Ensure that both `REG_DWORD` and `REG_QWORD` branches are
+                // actually covered by the `*_LITTLE_ENDIAN` variants.
+                const _: () = {
+                    use windows_sys::Win32::System::Registry::*;
+                    assert!(REG_DWORD == REG_DWORD_LITTLE_ENDIAN);
+                    assert!(REG_QWORD == REG_QWORD_LITTLE_ENDIAN);
+                };
+
+                panic!("unexpected registry value type: {data_type}")
+            }
+        };
+
+        Some(Ok(Value {
+            name: std::ffi::OsString::from_wide(&self.name_buf),
+            data,
+        }))
     }
 }
 
@@ -331,5 +584,28 @@ mod tests {
                 .find(|subkey| subkey.to_ascii_uppercase() == "MICROSOFT")
                 .is_some()
         };
+    }
+
+    #[test]
+    fn open_key_values() {
+        let values = PredefinedKey::LocalMachine
+            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
+            .open(std::ffi::OsStr::new("Microsoft")).unwrap()
+            .open(std::ffi::OsStr::new("Windows NT")).unwrap()
+            .open(std::ffi::OsStr::new("CurrentVersion")).unwrap()
+            .info().unwrap()
+            .values().map(Result::unwrap).collect::<Vec<_>>();
+
+        let current_build = values.iter()
+            .find(|value| value.name == "CurrentBuild").unwrap();
+        assert!(matches!(current_build.data, ValueData::String(_)));
+
+        let current_type = values.iter()
+            .find(|value| value.name == "CurrentType").unwrap();
+        assert!(matches!(current_type.data, ValueData::String(_)));
+
+        let current_version = values.iter()
+            .find(|value| value.name == "CurrentVersion").unwrap();
+        assert!(matches!(current_version.data, ValueData::String(_)));
     }
 }
