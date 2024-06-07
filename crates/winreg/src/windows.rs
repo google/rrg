@@ -30,6 +30,13 @@ impl PredefinedKey {
         }
     }
 
+    pub fn value_data(&self, value_name: &std::ffi::OsStr) -> std::io::Result<ValueData> {
+        // SAFETY: Predefined keys are guaranteed to be valid open keys.
+        unsafe {
+            query_raw_key_value_data(self.as_raw_key(), value_name)
+        }
+    }
+
     pub fn as_raw_key(&self) -> windows_sys::Win32::System::Registry::HKEY {
         use windows_sys::Win32::System::Registry::*;
 
@@ -62,6 +69,13 @@ impl OpenKey {
         // SAFETY: The key is guaranteed to be open and valid.
         unsafe {
             query_raw_key_info(self.0)
+        }
+    }
+
+    pub fn value_data(&self, value_name: &std::ffi::OsStr) -> std::io::Result<ValueData> {
+        // SAFETY: The key is guaranteed to be open and valid.
+        unsafe {
+            query_raw_key_value_data(self.0, value_name)
         }
     }
 }
@@ -561,6 +575,92 @@ unsafe fn query_raw_key_info(
     })
 }
 
+/// Queries value data of the given registry key.
+///
+/// # Safety
+///
+/// `key` must be a valid open registry key.
+unsafe fn query_raw_key_value_data(
+    key: windows_sys::Win32::System::Registry::HKEY,
+    value_name: &std::ffi::OsStr,
+) -> std::io::Result<ValueData> {
+    // TODO(@panhania): Get rid of this encoding.
+    use std::os::windows::ffi::OsStrExt as _;
+    let mut value_name = value_name.encode_wide().collect::<Vec<u16>>();
+    value_name.push(0);
+
+    let mut data_len = std::mem::MaybeUninit::uninit();
+
+    // SAFETY: This is just an FFI call as described in the docs [1].
+    //
+    // This is the first call that will give us information about the buffer
+    // length needed to hold the data (which is why most parameters are not
+    // provided).
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
+    let code = unsafe {
+        windows_sys::Win32::System::Registry::RegQueryValueExW(
+            key,
+            value_name.as_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            data_len.as_mut_ptr(),
+        )
+    };
+
+    if code != windows_sys::Win32::Foundation::ERROR_SUCCESS {
+        return Err(std::io::Error::from_raw_os_error(code as i32));
+    }
+
+    // SAFETY: We verified that the call above succeeded, so `data_len` should
+    // be initialized to the number o bytes needed to store the data.
+    let mut data_len = unsafe {
+        data_len.assume_init()
+    };
+
+    let mut data_buf = Vec::with_capacity(data_len as usize);
+    let mut data_type = std::mem::MaybeUninit::uninit();
+
+    // SAFETY: This is just an FFI call as described in the docs [1].
+    //
+    // Here we already have the buffer allocated and we just pass it along with
+    // its size. Note that even in the extremelly unlikely case of the value
+    // data size changing between the calls, there is no unsafety here and the
+    // call will just fail with `ERROR_MORE_DATA`.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
+    let code = unsafe {
+        windows_sys::Win32::System::Registry::RegQueryValueExW(
+            key,
+            value_name.as_ptr(),
+            std::ptr::null_mut(),
+            data_type.as_mut_ptr(),
+            data_buf.as_mut_ptr(),
+            &mut data_len,
+        )
+    };
+
+    if code != windows_sys::Win32::Foundation::ERROR_SUCCESS {
+        return Err(std::io::Error::from_raw_os_error(code as i32));
+    }
+
+    // SAFETY: We verified that the call above succeeded, `data_type` should now
+    // be initialized.
+    let data_type = unsafe {
+        data_type.assume_init()
+    };
+
+    // SAFETY: We verified that the call above succeeded, `data_buf` should now
+    // be filled with data up to the value specified in the `data_len`.
+    unsafe {
+        data_buf.set_len(data_len as usize);
+    }
+
+    ValueData::from_raw_data(data_type, &data_buf)
+        .map_err(std::io::Error::from)
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -647,5 +747,72 @@ mod tests {
         let current_version = values.iter()
             .find(|value| value.name == "CurrentVersion").unwrap();
         assert!(matches!(current_version.data, ValueData::String(_)));
+    }
+
+    #[test]
+    fn open_key_value_data_string() {
+        let current_type = PredefinedKey::LocalMachine
+            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
+            .open(std::ffi::OsStr::new("Microsoft")).unwrap()
+            .open(std::ffi::OsStr::new("Windows NT")).unwrap()
+            .open(std::ffi::OsStr::new("CurrentVersion")).unwrap()
+            .value_data(std::ffi::OsStr::new("CurrentType")).unwrap();
+        assert!(matches!(current_type, ValueData::String(_)));
+    }
+
+    #[test]
+    fn open_key_value_data_bytes() {
+        let digital_product_id = PredefinedKey::LocalMachine
+            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
+            .open(std::ffi::OsStr::new("Microsoft")).unwrap()
+            .open(std::ffi::OsStr::new("Windows NT")).unwrap()
+            .open(std::ffi::OsStr::new("CurrentVersion")).unwrap()
+            .value_data(std::ffi::OsStr::new("DigitalProductId")).unwrap();
+        assert!(matches!(digital_product_id, ValueData::Bytes(_)));
+    }
+
+    #[test]
+    fn open_key_value_data_expand_string() {
+        let program_files_path = PredefinedKey::LocalMachine
+            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
+            .open(std::ffi::OsStr::new("Microsoft")).unwrap()
+            .open(std::ffi::OsStr::new("Windows")).unwrap()
+            .open(std::ffi::OsStr::new("CurrentVersion")).unwrap()
+            .value_data(std::ffi::OsStr::new("ProgramFilesPath")).unwrap();
+        assert!(matches!(program_files_path, ValueData::ExpandString(_)));
+    }
+
+    #[test]
+    fn open_key_value_data_multi_string() {
+        let service_group_order_list = PredefinedKey::LocalMachine
+            .open(std::ffi::OsStr::new("SYSTEM")).unwrap()
+            .open(std::ffi::OsStr::new("CurrentControlSet")).unwrap()
+            .open(std::ffi::OsStr::new("Control")).unwrap()
+            .open(std::ffi::OsStr::new("ServiceGroupOrder")).unwrap()
+            .value_data(std::ffi::OsStr::new("List")).unwrap();
+
+        match service_group_order_list {
+            ValueData::MultiString(strings) => {
+                assert!(!strings.is_empty());
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn open_key_value_data_u32() {
+        let bios = PredefinedKey::LocalMachine
+            .open(std::ffi::OsStr::new("HARDWARE")).unwrap()
+            .open(std::ffi::OsStr::new("DESCRIPTION")).unwrap()
+            .open(std::ffi::OsStr::new("System")).unwrap()
+            .open(std::ffi::OsStr::new("BIOS")).unwrap();
+
+        let bios_major_release = bios
+            .value_data(std::ffi::OsStr::new("BiosMajorRelease")).unwrap();
+        let bios_minor_release = bios
+            .value_data(std::ffi::OsStr::new("BiosMinorRelease")).unwrap();
+
+        assert!(matches!(bios_major_release, ValueData::U32(_)));
+        assert!(matches!(bios_minor_release, ValueData::U32(_)));
     }
 }
