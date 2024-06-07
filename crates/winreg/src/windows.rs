@@ -1,3 +1,5 @@
+use std::ffi::{OsStr, OsString};
+
 /// [Predefined key][1] of the Windows registry.
 ///
 /// [1]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/predefined-keys
@@ -16,7 +18,7 @@ pub enum PredefinedKey {
 
 impl PredefinedKey {
 
-    pub fn open(&self, subkey_name: &std::ffi::OsStr) -> std::io::Result<OpenKey> {
+    pub fn open(&self, subkey_name: &OsStr) -> std::io::Result<OpenKey> {
         // SAFETY: Predefined keys are guaranteed to be valid open keys.
         unsafe {
             open_raw_key(self.as_raw_key(), subkey_name)
@@ -30,7 +32,7 @@ impl PredefinedKey {
         }
     }
 
-    pub fn value_data(&self, value_name: &std::ffi::OsStr) -> std::io::Result<ValueData> {
+    pub fn value_data(&self, value_name: &OsStr) -> std::io::Result<ValueData> {
         // SAFETY: Predefined keys are guaranteed to be valid open keys.
         unsafe {
             query_raw_key_value_data(self.as_raw_key(), value_name)
@@ -58,7 +60,7 @@ pub struct OpenKey(windows_sys::Win32::System::Registry::HKEY);
 
 impl OpenKey {
 
-    pub fn open(&self, subkey_name: &std::ffi::OsStr) -> std::io::Result<OpenKey> {
+    pub fn open(&self, subkey_name: &OsStr) -> std::io::Result<OpenKey> {
         // SAFETY: The key is guaranteed to be open and valid.
         unsafe {
             open_raw_key(self.0, subkey_name)
@@ -72,7 +74,7 @@ impl OpenKey {
         }
     }
 
-    pub fn value_data(&self, value_name: &std::ffi::OsStr) -> std::io::Result<ValueData> {
+    pub fn value_data(&self, value_name: &OsStr) -> std::io::Result<ValueData> {
         // SAFETY: The key is guaranteed to be open and valid.
         unsafe {
             query_raw_key_value_data(self.0, value_name)
@@ -142,9 +144,9 @@ pub struct Subkeys {
 
 impl Iterator for Subkeys {
 
-    type Item = std::io::Result<std::ffi::OsString>;
+    type Item = std::io::Result<OsString>;
 
-    fn next(&mut self) -> Option<std::io::Result<std::ffi::OsString>> {
+    fn next(&mut self) -> Option<std::io::Result<OsString>> {
         let mut name_len = self.name_buf.capacity() as u32;
 
         // SAFETY: This is just an FFI call as described in the docs [1].
@@ -199,7 +201,7 @@ impl Iterator for Subkeys {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Value {
     /// Name of the value.
-    name: std::ffi::OsString,
+    name: OsString,
     /// Data associated with the value.
     data: ValueData,
 }
@@ -214,13 +216,13 @@ pub enum ValueData {
     /// Byte string.
     Bytes(Vec<u8>),
     /// Unicode-ish string.
-    String(std::ffi::OsString),
+    String(OsString),
     /// Unicode0ish string with unexpanded references to environment variables.
-    ExpandString(std::ffi::OsString),
+    ExpandString(OsString),
     /// Sequence of unicode-ish strings.
-    MultiString(Vec<std::ffi::OsString>),
+    MultiString(Vec<OsString>),
     /// Symbolic link to another registry key.
-    Link(std::ffi::OsString),
+    Link(OsString),
     /// 32-bit number.
     U32(u32),
     /// 64-bit number.
@@ -262,7 +264,7 @@ impl ValueData {
                     data_buf_wide = &data_buf_wide[0..data_buf_wide.len() - 1];
                 }
 
-                ValueData::String(std::ffi::OsString::from_wide(data_buf_wide))
+                ValueData::String(OsString::from_wide(data_buf_wide))
             }
             windows_sys::Win32::System::Registry::REG_EXPAND_SZ => {
                 // SAFETY: The type is `REG_EXPAND_SZ` so we need to reinterpret
@@ -283,7 +285,7 @@ impl ValueData {
                     data_buf_wide = &data_buf_wide[0..data_buf_wide.len() - 1];
                 }
 
-                ValueData::ExpandString(std::ffi::OsString::from_wide(data_buf_wide))
+                ValueData::ExpandString(OsString::from_wide(data_buf_wide))
             }
             windows_sys::Win32::System::Registry::REG_MULTI_SZ => {
                 // SAFETY: The type is `REG_MULTI_SZ` so we need to reinterpret
@@ -310,7 +312,7 @@ impl ValueData {
                         continue;
                     }
 
-                    strings.push(std::ffi::OsString::from_wide(string));
+                    strings.push(OsString::from_wide(string));
                 }
 
                 ValueData::MultiString(strings)
@@ -333,7 +335,7 @@ impl ValueData {
                 assert!(matches!(data_buf_wide.last(), Some(0)));
                 data_buf_wide = &data_buf_wide[0..data_buf_wide.len() - 1];
 
-                ValueData::Link(std::ffi::OsString::from_wide(data_buf_wide))
+                ValueData::Link(OsString::from_wide(data_buf_wide))
             }
             windows_sys::Win32::System::Registry::REG_DWORD_LITTLE_ENDIAN => {
                 assert!(data_buf.len() == 4);
@@ -470,7 +472,7 @@ impl Iterator for Values {
 
         match ValueData::from_raw_data(data_type, &self.data_buf) {
             Ok(data) => Some(Ok(Value {
-                name: std::ffi::OsString::from_wide(&self.name_buf),
+                name: OsString::from_wide(&self.name_buf),
                 data,
             })),
             Err(error) => Some(Err(error.into())),
@@ -485,7 +487,7 @@ impl Iterator for Values {
 /// `key` must be a valid open registry key.
 unsafe fn open_raw_key(
     key: windows_sys::Win32::System::Registry::HKEY,
-    subkey_name: &std::ffi::OsStr,
+    subkey_name: &OsStr,
 ) -> std::io::Result<OpenKey> {
     // TODO(@panhania): Get rid of this encoding.
     use std::os::windows::ffi::OsStrExt as _;
@@ -582,7 +584,7 @@ unsafe fn query_raw_key_info(
 /// `key` must be a valid open registry key.
 unsafe fn query_raw_key_value_data(
     key: windows_sys::Win32::System::Registry::HKEY,
-    value_name: &std::ffi::OsStr,
+    value_name: &OsStr,
 ) -> std::io::Result<ValueData> {
     // TODO(@panhania): Get rid of this encoding.
     use std::os::windows::ffi::OsStrExt as _;
@@ -669,7 +671,7 @@ mod tests {
     #[test]
     fn predefined_key_open() {
         PredefinedKey::LocalMachine
-            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap();
+            .open(OsStr::new("SOFTWARE")).unwrap();
     }
 
     #[test]
@@ -700,22 +702,22 @@ mod tests {
     #[test]
     fn open_key_open() {
         PredefinedKey::LocalMachine
-            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
-            .open(std::ffi::OsStr::new("Microsoft")).unwrap()
-            .open(std::ffi::OsStr::new("Windows NT")).unwrap();
+            .open(OsStr::new("SOFTWARE")).unwrap()
+            .open(OsStr::new("Microsoft")).unwrap()
+            .open(OsStr::new("Windows NT")).unwrap();
     }
 
     #[test]
     fn open_key_info() {
         PredefinedKey::LocalMachine
-            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
+            .open(OsStr::new("SOFTWARE")).unwrap()
             .info().unwrap();
     }
 
     #[test]
     fn open_key_subkeys() {
         let subkeys = PredefinedKey::LocalMachine
-            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
+            .open(OsStr::new("SOFTWARE")).unwrap()
             .info().unwrap()
             .subkeys().map(Result::unwrap).collect::<Vec<_>>();
 
@@ -729,10 +731,10 @@ mod tests {
     #[test]
     fn open_key_values() {
         let values = PredefinedKey::LocalMachine
-            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
-            .open(std::ffi::OsStr::new("Microsoft")).unwrap()
-            .open(std::ffi::OsStr::new("Windows NT")).unwrap()
-            .open(std::ffi::OsStr::new("CurrentVersion")).unwrap()
+            .open(OsStr::new("SOFTWARE")).unwrap()
+            .open(OsStr::new("Microsoft")).unwrap()
+            .open(OsStr::new("Windows NT")).unwrap()
+            .open(OsStr::new("CurrentVersion")).unwrap()
             .info().unwrap()
             .values().map(Result::unwrap).collect::<Vec<_>>();
 
@@ -752,44 +754,44 @@ mod tests {
     #[test]
     fn open_key_value_data_string() {
         let current_type = PredefinedKey::LocalMachine
-            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
-            .open(std::ffi::OsStr::new("Microsoft")).unwrap()
-            .open(std::ffi::OsStr::new("Windows NT")).unwrap()
-            .open(std::ffi::OsStr::new("CurrentVersion")).unwrap()
-            .value_data(std::ffi::OsStr::new("CurrentType")).unwrap();
+            .open(OsStr::new("SOFTWARE")).unwrap()
+            .open(OsStr::new("Microsoft")).unwrap()
+            .open(OsStr::new("Windows NT")).unwrap()
+            .open(OsStr::new("CurrentVersion")).unwrap()
+            .value_data(OsStr::new("CurrentType")).unwrap();
         assert!(matches!(current_type, ValueData::String(_)));
     }
 
     #[test]
     fn open_key_value_data_bytes() {
         let digital_product_id = PredefinedKey::LocalMachine
-            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
-            .open(std::ffi::OsStr::new("Microsoft")).unwrap()
-            .open(std::ffi::OsStr::new("Windows NT")).unwrap()
-            .open(std::ffi::OsStr::new("CurrentVersion")).unwrap()
-            .value_data(std::ffi::OsStr::new("DigitalProductId")).unwrap();
+            .open(OsStr::new("SOFTWARE")).unwrap()
+            .open(OsStr::new("Microsoft")).unwrap()
+            .open(OsStr::new("Windows NT")).unwrap()
+            .open(OsStr::new("CurrentVersion")).unwrap()
+            .value_data(OsStr::new("DigitalProductId")).unwrap();
         assert!(matches!(digital_product_id, ValueData::Bytes(_)));
     }
 
     #[test]
     fn open_key_value_data_expand_string() {
         let program_files_path = PredefinedKey::LocalMachine
-            .open(std::ffi::OsStr::new("SOFTWARE")).unwrap()
-            .open(std::ffi::OsStr::new("Microsoft")).unwrap()
-            .open(std::ffi::OsStr::new("Windows")).unwrap()
-            .open(std::ffi::OsStr::new("CurrentVersion")).unwrap()
-            .value_data(std::ffi::OsStr::new("ProgramFilesPath")).unwrap();
+            .open(OsStr::new("SOFTWARE")).unwrap()
+            .open(OsStr::new("Microsoft")).unwrap()
+            .open(OsStr::new("Windows")).unwrap()
+            .open(OsStr::new("CurrentVersion")).unwrap()
+            .value_data(OsStr::new("ProgramFilesPath")).unwrap();
         assert!(matches!(program_files_path, ValueData::ExpandString(_)));
     }
 
     #[test]
     fn open_key_value_data_multi_string() {
         let service_group_order_list = PredefinedKey::LocalMachine
-            .open(std::ffi::OsStr::new("SYSTEM")).unwrap()
-            .open(std::ffi::OsStr::new("CurrentControlSet")).unwrap()
-            .open(std::ffi::OsStr::new("Control")).unwrap()
-            .open(std::ffi::OsStr::new("ServiceGroupOrder")).unwrap()
-            .value_data(std::ffi::OsStr::new("List")).unwrap();
+            .open(OsStr::new("SYSTEM")).unwrap()
+            .open(OsStr::new("CurrentControlSet")).unwrap()
+            .open(OsStr::new("Control")).unwrap()
+            .open(OsStr::new("ServiceGroupOrder")).unwrap()
+            .value_data(OsStr::new("List")).unwrap();
 
         match service_group_order_list {
             ValueData::MultiString(strings) => {
@@ -802,15 +804,15 @@ mod tests {
     #[test]
     fn open_key_value_data_u32() {
         let bios = PredefinedKey::LocalMachine
-            .open(std::ffi::OsStr::new("HARDWARE")).unwrap()
-            .open(std::ffi::OsStr::new("DESCRIPTION")).unwrap()
-            .open(std::ffi::OsStr::new("System")).unwrap()
-            .open(std::ffi::OsStr::new("BIOS")).unwrap();
+            .open(OsStr::new("HARDWARE")).unwrap()
+            .open(OsStr::new("DESCRIPTION")).unwrap()
+            .open(OsStr::new("System")).unwrap()
+            .open(OsStr::new("BIOS")).unwrap();
 
         let bios_major_release = bios
-            .value_data(std::ffi::OsStr::new("BiosMajorRelease")).unwrap();
+            .value_data(OsStr::new("BiosMajorRelease")).unwrap();
         let bios_minor_release = bios
-            .value_data(std::ffi::OsStr::new("BiosMinorRelease")).unwrap();
+            .value_data(OsStr::new("BiosMinorRelease")).unwrap();
 
         assert!(matches!(bios_major_release, ValueData::U32(_)));
         assert!(matches!(bios_minor_release, ValueData::U32(_)));
