@@ -89,8 +89,8 @@ pub struct KeyInfo {
     max_subkey_name_len: u32,
     // Maximum length of the value names (excluding trailing null byte).
     max_value_name_len: u32,
-    // Maximum length of the value (in bytes).
-    max_value_len: u32,
+    // Maximum length of the value data (in bytes).
+    max_value_data_len: u32,
 }
 
 impl KeyInfo {
@@ -222,7 +222,7 @@ unsafe fn query_raw_key_info(
 ) -> std::io::Result<KeyInfo> {
     let mut max_subkey_name_len = std::mem::MaybeUninit::uninit();
     let mut max_value_name_len = std::mem::MaybeUninit::uninit();
-    let mut max_value_len = std::mem::MaybeUninit::uninit();
+    let mut max_value_data_len = std::mem::MaybeUninit::uninit();
 
     // SAFETY: This is just an FFI call as described in the docs [1].
     //
@@ -238,7 +238,7 @@ unsafe fn query_raw_key_info(
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             max_value_name_len.as_mut_ptr(),
-            max_value_len.as_mut_ptr(),
+            max_value_data_len.as_mut_ptr(),
             std::ptr::null_mut(),
             std::ptr::null_mut(),
         )
@@ -262,8 +262,8 @@ unsafe fn query_raw_key_info(
         },
         // SAFETY: We verified that the call above succeeded, the value is now
         // initialized.
-        max_value_len: unsafe {
-            max_value_len.assume_init()
+        max_value_data_len: unsafe {
+            max_value_data_len.assume_init()
         },
     })
 }
