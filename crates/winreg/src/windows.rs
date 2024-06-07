@@ -219,10 +219,10 @@ impl ValueData {
     fn from_raw_data(
         data_type: windows_sys::Win32::System::Registry::REG_VALUE_TYPE,
         data_buf: &[u8],
-    ) -> ValueData {
+    ) -> Result<ValueData, InvalidValueDataTypeError> {
         use std::os::windows::ffi::OsStringExt as _;
 
-        match data_type {
+        let data = match data_type {
             windows_sys::Win32::System::Registry::REG_NONE => {
                 ValueData::None
             }
@@ -348,9 +348,35 @@ impl ValueData {
                     assert!(REG_QWORD == REG_QWORD_LITTLE_ENDIAN);
                 };
 
-                panic!("unexpected registry value type: {data_type}")
+                // Ideally this shouldn't happen but in practice (e.g. in Wine)
+                // we faced garbage types in the registry. Thus, rather than
+                // marking this as impossible and panicking, we gracefully throw
+                // an error.
+                return Err(InvalidValueDataTypeError(data_type).into());
             }
-        }
+        };
+
+        Ok(data)
+    }
+}
+
+#[derive(Debug)]
+struct InvalidValueDataTypeError(windows_sys::Win32::System::Registry::REG_VALUE_TYPE);
+
+impl std::fmt::Display for InvalidValueDataTypeError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "invalid registry value type: {}", self.0)
+    }
+}
+
+impl std::error::Error for InvalidValueDataTypeError {
+}
+
+impl From<InvalidValueDataTypeError> for std::io::Error {
+
+    fn from(error: InvalidValueDataTypeError) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, error)
     }
 }
 
@@ -428,10 +454,13 @@ impl Iterator for Values {
 
         use std::os::windows::ffi::OsStringExt as _;
 
-        Some(Ok(Value {
-            name: std::ffi::OsString::from_wide(&self.name_buf),
-            data: ValueData::from_raw_data(data_type, &self.data_buf),
-        }))
+        match ValueData::from_raw_data(data_type, &self.data_buf) {
+            Ok(data) => Some(Ok(Value {
+                name: std::ffi::OsString::from_wide(&self.name_buf),
+                data,
+            })),
+            Err(error) => Some(Err(error.into())),
+        }
     }
 }
 
