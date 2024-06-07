@@ -327,17 +327,17 @@ impl ValueData {
                 let octets = <[u8; 4]>::try_from(&data_buf[..]).unwrap();
                 ValueData::U32(u32::from_le_bytes(octets))
             }
-            windows_sys::Win32::System::Registry::REG_QWORD_LITTLE_ENDIAN => {
-                assert!(data_buf.len() == 8);
-
-                let octets = <[u8; 8]>::try_from(&data_buf[..]).unwrap();
-                ValueData::U64(u64::from_le_bytes(octets))
-            }
             windows_sys::Win32::System::Registry::REG_DWORD_BIG_ENDIAN => {
                 assert!(data_buf.len() == 4);
 
                 let octets = <[u8; 4]>::try_from(&data_buf[..]).unwrap();
                 ValueData::U32(u32::from_be_bytes(octets))
+            }
+            windows_sys::Win32::System::Registry::REG_QWORD_LITTLE_ENDIAN => {
+                assert!(data_buf.len() == 8);
+
+                let octets = <[u8; 8]>::try_from(&data_buf[..]).unwrap();
+                ValueData::U64(u64::from_le_bytes(octets))
             }
             _ => {
                 // Ensure that both `REG_DWORD` and `REG_QWORD` branches are
