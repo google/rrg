@@ -231,13 +231,13 @@ impl ValueData {
             }
             windows_sys::Win32::System::Registry::REG_SZ => {
                 // SAFETY: The type is `REG_SZ` so we need to reinterpret the
-                // buffer as 16-bit codepoint string.
-                let mut data_buf_wide = unsafe {
-                    std::slice::from_raw_parts(
-                        data_buf.as_ptr().cast::<u16>(),
-                        data_buf.len() / std::mem::size_of::<u16>(),
-                    )
+                // buffer as 16-bit codepoint string. This is safe because we
+                // do not have any assumptions on the actual bytes.
+                let (align_prefix, mut data_buf_wide, align_suffix) = unsafe {
+                    data_buf.align_to::<u16>()
                 };
+                assert!(align_prefix.is_empty());
+                assert!(align_suffix.is_empty());
 
                 // The string may or may not be null-terminated [1, 2]. We
                 // remove that null byte if it is.
@@ -252,13 +252,13 @@ impl ValueData {
             }
             windows_sys::Win32::System::Registry::REG_EXPAND_SZ => {
                 // SAFETY: The type is `REG_EXPAND_SZ` so we need to reinterpret
-                // the buffer as 16-bit codepoint string.
-                let mut data_buf_wide = unsafe {
-                    std::slice::from_raw_parts(
-                        data_buf.as_ptr().cast::<u16>(),
-                        data_buf.len() / std::mem::size_of::<u16>(),
-                    )
+                // the buffer as 16-bit codepoint string. This is safe because
+                // we do not have any assumptions on the actual bytes.
+                let (align_prefix, mut data_buf_wide, align_suffix) = unsafe {
+                    data_buf.align_to::<u16>()
                 };
+                assert!(align_prefix.is_empty());
+                assert!(align_suffix.is_empty());
 
                 // The string may or may not be null-terminated [1, 2]. We
                 // remove that null byte if it is.
@@ -273,13 +273,13 @@ impl ValueData {
             }
             windows_sys::Win32::System::Registry::REG_MULTI_SZ => {
                 // SAFETY: The type is `REG_MULTI_SZ` so we need to reinterpret
-                // the buffer as 16-bit codepoint string.
-                let data_buf_wide = unsafe {
-                    std::slice::from_raw_parts(
-                        data_buf.as_ptr().cast::<u16>(),
-                        data_buf.len() / std::mem::size_of::<u16>(),
-                    )
+                // the buffer as 16-bit codepoint string. This is safe because
+                // we do not have any assumptions on the actual bytes.
+                let (align_prefix, data_buf_wide, align_suffix) = unsafe {
+                    data_buf.align_to::<u16>()
                 };
+                assert!(align_prefix.is_empty());
+                assert!(align_suffix.is_empty());
 
                 let mut strings = Vec::new();
 
@@ -303,13 +303,13 @@ impl ValueData {
             }
             windows_sys::Win32::System::Registry::REG_LINK => {
                 // SAFETY: The type is `REG_LINK` so we need to reinterpret the
-                // buffer as 16-bit codepoint string.
-                let mut data_buf_wide = unsafe {
-                    std::slice::from_raw_parts(
-                        data_buf.as_ptr().cast::<u16>(),
-                        data_buf.len() / std::mem::size_of::<u16>(),
-                    )
+                // buffer as 16-bit codepoint string. This is safe because we do
+                // not have any assumptions on the actual bytes.
+                let (align_prefix, mut data_buf_wide, align_suffix) = unsafe {
+                    data_buf.align_to::<u16>()
                 };
+                assert!(align_prefix.is_empty());
+                assert!(align_suffix.is_empty());
 
                 // Note that unlike with `REG_MULTI_SZ`, `REG_EXPAND_SZ` and
                 // `REG_SZ` case, the documentation does not say anything about
