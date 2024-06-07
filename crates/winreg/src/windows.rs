@@ -296,7 +296,7 @@ impl ValueData {
                         continue;
                     }
 
-                    strings.push(std::ffi::OsString::from_wide(data_buf_wide));
+                    strings.push(std::ffi::OsString::from_wide(string));
                 }
 
                 ValueData::MultiString(strings)
