@@ -272,9 +272,9 @@ impl Iterator for Subkeys {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Value {
     /// Name of the value.
-    name: OsString,
+    pub name: OsString,
     /// Data associated with the value.
-    data: ValueData,
+    pub data: ValueData,
 }
 
 /// Data associated with a [registry value][1].
