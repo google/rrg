@@ -568,7 +568,8 @@ unsafe fn open_raw_key(
     key: windows_sys::Win32::System::Registry::HKEY,
     subkey_name: &OsStr,
 ) -> std::io::Result<OpenKey> {
-    // TODO(@panhania): Get rid of this encoding.
+    // Windows API functions expect null-terminated 16-bit characater strings,
+    // so we have to encode the name.
     use std::os::windows::ffi::OsStrExt as _;
     let mut subkey_name = subkey_name.encode_wide().collect::<Vec<u16>>();
     subkey_name.push(0);
@@ -665,7 +666,8 @@ unsafe fn query_raw_key_value_data(
     key: windows_sys::Win32::System::Registry::HKEY,
     value_name: &OsStr,
 ) -> std::io::Result<ValueData> {
-    // TODO(@panhania): Get rid of this encoding.
+    // Windows API functions expect null-terminated 16-bit characater strings,
+    // so we have to encode the name.
     use std::os::windows::ffi::OsStrExt as _;
     let mut value_name = value_name.encode_wide().collect::<Vec<u16>>();
     value_name.push(0);
