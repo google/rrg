@@ -18,6 +18,12 @@ pub enum PredefinedKey {
 
 impl PredefinedKey {
 
+    /// Opens a subkey with the given name of the key.
+    ///
+    /// This method corresponds to the [`RegOpenKeyExW`] function of the Windows
+    /// API.
+    ///
+    /// [`RegOpenKeyExW`]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexw
     pub fn open(&self, subkey_name: &OsStr) -> std::io::Result<OpenKey> {
         // SAFETY: Predefined keys are guaranteed to be valid open keys.
         unsafe {
@@ -25,6 +31,12 @@ impl PredefinedKey {
         }
     }
 
+    /// Queries information about the key.
+    ///
+    /// This method corresponds to the [`RegQueryInfoKeyW`] function of the
+    /// Windows API.
+    ///
+    /// [`RegQueryInfoKeyW`]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryinfokeyw
     pub fn info(&self) -> std::io::Result<KeyInfo> {
         // SAFETY: Predefined keys are guaranteed to be valid open keys.
         unsafe {
@@ -32,6 +44,12 @@ impl PredefinedKey {
         }
     }
 
+    /// Queries data of value with the given name of the key.
+    ///
+    /// This method corresponds to the [`RegQueryValueExW`] function of the
+    /// Windows API.
+    ///
+    /// [`RegQueryValueExW`]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
     pub fn value_data(&self, value_name: &OsStr) -> std::io::Result<ValueData> {
         // SAFETY: Predefined keys are guaranteed to be valid open keys.
         unsafe {
@@ -56,10 +74,22 @@ impl PredefinedKey {
     }
 }
 
+/// Open key of the Windows registry.
+///
+/// Unlike [predefined keys][1], open keys must be opened explicitly and are
+/// closed when they go out of scope.
+///
+/// [1]: crate::PredefinedKey
 pub struct OpenKey(windows_sys::Win32::System::Registry::HKEY);
 
 impl OpenKey {
 
+    /// Opens a subkey with the given name of the key.
+    ///
+    /// This method corresponds to the [`RegOpenKeyExW`] function of the Windows
+    /// API.
+    ///
+    /// [`RegOpenKeyExW`]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeyexw
     pub fn open(&self, subkey_name: &OsStr) -> std::io::Result<OpenKey> {
         // SAFETY: The key is guaranteed to be open and valid.
         unsafe {
@@ -67,6 +97,12 @@ impl OpenKey {
         }
     }
 
+    /// Queries information about the key.
+    ///
+    /// This method corresponds to the [`RegQueryInfoKeyW`] function of the
+    /// Windows API.
+    ///
+    /// [`RegQueryInfoKeyW`]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryinfokeyw
     pub fn info(&self) -> std::io::Result<KeyInfo> {
         // SAFETY: The key is guaranteed to be open and valid.
         unsafe {
@@ -74,6 +110,12 @@ impl OpenKey {
         }
     }
 
+    /// Queries data of value with the given name of the key.
+    ///
+    /// This method corresponds to the [`RegQueryValueExW`] function of the
+    /// Windows API.
+    ///
+    /// [`RegQueryValueExW`]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
     pub fn value_data(&self, value_name: &OsStr) -> std::io::Result<ValueData> {
         // SAFETY: The key is guaranteed to be open and valid.
         unsafe {
@@ -98,6 +140,10 @@ impl Drop for OpenKey {
     }
 }
 
+/// Information about a registry key.
+///
+/// Instances of this structure can be obtained through [`PredefinedKey::info`]
+/// and [`OpenKey::info`] functions.
 pub struct KeyInfo {
     // Registry key which this record describes.
     key: windows_sys::Win32::System::Registry::HKEY,
@@ -111,6 +157,12 @@ pub struct KeyInfo {
 
 impl KeyInfo {
 
+    /// Returns an iterator over the key subkey names.
+    ///
+    /// Iteration corresponds to calling the [`RegEnumKeyExA`] function of the
+    /// Windows API.
+    ///
+    /// [`RegEnumKeyExA`]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumkeyexa
     pub fn subkeys(&self) -> Subkeys {
         Subkeys {
             key: self.key,
@@ -121,6 +173,12 @@ impl KeyInfo {
         }
     }
 
+    /// Returns an iterator over the key values.
+    ///
+    /// Iteration corresponds to calling the [`RegEnumValueW`] function of the
+    /// Windows API.
+    ///
+    /// [`RegEnumValueW`]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumvaluew
     pub fn values(&self) -> Values {
         Values {
             key: self.key,
@@ -133,6 +191,14 @@ impl KeyInfo {
     }
 }
 
+/// Iterator over registry key subkey names.
+///
+/// This iterator can be created using the [`KeyInfo::subkeys`] function.
+///
+/// Iteration corresponds to calling the [`RegEnumKeyExA`] function of the
+/// Windows API.
+///
+/// [`RegEnumKeyExA`]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumkeyexa
 pub struct Subkeys {
     /// Registry key for which we yield subkeys.
     key: windows_sys::Win32::System::Registry::HKEY,
@@ -198,6 +264,11 @@ impl Iterator for Subkeys {
     }
 }
 
+/// Value of the Windows registry.
+///
+/// A value consists of a name and associated [data][1].
+///
+/// [1]: crate::ValueData
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Value {
     /// Name of the value.
@@ -396,6 +467,14 @@ impl From<InvalidValueDataTypeError> for std::io::Error {
     }
 }
 
+/// Iterator over registry key values.
+///
+/// This iterator can be created using the [`KeyInfo::values`] function.
+///
+/// Iteration corresponds to calling the [`RegEnumValueW`] function of the
+/// Windows API.
+///
+/// [`RegEnumValueW`]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumvaluew
 pub struct Values {
     /// Registry key for which we yield values.
     key: windows_sys::Win32::System::Registry::HKEY,
