@@ -92,7 +92,7 @@ struct VolumeNames {
     /// Buffer with null-terminated volume name to be yielded.
     name_buf: VolumeNameBuf,
     /// Active handle for the underlying Windows API iterator.
-    handle: Option<windows_sys::Win32::Storage::FileSystem::FindVolumeHandle>,
+    handle: Option<windows_sys::Win32::Foundation::HANDLE>,
 }
 
 impl VolumeNames {

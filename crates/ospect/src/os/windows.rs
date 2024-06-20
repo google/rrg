@@ -177,10 +177,7 @@ pub fn version() -> std::io::Result<String> {
 
 /// Returns the CPU architecture of the currently running operating system.
 pub fn arch() -> std::io::Result<String> {
-    use windows_sys::Win32::System::{
-        Diagnostics,
-        SystemInformation::*,
-    };
+    use windows_sys::Win32::System::SystemInformation::*;
 
     let mut sysinfo = std::mem::MaybeUninit::uninit();
     // SAFETY: We create a `SYSTEM_INFO` structure and pass it to the function
@@ -209,14 +206,12 @@ pub fn arch() -> std::io::Result<String> {
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/ns-sysinfoapi-system_info#members
     // [2]: https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
     let arch_str = match arch {
-        Diagnostics::Debug::PROCESSOR_ARCHITECTURE_AMD64 => "x86_64",
-        Diagnostics::Debug::PROCESSOR_ARCHITECTURE_ARM => "arm",
-        // TODO(@panhania): Replace with `PROCESSOR_ARCHITECTURE_ARM64` once it
-        // is part of the `windows-sys` crate.
-        0x12 => "arm64",
-        Diagnostics::Debug::PROCESSOR_ARCHITECTURE_IA64 => "ia64",
-        Diagnostics::Debug::PROCESSOR_ARCHITECTURE_INTEL => "x86",
-        Diagnostics::Debug::PROCESSOR_ARCHITECTURE_UNKNOWN | _ => "unknown",
+        PROCESSOR_ARCHITECTURE_AMD64 => "x86_64",
+        PROCESSOR_ARCHITECTURE_ARM => "arm",
+        PROCESSOR_ARCHITECTURE_ARM64 => "arm64",
+        PROCESSOR_ARCHITECTURE_IA64 => "ia64",
+        PROCESSOR_ARCHITECTURE_INTEL => "x86",
+        PROCESSOR_ARCHITECTURE_UNKNOWN | _ => "unknown",
     };
 
     Ok(String::from(arch_str))

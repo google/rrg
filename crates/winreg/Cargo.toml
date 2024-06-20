@@ -8,7 +8,7 @@ description = "A small library for querying the Windows registry."
 categories = ["windows"]
 
 [target.'cfg(target_os = "windows")'.dependencies.windows-sys]
-version = "0.45.0"
+version = "0.52.0"
 features = [
     "Win32_Foundation",
     "Win32_System_Registry",
