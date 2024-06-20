@@ -884,18 +884,11 @@ mod tests {
 
     #[test]
     fn open_key_value_data_u32() {
-        let bios = PredefinedKey::LocalMachine
-            .open(OsStr::new("HARDWARE")).unwrap()
-            .open(OsStr::new("DESCRIPTION")).unwrap()
-            .open(OsStr::new("System")).unwrap()
-            .open(OsStr::new("BIOS")).unwrap();
+        let current = PredefinedKey::LocalMachine
+            .open(OsStr::new("SYSTEM")).unwrap()
+            .open(OsStr::new("Select")).unwrap()
+            .value_data(OsStr::new("Current")).unwrap();
 
-        let bios_major_release = bios
-            .value_data(OsStr::new("BiosMajorRelease")).unwrap();
-        let bios_minor_release = bios
-            .value_data(OsStr::new("BiosMinorRelease")).unwrap();
-
-        assert!(matches!(bios_major_release, ValueData::U32(_)));
-        assert!(matches!(bios_minor_release, ValueData::U32(_)));
+        assert!(matches!(current, ValueData::U32(_)));
     }
 }
