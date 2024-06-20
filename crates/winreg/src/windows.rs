@@ -755,6 +755,12 @@ mod tests {
     }
 
     #[test]
+    fn predefined_key_open_nested() {
+        PredefinedKey::LocalMachine
+            .open(OsStr::new("SOFTWARE\\Microsoft\\Windows NT")).unwrap();
+    }
+
+    #[test]
     fn predefined_key_info() {
         PredefinedKey::LocalMachine
             .info().unwrap();
@@ -785,6 +791,13 @@ mod tests {
             .open(OsStr::new("SOFTWARE")).unwrap()
             .open(OsStr::new("Microsoft")).unwrap()
             .open(OsStr::new("Windows NT")).unwrap();
+    }
+
+    #[test]
+    fn open_key_open_nested() {
+        PredefinedKey::LocalMachine
+            .open(OsStr::new("SOFTWARE")).unwrap()
+            .open(OsStr::new("Microsoft\\Windows NT")).unwrap();
     }
 
     #[test]
