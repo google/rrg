@@ -426,6 +426,9 @@ impl ValueData {
                 let octets = <[u8; 8]>::try_from(&data_buf[..]).unwrap();
                 ValueData::U64(u64::from_le_bytes(octets))
             }
+            // TODO(@panhania): Handle `REG_RESOURCE_LIST`.
+            // TODO(@panhania): Handle `REG_RESOURCE_REQUIREMENTS_LIST`.
+            // TODO(@panhania): Handle `REG_FULL_RESOURCE_DESCRIPTOR`.
             _ => {
                 // Ensure that both `REG_DWORD` and `REG_QWORD` branches are
                 // actually covered by the `*_LITTLE_ENDIAN` variants.
@@ -435,10 +438,6 @@ impl ValueData {
                     assert!(REG_QWORD == REG_QWORD_LITTLE_ENDIAN);
                 };
 
-                // Ideally this shouldn't happen but in practice (e.g. in Wine)
-                // we faced garbage types in the registry. Thus, rather than
-                // marking this as impossible and panicking, we gracefully throw
-                // an error.
                 return Err(InvalidValueDataTypeError(data_type).into());
             }
         };
