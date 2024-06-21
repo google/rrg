@@ -39,6 +39,8 @@ pub enum Action {
     ListUsers,
     /// Get the snapshot of the entire filesystem.
     GetFilesystemTimeline,
+    // Get a value from the Windows Registry (Windows-only).
+    GetWinregValue,
 }
 
 impl std::fmt::Display for Action {
@@ -57,6 +59,7 @@ impl std::fmt::Display for Action {
             Action::ListMounts => write!(fmt, "list_mounts"),
             Action::ListUsers => write!(fmt, "list_users"),
             Action::GetFilesystemTimeline => write!(fmt, "get_filesystem_timeline"),
+            Action::GetWinregValue => write!(fmt, "get_winreg_value"),
         }
     }
 }
@@ -101,6 +104,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             LIST_MOUNTS => Ok(Action::ListMounts),
             LIST_USERS => Ok(Action::ListUsers),
             GET_FILESYSTEM_TIMELINE => Ok(Action::GetFilesystemTimeline),
+            GET_WINREG_VALUE => Ok(Action::GetWinregValue),
             _ => {
                 let value = protobuf::Enum::value(&proto);
                 Err(UnknownAction { value })
