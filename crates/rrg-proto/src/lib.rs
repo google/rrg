@@ -310,6 +310,89 @@ impl From<ospect::net::Interface> for net::Interface {
     }
 }
 
+#[cfg(target_os = "windows")]
+impl From<::winreg::PredefinedKey> for self::winreg::PredefinedKey {
+
+    fn from(key: ::winreg::PredefinedKey) -> self::winreg::PredefinedKey {
+        use self::winreg::PredefinedKey::*;
+
+        match key {
+            ::winreg::PredefinedKey::ClassesRoot => CLASSES_ROOT,
+            ::winreg::PredefinedKey::CurrentConfig => CURRENT_CONFIG,
+            ::winreg::PredefinedKey::CurrentUser => CURRENT_USER,
+            ::winreg::PredefinedKey::CurrentUserLocalSettings => CURRENT_USER_LOCAL_SETTINGS,
+            ::winreg::PredefinedKey::LocalMachine => LOCAL_MACHINE,
+            ::winreg::PredefinedKey::PerformanceData => PERFORMANCE_DATA,
+            ::winreg::PredefinedKey::PerformanceNlstext => PERFORMANCE_NLSTEXT,
+            ::winreg::PredefinedKey::PerformanceText => PERFORMANCE_TEXT,
+            ::winreg::PredefinedKey::Users => USERS,
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl TryFrom<self::winreg::PredefinedKey> for ::winreg::PredefinedKey {
+
+    type Error = ParseWinregPredefinedKeyError;
+
+    fn try_from(key: self::winreg::PredefinedKey) -> Result<::winreg::PredefinedKey, ParseWinregPredefinedKeyError> {
+        use self::winreg::PredefinedKey::*;
+
+        match key {
+            CLASSES_ROOT => Ok(::winreg::PredefinedKey::ClassesRoot),
+            CURRENT_USER => Ok(::winreg::PredefinedKey::CurrentUser),
+            LOCAL_MACHINE => Ok(::winreg::PredefinedKey::LocalMachine),
+            USERS => Ok(::winreg::PredefinedKey::Users),
+            PERFORMANCE_DATA => Ok(::winreg::PredefinedKey::PerformanceData),
+            CURRENT_CONFIG => Ok(::winreg::PredefinedKey::CurrentConfig),
+            PERFORMANCE_TEXT => Ok(::winreg::PredefinedKey::PerformanceText),
+            PERFORMANCE_NLSTEXT => Ok(::winreg::PredefinedKey::PerformanceNlstext),
+            CURRENT_USER_LOCAL_SETTINGS => Ok(::winreg::PredefinedKey::CurrentUserLocalSettings),
+            _ => Err(ParseWinregPredefinedKeyError { key }),
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl From<::winreg::Value> for self::winreg::Value {
+
+    fn from(value: ::winreg::Value) -> self::winreg::Value {
+        let mut proto = self::winreg::Value::default();
+        proto.set_name(value.name.to_string_lossy().into_owned());
+
+        match value.data {
+            ::winreg::ValueData::None => {},
+            ::winreg::ValueData::Bytes(bytes) => {
+                proto.set_bytes(bytes);
+            }
+            ::winreg::ValueData::String(string) => {
+                proto.set_string(string.to_string_lossy().into_owned());
+            }
+            ::winreg::ValueData::ExpandString(string) => {
+                proto.set_expand_string(string.to_string_lossy().into_owned());
+            }
+            ::winreg::ValueData::MultiString(strings) => {
+                let strings = strings.into_iter()
+                    .map(|string| string.to_string_lossy().into_owned())
+                    .collect();
+
+                proto.mut_multi_string().set_values(strings);
+            }
+            ::winreg::ValueData::Link(string) => {
+                proto.set_link(string.to_string_lossy().into_owned());
+            }
+            ::winreg::ValueData::U32(int) => {
+                proto.set_uint32(int);
+            }
+            ::winreg::ValueData::U64(int) => {
+                proto.set_uint64(int);
+            }
+        }
+
+        proto
+    }
+}
+
 impl From<rrg::log::Level> for log::LevelFilter {
 
     fn from(level: rrg::log::Level) -> log::LevelFilter {
@@ -352,6 +435,26 @@ impl std::error::Error for ParsePathError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.0.source()
     }
+}
+
+#[cfg(target_os = "windows")]
+/// Error that can occur when parsing predefined registry keys.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseWinregPredefinedKeyError {
+    key: self::winreg::PredefinedKey,
+}
+
+#[cfg(target_os = "windows")]
+impl std::fmt::Display for ParseWinregPredefinedKeyError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let value = protobuf::Enum::value(&self.key);
+        write!(fmt, "invalid Windows Registry predefined key: {value}")
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl std::error::Error for ParseWinregPredefinedKeyError {
 }
 
 /// An error type for failures that can occur when converting timestamps.
@@ -561,4 +664,23 @@ pub enum ParseDurationErrorKind {
     NegativeSecs,
     /// Value of the `nanos` field was negative.
     NegativeNanos,
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn try_from_winreg_predefined_key_all_covered() {
+        use protobuf::Enum as _;
+
+        for value in super::winreg::PredefinedKey::VALUES {
+            // `UNKNOWN` is the only value we expect not to parse.
+            if *value == super::winreg::PredefinedKey::UNKNOWN {
+                continue;
+            }
+
+            assert!(::winreg::PredefinedKey::try_from(*value).is_ok());
+        }
+    }
 }
