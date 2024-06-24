@@ -49,8 +49,10 @@ where
 
     session.reply(Item {
         root: args.root,
+        // TODO(@panhania): Add support for case-correcting the key.
         key: args.key,
         value: winreg::Value {
+            // TODO(@panhania): Add support for case-correcting the value.
             name: args.value_name,
             data: value_data,
         }
