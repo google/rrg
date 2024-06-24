@@ -348,7 +348,9 @@ impl TryFrom<self::winreg::PredefinedKey> for ::winreg::PredefinedKey {
             PERFORMANCE_TEXT => Ok(::winreg::PredefinedKey::PerformanceText),
             PERFORMANCE_NLSTEXT => Ok(::winreg::PredefinedKey::PerformanceNlstext),
             CURRENT_USER_LOCAL_SETTINGS => Ok(::winreg::PredefinedKey::CurrentUserLocalSettings),
-            _ => Err(ParseWinregPredefinedKeyError { key }),
+            _ => Err(ParseWinregPredefinedKeyError {
+                value: protobuf::Enum::value(&key),
+            }),
         }
     }
 }
@@ -441,15 +443,14 @@ impl std::error::Error for ParsePathError {
 /// Error that can occur when parsing predefined registry keys.
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParseWinregPredefinedKeyError {
-    key: self::winreg::PredefinedKey,
+    pub value: i32,
 }
 
 #[cfg(target_os = "windows")]
 impl std::fmt::Display for ParseWinregPredefinedKeyError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let value = protobuf::Enum::value(&self.key);
-        write!(fmt, "invalid Windows Registry predefined key: {value}")
+        write!(fmt, "invalid Windows Registry predefined key: {}", self.value)
     }
 }
 
