@@ -41,7 +41,22 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    todo!()
+    let key = args.root.open(&args.key)
+        .map_err(crate::session::Error::action)?;
+
+    let value_data = key.value_data(&args.value_name)
+        .map_err(crate::session::Error::action)?;
+
+    session.reply(Item {
+        root: args.root,
+        key: args.key,
+        value: winreg::Value {
+            name: args.value_name,
+            data: value_data,
+        }
+    })?;
+
+    Ok(())
 }
 
 #[cfg(target_family = "windows")]
@@ -77,5 +92,62 @@ impl crate::response::Item for Item {
         proto.set_value(self.value.into());
 
         proto
+    }
+}
+
+#[cfg(test)]
+#[cfg(target_family = "windows")]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn handle_non_existent() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from("FOOWARE\\Linux\\GNU"),
+            value_name: std::ffi::OsString::from("Version"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_err());
+    }
+
+    #[test]
+    fn handle_string() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"),
+            value_name: std::ffi::OsString::from("CurrentType"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.root, winreg::PredefinedKey::LocalMachine);
+        assert_eq!(item.key, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion");
+        assert_eq!(item.value.name, "CurrentType");
+        assert!(matches!(item.value.data, winreg::ValueData::String(_)));
+    }
+
+    #[test]
+    fn handle_bytes() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"),
+            value_name: std::ffi::OsString::from("DigitalProductId"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.root, winreg::PredefinedKey::LocalMachine);
+        assert_eq!(item.key, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion");
+        assert_eq!(item.value.name, "DigitalProductId");
+        assert!(matches!(item.value.data, winreg::ValueData::Bytes(_)));
     }
 }
