@@ -39,6 +39,9 @@ path = "../rrg-macro"
 [dependencies.rrg-proto]
 path = "../rrg-proto"
 
+[dependencies.winreg]
+path = "../winreg"
+
 [dependencies.argh]
 version = "0.1.8"
 
