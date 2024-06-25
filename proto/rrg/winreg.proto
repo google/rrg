@@ -21,9 +21,9 @@ enum PredefinedKey {
     USERS = 4;
     PERFORMANCE_DATA = 5;
     CURRENT_CONFIG = 6;
-    PERFORMANCE_TEXT = 8;
-    PERFORMANCE_NLSTEXT = 9;
-    CURRENT_USER_LOCAL_SETTINGS = 10;
+    PERFORMANCE_TEXT = 7;
+    PERFORMANCE_NLSTEXT = 8;
+    CURRENT_USER_LOCAL_SETTINGS = 9;
 }
 
 // [Value][1] of the Windows registry.
