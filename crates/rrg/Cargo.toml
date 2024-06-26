@@ -16,6 +16,7 @@ default = [
     "action-list_mounts",
     "action-get_winreg_value",
     "action-list_winreg_values",
+    "action-list_winreg_keys",
 ]
 
 action-get_system_metadata = []
@@ -27,6 +28,7 @@ action-list_interfaces = []
 action-list_mounts = []
 action-get_winreg_value = []
 action-list_winreg_values = []
+action-list_winreg_keys = []
 
 test-setfattr = []
 test-chattr = []

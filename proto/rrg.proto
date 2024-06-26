@@ -42,6 +42,8 @@ enum Action {
   GET_WINREG_VALUE = 13;
   // List values of the Windows Registry key (Windows-only).
   LIST_WINREG_VALUES = 14;
+  // List subkeys of the Windows Registry key (Windows-only).
+  LIST_WINREG_KEYS = 15;
 
   // TODO: Define more actions that should be supported.
 
