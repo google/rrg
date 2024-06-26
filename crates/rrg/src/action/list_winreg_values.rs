@@ -24,7 +24,33 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    todo!()
+    let key = args.root.open(&args.key)
+        .map_err(crate::session::Error::action)?;
+
+    let info = key.info()
+        .map_err(crate::session::Error::action)?;
+
+    for value in info.values() {
+        let value = match value {
+            Ok(value) => value,
+            Err(error) => {
+                log::error! {
+                    "failed to list value for key '{:?}': {}",
+                    args.key, error,
+                };
+                continue;
+            }
+        };
+
+        session.reply(Item {
+            root: args.root,
+            // TODO(@panhania): Add support for case-correcting the key.
+            key: args.key.clone(),
+            value,
+        })?;
+    }
+
+    Ok(())
 }
 
 /// Handles invocations of the `list_winreg_values` action.
@@ -69,5 +95,42 @@ impl crate::response::Item for Item {
         proto.set_value(self.value.into());
 
         proto
+    }
+}
+
+#[cfg(test)]
+#[cfg(target_family = "windows")]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn handle_non_existent() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from("FOOWARE"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_err());
+    }
+
+    #[test]
+    fn handle_ok() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let value_names = session.replies::<Item>()
+            .map(|item| item.value.name.clone())
+            .collect::<Vec<_>>();
+
+        assert!(value_names.contains(&"CurrentBuild".into()));
+        assert!(value_names.contains(&"CurrentType".into()));
+        assert!(value_names.contains(&"CurrentVersion".into()));
     }
 }
