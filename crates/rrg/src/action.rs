@@ -39,6 +39,9 @@ pub mod list_mounts;
 #[cfg(feature = "action-get_winreg_value")]
 pub mod get_winreg_value;
 
+#[cfg(feature = "action-list_winreg_values")]
+pub mod list_winreg_values;
+
 use log::info;
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -96,6 +99,10 @@ where
         #[cfg(feature = "action-get_winreg_value")]
         GetWinregValue => {
             handle(session, request, self::get_winreg_value::handle)
+        }
+        #[cfg(feature = "action-list_winreg_values")]
+        ListWinregValues => {
+            handle(session, request, self::list_winreg_values::handle)
         }
         // We allow `unreachable_patterns` because otherwise we get a warning if
         // we compile with all the actions enabled.

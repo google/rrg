@@ -15,6 +15,7 @@ default = [
     "action-list_interfaces",
     "action-list_mounts",
     "action-get_winreg_value",
+    "action-list_winreg_values",
 ]
 
 action-get_system_metadata = []
@@ -25,6 +26,7 @@ action-list_connections = []
 action-list_interfaces = []
 action-list_mounts = []
 action-get_winreg_value = []
+action-list_winreg_values = []
 
 test-setfattr = []
 test-chattr = []
