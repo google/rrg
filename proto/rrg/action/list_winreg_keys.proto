@@ -4,7 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 syntax = "proto3";
 
-package rrg.action.list_winreg_values;
+package rrg.action.list_winreg_keys;
 
 import "rrg/winreg.proto";
 
