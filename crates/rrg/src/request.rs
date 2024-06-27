@@ -43,6 +43,8 @@ pub enum Action {
     GetWinregValue,
     /// List values of the Windows Registry key (Windows-only).
     ListWinregValues,
+    /// List subkeys of the Windows Registry key (Windows-only).
+    ListWinregKeys,
 }
 
 impl std::fmt::Display for Action {
@@ -63,6 +65,7 @@ impl std::fmt::Display for Action {
             Action::GetFilesystemTimeline => write!(fmt, "get_filesystem_timeline"),
             Action::GetWinregValue => write!(fmt, "get_winreg_value"),
             Action::ListWinregValues => write!(fmt, "list_winreg_values"),
+            Action::ListWinregKeys => write!(fmt, "list_winreg_keys"),
         }
     }
 }
@@ -109,6 +112,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             GET_FILESYSTEM_TIMELINE => Ok(Action::GetFilesystemTimeline),
             GET_WINREG_VALUE => Ok(Action::GetWinregValue),
             LIST_WINREG_VALUES => Ok(Action::ListWinregValues),
+            LIST_WINREG_KEYS => Ok(Action::ListWinregKeys),
             _ => {
                 let value = protobuf::Enum::value(&proto);
                 Err(UnknownAction { value })
