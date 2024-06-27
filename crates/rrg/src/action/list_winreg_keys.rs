@@ -29,7 +29,33 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    todo!()
+    let key = args.root.open(&args.key)
+        .map_err(crate::session::Error::action)?;
+
+    let info = key.info()
+        .map_err(crate::session::Error::action)?;
+
+    for subkey in info.subkeys() {
+        let subkey = match subkey {
+            Ok(subkey) => subkey,
+            Err(error) => {
+                log::error! {
+                    "failed to list subkey for key '{:?}': {}",
+                    args.key, error,
+                };
+                continue
+            }
+        };
+
+        session.reply(Item {
+            root: args.root,
+            // TODO(@panhania): Add support for case-correcting the key.
+            key: args.key.clone(),
+            subkey,
+        })?;
+    }
+
+    Ok(())
 }
 
 /// Handles invocations of the `list_winreg_keys` action.
@@ -74,5 +100,58 @@ impl crate::response::Item for Item {
         proto.set_subkey(self.subkey.to_string_lossy().into_owned());
 
         proto
+    }
+}
+
+#[cfg(test)]
+#[cfg(target_family = "windows")]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn handle_non_existent() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from("FOOWARE"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_err());
+    }
+
+    #[test]
+    fn handle_root_only_ok() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from(""),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let subkeys_uppercase = session.replies::<Item>()
+            .map(|item| item.subkey.to_ascii_uppercase())
+            .collect::<Vec<_>>();
+
+        assert!(subkeys_uppercase.contains(&"HARDWARE".into()));
+        assert!(subkeys_uppercase.contains(&"SOFTWARE".into()));
+        assert!(subkeys_uppercase.contains(&"SYSTEM".into()));
+    }
+
+    #[test]
+    fn handle_ok() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from("SOFTWARE"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+        assert! {
+            session.replies::<Item>()
+                .find(|item| item.subkey.to_ascii_uppercase() == "MICROSOFT")
+                .is_some()
+        }
     }
 }
