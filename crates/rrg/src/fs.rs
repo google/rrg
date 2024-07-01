@@ -46,7 +46,7 @@ impl TryFrom<std::fs::DirEntry> for Entry {
 ///
 /// Note that symlinked folders or directories mounted to a different device
 /// than the root will not be recursively searched. This is done to avoid cycles
-/// and undesired traversal of network filesystems (which can be very flow).
+/// and undesired traversal of network filesystems (which can be very slow).
 ///
 /// # Errors
 ///

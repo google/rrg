@@ -126,7 +126,7 @@ impl std::fmt::Display for LenError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         write! {
             fmt,
-            "provded length ({}) is bigger than allowed ({})",
+            "provided length ({}) is bigger than allowed ({})",
             self.len, MAX_BLOB_LEN
         }
     }

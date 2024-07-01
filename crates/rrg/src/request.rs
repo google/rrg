@@ -230,7 +230,7 @@ impl Request {
         self.log_level
     }
 
-    /// Takes the filters secified in the request.
+    /// Takes the filters specified in the request.
     ///
     /// Note that calling this method will permanently clear filters contained
     /// within the request.
@@ -353,7 +353,7 @@ pub struct ParseRequestError {
     request_id: Option<RequestId>,
     /// A corresponding [`ParseRequestErrorKind`] of the error.
     kind: ParseRequestErrorKind,
-    /// A more datailed cause of the error.
+    /// A more detailed cause of the error.
     error: Option<Box<dyn std::error::Error>>,
 }
 
@@ -415,7 +415,7 @@ impl std::fmt::Display for ParseRequestErrorKind {
 
         match self {
             MalformedBytes => write!(fmt, "malformed protobuf message bytes"),
-            UnknownAction(action) => write!(fmt, "uknown action: {action}"),
+            UnknownAction(action) => write!(fmt, "unknown action: {action}"),
             InvalidCpuTimeLimit => write!(fmt, "invalid CPU time limit"),
             InvalidRealTimeLimit => write!(fmt, "invalid real time limit"),
             InvalidFilter => write!(fmt, "invalid filter"),
@@ -553,7 +553,7 @@ mod tests {
     }
 
     #[test]
-    fn action_try_fromt_proto_unknown() {
+    fn action_try_from_proto_unknown() {
         assert!(Action::try_from(rrg_proto::rrg::Action::UNKNOWN).is_err());
     }
 }
