@@ -11,13 +11,13 @@ use crate::filter::FilterSet;
 /// Protocol Buffers message that the GRR server can interpret. In other words,
 /// "items" are simply objects that can be converted to such messages.
 ///
-/// Note that unlike `From<protobuf::Message>`, implementators of this trait can
+/// Note that unlike `From<protobuf::Message>`, implementors of this trait can
 /// include a bit of "impurity" to the conversion (e.g. logging).
 pub trait Item: Sized {
     /// Low-level Protocol Buffers type representing the action results.
     type Proto: protobuf::MessageFull + Default;
 
-    /// Converts an action result ot its low-level representation.
+    /// Converts an action result to its low-level representation.
     fn into_proto(self) -> Self::Proto;
 }
 
@@ -160,8 +160,8 @@ impl Status {
 /// with a level higher than the logging threshold specified in the request are
 /// going to be sent to the server as responses.
 ///
-/// These responses can be useful for debugging action behaviour but are should
-/// not be used "by default" not to induce too much traffic on the server.
+/// These responses can be useful for debugging action behaviour but should
+/// not be used "by default" to not induce too much traffic on the server.
 ///
 /// Note that even though log messages are responses they do not have a unique
 /// identifier (unlike [`Status`] and [`Reply`] instances).
@@ -205,7 +205,7 @@ pub enum FilteredReply<I: Item> {
     Accepted(Reply<I>),
     /// Item was rejected by the filters.
     Rejected,
-    /// Error occured when applying filters to the item.
+    /// Error occurred when applying filters to the item.
     Error(crate::filter::Error),
 }
 
@@ -344,7 +344,7 @@ impl From<Sink> for rrg_proto::rrg::Sink {
 ///
 /// Sometimes the agent should send data to the server that is not associated
 /// with any particular request. An example can be the agent startup information
-/// sent to the server at the moment the agent process start. Another example is
+/// sent to the server at the moment the agent process starts. Another example is
 /// file contents that are delivered to the server not as part of the action
 /// results but are sent out-of-band to a sink that has logic for deduplication
 /// of data that we already collected in the past.
@@ -387,7 +387,7 @@ impl<I: crate::response::Item> Parcel<I> {
 
         let data = rrg_proto::rrg::Parcel::from(self).write_to_bytes()
             // This should only fail in case we are out of memory, which we are
-            // almost certainly not (and if we are, we have bigger issue).
+            // almost certainly not (and if we are, we have a bigger issue).
             .unwrap();
 
         let data_len = data.len();
@@ -410,7 +410,7 @@ where
         let result_proto = reply.item.as_proto();
         let result_any = protobuf::well_known_types::any::Any::pack(result_proto)
             // This should only fail in case we are out of memory, which we are
-            // almost certainly not (and if we are, we have bigger issue).
+            // almost certainly not (and if we are, we have a bigger issue).
             .expect("failed to serialize a result");
 
         let mut proto = rrg_proto::rrg::Response::new();

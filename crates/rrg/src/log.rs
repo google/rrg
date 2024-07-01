@@ -215,7 +215,7 @@ impl Log for GlobalResponseLogger {
 
     fn flush(&self) {
         let logger = RESPONSE_LOGGER.read()
-            .expect("failed to acquire reponse logger lock");
+            .expect("failed to acquire response logger lock");
 
         match logger.as_ref() {
             Some(logger) => logger.flush(),
