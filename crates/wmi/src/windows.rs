@@ -119,7 +119,7 @@ impl WbemServicesCimv2 {
     fn new(_: &ComInitGuard, loc: &WbemLocator) -> std::io::Result<WbemServicesCimv2> {
         let mut result = std::mem::MaybeUninit::uninit();
 
-        let namespace = self::bstr::BString::from("root\\cimv2");
+        let namespace = self::bstr::BString::new("root\\cimv2");
 
         // SAFETY: Simple FFI call as described in the documentation [1]. This
         // is based on the official example [2].

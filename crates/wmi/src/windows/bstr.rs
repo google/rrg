@@ -7,14 +7,12 @@ pub struct BString(windows_sys::core::BSTR);
 
 impl BString {
 
-    pub fn as_raw_bstr(&self) -> windows_sys::core::BSTR {
-        self.0
-    }
-}
-
-impl<S: AsRef<std::ffi::OsStr>> From<S> for BString {
-
-    fn from(string: S) -> BString {
+    /// Creates a new `BSTR` wrapper for the given string.
+    ///
+    /// # Panics
+    ///
+    /// If the given string length exceeds [`u32::MAX`] characters.
+    pub fn new<S: AsRef<std::ffi::OsStr>>(string: S) -> BString {
         use std::os::windows::ffi::OsStrExt as _;
 
         let string_wide = string.as_ref().encode_wide().collect::<Vec<u16>>();
@@ -42,6 +40,10 @@ impl<S: AsRef<std::ffi::OsStr>> From<S> for BString {
 
         BString(ptr)
     }
+
+    pub fn as_raw_bstr(&self) -> windows_sys::core::BSTR {
+        self.0
+    }
 }
 
 impl Drop for BString {
@@ -64,12 +66,12 @@ mod tests {
 
     #[test]
     fn bstring_from_str_ascii() {
-        let _ = BString::from("foobar");
+        let _ = BString::new("foobar");
     }
 
     #[test]
     fn bstring_from_str_unicode() {
-        let _ = BString::from("załóć gęślą jaźń");
+        let _ = BString::new("załóć gęślą jaźń");
     }
 
 }
