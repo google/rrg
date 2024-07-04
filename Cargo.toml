@@ -5,6 +5,7 @@ members = [
     "./crates/rrg-macro",
     "./crates/rrg-proto",
     "./crates/winreg",
+    "./crates/wmi",
 ]
 resolver = "2"
 
