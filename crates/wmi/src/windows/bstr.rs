@@ -18,12 +18,19 @@ impl<S: AsRef<std::ffi::OsStr>> From<S> for BString {
         use std::os::windows::ffi::OsStrExt as _;
 
         let string_wide = string.as_ref().encode_wide().collect::<Vec<u16>>();
+        let string_wide_len = match u32::try_from(string_wide.len()) {
+            Ok(string_wide_len) => string_wide_len,
+            Err(_) => panic!("string too long"),
+        };
 
         // SAFETY: Simple FFI call as described in the documentation [1].
         //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-sysallocstring
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-sysallocstringlen
         let ptr = unsafe {
-            windows_sys::Win32::Foundation::SysAllocString(string_wide.as_ptr())
+            windows_sys::Win32::Foundation::SysAllocStringLen(
+                string_wide.as_ptr(),
+                string_wide_len,
+            )
         };
 
         // The call can return null only in case of insufficient memory [1].
