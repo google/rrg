@@ -48,6 +48,65 @@ impl Drop for ComInitGuard {
     }
 }
 
+struct WbemLocator(*mut IWbemLocator);
+
+impl WbemLocator {
+
+    fn new(_: &ComInitGuard) -> std::io::Result<WbemLocator> {
+        let mut result = std::mem::MaybeUninit::<*mut IWbemLocator>::uninit();
+
+        // SAFETY: Simple FFI cal as described in the documentation [1]. This is
+        // based on the official example [2].
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-cocreateinstance
+        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
+        let status = unsafe {
+            windows_sys::Win32::System::Com::CoCreateInstance(
+                // `CLSID_WbemLocator` defined in `inc/wnet/wbemcli.h`.
+                &windows_sys::core::GUID {
+                    data1: 0x4590f811,
+                    data2: 0x1d3a,
+                    data3: 0x11d0,
+                    data4: [0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24],
+                },
+                std::ptr::null_mut(),
+                windows_sys::Win32::System::Com::CLSCTX_INPROC_SERVER,
+                // `IID_IWbemLocator` defined in `inc/wnet/wbemcli.h`.
+                &windows_sys::core::GUID {
+                    data1: 0xdc12a687,
+                    data2: 0x737f,
+                    data3: 0x11cf,
+                    data4: [0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24],
+                },
+                result.as_mut_ptr().cast::<*mut std::ffi::c_void>(),
+            )
+        };
+
+        if status != windows_sys::Win32::Foundation::S_OK {
+            return Err(std::io::Error::from_raw_os_error(status));
+        }
+
+        // SAFETY: We verified that the call succeeded, so `result` is now
+        // properly initialized and points to a valid WBEM locator instance.
+        Ok(WbemLocator(unsafe {
+            result.assume_init()
+        }))
+    }
+}
+
+impl Drop for WbemLocator {
+
+    fn drop(&mut self) {
+        // SAFETY: We call the [`Release`][1] method of valid WBEM locator. It
+        // returns a new reference count, so we are not interested in it.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
+        let _ = unsafe {
+            ((*(*self.0).lpVtbl).Release)(self.0)
+        };
+    }
+}
+
 // https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nn-wbemcli-iwbemlocator
 //
 // inc/wnet/wbemcli.h
@@ -532,5 +591,12 @@ mod tests {
         drop(guard_1);
         drop(guard_2);
         drop(guard_3);
+    }
+
+    #[test]
+    fn wbem_locator() {
+        let com = ComInitGuard::new().unwrap();
+
+        assert!(WbemLocator::new(&com).is_ok());
     }
 }
