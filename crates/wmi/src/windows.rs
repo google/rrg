@@ -147,6 +147,65 @@ impl Drop for WbemLocator {
     }
 }
 
+struct WbemServicesCimv2(*mut IWbemServices);
+
+impl WbemServicesCimv2 {
+
+    fn new(_: &ComInitGuard, loc: &WbemLocator) -> std::io::Result<WbemServicesCimv2> {
+        let mut result = std::mem::MaybeUninit::uninit();
+
+        let namespace = BString::from("root\\cimv2");
+
+        // SAFETY: Simple FFI call as described in the documentation [1]. This
+        // is based on the official example [2].
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemlocator-connectserver
+        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
+        let status = unsafe {
+            ((*(*(loc.0)).lpVtbl).ConnectServer)(
+                loc.0,
+                namespace.0,
+                std::ptr::null(),
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                result.as_mut_ptr(),
+            )
+        };
+
+        // We explicitly drop the namespace after the function call to guarantee
+        // its lifetime.
+        drop(namespace);
+
+        if status != windows_sys::Win32::Foundation::S_OK {
+            return Err(std::io::Error::from_raw_os_error(status));
+        }
+
+        // SAFETY: We verified that the call succeeded, so `result` is now
+        // properly initialized and points to a valid WBEM services accessor
+        // object.
+        Ok(WbemServicesCimv2(unsafe {
+            result.assume_init()
+        }))
+    }
+}
+
+impl Drop for WbemServicesCimv2 {
+
+    fn drop(&mut self) {
+        // SAFETY: We call the [`Release`][1] method of valid WBEM services
+        // accessor object. It returns a new reference count, so we are not
+        // interested in it.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
+        let _ = unsafe {
+            ((*(*self.0).lpVtbl).Release)(self.0)
+        };
+    }
+}
+
 // https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nn-wbemcli-iwbemlocator
 //
 // inc/wnet/wbemcli.h
@@ -648,5 +707,13 @@ mod tests {
         let com = ComInitGuard::new().unwrap();
 
         assert!(WbemLocator::new(&com).is_ok());
+    }
+
+    #[test]
+    fn wbem_services_cimv2() {
+        let com = ComInitGuard::new().unwrap();
+        let loc = WbemLocator::new(&com).unwrap();
+
+        assert!(WbemServicesCimv2::new(&com, &loc).is_ok());
     }
 }
