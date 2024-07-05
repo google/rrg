@@ -51,11 +51,14 @@ impl Drop for ComInitGuard {
     }
 }
 
-struct WbemLocator(*mut self::ffi::IWbemLocator);
+struct WbemLocator<'com> {
+    ptr: *mut self::ffi::IWbemLocator,
+    com: std::marker::PhantomData<&'com ComInitGuard>,
+}
 
-impl WbemLocator {
+impl<'com> WbemLocator<'com> {
 
-    fn new(_: &ComInitGuard) -> std::io::Result<WbemLocator> {
+    fn new(_: &'com ComInitGuard) -> std::io::Result<WbemLocator<'com>> {
         let mut result = {
             std::mem::MaybeUninit::<*mut self::ffi::IWbemLocator>::uninit()
         };
@@ -91,15 +94,16 @@ impl WbemLocator {
             return Err(std::io::Error::from_raw_os_error(status));
         }
 
-        // SAFETY: We verified that the call succeeded, so `result` is now
-        // properly initialized and points to a valid WBEM locator instance.
-        Ok(WbemLocator(unsafe {
-            result.assume_init()
-        }))
+        Ok(WbemLocator {
+            // SAFETY: We verified that the call succeeded, so `result` is now
+            // properly initialized and points to a valid WBEM locator instance.
+            ptr: unsafe { result.assume_init() },
+            com: std::marker::PhantomData,
+        })
     }
 }
 
-impl Drop for WbemLocator {
+impl<'com> Drop for WbemLocator<'com> {
 
     fn drop(&mut self) {
         // SAFETY: We call the [`Release`][1] method of valid WBEM locator. It
@@ -107,16 +111,19 @@ impl Drop for WbemLocator {
         //
         // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
         let _ = unsafe {
-            ((*(*self.0).lpVtbl).Release)(self.0)
+            ((*(*self.ptr).lpVtbl).Release)(self.ptr)
         };
     }
 }
 
-struct WbemServicesCimv2(*mut self::ffi::IWbemServices);
+struct WbemServicesCimv2<'com> {
+    ptr: *mut self::ffi::IWbemServices,
+    com: std::marker::PhantomData<&'com ComInitGuard>,
+}
 
-impl WbemServicesCimv2 {
+impl<'com> WbemServicesCimv2<'com> {
 
-    fn new(_: &ComInitGuard, loc: &WbemLocator) -> std::io::Result<WbemServicesCimv2> {
+    fn new(_: &'com ComInitGuard, loc: &WbemLocator) -> std::io::Result<WbemServicesCimv2<'com>> {
         let mut result = std::mem::MaybeUninit::uninit();
 
         let namespace = self::bstr::BString::new("root\\cimv2");
@@ -127,8 +134,8 @@ impl WbemServicesCimv2 {
         // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemlocator-connectserver
         // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
         let status = unsafe {
-            ((*(*(loc.0)).lpVtbl).ConnectServer)(
-                loc.0,
+            ((*(*(loc.ptr)).lpVtbl).ConnectServer)(
+                loc.ptr,
                 namespace.as_raw_bstr(),
                 std::ptr::null(),
                 std::ptr::null(),
@@ -148,16 +155,17 @@ impl WbemServicesCimv2 {
             return Err(std::io::Error::from_raw_os_error(status));
         }
 
-        // SAFETY: We verified that the call succeeded, so `result` is now
-        // properly initialized and points to a valid WBEM services accessor
-        // object.
-        Ok(WbemServicesCimv2(unsafe {
-            result.assume_init()
-        }))
+        Ok(WbemServicesCimv2 {
+            // SAFETY: We verified that the call succeeded, so `result` is now
+            // properly initialized and points to a valid WBEM services accessor
+            // object.
+            ptr: unsafe { result.assume_init() },
+            com: std::marker::PhantomData,
+        })
     }
 }
 
-impl Drop for WbemServicesCimv2 {
+impl<'com> Drop for WbemServicesCimv2<'com> {
 
     fn drop(&mut self) {
         // SAFETY: We call the [`Release`][1] method of valid WBEM services
@@ -166,7 +174,7 @@ impl Drop for WbemServicesCimv2 {
         //
         // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
         let _ = unsafe {
-            ((*(*self.0).lpVtbl).Release)(self.0)
+            ((*(*self.ptr).lpVtbl).Release)(self.ptr)
         };
     }
 }
