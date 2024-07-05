@@ -163,6 +163,42 @@ impl<'com> WbemServicesCimv2<'com> {
             com: std::marker::PhantomData,
         })
     }
+
+    fn query<S>(&self, query: S) -> std::io::Result<WbemEnumClassObject<'com>>
+    where
+        S: AsRef<std::ffi::OsStr>,
+    {
+        let mut result = std::mem::MaybeUninit::uninit();
+
+        // SAFETY: Simple FFI call as described in the documentation [1]. This
+        // is based on the official example [2].
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemservices-execquery
+        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
+        let status = unsafe {
+            use windows_sys::Win32::System::Wmi::*;
+
+            ((*(*self.ptr).lpVtbl).ExecQuery)(
+                self.ptr,
+                self::bstr::BString::new("WQL").as_raw_bstr(),
+                self::bstr::BString::new(query).as_raw_bstr(),
+                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                std::ptr::null_mut(),
+                result.as_mut_ptr(),
+            )
+        };
+
+        if status != windows_sys::Win32::Foundation::S_OK {
+            return Err(std::io::Error::from_raw_os_error(status));
+        }
+
+        Ok(WbemEnumClassObject {
+            // SAFETY: We verified that the call succeeded, so `result` is now
+            // properly initialized and points to a valid WBEM enumerator.
+            ptr: unsafe { result.assume_init() },
+            com: std::marker::PhantomData,
+        })
+    }
 }
 
 impl<'com> Drop for WbemServicesCimv2<'com> {
@@ -171,6 +207,91 @@ impl<'com> Drop for WbemServicesCimv2<'com> {
         // SAFETY: We call the [`Release`][1] method of valid WBEM services
         // accessor object. It returns a new reference count, so we are not
         // interested in it.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
+        let _ = unsafe {
+            ((*(*self.ptr).lpVtbl).Release)(self.ptr)
+        };
+    }
+}
+
+struct WbemEnumClassObject<'com> {
+    ptr: *mut self::ffi::IEnumWbemClassObject,
+    com: std::marker::PhantomData<&'com ComInitGuard>,
+}
+
+impl<'com> WbemEnumClassObject<'com> {
+
+    fn next(&mut self) -> std::io::Result<Option<WbemClassObject<'com>>> {
+        let mut result = std::mem::MaybeUninit::uninit();
+        let mut count = std::mem::MaybeUninit::uninit();
+
+        // SAFETY: Simple FFI call as described in the documentation [1]. This
+        // is based on the official example [2].
+        //
+        // We request only a single result, so the buffer (single `MaybeUninit`
+        // cell) is sufficiently big.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-ienumwbemclassobject-next
+        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
+        let status = unsafe {
+            ((*(*self.ptr).lpVtbl).Next)(
+                self.ptr,
+                windows_sys::Win32::System::Wmi::WBEM_INFINITE,
+                1,
+                result.as_mut_ptr(),
+                count.as_mut_ptr(),
+            )
+        };
+
+        match status {
+            windows_sys::Win32::System::Wmi::WBEM_S_NO_ERROR => {
+                // SAFETY: This branch is reached only if the call succeeded and
+                // the returned count is equal to the requested count. We can
+                // thus assume that `count` is initialized and just as a sanity
+                // check we verify that it matches 1 (since we only requested
+                // a single result.
+                let count = unsafe {
+                    count.assume_init()
+                };
+                assert!(count == 1);
+
+                Ok(Some(WbemClassObject {
+                    // SAFETY: The call succeeded and it initialized the sole
+                    // (expected) result.
+                    ptr: unsafe { result.assume_init() },
+                    com: std::marker::PhantomData,
+                }))
+            }
+            windows_sys::Win32::System::Wmi::WBEM_S_FALSE => Ok(None),
+            _ => Err(std::io::Error::from_raw_os_error(status)),
+        }
+    }
+}
+
+impl<'com> Drop for WbemEnumClassObject<'com> {
+
+    fn drop(&mut self) {
+        // SAFETY: We call the [`Release`][1] method of valid WBEM enumerator.
+        // It returns a new reference count, so we are not interested in it.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
+        let _ = unsafe {
+            ((*(*self.ptr).lpVtbl).Release)(self.ptr)
+        };
+    }
+}
+
+struct WbemClassObject<'com> {
+    ptr: *mut self::ffi::IWbemClassObject,
+    com: std::marker::PhantomData<&'com ComInitGuard>,
+}
+
+impl<'com> Drop for WbemClassObject<'com> {
+
+    fn drop(&mut self) {
+        // SAFETY: We call the [`Release`][1] method of valid WBEM enumerator.
+        // It returns a new reference count, so we are not interested in it.
         //
         // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
         let _ = unsafe {
@@ -220,10 +341,11 @@ mod tests {
     }
 
     #[test]
-    fn wbem_services_cimv2() {
+    fn wbem_services_cimv2_query() {
         let com = ComInitGuard::new().unwrap();
         let loc = WbemLocator::new(&com).unwrap();
 
-        assert!(WbemServicesCimv2::new(&com, &loc).is_ok());
+        WbemServicesCimv2::new(&com, &loc).unwrap()
+            .query("SELECT * FROM Win32_OperatingSystem").unwrap();
     }
 }
