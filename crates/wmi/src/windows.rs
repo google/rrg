@@ -300,6 +300,40 @@ impl<'com> Drop for WbemClassObject<'com> {
     }
 }
 
+struct Variant(windows_sys::Win32::System::Variant::VARIANT);
+
+impl Variant {
+
+    pub fn new() -> Variant {
+        let mut raw = std::mem::MaybeUninit::uninit();
+
+        // SAFETY: We call the initialization function as documented [1].
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-variantinit
+        unsafe {
+            windows_sys::Win32::System::Variant::VariantInit(raw.as_mut_ptr());
+        }
+
+        // SAFETY: Value is now correctly initialized.
+        Variant(unsafe { raw.assume_init() })
+    }
+}
+
+impl Drop for Variant {
+
+    fn drop(&mut self) {
+        // SAFETY: We call the deinitialization function as documented [1].
+        //
+        // The function can return an error but it is not possible to handle
+        // it in `Drop` implementation.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-variantclear
+        let _ = unsafe {
+            windows_sys::Win32::System::Variant::VariantClear(&mut self.0);
+        };
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
