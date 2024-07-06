@@ -388,13 +388,24 @@ pub struct IWbemClassObjectVtbl {
     pub GetNames: *const std::ffi::c_void, // Not complete, unused.
 
     // https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-beginenumeration
-    pub BeginEnumeration: *const std::ffi::c_void, // Not complete, unused.
+    pub BeginEnumeration: unsafe extern "system" fn(
+        this: *mut IWbemClassObject,
+        lEnumFlags: std::ffi::c_long,
+    ) -> windows_sys::core::HRESULT,
 
     // https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-next
-    pub Next: *const std::ffi::c_void, // Not complete, unused.
+    pub Next: unsafe extern "system" fn(
+        this: *mut IWbemClassObject,
+        strName: *mut windows_sys::core::BSTR,
+        pVal: *mut windows_sys::Win32::System::Variant::VARIANT,
+        pType: *mut CIMTYPE,
+        plFlavor: *mut std::ffi::c_long,
+    ) -> windows_sys::core::HRESULT, // Not complete, unused.
 
     // https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-endenumeration
-    pub EndEnumeration: *const std::ffi::c_void, // Not complete, unused.
+    pub EndEnumeration: unsafe extern "system" fn(
+        this: *mut IWbemClassObject,
+    ) -> windows_sys::core::HRESULT,
 
     // https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-getpropertyqualifierset
     pub GetPropertyQualifierSet: *const std::ffi::c_void, // Not complete, unused.
