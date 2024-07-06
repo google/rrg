@@ -41,6 +41,43 @@ impl BString {
         BString(ptr)
     }
 
+    /// Creates a new `BSTR` wrapper from raw pointer and takes ownership.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must be valid instance of `BSTR`. It has similar semantics
+    /// and requirements as [`Box::from_raw`].
+    pub unsafe fn from_raw_bstr(raw: windows_sys::core::BSTR) -> BString {
+        BString(raw)
+    }
+
+    /// Returns the length of the string in bytes.
+    pub fn count_bytes(&self) -> usize {
+        // SAFETY: Every `BSTR` instance is prefixed with 4-byte length of the
+        // string (excluding the null terminator) [1]. This value is placed
+        // directly *before* the pointer that we have, so we offset it and read
+        // from there.
+        //
+        // [1] https://learn.microsoft.com/en-us/previous-versions/windows/desktop/automat/bstr#remarks
+        unsafe {
+            *self.0.cast::<u8>().offset(-4).cast::<u32>() as usize
+        }
+    }
+
+    /// Copies the string into an owned [`std::ffi::OsString`].
+    pub fn to_os_string(&self) -> std::ffi::OsString {
+        use std::os::windows::ffi::OsStringExt as _;
+
+        let len = self.count_bytes() / std::mem::size_of::<u16>();
+
+        // SAFETY: We know that the pointer is valid and calculate its length by
+        // taking it byte length and dividing by the size of each character (so,
+        // 2 bytes).
+        std::os::windows::ffi::OsStringExt::from_wide(unsafe {
+            std::slice::from_raw_parts(self.0, len)
+        })
+    }
+
     pub fn as_raw_bstr(&self) -> windows_sys::core::BSTR {
         self.0
     }
@@ -65,6 +102,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bstring_from_str_empty() {
+        let _ = BString::new("");
+    }
+
+    #[test]
     fn bstring_from_str_ascii() {
         let _ = BString::new("foobar");
     }
@@ -74,4 +116,28 @@ mod tests {
         let _ = BString::new("załóć gęślą jaźń");
     }
 
+    #[test]
+    fn bstring_len_empty() {
+        assert_eq!(BString::new("").count_bytes(), 0);
+    }
+
+    #[test]
+    fn bstring_len_ascii() {
+        assert_eq!(BString::new("foobar").count_bytes(), 12);
+    }
+
+    #[test]
+    fn bstring_to_os_string_empty() {
+        assert_eq!(BString::new("").to_os_string(), "");
+    }
+
+    #[test]
+    fn bstring_to_os_string_ascii() {
+        assert_eq!(BString::new("foobar").to_os_string(), "foobar");
+    }
+
+    #[test]
+    fn bstring_to_os_string_unicode() {
+        assert_eq!(BString::new("żółć").to_os_string(), "żółć");
+    }
 }
