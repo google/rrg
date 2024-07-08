@@ -6,6 +6,95 @@
 mod bstr;
 mod ffi;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum QueryValue {
+    Illegal,
+    None,
+    Bool(bool),
+    U8(u8),
+    I8(i8),
+    U16(u16),
+    I16(i16),
+    U32(u32),
+    I32(i32),
+    U64(u64),
+    I64(i64),
+    F32(f32),
+    F64(f64),
+    // TODO(@panhania): Add support for other types.
+}
+
+impl QueryValue {
+
+    /// Constructs a value from native [`VARIANT`] instance.
+    ///
+    /// # Safety
+    ///
+    /// `variant` must be a properly initialized [`VARIANT`] instance.
+    unsafe fn from_variant(
+        variant: &windows_sys::Win32::System::Variant::VARIANT,
+    ) -> std::io::Result<QueryValue> {
+        let variant = variant.Anonymous.Anonymous;
+
+        // Based on `inc/wnet/comutil.h`, `inc/wnet/oleauto.h` and [1].
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/oaidl/ns-oaidl-variant
+        match variant.vt {
+            windows_sys::Win32::System::Variant::VT_EMPTY => {
+                Ok(QueryValue::None)
+            }
+            windows_sys::Win32::System::Variant::VT_NULL => {
+                Ok(QueryValue::None)
+            }
+            windows_sys::Win32::System::Variant::VT_BOOL => {
+                match variant.Anonymous.boolVal {
+                    0 => Ok(QueryValue::Bool(false)),
+                    -1 => Ok(QueryValue::Bool(true)),
+                    value => Err(std::io::ErrorKind::InvalidData.into()),
+                }
+            }
+            windows_sys::Win32::System::Variant::VT_UI1 => {
+                Ok(QueryValue::U8(variant.Anonymous.bVal))
+            }
+            windows_sys::Win32::System::Variant::VT_I1 => {
+                // According to `inc/wnet/oleauto.h`, `VT_I1` corresponds to
+                // `cVal` and should be a signed char but this is not what the
+                // type says, so we reinterpret it.
+                Ok(QueryValue::I8(variant.Anonymous.cVal as i8))
+            }
+            windows_sys::Win32::System::Variant::VT_UI2 => {
+                Ok(QueryValue::U16(variant.Anonymous.uiVal))
+            }
+            windows_sys::Win32::System::Variant::VT_I2 => {
+                Ok(QueryValue::I16(variant.Anonymous.iVal))
+            }
+            windows_sys::Win32::System::Variant::VT_UI4 => {
+                Ok(QueryValue::U32(variant.Anonymous.ulVal))
+            }
+            windows_sys::Win32::System::Variant::VT_I4 => {
+                Ok(QueryValue::I32(variant.Anonymous.lVal))
+            }
+            windows_sys::Win32::System::Variant::VT_UI8 => {
+                Ok(QueryValue::U64(variant.Anonymous.ullVal))
+            }
+            windows_sys::Win32::System::Variant::VT_I8 => {
+                Ok(QueryValue::I64(variant.Anonymous.llVal))
+            }
+            windows_sys::Win32::System::Variant::VT_R4 => {
+                Ok(QueryValue::F32(variant.Anonymous.fltVal))
+            }
+            windows_sys::Win32::System::Variant::VT_R8 => {
+                Ok(QueryValue::F64(variant.Anonymous.dblVal))
+            }
+            windows_sys::Win32::System::Variant::VT_BSTR => {
+                // TODO(@panhania): Add support for this.
+                Err(std::io::ErrorKind::Unsupported.into())
+            }
+            _ => Err(std::io::ErrorKind::Unsupported.into())
+        }
+    }
+}
+
 struct ComInitGuard;
 
 impl ComInitGuard {
