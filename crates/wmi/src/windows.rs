@@ -21,7 +21,7 @@ pub enum QueryValue {
     I64(i64),
     F32(f32),
     F64(f64),
-    // TODO(@panhania): Add support for other types.
+    String(std::ffi::OsString),
 }
 
 impl QueryValue {
@@ -87,8 +87,10 @@ impl QueryValue {
                 Ok(QueryValue::F64(variant.Anonymous.dblVal))
             }
             windows_sys::Win32::System::Variant::VT_BSTR => {
-                // TODO(@panhania): Add support for this.
-                Err(std::io::ErrorKind::Unsupported.into())
+                Ok(QueryValue::String({
+                    self::bstr::BStr::from_raw_bstr(variant.Anonymous.bstrVal)
+                        .to_os_string()
+                }))
             }
             _ => Err(std::io::ErrorKind::Unsupported.into())
         }
