@@ -396,6 +396,7 @@ pub struct IWbemClassObjectVtbl {
     // https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-next
     pub Next: unsafe extern "system" fn(
         this: *mut IWbemClassObject,
+        lFlags: std::ffi::c_long,
         strName: *mut windows_sys::core::BSTR,
         pVal: *mut windows_sys::Win32::System::Variant::VARIANT,
         pType: *mut CIMTYPE,
