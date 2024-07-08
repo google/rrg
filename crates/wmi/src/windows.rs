@@ -6,6 +6,156 @@
 mod bstr;
 mod ffi;
 
+fn query<S: AsRef<std::ffi::OsStr>>(query: S) -> std::io::Result<Query<S>> {
+    let com = ComInitGuard::new()?;
+
+    Ok(Query {
+        query,
+        com,
+    })
+}
+
+struct Query<S: AsRef<std::ffi::OsStr>> {
+    query: S,
+    com: ComInitGuard,
+}
+
+impl<S: AsRef<std::ffi::OsStr>> Query<S> {
+
+    fn rows(&self) -> std::io::Result<QueryRows<'_>> {
+        Ok(QueryRows {
+            raw: WbemServicesCimv2::new(&self.com, &WbemLocator::new(&self.com)?)?
+                .query(&self.query)?,
+        })
+    }
+}
+
+struct QueryRows<'com> {
+    raw: WbemEnumClassObject<'com>,
+}
+
+impl<'com> Iterator for QueryRows<'com> {
+
+    type Item = std::io::Result<QueryRow>;
+
+    fn next(&mut self) -> Option<std::io::Result<QueryRow>> {
+        let object = match self.raw.next() {
+            Ok(None) => return None,
+            Ok(Some(object)) => object,
+            Err(error) => return Some(Err(error)),
+        };
+
+        // SAFETY: We start the enumeration on a valid object without any extra
+        // flags as documented [1]. We verify the call status below.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-beginenumeration
+        let status = unsafe {
+            ((*(*object.ptr).lpVtbl).BeginEnumeration)(object.ptr, 0)
+        };
+
+        if status != windows_sys::Win32::Foundation::S_OK {
+            return Some(Err(std::io::Error::from_raw_os_error(status)));
+        }
+
+        let mut row = std::collections::HashMap::new();
+
+        loop {
+            let mut raw_name = std::mem::MaybeUninit::uninit();
+            let mut raw_value = std::mem::MaybeUninit::uninit();
+
+            // SAFETY: We advance the iterator [1] without any extra flags. Note
+            // that we already called `BeginEnumeration`. The call should call
+            // `VariantInit` on `raw_value` [2] so we should not do it upfront.
+            //
+            // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-next
+            let status = unsafe {
+                ((*(*object.ptr).lpVtbl).Next)(
+                    object.ptr,
+                    0,
+                    raw_name.as_mut_ptr(),
+                    raw_value.as_mut_ptr(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            };
+
+            match status {
+                windows_sys::Win32::Foundation::S_OK => (),
+                windows_sys::Win32::System::Wmi::WBEM_S_NO_MORE_DATA => break,
+                _ => {
+                    // SAFETY: We need to terminate early, so we are required
+                    // to call `EndEnumeration` now. We swallow the error, as
+                    // we still want to return the one from the `Next` call.
+                    let _ = unsafe {
+                        ((*(*object.ptr).lpVtbl).EndEnumeration)(object.ptr)
+                    };
+
+                    return Some(Err(std::io::Error::from_raw_os_error(status)))
+                }
+            }
+
+            // SAFETY: Call to `Next` succeeded, the name should be properly
+            // initialized now.
+            let raw_name = unsafe {
+                raw_name.assume_init()
+            };
+
+            // SAFETY: Call to `Next` succeeded, the value should be properly
+            // initialized now.
+            let mut raw_value = unsafe {
+                raw_value.assume_init()
+            };
+
+            // SAFETY: `raw_name` is guaranteed to be a valid `BSTR` instance
+            // and we should dispose it after we are done with it, so we put it
+            // into the owned wrapper.
+            let name = unsafe {
+                self::bstr::BString::from_raw_bstr(raw_name)
+            }.to_os_string();
+
+            // SAFETY: `raw_value` is guaranteed to be a valid `VARIANT` now.
+            //
+            // We do not unwrap the conversion error yet, because we have to
+            // clear the variant first. We do it afterwards.
+            let value = unsafe {
+                QueryValue::from_variant(&raw_value)
+            };
+
+            // SAFETY: We call the deinitialization function [1] after the value
+            // is no longer needed as instructed [2].
+            //
+            // [1]: https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-variantclear
+            // [2]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-next#parameters
+            let status = unsafe {
+                windows_sys::Win32::System::Variant::VariantClear(&mut raw_value)
+            };
+
+            if status != windows_sys::Win32::Foundation::S_OK {
+                // SAFETY: Similarly to handling faiure of `Next`, we need to
+                // terminate early, so we are required to call `EndEnumeration`
+                // now. We swallow the error, as we still want to return the one
+                // from the `VariantClear` call.
+                let _ = unsafe {
+                    ((*(*object.ptr).lpVtbl).EndEnumeration)(object.ptr)
+                };
+
+                return Some(Err(std::io::Error::from_raw_os_error(status)));
+            }
+
+            let value = match value {
+                Ok(value) => value,
+                Err(error) => return Some(Err(error)),
+            };
+
+            row.insert(name, value);
+        }
+
+        Some(Ok(row))
+    }
+}
+
+type QueryRow = std::collections::HashMap<std::ffi::OsString, QueryValue>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum QueryValue {
     Illegal,
@@ -36,7 +186,11 @@ impl QueryValue {
     ) -> std::io::Result<QueryValue> {
         let variant = variant.Anonymous.Anonymous;
 
-        // Based on `inc/wnet/comutil.h`, `inc/wnet/oleauto.h` and [1].
+        // Based on [1] and following header files:
+        //
+        //   * `inc/wnet/comutil.h`
+        //   * `inc/wnet/oleauto.h`
+        //   * `inc/wnet/wtypes.h`
         //
         // [1]: https://learn.microsoft.com/en-us/windows/win32/api/oaidl/ns-oaidl-variant
         match variant.vt {
@@ -92,8 +246,30 @@ impl QueryValue {
                         .to_os_string()
                 }))
             }
-            _ => Err(std::io::ErrorKind::Unsupported.into())
+            raw_type => Err(UnsupportedQueryValueTypeError { raw_type }.into()),
         }
+    }
+}
+
+#[derive(Debug)]
+struct UnsupportedQueryValueTypeError {
+    raw_type: windows_sys::Win32::System::Variant::VARENUM,
+}
+
+impl std::fmt::Display for UnsupportedQueryValueTypeError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "unsupported query value type: {}", self.raw_type)
+    }
+}
+
+impl std::error::Error for UnsupportedQueryValueTypeError {
+}
+
+impl From<UnsupportedQueryValueTypeError> for std::io::Error {
+
+    fn from(error: UnsupportedQueryValueTypeError) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::Unsupported, error)
     }
 }
 
@@ -472,5 +648,47 @@ mod tests {
 
         WbemServicesCimv2::new(&com, &loc).unwrap()
             .query("SELECT * FROM Win32_OperatingSystem").unwrap();
+    }
+
+    #[test]
+    fn query_win32_operating_system() {
+        let rows = query("SELECT * FROM Win32_OperatingSystem").unwrap()
+            .rows().unwrap()
+            .collect::<std::io::Result<Vec<_>>>().unwrap();
+
+        assert_eq!(rows.len(), 1);
+        assert!(matches! {
+            rows[0].get(std::ffi::OsStr::new("Caption")).unwrap(),
+            QueryValue::String(_),
+        });
+        assert!(matches! {
+            rows[0].get(std::ffi::OsStr::new("Primary")).unwrap(),
+            QueryValue::Bool(_),
+        });
+        assert!(matches! {
+            rows[0].get(std::ffi::OsStr::new("CurrentTimeZone")).unwrap(),
+            QueryValue::I16(_),
+        });
+    }
+
+    #[test]
+    fn query_win32_environment() {
+        let rows = query("SELECT * FROM Win32_ComputerSystem").unwrap()
+            .rows().unwrap()
+            .collect::<std::io::Result<Vec<_>>>().unwrap();
+
+        assert_eq!(rows.len(), 1);
+        assert!(matches! {
+            rows[0].get(std::ffi::OsStr::new("Model")).unwrap(),
+            QueryValue::String(_),
+        });
+        assert!(matches! {
+            rows[0].get(std::ffi::OsStr::new("Name")).unwrap(),
+            QueryValue::String(_),
+        });
+        assert!(matches! {
+            rows[0].get(std::ffi::OsStr::new("HypervisorPresent")).unwrap(),
+            QueryValue::Bool(_),
+        });
     }
 }
