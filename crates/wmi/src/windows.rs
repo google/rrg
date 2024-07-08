@@ -4,10 +4,11 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 mod bstr;
+mod com;
 mod ffi;
 
 fn query<S: AsRef<std::ffi::OsStr>>(query: S) -> std::io::Result<Query<S>> {
-    let com = ComInitGuard::new()?;
+    let com = self::com::init()?;
 
     Ok(Query {
         query,
@@ -17,7 +18,7 @@ fn query<S: AsRef<std::ffi::OsStr>>(query: S) -> std::io::Result<Query<S>> {
 
 struct Query<S: AsRef<std::ffi::OsStr>> {
     query: S,
-    com: ComInitGuard,
+    com: self::com::InitGuard,
 }
 
 impl<S: AsRef<std::ffi::OsStr>> Query<S> {
@@ -273,59 +274,14 @@ impl From<UnsupportedQueryValueTypeError> for std::io::Error {
     }
 }
 
-struct ComInitGuard;
-
-impl ComInitGuard {
-
-    fn new() -> std::io::Result<ComInitGuard> {
-        // SAFETY: Simple FFI call as described in the documentation [1]. We
-        // verify the return code below.
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-coinitializeex
-        let status = unsafe {
-            windows_sys::Win32::System::Com::CoInitializeEx(
-                std::ptr::null(),
-                windows_sys::Win32::System::Com::COINIT_MULTITHREADED as u32,
-            )
-        };
-
-        // As described in the documentation, we return the guard even if the
-        // call returned `S_FALSE` or `RPC_E_CHANGED_MODE` (it means that the
-        // library was initialized before) as _every_ initialization call should
-        // be balanced be corresponding uninitialization.
-        match status {
-            windows_sys::Win32::Foundation::S_OK => {}
-            windows_sys::Win32::Foundation::S_FALSE => {}
-            windows_sys::Win32::Foundation::RPC_E_CHANGED_MODE => (),
-            _ => return Err(std::io::Error::from_raw_os_error(status)),
-        }
-
-        Ok(ComInitGuard)
-    }
-}
-
-impl Drop for ComInitGuard {
-
-    fn drop(&mut self) {
-        // SAFETY: Simple FFI call as described in the documentation [1]. If we
-        // reach this line, it means that the initialization did not error and
-        // should be balanced by uninitialization.
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/desktop/api/combaseapi/nf-combaseapi-couninitialize
-        unsafe {
-            windows_sys::Win32::System::Com::CoUninitialize();
-        }
-    }
-}
-
 struct WbemLocator<'com> {
     ptr: *mut self::ffi::IWbemLocator,
-    com: std::marker::PhantomData<&'com ComInitGuard>,
+    com: std::marker::PhantomData<&'com self::com::InitGuard>,
 }
 
 impl<'com> WbemLocator<'com> {
 
-    fn new(_: &'com ComInitGuard) -> std::io::Result<WbemLocator<'com>> {
+    fn new(_: &'com self::com::InitGuard) -> std::io::Result<WbemLocator<'com>> {
         let mut result = {
             std::mem::MaybeUninit::<*mut self::ffi::IWbemLocator>::uninit()
         };
@@ -385,12 +341,12 @@ impl<'com> Drop for WbemLocator<'com> {
 
 struct WbemServicesCimv2<'com> {
     ptr: *mut self::ffi::IWbemServices,
-    com: std::marker::PhantomData<&'com ComInitGuard>,
+    com: std::marker::PhantomData<&'com self::com::InitGuard>,
 }
 
 impl<'com> WbemServicesCimv2<'com> {
 
-    fn new(_: &'com ComInitGuard, loc: &WbemLocator) -> std::io::Result<WbemServicesCimv2<'com>> {
+    fn new(_: &'com self::com::InitGuard, loc: &WbemLocator) -> std::io::Result<WbemServicesCimv2<'com>> {
         let mut result = std::mem::MaybeUninit::uninit();
 
         let namespace = self::bstr::BString::new("root\\cimv2");
@@ -484,7 +440,7 @@ impl<'com> Drop for WbemServicesCimv2<'com> {
 
 struct WbemEnumClassObject<'com> {
     ptr: *mut self::ffi::IEnumWbemClassObject,
-    com: std::marker::PhantomData<&'com ComInitGuard>,
+    com: std::marker::PhantomData<&'com self::com::InitGuard>,
 }
 
 impl<'com> WbemEnumClassObject<'com> {
@@ -551,7 +507,7 @@ impl<'com> Drop for WbemEnumClassObject<'com> {
 
 struct WbemClassObject<'com> {
     ptr: *mut self::ffi::IWbemClassObject,
-    com: std::marker::PhantomData<&'com ComInitGuard>,
+    com: std::marker::PhantomData<&'com self::com::InitGuard>,
 }
 
 impl<'com> Drop for WbemClassObject<'com> {
@@ -573,43 +529,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn com_init_guard() {
-        assert!(ComInitGuard::new().is_ok());
-    }
-
-    #[test]
-    fn com_init_guard_sequence() {
-        let guard = ComInitGuard::new().unwrap();
-        drop(guard);
-
-        let guard = ComInitGuard::new().unwrap();
-        drop(guard);
-
-        let guard = ComInitGuard::new().unwrap();
-        drop(guard);
-    }
-
-    #[test]
-    fn com_init_guard_nested() {
-        let guard_1 = ComInitGuard::new().unwrap();
-        let guard_2 = ComInitGuard::new().unwrap();
-        let guard_3 = ComInitGuard::new().unwrap();
-
-        drop(guard_1);
-        drop(guard_2);
-        drop(guard_3);
-    }
-
-    #[test]
     fn wbem_locator() {
-        let com = ComInitGuard::new().unwrap();
+        let com = self::com::init().unwrap();
 
         assert!(WbemLocator::new(&com).is_ok());
     }
 
     #[test]
     fn wbem_services_cimv2_query() {
-        let com = ComInitGuard::new().unwrap();
+        let com = self::com::init().unwrap();
         let loc = WbemLocator::new(&com).unwrap();
 
         WbemServicesCimv2::new(&com, &loc).unwrap()
