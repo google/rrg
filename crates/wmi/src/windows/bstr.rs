@@ -52,12 +52,12 @@ impl BString {
         BString(raw)
     }
     /// Returns the length of the string in bytes.
-    pub fn count_bytes(self) -> usize {
+    pub fn count_bytes(&self) -> usize {
         self.as_bstr().count_bytes()
     }
 
     /// Copies the string into an owned [`std::ffi::OsString`].
-    pub fn to_os_string(self) -> std::ffi::OsString {
+    pub fn to_os_string(&self) -> std::ffi::OsString {
         self.as_bstr().to_os_string()
     }
 
