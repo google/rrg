@@ -24,10 +24,70 @@ struct Query<S: AsRef<std::ffi::OsStr>> {
 impl<S: AsRef<std::ffi::OsStr>> Query<S> {
 
     fn rows(&self) -> std::io::Result<QueryRows<'_>> {
-        Ok(QueryRows {
-            raw: WbemServicesCimv2::new(&self.com, &mut self::com::WbemLocator::new(&self.com)?)?
-                .query(&self.query)?,
-        })
+        let mut loc = self::com::WbemLocator::new(&self.com)?;
+
+        let mut svc_ptr = std::mem::MaybeUninit::uninit();
+
+        // SAFETY: Simple FFI call as described in the documentation [1]. This
+        // is based on the official example [2].
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemlocator-connectserver
+        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
+        let status = unsafe {
+            ((loc.vtable()).ConnectServer)(
+                loc.as_raw_mut(),
+                self::bstr::BString::new("root\\cimv2").as_raw_bstr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                svc_ptr.as_mut_ptr(),
+            )
+        };
+
+        if status != windows_sys::Win32::Foundation::S_OK {
+            return Err(std::io::Error::from_raw_os_error(status));
+        }
+
+        // SAFETY: We verified that the call succeeded, so `svc_ptr` is now
+        // properly initialized and points to a valid WBEM services accessor
+        // object. Thus, we can safely constructor a RAII wrapper out of it.
+        let mut svc = unsafe {
+            self::com::WbemServices::from_raw_ptr(&self.com, svc_ptr.assume_init())
+        };
+
+        let mut enum_ptr = std::mem::MaybeUninit::uninit();
+
+        // SAFETY: Simple FFI call as described in the documentation [1]. This
+        // is based on the official example [2].
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemservices-execquery
+        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
+        let status = unsafe {
+            use windows_sys::Win32::System::Wmi::*;
+
+            (svc.vtable().ExecQuery)(
+                svc.as_raw_mut(),
+                self::bstr::BString::new("WQL").as_raw_bstr(),
+                self::bstr::BString::new(&self.query).as_raw_bstr(),
+                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                std::ptr::null_mut(),
+                enum_ptr.as_mut_ptr(),
+            )
+        };
+
+        if status != windows_sys::Win32::Foundation::S_OK {
+            return Err(std::io::Error::from_raw_os_error(status));
+        }
+
+        Ok(QueryRows { raw: WbemEnumClassObject {
+            // SAFETY: We verified that the call succeeded, so `enum_ptr` is now
+            // properly initialized and points to a valid WBEM enumerator.
+            ptr: unsafe { enum_ptr.assume_init() },
+            com: std::marker::PhantomData,
+        }})
     }
 }
 
@@ -274,97 +334,6 @@ impl From<UnsupportedQueryValueTypeError> for std::io::Error {
     }
 }
 
-struct WbemServicesCimv2<'com> {
-    inner: self::com::WbemServices<'com>,
-}
-
-impl<'com> WbemServicesCimv2<'com> {
-
-    fn new(com: &'com self::com::InitGuard, loc: &mut self::com::WbemLocator) -> std::io::Result<WbemServicesCimv2<'com>> {
-        let mut result = std::mem::MaybeUninit::uninit();
-
-        let namespace = self::bstr::BString::new("root\\cimv2");
-
-        // SAFETY: Simple FFI call as described in the documentation [1]. This
-        // is based on the official example [2].
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemlocator-connectserver
-        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
-        let status = unsafe {
-            ((loc.vtable()).ConnectServer)(
-                loc.as_raw_mut(),
-                namespace.as_raw_bstr(),
-                std::ptr::null(),
-                std::ptr::null(),
-                std::ptr::null(),
-                0,
-                std::ptr::null(),
-                std::ptr::null_mut(),
-                result.as_mut_ptr(),
-            )
-        };
-
-        // We explicitly drop the namespace after the function call to guarantee
-        // its lifetime.
-        drop(namespace);
-
-        if status != windows_sys::Win32::Foundation::S_OK {
-            return Err(std::io::Error::from_raw_os_error(status));
-        }
-
-        // SAFETY: We verified that the call succeeded, so `result` is now
-        // properly initialized and points to a valid WBEM services accessor
-        // object.
-        let result = unsafe {
-            result.assume_init()
-        };
-
-        Ok(WbemServicesCimv2 {
-            // SAFTY: `result` is not properly initialized pointer to a a valid
-            // WBEM service accessor instance.
-            inner: unsafe {
-                self::com::WbemServices::from_raw_ptr(com, result)
-            },
-        })
-    }
-
-    fn query<S>(&mut self, query: S) -> std::io::Result<WbemEnumClassObject<'com>>
-    where
-        S: AsRef<std::ffi::OsStr>,
-    {
-        let mut result = std::mem::MaybeUninit::uninit();
-
-        // SAFETY: Simple FFI call as described in the documentation [1]. This
-        // is based on the official example [2].
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemservices-execquery
-        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
-        let status = unsafe {
-            use windows_sys::Win32::System::Wmi::*;
-
-            (self.inner.vtable().ExecQuery)(
-                self.inner.as_raw_mut(),
-                self::bstr::BString::new("WQL").as_raw_bstr(),
-                self::bstr::BString::new(query).as_raw_bstr(),
-                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
-                std::ptr::null_mut(),
-                result.as_mut_ptr(),
-            )
-        };
-
-        if status != windows_sys::Win32::Foundation::S_OK {
-            return Err(std::io::Error::from_raw_os_error(status));
-        }
-
-        Ok(WbemEnumClassObject {
-            // SAFETY: We verified that the call succeeded, so `result` is now
-            // properly initialized and points to a valid WBEM enumerator.
-            ptr: unsafe { result.assume_init() },
-            com: std::marker::PhantomData,
-        })
-    }
-}
-
 struct WbemEnumClassObject<'com> {
     ptr: *mut self::ffi::IEnumWbemClassObject,
     com: std::marker::PhantomData<&'com self::com::InitGuard>,
@@ -454,15 +423,6 @@ impl<'com> Drop for WbemClassObject<'com> {
 mod tests {
 
     use super::*;
-
-    #[test]
-    fn wbem_services_cimv2_query() {
-        let com = self::com::init().unwrap();
-        let mut loc = self::com::WbemLocator::new(&com).unwrap();
-
-        WbemServicesCimv2::new(&com, &mut loc).unwrap()
-            .query("SELECT * FROM Win32_OperatingSystem").unwrap();
-    }
 
     #[test]
     fn query_win32_operating_system() {
