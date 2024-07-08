@@ -25,7 +25,7 @@ impl<S: AsRef<std::ffi::OsStr>> Query<S> {
 
     fn rows(&self) -> std::io::Result<QueryRows<'_>> {
         Ok(QueryRows {
-            raw: WbemServicesCimv2::new(&self.com, &WbemLocator::new(&self.com)?)?
+            raw: WbemServicesCimv2::new(&self.com, &mut self::com::WbemLocator::new(&self.com)?)?
                 .query(&self.query)?,
         })
     }
@@ -274,71 +274,6 @@ impl From<UnsupportedQueryValueTypeError> for std::io::Error {
     }
 }
 
-struct WbemLocator<'com> {
-    ptr: *mut self::ffi::IWbemLocator,
-    com: std::marker::PhantomData<&'com self::com::InitGuard>,
-}
-
-impl<'com> WbemLocator<'com> {
-
-    fn new(_: &'com self::com::InitGuard) -> std::io::Result<WbemLocator<'com>> {
-        let mut result = {
-            std::mem::MaybeUninit::<*mut self::ffi::IWbemLocator>::uninit()
-        };
-
-        // SAFETY: Simple FFI cal as described in the documentation [1]. This is
-        // based on the official example [2].
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-cocreateinstance
-        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
-        let status = unsafe {
-            windows_sys::Win32::System::Com::CoCreateInstance(
-                // `CLSID_WbemLocator` defined in `inc/wnet/wbemcli.h`.
-                &windows_sys::core::GUID {
-                    data1: 0x4590f811,
-                    data2: 0x1d3a,
-                    data3: 0x11d0,
-                    data4: [0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24],
-                },
-                std::ptr::null_mut(),
-                windows_sys::Win32::System::Com::CLSCTX_INPROC_SERVER,
-                // `IID_IWbemLocator` defined in `inc/wnet/wbemcli.h`.
-                &windows_sys::core::GUID {
-                    data1: 0xdc12a687,
-                    data2: 0x737f,
-                    data3: 0x11cf,
-                    data4: [0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24],
-                },
-                result.as_mut_ptr().cast::<*mut std::ffi::c_void>(),
-            )
-        };
-
-        if status != windows_sys::Win32::Foundation::S_OK {
-            return Err(std::io::Error::from_raw_os_error(status));
-        }
-
-        Ok(WbemLocator {
-            // SAFETY: We verified that the call succeeded, so `result` is now
-            // properly initialized and points to a valid WBEM locator instance.
-            ptr: unsafe { result.assume_init() },
-            com: std::marker::PhantomData,
-        })
-    }
-}
-
-impl<'com> Drop for WbemLocator<'com> {
-
-    fn drop(&mut self) {
-        // SAFETY: We call the [`Release`][1] method of valid WBEM locator. It
-        // returns a new reference count, so we are not interested in it.
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
-        let _ = unsafe {
-            ((*(*self.ptr).lpVtbl).Release)(self.ptr)
-        };
-    }
-}
-
 struct WbemServicesCimv2<'com> {
     ptr: *mut self::ffi::IWbemServices,
     com: std::marker::PhantomData<&'com self::com::InitGuard>,
@@ -346,7 +281,7 @@ struct WbemServicesCimv2<'com> {
 
 impl<'com> WbemServicesCimv2<'com> {
 
-    fn new(_: &'com self::com::InitGuard, loc: &WbemLocator) -> std::io::Result<WbemServicesCimv2<'com>> {
+    fn new(_: &'com self::com::InitGuard, loc: &mut self::com::WbemLocator) -> std::io::Result<WbemServicesCimv2<'com>> {
         let mut result = std::mem::MaybeUninit::uninit();
 
         let namespace = self::bstr::BString::new("root\\cimv2");
@@ -357,8 +292,8 @@ impl<'com> WbemServicesCimv2<'com> {
         // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemlocator-connectserver
         // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
         let status = unsafe {
-            ((*(*(loc.ptr)).lpVtbl).ConnectServer)(
-                loc.ptr,
+            ((loc.vtable()).ConnectServer)(
+                loc.as_raw_mut(),
                 namespace.as_raw_bstr(),
                 std::ptr::null(),
                 std::ptr::null(),
@@ -529,18 +464,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn wbem_locator() {
-        let com = self::com::init().unwrap();
-
-        assert!(WbemLocator::new(&com).is_ok());
-    }
-
-    #[test]
     fn wbem_services_cimv2_query() {
         let com = self::com::init().unwrap();
-        let loc = WbemLocator::new(&com).unwrap();
+        let mut loc = self::com::WbemLocator::new(&com).unwrap();
 
-        WbemServicesCimv2::new(&com, &loc).unwrap()
+        WbemServicesCimv2::new(&com, &mut loc).unwrap()
             .query("SELECT * FROM Win32_OperatingSystem").unwrap();
     }
 

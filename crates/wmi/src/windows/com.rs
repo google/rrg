@@ -50,6 +50,94 @@ impl Drop for InitGuard {
     }
 }
 
+/// RAII wrapper for [WBEM service locator][1].
+///
+/// When this structure is dropped, the underlying COM object is automatically
+/// released.
+///
+/// [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nn-wbemcli-iwbemlocator
+pub struct WbemLocator<'com> {
+    ptr: *mut super::ffi::IWbemLocator,
+    com: std::marker::PhantomData<&'com InitGuard>,
+}
+
+impl<'com> WbemLocator<'com> {
+
+    /// Creates a new instance of the WBEM service locator.
+    pub fn new(_: &'com InitGuard) -> std::io::Result<WbemLocator<'com>> {
+        let mut result = {
+            std::mem::MaybeUninit::<*mut super::ffi::IWbemLocator>::uninit()
+        };
+
+        // SAFETY: Simple FFI cal as described in the documentation [1]. This is
+        // based on the official example [2].
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-cocreateinstance
+        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
+        let status = unsafe {
+            windows_sys::Win32::System::Com::CoCreateInstance(
+                // `CLSID_WbemLocator` defined in `inc/wnet/wbemcli.h`.
+                &windows_sys::core::GUID {
+                    data1: 0x4590f811,
+                    data2: 0x1d3a,
+                    data3: 0x11d0,
+                    data4: [0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24],
+                },
+                std::ptr::null_mut(),
+                windows_sys::Win32::System::Com::CLSCTX_INPROC_SERVER,
+                // `IID_IWbemLocator` defined in `inc/wnet/wbemcli.h`.
+                &windows_sys::core::GUID {
+                    data1: 0xdc12a687,
+                    data2: 0x737f,
+                    data3: 0x11cf,
+                    data4: [0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24],
+                },
+                result.as_mut_ptr().cast::<*mut std::ffi::c_void>(),
+            )
+        };
+
+        if status != windows_sys::Win32::Foundation::S_OK {
+            return Err(std::io::Error::from_raw_os_error(status));
+        }
+
+        Ok(WbemLocator {
+            // SAFETY: We verified that the call succeeded, so `result` is now
+            // properly initialized and points to a valid WBEM locator instance.
+            ptr: unsafe { result.assume_init() },
+            com: std::marker::PhantomData,
+        })
+    }
+
+    /// Returns reference the underlying COM object.
+    pub fn as_raw_mut(&mut self) -> &mut super::ffi::IWbemLocator {
+        // SAFETY: The pointer is guaranteed to be valid.
+        unsafe {
+            &mut *self.ptr
+        }
+    }
+
+    /// Returns reference to the vtable of the underlying COM object.
+    pub fn vtable(&self) -> &super::ffi::IWbemLocatorVtbl {
+        // SAFETY: The pointers are guaranteed to be valid.
+        unsafe {
+            &*(*self.ptr).lpVtbl
+        }
+    }
+}
+
+impl<'com> Drop for WbemLocator<'com> {
+
+    fn drop(&mut self) {
+        // SAFETY: We call the [`Release`][1] method of valid WBEM locator. It
+        // returns a new reference count, so we are not interested in it.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
+        let _ = unsafe {
+            (self.vtable().Release)(self.ptr)
+        };
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
