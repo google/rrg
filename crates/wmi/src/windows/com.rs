@@ -138,6 +138,66 @@ impl<'com> Drop for WbemLocator<'com> {
     }
 }
 
+/// RAII wrapper for [WMI service accessor][1].
+///
+/// When this structure is dropped, the underlying COM object is automatically
+/// released.
+///
+/// [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nn-wbemcli-iwbemservices
+pub struct WbemServices<'com> {
+    ptr: *mut super::ffi::IWbemServices,
+    com: std::marker::PhantomData<&'com InitGuard>,
+}
+
+impl<'com> WbemServices<'com> {
+
+    /// Creates a new wrapper instance from the given raw pointer.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be a valid pointer to a `IWbemServices` instance valid for
+    /// the given COM initialization guard lifetime.
+    pub unsafe fn from_raw_ptr(
+        _: &'com InitGuard,
+        ptr: *mut super::ffi::IWbemServices,
+    ) -> WbemServices<'com> {
+        WbemServices {
+            ptr,
+            com: std::marker::PhantomData,
+        }
+    }
+
+    /// Returns reference the underlying COM object.
+    pub fn as_raw_mut(&mut self) -> &mut super::ffi::IWbemServices {
+        // SAFETY: The pointer is guaranteed to be valid.
+        unsafe {
+            &mut *self.ptr
+        }
+    }
+
+    /// Returns reference to the vtable of the underlying COM object.
+    pub fn vtable(&self) -> &super::ffi::IWbemServicesVtbl {
+        // SAFETY: The pointers are guaranteed to be valid.
+        unsafe {
+            &*(*self.ptr).lpVtbl
+        }
+    }
+}
+
+impl<'com> Drop for WbemServices<'com> {
+
+    fn drop(&mut self) {
+        // SAFETY: We call the [`Release`][1] method of valid WBEM services
+        // accessor object. It returns a new reference count, so we are not
+        // interested in it.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
+        let _ = unsafe {
+            (self.vtable().Release)(self.ptr)
+        };
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

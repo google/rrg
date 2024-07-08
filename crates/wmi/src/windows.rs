@@ -275,13 +275,12 @@ impl From<UnsupportedQueryValueTypeError> for std::io::Error {
 }
 
 struct WbemServicesCimv2<'com> {
-    ptr: *mut self::ffi::IWbemServices,
-    com: std::marker::PhantomData<&'com self::com::InitGuard>,
+    inner: self::com::WbemServices<'com>,
 }
 
 impl<'com> WbemServicesCimv2<'com> {
 
-    fn new(_: &'com self::com::InitGuard, loc: &mut self::com::WbemLocator) -> std::io::Result<WbemServicesCimv2<'com>> {
+    fn new(com: &'com self::com::InitGuard, loc: &mut self::com::WbemLocator) -> std::io::Result<WbemServicesCimv2<'com>> {
         let mut result = std::mem::MaybeUninit::uninit();
 
         let namespace = self::bstr::BString::new("root\\cimv2");
@@ -313,16 +312,23 @@ impl<'com> WbemServicesCimv2<'com> {
             return Err(std::io::Error::from_raw_os_error(status));
         }
 
+        // SAFETY: We verified that the call succeeded, so `result` is now
+        // properly initialized and points to a valid WBEM services accessor
+        // object.
+        let result = unsafe {
+            result.assume_init()
+        };
+
         Ok(WbemServicesCimv2 {
-            // SAFETY: We verified that the call succeeded, so `result` is now
-            // properly initialized and points to a valid WBEM services accessor
-            // object.
-            ptr: unsafe { result.assume_init() },
-            com: std::marker::PhantomData,
+            // SAFTY: `result` is not properly initialized pointer to a a valid
+            // WBEM service accessor instance.
+            inner: unsafe {
+                self::com::WbemServices::from_raw_ptr(com, result)
+            },
         })
     }
 
-    fn query<S>(&self, query: S) -> std::io::Result<WbemEnumClassObject<'com>>
+    fn query<S>(&mut self, query: S) -> std::io::Result<WbemEnumClassObject<'com>>
     where
         S: AsRef<std::ffi::OsStr>,
     {
@@ -336,8 +342,8 @@ impl<'com> WbemServicesCimv2<'com> {
         let status = unsafe {
             use windows_sys::Win32::System::Wmi::*;
 
-            ((*(*self.ptr).lpVtbl).ExecQuery)(
-                self.ptr,
+            (self.inner.vtable().ExecQuery)(
+                self.inner.as_raw_mut(),
                 self::bstr::BString::new("WQL").as_raw_bstr(),
                 self::bstr::BString::new(query).as_raw_bstr(),
                 WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
@@ -356,20 +362,6 @@ impl<'com> WbemServicesCimv2<'com> {
             ptr: unsafe { result.assume_init() },
             com: std::marker::PhantomData,
         })
-    }
-}
-
-impl<'com> Drop for WbemServicesCimv2<'com> {
-
-    fn drop(&mut self) {
-        // SAFETY: We call the [`Release`][1] method of valid WBEM services
-        // accessor object. It returns a new reference count, so we are not
-        // interested in it.
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
-        let _ = unsafe {
-            ((*(*self.ptr).lpVtbl).Release)(self.ptr)
-        };
     }
 }
 
