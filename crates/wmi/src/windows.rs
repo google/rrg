@@ -267,7 +267,7 @@ impl QueryValue {
                 match variant.Anonymous.boolVal {
                     0 => Ok(QueryValue::Bool(false)),
                     -1 => Ok(QueryValue::Bool(true)),
-                    value => Err(std::io::ErrorKind::InvalidData.into()),
+                    raw_value => Err(QueryValueBoolError { raw_value }.into()),
                 }
             }
             windows_sys::Win32::System::Variant::VT_UI1 => {
@@ -333,6 +333,28 @@ impl From<UnsupportedQueryValueTypeError> for std::io::Error {
 
     fn from(error: UnsupportedQueryValueTypeError) -> std::io::Error {
         std::io::Error::new(std::io::ErrorKind::Unsupported, error)
+    }
+}
+
+#[derive(Debug)]
+struct QueryValueBoolError {
+    raw_value: i16,
+}
+
+impl std::fmt::Display for QueryValueBoolError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "invalid bool value: {}", self.raw_value)
+    }
+}
+
+impl std::error::Error for QueryValueBoolError {
+}
+
+impl From<QueryValueBoolError> for std::io::Error {
+
+    fn from(error: QueryValueBoolError) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, error)
     }
 }
 
