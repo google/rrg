@@ -7,7 +7,7 @@ mod bstr;
 mod com;
 mod ffi;
 
-fn query<S: AsRef<std::ffi::OsStr>>(query: S) -> std::io::Result<Query<S>> {
+pub fn query<S: AsRef<std::ffi::OsStr>>(query: S) -> std::io::Result<Query<S>> {
     let com = self::com::init()?;
 
     Ok(Query {
@@ -16,14 +16,14 @@ fn query<S: AsRef<std::ffi::OsStr>>(query: S) -> std::io::Result<Query<S>> {
     })
 }
 
-struct Query<S: AsRef<std::ffi::OsStr>> {
+pub struct Query<S: AsRef<std::ffi::OsStr>> {
     query: S,
     com: self::com::InitGuard,
 }
 
 impl<S: AsRef<std::ffi::OsStr>> Query<S> {
 
-    fn rows(&self) -> std::io::Result<QueryRows<'_>> {
+    pub fn rows(&self) -> std::io::Result<QueryRows<'_>> {
         let mut loc = self::com::WbemLocator::new(&self.com)?;
 
         let mut svc_ptr = std::mem::MaybeUninit::uninit();
@@ -93,7 +93,7 @@ impl<S: AsRef<std::ffi::OsStr>> Query<S> {
     }
 }
 
-struct QueryRows<'com> {
+pub struct QueryRows<'com> {
     raw: self::com::EnumWbemClassObject<'com>,
 }
 
@@ -217,7 +217,7 @@ impl<'com> Iterator for QueryRows<'com> {
     }
 }
 
-type QueryRow = std::collections::HashMap<std::ffi::OsString, QueryValue>;
+pub type QueryRow = std::collections::HashMap<std::ffi::OsString, QueryValue>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum QueryValue {
