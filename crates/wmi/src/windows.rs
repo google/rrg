@@ -86,7 +86,7 @@ impl<S: AsRef<std::ffi::OsStr>> Query<S> {
             // SAFETY: We verified that the call succeeded, so `enum_ptr` is now
             // properly initialized and points to a valid WBEM enumerator.
             ptr: unsafe { enum_ptr.assume_init() },
-            com: std::marker::PhantomData,
+            com: &self.com,
         }})
     }
 }
@@ -100,7 +100,7 @@ impl<'com> Iterator for QueryRows<'com> {
     type Item = std::io::Result<QueryRow>;
 
     fn next(&mut self) -> Option<std::io::Result<QueryRow>> {
-        let object = match self.raw.next() {
+        let mut object = match self.raw.next() {
             Ok(None) => return None,
             Ok(Some(object)) => object,
             Err(error) => return Some(Err(error)),
@@ -111,7 +111,7 @@ impl<'com> Iterator for QueryRows<'com> {
         //
         // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-beginenumeration
         let status = unsafe {
-            ((*(*object.ptr).lpVtbl).BeginEnumeration)(object.ptr, 0)
+            (object.vtable().BeginEnumeration)(object.as_raw_mut(), 0)
         };
 
         if status != windows_sys::Win32::Foundation::S_OK {
@@ -130,8 +130,8 @@ impl<'com> Iterator for QueryRows<'com> {
             //
             // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-next
             let status = unsafe {
-                ((*(*object.ptr).lpVtbl).Next)(
-                    object.ptr,
+                (object.vtable().Next)(
+                    object.as_raw_mut(),
                     0,
                     raw_name.as_mut_ptr(),
                     raw_value.as_mut_ptr(),
@@ -148,7 +148,7 @@ impl<'com> Iterator for QueryRows<'com> {
                     // to call `EndEnumeration` now. We swallow the error, as
                     // we still want to return the one from the `Next` call.
                     let _ = unsafe {
-                        ((*(*object.ptr).lpVtbl).EndEnumeration)(object.ptr)
+                        (object.vtable().EndEnumeration)(object.as_raw_mut())
                     };
 
                     return Some(Err(std::io::Error::from_raw_os_error(status)))
@@ -197,7 +197,7 @@ impl<'com> Iterator for QueryRows<'com> {
                 // now. We swallow the error, as we still want to return the one
                 // from the `VariantClear` call.
                 let _ = unsafe {
-                    ((*(*object.ptr).lpVtbl).EndEnumeration)(object.ptr)
+                    (object.vtable().EndEnumeration)(object.as_raw_mut())
                 };
 
                 return Some(Err(std::io::Error::from_raw_os_error(status)));
@@ -336,12 +336,12 @@ impl From<UnsupportedQueryValueTypeError> for std::io::Error {
 
 struct WbemEnumClassObject<'com> {
     ptr: *mut self::ffi::IEnumWbemClassObject,
-    com: std::marker::PhantomData<&'com self::com::InitGuard>,
+    com: &'com self::com::InitGuard,
 }
 
 impl<'com> WbemEnumClassObject<'com> {
 
-    fn next(&mut self) -> std::io::Result<Option<WbemClassObject<'com>>> {
+    fn next(&mut self) -> std::io::Result<Option<self::com::WbemClassObject<'com>>> {
         let mut result = std::mem::MaybeUninit::uninit();
         let mut count = std::mem::MaybeUninit::uninit();
 
@@ -375,11 +375,11 @@ impl<'com> WbemEnumClassObject<'com> {
                 };
                 assert!(count == 1);
 
-                Ok(Some(WbemClassObject {
-                    // SAFETY: The call succeeded and it initialized the sole
-                    // (expected) result.
-                    ptr: unsafe { result.assume_init() },
-                    com: std::marker::PhantomData,
+                // SAFETY: The call succeeded and so the sole (expected) result
+                // is now properly initialized. Thus, we can safely construct an
+                // RAII wrapper out of it.
+                Ok(Some(unsafe {
+                    self::com::WbemClassObject::from_raw_ptr(self.com, result.assume_init())
                 }))
             }
             windows_sys::Win32::System::Wmi::WBEM_S_FALSE => Ok(None),
@@ -389,24 +389,6 @@ impl<'com> WbemEnumClassObject<'com> {
 }
 
 impl<'com> Drop for WbemEnumClassObject<'com> {
-
-    fn drop(&mut self) {
-        // SAFETY: We call the [`Release`][1] method of valid WBEM enumerator.
-        // It returns a new reference count, so we are not interested in it.
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
-        let _ = unsafe {
-            ((*(*self.ptr).lpVtbl).Release)(self.ptr)
-        };
-    }
-}
-
-struct WbemClassObject<'com> {
-    ptr: *mut self::ffi::IWbemClassObject,
-    com: std::marker::PhantomData<&'com self::com::InitGuard>,
-}
-
-impl<'com> Drop for WbemClassObject<'com> {
 
     fn drop(&mut self) {
         // SAFETY: We call the [`Release`][1] method of valid WBEM enumerator.
