@@ -309,29 +309,29 @@ impl QueryValue {
                         .to_os_string()
                 }))
             }
-            raw_type => Err(UnsupportedQueryValueTypeError { raw_type }.into()),
+            raw_type => Err(QueryValueTypeError { raw_type }.into()),
         }
     }
 }
 
 #[derive(Debug)]
-struct UnsupportedQueryValueTypeError {
+struct QueryValueTypeError {
     raw_type: windows_sys::Win32::System::Variant::VARENUM,
 }
 
-impl std::fmt::Display for UnsupportedQueryValueTypeError {
+impl std::fmt::Display for QueryValueTypeError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(fmt, "unsupported query value type: {}", self.raw_type)
     }
 }
 
-impl std::error::Error for UnsupportedQueryValueTypeError {
+impl std::error::Error for QueryValueTypeError {
 }
 
-impl From<UnsupportedQueryValueTypeError> for std::io::Error {
+impl From<QueryValueTypeError> for std::io::Error {
 
-    fn from(error: UnsupportedQueryValueTypeError) -> std::io::Error {
+    fn from(error: QueryValueTypeError) -> std::io::Error {
         std::io::Error::new(std::io::ErrorKind::Unsupported, error)
     }
 }
