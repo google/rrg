@@ -198,6 +198,116 @@ impl<'com> Drop for WbemServices<'com> {
     }
 }
 
+/// RAII wrapper for [WBEM class object enumerator][1].
+///
+/// When this structure is dropped, the underlying COM object is automatically
+/// released.
+///
+/// [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nn-wbemcli-ienumwbemclassobject
+pub struct EnumWbemClassObject<'com> {
+    ptr: *mut super::ffi::IEnumWbemClassObject,
+    com: &'com InitGuard,
+}
+
+impl<'com> EnumWbemClassObject<'com> {
+
+    /// Creates a new wrapper instance from the given raw pointer.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be a valid pointer to a `IEnumWbemClassObject` instance valid
+    /// for the given COM initialization guard lifetime.
+    pub unsafe fn from_raw_ptr(
+        com: &'com InitGuard,
+        ptr: *mut super::ffi::IEnumWbemClassObject,
+    ) -> EnumWbemClassObject<'com> {
+        EnumWbemClassObject {
+            ptr,
+            com,
+        }
+    }
+
+    /// Returns reference the underlying COM object.
+    pub fn as_raw_mut(&mut self) -> &mut super::ffi::IEnumWbemClassObject {
+        // SAFETY: The pointer is guaranteed to be valid.
+        unsafe {
+            &mut *self.ptr
+        }
+    }
+
+    /// Returns reference to the vtable of the underlying COM object.
+    pub fn vtable(&self) -> &super::ffi::IEnumWbemClassObjectVtbl {
+        // SAFETY: The pointers are guaranteed to be valid.
+        unsafe {
+            &*(*self.ptr).lpVtbl
+        }
+    }
+}
+
+impl<'com> Drop for EnumWbemClassObject<'com> {
+
+    fn drop(&mut self) {
+        // SAFETY: We call the [`Release`][1] method of valid WBEM enumerator.
+        // It returns a new reference count, so we are not interested in it.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
+        let _ = unsafe {
+            (self.vtable().Release)(self.ptr)
+        };
+    }
+}
+
+impl<'com> Iterator for EnumWbemClassObject<'com> {
+
+    type Item = std::io::Result<WbemClassObject<'com>>;
+
+    fn next(&mut self) -> Option<std::io::Result<WbemClassObject<'com>>> {
+        let mut result = std::mem::MaybeUninit::uninit();
+        let mut count = std::mem::MaybeUninit::uninit();
+
+        // SAFETY: Simple FFI call as described in the documentation [1]. This
+        // is based on the official example [2].
+        //
+        // We request only a single result, so the buffer (single `MaybeUninit`
+        // cell) is sufficiently big.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-ienumwbemclassobject-next
+        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
+        let status = unsafe {
+            (self.vtable().Next)(
+                self.ptr,
+                windows_sys::Win32::System::Wmi::WBEM_INFINITE,
+                1,
+                result.as_mut_ptr(),
+                count.as_mut_ptr(),
+            )
+        };
+
+        match status {
+            windows_sys::Win32::System::Wmi::WBEM_S_NO_ERROR => {
+                // SAFETY: This branch is reached only if the call succeeded and
+                // the returned count is equal to the requested count. We can
+                // thus assume that `count` is initialized and just as a sanity
+                // check we verify that it matches 1 (since we only requested
+                // a single result.
+                let count = unsafe {
+                    count.assume_init()
+                };
+                assert!(count == 1);
+
+                // SAFETY: The call succeeded and so the sole (expected) result
+                // is now properly initialized. Thus, we can safely construct an
+                // RAII wrapper out of it.
+                Some(Ok(unsafe {
+                    WbemClassObject::from_raw_ptr(self.com, result.assume_init())
+                }))
+            }
+            windows_sys::Win32::System::Wmi::WBEM_S_FALSE => None,
+            _ => Some(Err(std::io::Error::from_raw_os_error(status))),
+        }
+    }
+}
+
 /// RAII wrapper for [WBEM class objects][1].
 ///
 /// When this structure is dropped, the underlying COM object is automatically

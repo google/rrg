@@ -82,17 +82,19 @@ impl<S: AsRef<std::ffi::OsStr>> Query<S> {
             return Err(std::io::Error::from_raw_os_error(status));
         }
 
-        Ok(QueryRows { raw: WbemEnumClassObject {
+        Ok(QueryRows {
             // SAFETY: We verified that the call succeeded, so `enum_ptr` is now
-            // properly initialized and points to a valid WBEM enumerator.
-            ptr: unsafe { enum_ptr.assume_init() },
-            com: &self.com,
-        }})
+            // properly initialized and points to a valid WBEM enumerator. Thus,
+            // we can safely construct a wrapper out of it.
+            raw: unsafe {
+                self::com::EnumWbemClassObject::from_raw_ptr(&self.com, enum_ptr.assume_init())
+            },
+        })
     }
 }
 
 struct QueryRows<'com> {
-    raw: WbemEnumClassObject<'com>,
+    raw: self::com::EnumWbemClassObject<'com>,
 }
 
 impl<'com> Iterator for QueryRows<'com> {
@@ -101,9 +103,9 @@ impl<'com> Iterator for QueryRows<'com> {
 
     fn next(&mut self) -> Option<std::io::Result<QueryRow>> {
         let mut object = match self.raw.next() {
-            Ok(None) => return None,
-            Ok(Some(object)) => object,
-            Err(error) => return Some(Err(error)),
+            None => return None,
+            Some(Ok(object)) => object,
+            Some(Err(error)) => return Some(Err(error)),
         };
 
         // SAFETY: We start the enumeration on a valid object without any extra
@@ -331,73 +333,6 @@ impl From<UnsupportedQueryValueTypeError> for std::io::Error {
 
     fn from(error: UnsupportedQueryValueTypeError) -> std::io::Error {
         std::io::Error::new(std::io::ErrorKind::Unsupported, error)
-    }
-}
-
-struct WbemEnumClassObject<'com> {
-    ptr: *mut self::ffi::IEnumWbemClassObject,
-    com: &'com self::com::InitGuard,
-}
-
-impl<'com> WbemEnumClassObject<'com> {
-
-    fn next(&mut self) -> std::io::Result<Option<self::com::WbemClassObject<'com>>> {
-        let mut result = std::mem::MaybeUninit::uninit();
-        let mut count = std::mem::MaybeUninit::uninit();
-
-        // SAFETY: Simple FFI call as described in the documentation [1]. This
-        // is based on the official example [2].
-        //
-        // We request only a single result, so the buffer (single `MaybeUninit`
-        // cell) is sufficiently big.
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-ienumwbemclassobject-next
-        // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
-        let status = unsafe {
-            ((*(*self.ptr).lpVtbl).Next)(
-                self.ptr,
-                windows_sys::Win32::System::Wmi::WBEM_INFINITE,
-                1,
-                result.as_mut_ptr(),
-                count.as_mut_ptr(),
-            )
-        };
-
-        match status {
-            windows_sys::Win32::System::Wmi::WBEM_S_NO_ERROR => {
-                // SAFETY: This branch is reached only if the call succeeded and
-                // the returned count is equal to the requested count. We can
-                // thus assume that `count` is initialized and just as a sanity
-                // check we verify that it matches 1 (since we only requested
-                // a single result.
-                let count = unsafe {
-                    count.assume_init()
-                };
-                assert!(count == 1);
-
-                // SAFETY: The call succeeded and so the sole (expected) result
-                // is now properly initialized. Thus, we can safely construct an
-                // RAII wrapper out of it.
-                Ok(Some(unsafe {
-                    self::com::WbemClassObject::from_raw_ptr(self.com, result.assume_init())
-                }))
-            }
-            windows_sys::Win32::System::Wmi::WBEM_S_FALSE => Ok(None),
-            _ => Err(std::io::Error::from_raw_os_error(status)),
-        }
-    }
-}
-
-impl<'com> Drop for WbemEnumClassObject<'com> {
-
-    fn drop(&mut self) {
-        // SAFETY: We call the [`Release`][1] method of valid WBEM enumerator.
-        // It returns a new reference count, so we are not interested in it.
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release
-        let _ = unsafe {
-            ((*(*self.ptr).lpVtbl).Release)(self.ptr)
-        };
     }
 }
 
