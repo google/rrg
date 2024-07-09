@@ -206,7 +206,7 @@ impl<'com> Drop for WbemServices<'com> {
 /// [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nn-wbemcli-ienumwbemclassobject
 pub struct EnumWbemClassObject<'com> {
     ptr: *mut super::ffi::IEnumWbemClassObject,
-    com: &'com InitGuard,
+    com: std::marker::PhantomData<&'com InitGuard>,
 }
 
 impl<'com> EnumWbemClassObject<'com> {
@@ -218,12 +218,12 @@ impl<'com> EnumWbemClassObject<'com> {
     /// `ptr` must be a valid pointer to a `IEnumWbemClassObject` instance valid
     /// for the given COM initialization guard lifetime.
     pub unsafe fn from_raw_ptr(
-        com: &'com InitGuard,
+        _: &'com InitGuard,
         ptr: *mut super::ffi::IEnumWbemClassObject,
     ) -> EnumWbemClassObject<'com> {
         EnumWbemClassObject {
             ptr,
-            com,
+            com: std::marker::PhantomData,
         }
     }
 
@@ -295,11 +295,12 @@ impl<'com> Iterator for EnumWbemClassObject<'com> {
                 };
                 assert!(count == 1);
 
-                // SAFETY: The call succeeded and so the sole (expected) result
-                // is now properly initialized. Thus, we can safely construct an
-                // RAII wrapper out of it.
-                Some(Ok(unsafe {
-                    WbemClassObject::from_raw_ptr(self.com, result.assume_init())
+                Some(Ok(WbemClassObject {
+                    // SAFETY: The call succeeded and so the sole (expected)
+                    // result is now properly initialized. Thus, we can safely
+                    // construct an RAII wrapper out of it.
+                    ptr: unsafe { result.assume_init() },
+                    com: std::marker::PhantomData,
                 }))
             }
             windows_sys::Win32::System::Wmi::WBEM_S_FALSE => None,
@@ -320,22 +321,6 @@ pub struct WbemClassObject<'com> {
 }
 
 impl<'com> WbemClassObject<'com> {
-
-    /// Creates a new wrapper instance from the given raw pointer.
-    ///
-    /// # Safety
-    ///
-    /// `ptr` must be a valid pointer to a `IWbemClassObject` instance valid for
-    /// the given COM initialization guard lifetime.
-    pub unsafe fn from_raw_ptr(
-        _: &'com InitGuard,
-        ptr: *mut super::ffi::IWbemClassObject,
-    ) -> WbemClassObject<'com> {
-        WbemClassObject {
-            ptr,
-            com: std::marker::PhantomData,
-        }
-    }
 
     /// Returns reference the underlying COM object.
     pub fn as_raw_mut(&mut self) -> &mut super::ffi::IWbemClassObject {
