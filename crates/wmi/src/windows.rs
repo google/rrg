@@ -7,21 +7,24 @@ mod bstr;
 mod com;
 mod ffi;
 
-pub fn query<S: AsRef<std::ffi::OsStr>>(query: S) -> std::io::Result<Query<S>> {
+pub fn query<'s, S>(query: &'s S) -> std::io::Result<Query<'s>>
+where
+    S: AsRef<std::ffi::OsStr> + ?Sized,
+{
     let com = self::com::init()?;
 
     Ok(Query {
-        query,
+        query: query.as_ref(),
         com,
     })
 }
 
-pub struct Query<S: AsRef<std::ffi::OsStr>> {
-    query: S,
+pub struct Query<'s> {
+    query: &'s std::ffi::OsStr,
     com: self::com::InitGuard,
 }
 
-impl<S: AsRef<std::ffi::OsStr>> Query<S> {
+impl<'s> Query<'s> {
 
     pub fn rows(&self) -> std::io::Result<QueryRows<'_>> {
         let mut loc = self::com::WbemLocator::new(&self.com)?;
@@ -71,7 +74,7 @@ impl<S: AsRef<std::ffi::OsStr>> Query<S> {
             (svc.vtable().ExecQuery)(
                 svc.as_raw_mut(),
                 self::bstr::BString::new("WQL").as_raw_bstr(),
-                self::bstr::BString::new(&self.query).as_raw_bstr(),
+                self::bstr::BString::new(self.query).as_raw_bstr(),
                 WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
                 std::ptr::null_mut(),
                 enum_ptr.as_mut_ptr(),
