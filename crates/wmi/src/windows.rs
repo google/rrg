@@ -338,7 +338,7 @@ impl From<QueryValueTypeError> for std::io::Error {
 
 #[derive(Debug)]
 struct QueryValueBoolError {
-    raw_value: i16,
+    raw_value: windows_sys::Win32::Foundation::VARIANT_BOOL,
 }
 
 impl std::fmt::Display for QueryValueBoolError {
