@@ -125,8 +125,6 @@ impl<'a> BStr<'a> {
 
     /// Copies the string into an owned [`std::ffi::OsString`].
     pub fn to_os_string(self) -> std::ffi::OsString {
-        use std::os::windows::ffi::OsStringExt as _;
-
         let len = self.count_bytes() / std::mem::size_of::<u16>();
 
         // SAFETY: We know that the pointer is valid and calculate its length by
