@@ -51,10 +51,6 @@ impl BString {
     pub unsafe fn from_raw_bstr(raw: windows_sys::core::BSTR) -> BString {
         BString(raw)
     }
-    /// Returns the length of the string in bytes.
-    pub fn count_bytes(&self) -> usize {
-        self.as_bstr().count_bytes()
-    }
 
     /// Copies the string into an owned [`std::ffi::OsString`].
     pub fn to_os_string(&self) -> std::ffi::OsString {
@@ -162,16 +158,6 @@ mod tests {
     }
 
     #[test]
-    fn bstring_len_empty() {
-        assert_eq!(BString::new("").count_bytes(), 0);
-    }
-
-    #[test]
-    fn bstring_len_ascii() {
-        assert_eq!(BString::new("foobar").count_bytes(), 12);
-    }
-
-    #[test]
     fn bstring_to_os_string_empty() {
         assert_eq!(BString::new("").to_os_string(), "");
     }
@@ -184,5 +170,15 @@ mod tests {
     #[test]
     fn bstring_to_os_string_unicode() {
         assert_eq!(BString::new("żółć").to_os_string(), "żółć");
+    }
+
+    #[test]
+    fn bstr_count_bytes_empty() {
+        assert_eq!(BString::new("").as_bstr().count_bytes(), 0);
+    }
+
+    #[test]
+    fn bstr_count_bytes_ascii() {
+        assert_eq!(BString::new("foobar").as_bstr().count_bytes(), 12);
     }
 }
