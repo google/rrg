@@ -119,7 +119,7 @@ impl<'a> BStr<'a> {
         //
         // [1] https://learn.microsoft.com/en-us/previous-versions/windows/desktop/automat/bstr#remarks
         unsafe {
-            *self.raw.cast::<u8>().offset(-4).cast::<u32>() as usize
+            *self.as_raw_bstr().cast::<u8>().offset(-4).cast::<u32>() as usize
         }
     }
 
@@ -131,7 +131,7 @@ impl<'a> BStr<'a> {
         // taking it byte length and dividing by the size of each character (so,
         // 2 bytes).
         std::os::windows::ffi::OsStringExt::from_wide(unsafe {
-            std::slice::from_raw_parts(self.raw, len)
+            std::slice::from_raw_parts(self.as_raw_bstr(), len)
         })
     }
 

@@ -275,7 +275,7 @@ impl<'com> Iterator for EnumWbemClassObject<'com> {
         // [2]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/example--getting-wmi-data-from-the-local-computer
         let status = unsafe {
             (self.vtable().Next)(
-                self.ptr,
+                self.as_raw_mut(),
                 windows_sys::Win32::System::Wmi::WBEM_INFINITE,
                 1,
                 result.as_mut_ptr(),
