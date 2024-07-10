@@ -8,6 +8,8 @@ mod com;
 mod error;
 mod ffi;
 
+use self::error::Error;
+
 /// Creates a WQL query that can then be iterated to poll for results.
 pub fn query<'s, S>(query: &'s S) -> std::io::Result<Query<'s>>
 where
@@ -61,7 +63,7 @@ impl<'s> Query<'s> {
         };
 
         if status != windows_sys::Win32::Foundation::S_OK {
-            return Err(self::error::Error::from_raw_hresult(status).into());
+            return Err(Error::from_raw_hresult(status).into());
         }
 
         // SAFETY: We verified that the call succeeded, so `svc_ptr` is now
@@ -92,7 +94,7 @@ impl<'s> Query<'s> {
         };
 
         if status != windows_sys::Win32::Foundation::S_OK {
-            return Err(self::error::Error::from_raw_hresult(status).into());
+            return Err(Error::from_raw_hresult(status).into());
         }
 
         Ok(QueryRows {
@@ -136,7 +138,7 @@ impl<'com> Iterator for QueryRows<'com> {
         };
 
         if status != windows_sys::Win32::Foundation::S_OK {
-            return Some(Err(self::error::Error::from_raw_hresult(status).into()));
+            return Some(Err(Error::from_raw_hresult(status).into()));
         }
 
         let mut row = std::collections::HashMap::new();
@@ -172,7 +174,7 @@ impl<'com> Iterator for QueryRows<'com> {
                         (object.vtable().EndEnumeration)(object.as_raw_mut())
                     };
 
-                    return Some(Err(self::error::Error::from_raw_hresult(status).into()))
+                    return Some(Err(Error::from_raw_hresult(status).into()))
                 }
             }
 
@@ -221,7 +223,7 @@ impl<'com> Iterator for QueryRows<'com> {
                     (object.vtable().EndEnumeration)(object.as_raw_mut())
                 };
 
-                return Some(Err(self::error::Error::from_raw_hresult(status).into()));
+                return Some(Err(Error::from_raw_hresult(status).into()));
             }
 
             let value = match value {

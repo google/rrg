@@ -30,7 +30,7 @@ pub fn init() -> std::io::Result<InitGuard> {
         windows_sys::Win32::Foundation::S_OK => {}
         windows_sys::Win32::Foundation::S_FALSE => {}
         windows_sys::Win32::Foundation::RPC_E_CHANGED_MODE => (),
-        _ => return Err(super::error::Error::from_raw_hresult(status).into()),
+        _ => return Err(super::Error::from_raw_hresult(status).into()),
     }
 
     Ok(InitGuard(()))
@@ -97,7 +97,7 @@ impl<'com> WbemLocator<'com> {
         };
 
         if status != windows_sys::Win32::Foundation::S_OK {
-            return Err(super::error::Error::from_raw_hresult(status).into());
+            return Err(super::Error::from_raw_hresult(status).into());
         }
 
         Ok(WbemLocator {
@@ -304,7 +304,7 @@ impl<'com> Iterator for EnumWbemClassObject<'com> {
                 }))
             }
             windows_sys::Win32::System::Wmi::WBEM_S_FALSE => None,
-            _ => Some(Err(super::error::Error::from_raw_hresult(status).into())),
+            _ => Some(Err(super::Error::from_raw_hresult(status).into())),
         }
     }
 }
