@@ -7,6 +7,7 @@ mod bstr;
 mod com;
 mod ffi;
 
+/// Creates a WQL query that can then be iterated to poll for results.
 pub fn query<'s, S>(query: &'s S) -> std::io::Result<Query<'s>>
 where
     S: AsRef<std::ffi::OsStr> + ?Sized,
@@ -19,13 +20,21 @@ where
     })
 }
 
+/// WQL query object tied to a particular query string.
+///
+/// This struct is created by the [`query`] function.
 pub struct Query<'s> {
+    /// WQL string tied to the query.
     query: &'s std::ffi::OsStr,
+    /// COM library initialization guard ensuring validity of the query.
     com: self::com::InitGuard,
 }
 
 impl<'s> Query<'s> {
 
+    /// Returns an iterator over the [rows][1] the query yielded.
+    ///
+    /// [1]: QueryRow
     pub fn rows(&self) -> std::io::Result<QueryRows<'_>> {
         let mut loc = self::com::WbemLocator::new(&self.com)?;
 
@@ -96,6 +105,12 @@ impl<'s> Query<'s> {
     }
 }
 
+/// Iterator over [rows][1] that a [query][2] yielded.
+///
+/// This struct is created by the [`Query::rows`] method.
+///
+/// [1]: QueryRow
+/// [2]: Query
 pub struct QueryRows<'com> {
     raw: self::com::EnumWbemClassObject<'com>,
 }
@@ -220,8 +235,10 @@ impl<'com> Iterator for QueryRows<'com> {
     }
 }
 
+/// Mapping from column names to values.
 pub type QueryRow = std::collections::HashMap<std::ffi::OsString, QueryValue>;
 
+/// Possible values that WQL queries can yield.
 #[derive(Debug, Clone, PartialEq)]
 pub enum QueryValue {
     Illegal,
