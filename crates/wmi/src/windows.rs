@@ -260,7 +260,7 @@ impl<'com> Iterator for QueryRows<'com> {
 pub type QueryRow = std::collections::HashMap<std::ffi::OsString, QueryValue>;
 
 /// Possible values that WQL queries can yield.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum QueryValue {
     Illegal,
     None,
@@ -276,6 +276,7 @@ pub enum QueryValue {
     F32(f32),
     F64(f64),
     String(std::ffi::OsString),
+    Unsupported(UnsupportedQueryValue),
 }
 
 impl QueryValue {
@@ -350,31 +351,22 @@ impl QueryValue {
                         .to_os_string()
                 }))
             }
-            raw_type => Err(QueryValueTypeError { raw_type }.into()),
+            raw_type => {
+                Ok(QueryValue::Unsupported(UnsupportedQueryValue {
+                    raw_type,
+                }))
+            }
         }
     }
 }
 
-#[derive(Debug)]
-struct QueryValueTypeError {
+/// Values that WQL queries can yield but are not supported by the crate.
+#[derive(Debug, Clone)]
+pub struct UnsupportedQueryValue {
+    // We do not expose `raw_type` at the moment but keep this field as it might
+    // be useful for debugging purposes (`Debug` is derived for this struct).
+    #[allow(unused)]
     raw_type: windows_sys::Win32::System::Variant::VARENUM,
-}
-
-impl std::fmt::Display for QueryValueTypeError {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "unsupported query value type: {}", self.raw_type)
-    }
-}
-
-impl std::error::Error for QueryValueTypeError {
-}
-
-impl From<QueryValueTypeError> for std::io::Error {
-
-    fn from(error: QueryValueTypeError) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::Unsupported, error)
-    }
 }
 
 #[derive(Debug)]
