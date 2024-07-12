@@ -45,6 +45,9 @@ pub mod list_winreg_values;
 #[cfg(feature = "action-list_winreg_keys")]
 pub mod list_winreg_keys;
 
+#[cfg(feature = "action-query_wmi")]
+pub mod query_wmi;
+
 use log::info;
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -110,6 +113,10 @@ where
         #[cfg(feature = "action-list_winreg_keys")]
         ListWinregKeys => {
             handle(session, request, self::list_winreg_keys::handle)
+        }
+        #[cfg(feature = "action-query_wmi")]
+        QueryWmi => {
+            handle(session, request, self::query_wmi::handle)
         }
         // We allow `unreachable_patterns` because otherwise we get a warning if
         // we compile with all the actions enabled.
