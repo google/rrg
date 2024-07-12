@@ -48,6 +48,9 @@ path = "../rrg-proto"
 [dependencies.winreg]
 path = "../winreg"
 
+[dependencies.wmi]
+path = "../wmi"
+
 [dependencies.argh]
 version = "0.1.8"
 
