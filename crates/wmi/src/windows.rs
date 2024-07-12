@@ -11,6 +11,24 @@ mod ffi;
 use self::error::Error;
 
 /// Creates a WQL query that can then be iterated to poll for results.
+///
+/// # Examples
+///
+/// ```no_run
+/// let query = wmi::query("SELECT Name FROM Win32_UserAccount")
+///     .unwrap();
+///
+/// for row in query.rows().unwrap() {
+///     let row = row.unwrap();
+///
+///     let name = match &row[std::ffi::OsStr::new("Name")] {
+///         wmi::QueryValue::String(name) => name,
+///         _ => panic!(),
+///     };
+///
+///     println!("Hello, {}!", name.to_string_lossy());
+/// }
+/// ```
 pub fn query<'s, S>(query: &'s S) -> std::io::Result<Query<'s>>
 where
     S: AsRef<std::ffi::OsStr> + ?Sized,
