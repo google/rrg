@@ -262,7 +262,6 @@ pub type QueryRow = std::collections::HashMap<std::ffi::OsString, QueryValue>;
 /// Possible values that WQL queries can yield.
 #[derive(Debug, Clone)]
 pub enum QueryValue {
-    Illegal,
     None,
     Bool(bool),
     U8(u8),
