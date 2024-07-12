@@ -33,7 +33,37 @@ pub fn init() -> std::io::Result<InitGuard> {
         _ => return Err(super::Error::from_raw_hresult(status).into()),
     }
 
-    Ok(InitGuard(()))
+    // We create the guard before calling security initialization, so that the
+    // destructor is invoked and even in case the following call fails.
+    let com = InitGuard(());
+
+    // SAFETY: Simple FFI call as described in the documentation [1] using
+    // default parameters. We verify the return code below.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-coinitializesecurity
+    let status = unsafe {
+        windows_sys::Win32::System::Com::CoInitializeSecurity(
+            std::ptr::null_mut(),
+            -1,
+            std::ptr::null(),
+            std::ptr::null(),
+            windows_sys::Win32::System::Com::RPC_C_AUTHN_LEVEL_DEFAULT,
+            windows_sys::Win32::System::Com::RPC_C_IMP_LEVEL_IMPERSONATE,
+            std::ptr::null(),
+            windows_sys::Win32::System::Com::EOAC_NONE as u32,
+            std::ptr::null(),
+        )
+    };
+
+    // `RPC_E_TOO_LATE` is also fine, it just means that the security was
+    // initialized before.
+    match status {
+        windows_sys::Win32::Foundation::S_OK => (),
+        windows_sys::Win32::Foundation::RPC_E_TOO_LATE => (),
+        _ => return Err(super::Error::from_raw_hresult(status).into()),
+    }
+
+    Ok(com)
 }
 
 impl Drop for InitGuard {
