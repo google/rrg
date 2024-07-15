@@ -25,7 +25,25 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    todo!()
+    let query = wmi::query(&args.query)
+        .map_err(crate::session::Error::action)?;
+
+    let rows = query.rows()
+        .map_err(crate::session::Error::action)?;
+
+    for row in rows {
+        let row = match row {
+            Ok(row) => row,
+            Err(error) => {
+                log::error!("failed to obtain WMI query row: {}", error);
+                continue;
+            }
+        };
+
+        session.reply(Item { row })?;
+    }
+
+    Ok(())
 }
 
 /// Handles invocations of the `query_wmi` action.
@@ -107,5 +125,65 @@ impl crate::response::Item for Item {
         }
 
         proto
+    }
+}
+
+#[cfg(test)]
+#[cfg(target_family = "windows")]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn handle_invalid_query() {
+        let args = Args {
+            query: "
+                INSERT
+                INTO
+                  Win32_OperatingSystem (Name, Version)
+                VALUES
+                  ('Foo', '1.3.3.7')
+            ".into(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_err());
+
+    }
+
+    #[test]
+    fn handle_no_rows() {
+        let args = Args {
+            query: "
+                SELECT
+                  *
+                FROM
+                  Win32_OperatingSystem
+                WHERE
+                  FreePhysicalMemory < 0
+            ".into(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[test]
+    fn handle_some_rows() {
+        let args = Args {
+            query: "
+                SELECT
+                  *
+                FROM
+                  Win32_OperatingSystem
+                WHERE
+                  FreePhysicalMemory >= 0
+            ".into(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+        assert_eq!(session.reply_count(), 1);
     }
 }
