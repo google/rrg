@@ -138,7 +138,7 @@ impl<'com> WbemLocator<'com> {
         })
     }
 
-    /// Returns reference the underlying COM object.
+    /// Returns reference to the underlying COM object.
     pub fn as_raw_mut(&mut self) -> &mut super::ffi::IWbemLocator {
         // SAFETY: The pointer is guaranteed to be valid.
         unsafe {
@@ -197,7 +197,7 @@ impl<'com> WbemServices<'com> {
         }
     }
 
-    /// Returns reference the underlying COM object.
+    /// Returns reference to the underlying COM object.
     pub fn as_raw_mut(&mut self) -> &mut super::ffi::IWbemServices {
         // SAFETY: The pointer is guaranteed to be valid.
         unsafe {
@@ -257,7 +257,7 @@ impl<'com> EnumWbemClassObject<'com> {
         }
     }
 
-    /// Returns reference the underlying COM object.
+    /// Returns reference to the underlying COM object.
     pub fn as_raw_mut(&mut self) -> &mut super::ffi::IEnumWbemClassObject {
         // SAFETY: The pointer is guaranteed to be valid.
         unsafe {
@@ -319,7 +319,7 @@ impl<'com> Iterator for EnumWbemClassObject<'com> {
                 // the returned count is equal to the requested count. We can
                 // thus assume that `count` is initialized and just as a sanity
                 // check we verify that it matches 1 (since we only requested
-                // a single result.
+                // a single result).
                 let count = unsafe {
                     count.assume_init()
                 };
@@ -352,7 +352,7 @@ pub struct WbemClassObject<'com> {
 
 impl<'com> WbemClassObject<'com> {
 
-    /// Returns reference the underlying COM object.
+    /// Returns reference to the underlying COM object.
     pub fn as_raw_mut(&mut self) -> &mut super::ffi::IWbemClassObject {
         // SAFETY: The pointer is guaranteed to be valid.
         unsafe {

@@ -166,8 +166,10 @@ impl<'com> Iterator for QueryRows<'com> {
             let mut raw_value = std::mem::MaybeUninit::uninit();
 
             // SAFETY: We advance the iterator [1] without any extra flags. Note
-            // that we already called `BeginEnumeration`. The call should call
-            // `VariantInit` on `raw_value` [2] so we should not do it upfront.
+            // that we already called `BeginEnumeration`.
+            //
+            // The `Next` call will invoke `VariantInit` on `raw_value`, so we
+            // should not do it ourselves.
             //
             // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-next
             let status = unsafe {
