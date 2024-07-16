@@ -31,19 +31,58 @@ where
     let rows = query.rows()
         .map_err(crate::session::Error::action)?;
 
+    // Depending on the implementation, sometimes even if the query is invalid,
+    // we get an error from the system only after we poll for the first row (but
+    // sometimes we get it immediately, e.g. when running under Wine).
+    //
+    // We also do not want to fail the entire action if only some of the rows
+    // failed to be fetched. Thus, we want to model the behaviour where we fail
+    // the entire action if there are no rows at all but we do not do it if
+    // there are any rows to be returned.
+    //
+    // We introduce auxiliary `Status` struct encoding a state machine that
+    // implements such logic.
+    enum Status {
+        /// There were no rows at all.
+        None,
+        /// There were some rows returned.
+        Some,
+        /// There were only errors reported.
+        Error(std::io::Error),
+    }
+
+    let mut status: Status = Status::None;
+
     for row in rows {
         let row = match row {
             Ok(row) => row,
             Err(error) => {
                 log::error!("failed to obtain WMI query row: {}", error);
+                // If there were no rows at all so far we keep the error in case
+                // there are not going to be any further. We only keep the first
+                // error—this is a rather arbitrary choice as all errors will be
+                // logged anyway but might offer better experience when handling
+                // these on the GRR flow level.
+                if matches!(status, Status::None) {
+                    status = Status::Error(error);
+                }
                 continue;
             }
         };
 
         session.reply(Item { row })?;
+        // We reported a row, so we unconditionally change the status. Even if
+        // there was an error, we will not fail the action at this point.
+        status = Status::Some;
     }
 
-    Ok(())
+    // As mentioned, we succeed the action if there were any rows reported or
+    // if there was nothing at all. However, if there were only errors, we fail
+    // it with the first error that occurred.
+    match status {
+        Status::None | Status::Some => Ok(()),
+        Status::Error(error) => Err(crate::session::Error::action(error)),
+    }
 }
 
 /// Handles invocations of the `query_wmi` action.
