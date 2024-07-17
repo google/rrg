@@ -17,6 +17,7 @@ default = [
     "action-get_winreg_value",
     "action-list_winreg_values",
     "action-list_winreg_keys",
+    "action-query_wmi",
 ]
 
 action-get_system_metadata = []
@@ -29,6 +30,7 @@ action-list_mounts = []
 action-get_winreg_value = []
 action-list_winreg_values = []
 action-list_winreg_keys = []
+action-query_wmi = []
 
 test-setfattr = []
 test-chattr = []
@@ -45,6 +47,9 @@ path = "../rrg-proto"
 
 [dependencies.winreg]
 path = "../winreg"
+
+[dependencies.wmi]
+path = "../wmi"
 
 [dependencies.argh]
 version = "0.1.8"

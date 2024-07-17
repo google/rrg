@@ -44,6 +44,8 @@ enum Action {
   LIST_WINREG_VALUES = 14;
   // List subkeys of the Windows Registry key (Windows-only).
   LIST_WINREG_KEYS = 15;
+  // Query WMI using WQL (Windows-only).
+  QUERY_WMI = 16;
 
   // TODO: Define more actions that should be supported.
 
