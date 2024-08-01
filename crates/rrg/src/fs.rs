@@ -25,20 +25,6 @@ pub struct Entry {
     pub metadata: Metadata,
 }
 
-impl TryFrom<std::fs::DirEntry> for Entry {
-
-    type Error = std::io::Error;
-
-    fn try_from(entry: std::fs::DirEntry) -> std::io::Result<Entry> {
-        let metadata = entry.metadata()?;
-
-        return Ok(Entry {
-            path: entry.path(),
-            metadata,
-        });
-    }
-}
-
 /// Returns a deep iterator over entries within a directory.
 ///
 /// The iterator will recursively visit all subdirectories under `root` and
@@ -203,7 +189,21 @@ impl std::iter::Iterator for ListDir {
     type Item = std::io::Result<Entry>;
 
     fn next(&mut self) -> Option<std::io::Result<Entry>> {
-        self.iter.next().map(|entry| Entry::try_from(entry?))
+        let entry = match self.iter.next() {
+            Some(Ok(entry)) => entry,
+            Some(Err(error)) => return Some(Err(error)),
+            None => return None,
+        };
+
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
+            Err(error) => return Some(Err(error)),
+        };
+
+        Some(Ok(Entry {
+            path: entry.path(),
+            metadata,
+        }))
     }
 }
 
