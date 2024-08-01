@@ -58,7 +58,9 @@ pub struct Entry {
 pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     let root = root.as_ref();
 
-    let iter = list_dir(root)?;
+    let iter = ListDir {
+        iter: std::fs::read_dir(root)?,
+    };
 
     #[cfg(target_family = "unix")]
     let dev = {
@@ -71,41 +73,6 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
         pending_iters: vec![],
         #[cfg(target_family = "unix")]
         dev: dev,
-    })
-}
-
-/// Returns a shallow iterator over entries within a directory.
-///
-/// This function is very similar to the standard [`read_dir`], except that the
-/// returned iterator always returns entries with valid metadata and a path.
-///
-/// [`read_dir`]: std::fs::read_dir
-///
-/// # Errors
-///
-/// This function will fail if the specified path does not represent a directory
-/// or does not exist. Note that items returned by the iterator can also contain
-/// errors in case there was an issue with a particular directory entry.
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::path::PathBuf;
-///
-/// let paths = rrg::fs::list_dir("/").unwrap()
-///     .filter_map(Result::ok)
-///     .map(|entry| entry.path)
-///     .collect::<Vec<_>>();
-///
-/// assert!(paths.contains(&PathBuf::from("/home")));
-/// assert!(paths.contains(&PathBuf::from("/bin")));
-/// assert!(paths.contains(&PathBuf::from("/tmp")));
-/// ```
-pub fn list_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ListDir> {
-    let iter = std::fs::read_dir(path)?;
-
-    Ok(ListDir {
-        iter: iter,
     })
 }
 
@@ -152,7 +119,11 @@ impl std::iter::Iterator for WalkDir {
                 };
 
                 if entry.metadata.is_dir() && self.is_same_dev(&entry) {
-                    self.pending_iters.push(list_dir(&entry.path));
+                    self.pending_iters.push({
+                        std::fs::read_dir(&entry.path).map(|iter| ListDir {
+                            iter,
+                        })
+                    });
                 }
 
                 return Some(Ok(entry));
@@ -178,8 +149,6 @@ impl std::iter::Iterator for WalkDir {
 ///
 /// Unlike the [`ReadDir`] iterator entries, [`ListDir`] entries are guaranteed
 /// to have valid metadata objects attached.
-///
-/// The iterator can be constructed with the [`list_dir`] function.
 pub struct ListDir {
     iter: std::fs::ReadDir,
 }
@@ -213,110 +182,6 @@ mod tests {
     use std::fs::File;
 
     use super::*;
-
-    #[test]
-    fn test_list_dir_non_existing() {
-        let tempdir = tempfile::tempdir().unwrap();
-
-        let iter = list_dir(tempdir.path().join("foo"));
-        assert!(iter.is_err());
-    }
-
-    #[test]
-    fn test_list_dir_empty() {
-        let tempdir = tempfile::tempdir().unwrap();
-
-        let mut iter = list_dir(&tempdir).unwrap();
-
-        assert!(iter.next().is_none());
-    }
-
-    #[test]
-    fn test_list_dir_with_files() {
-        let tempdir = tempfile::tempdir().unwrap();
-        File::create(tempdir.path().join("abc")).unwrap();
-        File::create(tempdir.path().join("def")).unwrap();
-        File::create(tempdir.path().join("ghi")).unwrap();
-
-        let mut results = list_dir(&tempdir).unwrap()
-            .filter_map(Result::ok)
-            .collect::<Vec<_>>();
-        results.sort_by_key(|entry| entry.path.clone());
-
-        assert_eq!(results.len(), 3);
-
-        assert_eq!(results[0].path, tempdir.path().join("abc"));
-        assert!(results[0].metadata.is_file());
-
-        assert_eq!(results[1].path, tempdir.path().join("def"));
-        assert!(results[1].metadata.is_file());
-
-        assert_eq!(results[2].path, tempdir.path().join("ghi"));
-        assert!(results[2].metadata.is_file());
-    }
-
-    #[test]
-    fn test_list_dir_with_dirs() {
-        let tempdir = tempfile::tempdir().unwrap();
-        std::fs::create_dir(tempdir.path().join("abc")).unwrap();
-        std::fs::create_dir(tempdir.path().join("def")).unwrap();
-
-        let mut results = list_dir(&tempdir).unwrap()
-            .filter_map(Result::ok)
-            .collect::<Vec<_>>();
-        results.sort_by_key(|entry| entry.path.clone());
-
-        assert_eq!(results.len(), 2);
-
-        assert_eq!(results[0].path, tempdir.path().join("abc"));
-        assert!(results[0].metadata.is_dir());
-
-        assert_eq!(results[1].path, tempdir.path().join("def"));
-        assert!(results[1].metadata.is_dir());
-    }
-
-    // Symlinking is supported only on Unix-like systems.
-    #[cfg(target_family = "unix")]
-    #[test]
-    fn test_list_dir_with_links() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let source = tempdir.path().join("abc");
-        let target = tempdir.path().join("def");
-
-        File::create(&source).unwrap();
-        std::os::unix::fs::symlink(&source, &target).unwrap();
-
-        let mut results = list_dir(&tempdir).unwrap()
-            .filter_map(Result::ok)
-            .collect::<Vec<_>>();
-        results.sort_by_key(|entry| entry.path.clone());
-
-        assert_eq!(results.len(), 2);
-
-        assert_eq!(results[0].path, source);
-        assert!(results[0].metadata.file_type().is_file());
-
-        assert_eq!(results[1].path, target);
-        assert!(results[1].metadata.file_type().is_symlink());
-    }
-
-    // macOS mangles Unicode-specific characters in filenames.
-    #[cfg_attr(target_os = "macos", ignore)]
-    #[test]
-    fn test_walk_list_with_unicode_names() {
-        let tempdir = tempfile::tempdir().unwrap();
-        File::create(tempdir.path().join("zażółć gęślą jaźń")).unwrap();
-        File::create(tempdir.path().join("што й па мору")).unwrap();
-
-        let mut results = list_dir(&tempdir).unwrap()
-            .filter_map(Result::ok)
-            .collect::<Vec<_>>();
-        results.sort_by_key(|entry| entry.path.clone());
-
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].path, tempdir.path().join("zażółć gęślą jaźń"));
-        assert_eq!(results[1].path, tempdir.path().join("што й па мору"));
-    }
 
     #[test]
     fn test_walk_dir_non_existing() {
