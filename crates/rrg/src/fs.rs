@@ -60,6 +60,7 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
 
     let iter = ListDir {
         iter: std::fs::read_dir(root)?,
+        cur_depth: 1,
     };
 
     #[cfg(target_family = "unix")]
@@ -69,6 +70,7 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     };
 
     Ok(WalkDir {
+        max_depth: u32::MAX,
         iter,
         pending_iters: vec![],
         #[cfg(target_family = "unix")]
@@ -88,12 +90,20 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
 ///
 /// The iterator can be constructed with the [`walk_dir`] function.
 pub struct WalkDir {
+    max_depth: u32,
     iter: ListDir,
     pending_iters: Vec<std::io::Result<ListDir>>,
     #[cfg(target_family = "unix")] dev: u64,
 }
 
 impl WalkDir {
+
+    pub fn with_max_depth(mut self, max_depth: u32) -> WalkDir {
+        assert!(max_depth > 0);
+
+        self.max_depth = max_depth;
+        self
+    }
 
     #[cfg(target_family = "unix")]
     fn is_same_dev(&self, entry: &Entry) -> bool {
@@ -118,10 +128,14 @@ impl std::iter::Iterator for WalkDir {
                     Err(error) => return Some(Err(error)),
                 };
 
-                if entry.metadata.is_dir() && self.is_same_dev(&entry) {
+                if entry.metadata.is_dir() && self.is_same_dev(&entry) && self.iter.cur_depth < self.max_depth {
                     self.pending_iters.push({
                         std::fs::read_dir(&entry.path).map(|iter| ListDir {
                             iter,
+                            // This cannot ever overflow because the condition
+                            // above guarantees that `self.iter.cur_depth` is
+                            // less than `u32::MAX`.
+                            cur_depth: self.iter.cur_depth + 1,
                         })
                     });
                 }
@@ -150,6 +164,7 @@ impl std::iter::Iterator for WalkDir {
 /// Unlike the [`ReadDir`] iterator entries, [`ListDir`] entries are guaranteed
 /// to have valid metadata objects attached.
 pub struct ListDir {
+    cur_depth: u32,
     iter: std::fs::ReadDir,
 }
 
@@ -400,5 +415,74 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].metadata.len(), 9);
+    }
+
+    #[test]
+    #[should_panic]
+    fn walk_dir_with_max_depth_0() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let _ = walk_dir(tempdir.path()).unwrap()
+            .with_max_depth(0);
+    }
+
+    #[test]
+    fn walk_dir_with_max_depth_1() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::create_dir(tempdir.join("abc"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("abc").join("def"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("ghi"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("ghi").join("jkl"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("mno"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("mno").join("pqr"))
+            .unwrap();
+
+        let results = walk_dir(&tempdir).unwrap().with_max_depth(1)
+            .filter_map(Result::ok);
+
+        let paths = results.map(|entry| entry.path)
+            .collect::<Vec<_>>();
+
+        assert!(paths.contains(&tempdir.join("abc")));
+        assert!(paths.contains(&tempdir.join("ghi")));
+        assert!(paths.contains(&tempdir.join("mno")));
+
+        assert!(!paths.contains(&tempdir.join("abc").join("def")));
+        assert!(!paths.contains(&tempdir.join("ghi").join("jkl")));
+        assert!(!paths.contains(&tempdir.join("mno").join("pqr")));
+    }
+
+    #[test]
+    fn walk_dir_with_max_depth_2() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::create_dir(tempdir.join("a"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("a").join("b"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("a").join("b").join("c"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("a").join("b").join("c").join("d"))
+            .unwrap();
+
+        let results = walk_dir(tempdir).unwrap().with_max_depth(2)
+            .filter_map(Result::ok);
+
+        let paths = results.map(|entry| entry.path)
+            .collect::<Vec<_>>();
+
+        assert!(paths.contains(&tempdir.join("a")));
+        assert!(paths.contains(&tempdir.join("a").join("b")));
+
+        assert!(!paths.contains(&tempdir.join("a").join("b").join("c")));
+        assert!(!paths.contains(&tempdir.join("a").join("b").join("c").join("d")));
     }
 }
