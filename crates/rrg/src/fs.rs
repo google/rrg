@@ -44,16 +44,14 @@ pub struct Entry {
 /// # Examples
 ///
 /// ```no_run
-/// use std::path::PathBuf;
-///
 /// let paths = rrg::fs::walk_dir("/").unwrap()
 ///     .filter_map(Result::ok)
 ///     .map(|entry| entry.path)
 ///     .collect::<Vec<_>>();
 ///
-/// assert!(paths.contains(&PathBuf::from("/usr")));
-/// assert!(paths.contains(&PathBuf::from("/usr/bin")));
-/// assert!(paths.contains(&PathBuf::from("/usr/lib")));
+/// assert!(paths.contains(&"/usr".into()));
+/// assert!(paths.contains(&"/usr/bin".into()));
+/// assert!(paths.contains(&"/usr/lib".into()));
 /// ```
 pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
     let root = root.as_ref();
@@ -107,16 +105,14 @@ impl WalkDir {
     /// # Examples
     ///
     /// ```no_run
-    /// use std::path::PathBuf;
-    ///
     /// let paths = rrg::fs::walk_dir("/").unwrap().with_max_depth(1)
     ///     .filter_map(Result::ok)
     ///     .map(|entry| entry.path)
     ///     .collect::<Vec<_>>();
     ///
-    /// assert!(paths.contains(&PathBuf::from("/usr")));
-    /// assert!(!paths.contains(&PathBuf::from("/usr/bin")));
-    /// assert!(!paths.contains(&PathBuf::from("/usr/lib")));
+    /// assert!(paths.contains(&"/usr".into()));
+    /// assert!(!paths.contains(&"/usr/bin".into()));
+    /// assert!(!paths.contains(&"/usr/lib".into()));
     /// ```
     pub fn with_max_depth(mut self, max_depth: u32) -> WalkDir {
         assert!(max_depth > 0);
