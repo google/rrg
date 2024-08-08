@@ -207,6 +207,15 @@ mod tests {
     }
 
     #[test]
+    fn walk_dir_not_dir() {
+        let tempdir = tempfile::tempdir().unwrap();
+        File::create(tempdir.path().join("foo")).unwrap();
+
+        let iter = walk_dir(tempdir.path().join("foo"));
+        assert!(iter.is_err());
+    }
+
+    #[test]
     fn test_walk_dir_empty() {
         let tempdir = tempfile::tempdir().unwrap();
 
