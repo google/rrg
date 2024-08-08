@@ -98,6 +98,26 @@ pub struct WalkDir {
 
 impl WalkDir {
 
+    /// Limits recursion to the specified `max_depth`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given limit is zero.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::path::PathBuf;
+    ///
+    /// let paths = rrg::fs::walk_dir("/").unwrap().with_max_depth(1)
+    ///     .filter_map(Result::ok)
+    ///     .map(|entry| entry.path)
+    ///     .collect::<Vec<_>>();
+    ///
+    /// assert!(paths.contains(&PathBuf::from("/usr")));
+    /// assert!(!paths.contains(&PathBuf::from("/usr/bin")));
+    /// assert!(!paths.contains(&PathBuf::from("/usr/lib")));
+    /// ```
     pub fn with_max_depth(mut self, max_depth: u32) -> WalkDir {
         assert!(max_depth > 0);
 
