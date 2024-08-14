@@ -83,10 +83,12 @@ pub fn walk_dir<P: AsRef<Path>>(root: P) -> std::io::Result<WalkDir> {
 /// traversal it will not cross device boundaries and enter symlinked
 /// directories.
 ///
-/// Note that this iterator always returns an entry. All errors are simply
-/// swallowed.
+/// To limit depth of the recursion once can use the [`with_max_depth`] method
+/// on the instance.
 ///
 /// The iterator can be constructed with the [`walk_dir`] function.
+///
+/// [`with_max_depth`]: WalkDir::with_max_depth
 pub struct WalkDir {
     max_depth: u32,
     iter: ListDir,
