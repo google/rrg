@@ -6,8 +6,10 @@ use std::path::{Path, PathBuf};
 
 /// Arguments of the `get_file_metadata` action.
 pub struct Args {
-    /// Path the file to get the metadata of.
+    /// Root path to the file to get the metadata of.
     path: PathBuf,
+    /// Limit on the depth of recursion when visiting subfolders.
+    max_depth: u32,
 }
 
 /// Result of the `get_file_metadata` action.
@@ -73,12 +75,74 @@ where
     let symlink = symlink.transpose().map_err(crate::session::Error::action)?;
 
     session.reply(Item {
-        path,
+        path: path.clone(),
         metadata,
         #[cfg(target_family = "unix")]
         ext_attrs,
         symlink,
     })?;
+
+    if args.max_depth > 0 {
+        for entry in crate::fs::walk_dir(&path)
+            .map_err(crate::session::Error::action)?
+            .with_max_depth(args.max_depth)
+        {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) => {
+                    log::error!("failed to read directory entry: {error}");
+                    continue
+                }
+            };
+
+            #[cfg(target_family = "unix")]
+            let ext_attrs = match ospect::fs::ext_attrs(&entry.path) {
+                Ok(ext_attrs) => ext_attrs.filter_map(|ext_attr| match ext_attr {
+                    Ok(ext_attr) => Some(ext_attr),
+                    Err(error) => {
+                        log::error! {
+                            "failed to read an extended attribute for '{}': {error}",
+                            entry.path.display()
+                        };
+
+                        None
+                    }
+                }).collect(),
+                Err(error) => {
+                    log::error! {
+                        "failed to list extended attributes for '{}': {error}",
+                        entry.path.display()
+                    };
+
+                    Vec::default()
+                }
+            };
+
+            let symlink = if entry.metadata.is_symlink() {
+                match std::fs::read_link(&entry.path) {
+                    Ok(symlink) => Some(symlink),
+                    Err(error) => {
+                        log::error! {
+                            "failed to read symlink target for '{}': {error}",
+                            entry.path.display()
+                        };
+
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            session.reply(Item {
+                path: entry.path,
+                metadata: entry.metadata,
+                #[cfg(target_family = "unix")]
+                ext_attrs,
+                symlink,
+            })?;
+        }
+    }
 
     Ok(())
 }
@@ -95,6 +159,7 @@ impl crate::request::Args for Args {
 
         Ok(Args {
             path,
+            max_depth: proto.max_depth(),
         })
     }
 }
@@ -171,6 +236,7 @@ mod tests {
 
         let args = Args {
             path: tempdir.path().join("foo"),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -180,7 +246,8 @@ mod tests {
     #[test]
     fn handle_relative() {
         let args = Args {
-            path: PathBuf::from("foo/bar/baz")
+            path: PathBuf::from("foo/bar/baz"),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -199,6 +266,7 @@ mod tests {
 
         let args = Args {
             path: tempdir.join("foo").to_path_buf(),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -226,6 +294,7 @@ mod tests {
 
         let args = Args {
             path: tempdir.join("link"),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -258,6 +327,7 @@ mod tests {
 
         let args = Args {
             path: tempfile.path().to_path_buf(),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -290,6 +360,7 @@ mod tests {
 
         let args = Args {
             path: tempfile.path().to_owned(),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -302,6 +373,237 @@ mod tests {
         assert_eq!(item.ext_attrs.len(), 1);
         assert_eq!(item.ext_attrs[0].name, "user.foo");
         assert_eq!(item.ext_attrs[0].value, b"bar");
+    }
+
+    #[test]
+    fn handle_dir_max_depth_0() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::File::create(tempdir.join("foo"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("bar"))
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.to_path_buf(),
+            max_depth: 0,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let paths = session.replies::<Item>()
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>();
+
+        assert!(paths.contains((&tempdir).into()));
+        assert!(!paths.contains(&tempdir.join("foo")));
+        assert!(!paths.contains(&tempdir.join("bar")));
+    }
+
+    #[test]
+    fn handle_dir_max_depth_1() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::File::create(tempdir.join("file1"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("file2"))
+            .unwrap();
+
+        std::fs::create_dir(tempdir.join("subdir"))
+            .unwrap();
+
+        std::fs::File::create(tempdir.join("subdir").join("file1"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("subdir").join("file2"))
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.to_path_buf(),
+            max_depth: 1,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let items_by_path = session.replies::<Item>()
+            .map(|item| (item.path.clone(), item))
+            .collect::<std::collections::HashMap<_, _>>();
+
+        assert!(items_by_path.contains_key(&tempdir));
+        assert!(items_by_path[&tempdir].metadata.is_dir());
+
+        assert!(items_by_path.contains_key(&tempdir.join("file1")));
+        assert!(items_by_path[&tempdir.join("file1")].metadata.is_file());
+
+        assert!(items_by_path.contains_key(&tempdir.join("file2")));
+        assert!(items_by_path[&tempdir.join("file2")].metadata.is_file());
+
+        assert!(items_by_path.contains_key(&tempdir.join("subdir")));
+        assert!(items_by_path[&tempdir.join("subdir")].metadata.is_dir());
+
+        assert!(!items_by_path.contains_key(&tempdir.join("subdir").join("file1")));
+        assert!(!items_by_path.contains_key(&tempdir.join("subdir").join("file2")));
+    }
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_dir_max_depth_1_symlinks() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::File::create(tempdir.join("file"))
+            .unwrap();
+
+        std::os::unix::fs::symlink(tempdir.join("file"), tempdir.join("link"))
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.to_path_buf(),
+            max_depth: 1,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let items_by_path = session.replies::<Item>()
+            .map(|item| (item.path.clone(), item))
+            .collect::<std::collections::HashMap::<_, _>>();
+
+        assert!(items_by_path.contains_key(&tempdir));
+        assert!(items_by_path.contains_key(&tempdir.join("file")));
+        assert!(items_by_path.contains_key(&tempdir.join("link")));
+
+        let item_link = items_by_path[&tempdir.join("link")];
+        assert!(item_link.metadata.is_symlink());
+        assert_eq!(item_link.symlink, Some(tempdir.join("file")));
+    }
+
+    #[cfg(feature = "test-setfattr")]
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn handle_dir_max_depth_1_ext_attrs() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::File::create(tempdir.join("file1"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("file2"))
+            .unwrap();
+
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--no-dereference")
+                .arg("--name").arg("user.attr1")
+                .arg("--value").arg("value1")
+                .arg(tempdir.join("file1"))
+                .status().unwrap()
+                .success()
+        };
+        assert! {
+            std::process::Command::new("setfattr")
+                .arg("--no-dereference")
+                .arg("--name").arg("user.attr2")
+                .arg("--value").arg("value2")
+                .arg(tempdir.join("file2"))
+                .status().unwrap()
+                .success()
+        };
+
+        let args = Args {
+            path: tempdir.to_path_buf(),
+            max_depth: 1,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let items_by_path = session.replies::<Item>()
+            .map(|item| (item.path.clone(), item))
+            .collect::<std::collections::HashMap::<_, _>>();
+
+        assert!(items_by_path.contains_key(&tempdir));
+        assert!(items_by_path.contains_key(&tempdir.join("file1")));
+        assert!(items_by_path.contains_key(&tempdir.join("file2")));
+
+        let item_file1 = items_by_path[&tempdir.join("file1")];
+        assert_eq!(item_file1.ext_attrs.len(), 1);
+        assert_eq!(item_file1.ext_attrs[0].name, "user.attr1");
+        assert_eq!(item_file1.ext_attrs[0].value, b"value1");
+
+        let item_file2 = items_by_path[&tempdir.join("file2")];
+        assert_eq!(item_file2.ext_attrs.len(), 1);
+        assert_eq!(item_file2.ext_attrs[0].name, "user.attr2");
+        assert_eq!(item_file2.ext_attrs[0].value, b"value2");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn handle_dir_max_depth_1_ext_attrs() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::File::create(tempdir.join("file1"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("file2"))
+            .unwrap();
+
+        assert! {
+            std::process::Command::new("xattr")
+                .arg("-w")
+                .arg("user.attr1")
+                .arg("value1")
+                .arg(tempdir.join("file1"))
+                .status().unwrap()
+                .success()
+        };
+        assert! {
+            std::process::Command::new("xattr")
+                .arg("-w")
+                .arg("user.attr2")
+                .arg("value2")
+                .arg(tempdir.join("file2"))
+                .status().unwrap()
+                .success()
+        };
+
+        let args = Args {
+            path: tempdir.to_path_buf(),
+            max_depth: 1,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let items_by_path = session.replies::<Item>()
+            .map(|item| (item.path.clone(), item))
+            .collect::<std::collections::HashMap::<_, _>>();
+
+        assert!(items_by_path.contains_key(&tempdir));
+        assert!(items_by_path.contains_key(&tempdir.join("file1")));
+        assert!(items_by_path.contains_key(&tempdir.join("file2")));
+
+        let item_file1 = items_by_path[&tempdir.join("file1")];
+        assert_eq!(item_file1.ext_attrs.len(), 1);
+        assert_eq!(item_file1.ext_attrs[0].name, "user.attr1");
+        assert_eq!(item_file1.ext_attrs[0].value, b"value1");
+
+        let item_file2 = items_by_path[&tempdir.join("file2")];
+        assert_eq!(item_file2.ext_attrs.len(), 1);
+        assert_eq!(item_file2.ext_attrs[0].name, "user.attr2");
+        assert_eq!(item_file2.ext_attrs[0].value, b"value2");
     }
 
     macro_rules! path {
