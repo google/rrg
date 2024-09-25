@@ -26,7 +26,35 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    todo!()
+    let file = std::fs::File::open(&args.path)
+        .map_err(crate::session::Error::action)?;
+
+    let mut file = std::io::BufReader::new(file);
+
+    // TODO(@panhania): Read to a buffer of predefined size so that we do not
+    // allow reading lines of arbitrary length.
+    let mut line = String::new();
+    let mut offset = 0;
+
+    loop {
+        use std::io::BufRead as _;
+
+        line.clear();
+        let len = match file.read_line(&mut line) {
+            Ok(0) => return Ok(()),
+            Ok(len) => len,
+            Err(error) => return Err(crate::session::Error::action(error)),
+        };
+
+        for matcz in args.regex.find_iter(&line) {
+            session.reply(Item {
+                offset: offset + matcz.start() as u64,
+                content: matcz.as_str().to_string(),
+            })?;
+        }
+
+        offset += len as u64;
+    }
 }
 
 impl crate::request::Args for Args {
@@ -59,5 +87,107 @@ impl crate::response::Item for Item {
         proto.set_content(self.content);
 
         proto
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn handle_empty_file_non_empty_regex() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        std::fs::write(tempdir.path().join("file"), b"")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.path().join("file"),
+            regex: regex::Regex::new("").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[test]
+    fn handle_regex_no_matches() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        std::fs::write(tempdir.path().join("file"), b"foo")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.path().join("file"),
+            regex: regex::Regex::new("bar").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[test]
+    fn handle_regex_single_match() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        std::fs::write(tempdir.path().join("file"), b"bar")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.path().join("file"),
+            regex: regex::Regex::new("bar").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.offset, 0);
+        assert_eq!(item.content, "bar");
+    }
+
+    #[test]
+    fn handle_regex_multiple_matches() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        std::fs::write(tempdir.path().join("file"), b"bar\nbas\nbaz\nbar")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.path().join("file"),
+            regex: regex::Regex::new("ba[rz]").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 3);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.offset, 0);
+        assert_eq!(item.content, "bar");
+
+        let item = session.reply::<Item>(1);
+        assert_eq!(item.offset, 8);
+        assert_eq!(item.content, "baz");
+
+        let item = session.reply::<Item>(2);
+        assert_eq!(item.offset, 12);
+        assert_eq!(item.content, "bar");
     }
 }
