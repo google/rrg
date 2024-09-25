@@ -23,6 +23,8 @@ pub enum Action {
     GetFileContents,
     /// Get hash of the specified file.
     GetFileHash,
+    /// Grep the specified file for a pattern.
+    GrepFileContents,
     /// List contents of a directory.
     ListDirectory,
     /// List processes available on the system.
@@ -57,6 +59,7 @@ impl std::fmt::Display for Action {
             Action::GetFileMetadata => write!(fmt, "get_file_metadata"),
             Action::GetFileContents => write!(fmt, "get_file_contents"),
             Action::GetFileHash => write!(fmt, "get_file_hash"),
+            Action::GrepFileContents => write!(fmt, "grep_file_contents"),
             Action::ListDirectory => write!(fmt, "list_directory"),
             Action::ListProcesses => write!(fmt, "list_processes"),
             Action::ListConnections => write!(fmt, "list_connections"),
@@ -105,6 +108,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             GET_FILE_METADATA => Ok(Action::GetFileMetadata),
             GET_FILE_CONTENTS => Ok(Action::GetFileContents),
             GET_FILE_HASH => Ok(Action::GetFileHash),
+            GREP_FILE_CONTENTS => Ok(Action::GrepFileContents),
             LIST_DIRECTORY => Ok(Action::ListDirectory),
             LIST_PROCESSES => Ok(Action::ListProcesses),
             LIST_CONNECTIONS => Ok(Action::ListConnections),
