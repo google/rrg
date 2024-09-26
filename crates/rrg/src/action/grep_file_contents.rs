@@ -160,11 +160,43 @@ mod tests {
     }
 
     #[test]
-    fn handle_regex_multiple_matches() {
+    fn handle_regex_multiple_matches_multiple_lines() {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
         std::fs::write(tempdir.path().join("file"), b"bar\nbas\nbaz\nbar")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.path().join("file"),
+            regex: regex::Regex::new("ba[rz]").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 3);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.offset, 0);
+        assert_eq!(item.content, "bar");
+
+        let item = session.reply::<Item>(1);
+        assert_eq!(item.offset, 8);
+        assert_eq!(item.content, "baz");
+
+        let item = session.reply::<Item>(2);
+        assert_eq!(item.offset, 12);
+        assert_eq!(item.content, "bar");
+    }
+
+    #[test]
+    fn handle_regex_multiple_matches_single_line() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        std::fs::write(tempdir.path().join("file"), b"bar bas baz bar")
             .unwrap();
 
         let args = Args {
