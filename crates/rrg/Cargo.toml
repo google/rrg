@@ -10,6 +10,7 @@ default = [
     "action-get_system_metadata",
     "action-get_file_metadata",
     "action-get_file_contents",
+    "action-grep_file_contents",
     "action-get_filesystem_timeline",
     "action-list_connections",
     "action-list_interfaces",
@@ -23,6 +24,7 @@ default = [
 action-get_system_metadata = []
 action-get_file_metadata = []
 action-get_file_contents = ["dep:sha2"]
+action-grep_file_contents = []
 action-get_filesystem_timeline = ["dep:flate2", "dep:sha2"]
 action-list_connections = []
 action-list_interfaces = []
