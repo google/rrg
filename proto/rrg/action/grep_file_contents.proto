@@ -4,7 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 syntax = "proto3";
 
-package rrg.action.get_file_contents;
+package rrg.action.grep_file_contents;
 
 import "rrg/fs.proto";
 
