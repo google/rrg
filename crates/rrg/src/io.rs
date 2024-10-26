@@ -149,7 +149,7 @@ impl<R: Read> LineReader<R> {
             // advance the internal buffer accordingly.
             if let Some(pos) = self.buf[..self.buf_fill_len].iter().position(|byte| *byte == b'\n') {
                 if len + pos + 1 > self.max_line_len {
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other, MaxLineLenError(self.max_line_len)));
+                    return Err(std::io::Error::other(MaxLineLenError(self.max_line_len)));
                 }
 
                 buf.push_str(&String::from_utf8_lossy(&self.buf[..pos + 1]));
@@ -165,7 +165,7 @@ impl<R: Read> LineReader<R> {
             // exceeded) and fill it again with new content.
 
             if len + self.buf_fill_len > self.max_line_len {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, MaxLineLenError(self.max_line_len)));
+                return Err(std::io::Error::other(MaxLineLenError(self.max_line_len)));
             }
 
             buf.push_str(&String::from_utf8_lossy(&self.buf[..self.buf_fill_len]));
