@@ -86,6 +86,8 @@ pub struct LineReader<R: Read> {
     buf: Box<[u8]>,
     /// Number of elements of `buf` that are actually available.
     buf_fill_len: usize,
+    /// Limit on the length of a single line that the reader can read.
+    max_line_len: usize,
 }
 
 impl<R: Read> LineReader<R> {
@@ -105,7 +107,18 @@ impl<R: Read> LineReader<R> {
             inner,
             buf: vec![0; capacity].into_boxed_slice(),
             buf_fill_len: 0,
+            max_line_len: usize::MAX,
         }
+    }
+
+    /// Sets the limit on the length of a single line that the reader can read.
+    ///
+    /// This is useful to avoid situation in which a large file without any line
+    /// feed characters can cause the memory to be completely exhausted when
+    /// trying to read the line.
+    pub fn with_max_line_len(mut self, len: usize) -> LineReader<R> {
+        self.max_line_len = len;
+        self
     }
 
     /// Reads all bytes until a newline (the `0xA` byte) is reached, and appends
@@ -121,6 +134,9 @@ impl<R: Read> LineReader<R> {
     /// This function will fail if an I/O error is raised when reading data. In
     /// such cases `buf` may contain some new bytes that were read so far.
     ///
+    /// This will also fail if the line length limit was specified and the line
+    /// being read exceeds it.
+    ///
     /// [1]: std::string::String::from_utf8_lossy
     /// [2]: std::char::REPLACEMENT_CHARACTER
     pub fn read_line_lossy(&mut self, buf: &mut String) -> std::io::Result<usize> {
@@ -129,8 +145,14 @@ impl<R: Read> LineReader<R> {
         loop {
             // We may have a line feed somewhere in our buffer already. In such
             // a case, we extend the result buffer with content up until that
-            // point and advance the internal buffer accordingly.
+            // point (provided that the length limit is not exceeted) and
+            // advance the internal buffer accordingly.
             if let Some(pos) = self.buf[..self.buf_fill_len].iter().position(|byte| *byte == b'\n') {
+                if len + pos + 1 > self.max_line_len {
+                    // TODO(@panhania): Refactor with proper error type.
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "line too long"));
+                }
+
                 buf.push_str(&String::from_utf8_lossy(&self.buf[..pos + 1]));
                 len += pos + 1;
 
@@ -140,7 +162,14 @@ impl<R: Read> LineReader<R> {
             }
 
             // There is no line feed in our buffer. Thus, we put everything we
-            // have to the result string and fill it again with new content.
+            // have to the result string (provided that the length limit is not
+            // exceeded) and fill it again with new content.
+
+            if len + self.buf_fill_len > self.max_line_len {
+                // TODO(@panhania): Refactor with proper error type.
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, "line too long"));
+            }
+
             buf.push_str(&String::from_utf8_lossy(&self.buf[..self.buf_fill_len]));
             len += self.buf_fill_len;
 
@@ -371,6 +400,22 @@ mod tests {
         line.clear();
         assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 3);
         assert_eq!(line, "baz");
+    }
+
+    #[test]
+    fn line_reader_small_max_line_len_one_line_without_line_feed() {
+        let mut reader = LineReader::new("foo".as_bytes())
+            .with_max_line_len(2);
+
+        assert!(reader.read_line_lossy(&mut String::new()).is_err());
+    }
+
+    #[test]
+    fn line_reader_small_max_line_len_one_line_with_line_feed() {
+        let mut reader = LineReader::new("foo\n".as_bytes())
+            .with_max_line_len(3);
+
+        assert!(reader.read_line_lossy(&mut String::new()).is_err());
     }
 
     #[test]
