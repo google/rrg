@@ -149,8 +149,7 @@ impl<R: Read> LineReader<R> {
             // advance the internal buffer accordingly.
             if let Some(pos) = self.buf[..self.buf_fill_len].iter().position(|byte| *byte == b'\n') {
                 if len + pos + 1 > self.max_line_len {
-                    // TODO(@panhania): Refactor with proper error type.
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "line too long"));
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other, MaxLineLenError(self.max_line_len)));
                 }
 
                 buf.push_str(&String::from_utf8_lossy(&self.buf[..pos + 1]));
@@ -166,8 +165,7 @@ impl<R: Read> LineReader<R> {
             // exceeded) and fill it again with new content.
 
             if len + self.buf_fill_len > self.max_line_len {
-                // TODO(@panhania): Refactor with proper error type.
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, "line too long"));
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, MaxLineLenError(self.max_line_len)));
             }
 
             buf.push_str(&String::from_utf8_lossy(&self.buf[..self.buf_fill_len]));
@@ -195,6 +193,19 @@ impl<R: Read> LineReader<R> {
             }
         }
     }
+}
+
+#[derive(Debug)]
+struct MaxLineLenError(usize);
+
+impl std::fmt::Display for MaxLineLenError {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "maximum line length ({} bytes) exceeded", self.0)
+    }
+}
+
+impl std::error::Error for MaxLineLenError {
 }
 
 /// An reader implementation for a stream of readers.
@@ -407,7 +418,10 @@ mod tests {
         let mut reader = LineReader::new("foo".as_bytes())
             .with_max_line_len(2);
 
-        assert!(reader.read_line_lossy(&mut String::new()).is_err());
+        let error = reader.read_line_lossy(&mut String::new())
+            .unwrap_err().into_inner().unwrap()
+            .downcast::<MaxLineLenError>().unwrap();
+        assert!(matches!(error.as_ref(), MaxLineLenError(2)));
     }
 
     #[test]
@@ -415,7 +429,10 @@ mod tests {
         let mut reader = LineReader::new("foo\n".as_bytes())
             .with_max_line_len(3);
 
-        assert!(reader.read_line_lossy(&mut String::new()).is_err());
+        let error = reader.read_line_lossy(&mut String::new())
+            .unwrap_err().into_inner().unwrap()
+            .downcast::<MaxLineLenError>().unwrap();
+        assert!(matches!(error.as_ref(), MaxLineLenError(3)));
     }
 
     #[test]
