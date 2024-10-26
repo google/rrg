@@ -75,6 +75,99 @@ where
     Ok(written)
 }
 
+/// Buffered reader for efficent line reading.
+///
+/// This object works similarly to [`std::io::BufReader`] but is tailored for
+/// line reading capabilities.
+pub struct LineReader<R: Read> {
+    /// Content source to read from.
+    inner: R,
+    /// Buffer that we use for reading.
+    buf: Box<[u8]>,
+    /// Number of elements of `buf` that are actually available.
+    buf_fill_len: usize,
+}
+
+impl<R: Read> LineReader<R> {
+
+    /// Creates a new `LineReader` with default buffer capacity.
+    ///
+    /// See also [`std::io::BufReader::new`].
+    pub fn new(inner: R) -> LineReader<R> {
+        LineReader::with_capacity(DEFAULT_BUF_SIZE, inner)
+    }
+
+    /// Creates a new `LineReader` with the specified buffer capacity.
+    ///
+    /// See also [`std::io::BufReader::with_capacity`].
+    pub fn with_capacity(capacity: usize, inner: R) -> LineReader<R> {
+        LineReader {
+            inner,
+            buf: vec![0; capacity].into_boxed_slice(),
+            buf_fill_len: 0,
+        }
+    }
+
+    /// Reads all bytes until a newline (the `0xA` byte) is reached, and appends
+    /// them to the provided `String` buffer.
+    ///
+    /// Unlike [`std::io::BufRead::read_line`], this method does not fail when
+    /// an invalid UTF-8 sequence is encountered but instead uses [lossy UTF8
+    /// conversion][1].which replaces such sequences with [`U+FFFD REPLACEMENT
+    /// CHARACTER`][2].
+    ///
+    /// # Errors
+    ///
+    /// This function will fail if an I/O error is raised when reading data. In
+    /// such cases `buf` may contain some new bytes that were read so far.
+    ///
+    /// [1]: std::string::String::from_utf8_lossy
+    /// [2]: std::char::REPLACEMENT_CHARACTER
+    pub fn read_line_lossy(&mut self, buf: &mut String) -> std::io::Result<usize> {
+        let mut len = 0;
+
+        loop {
+            // We may have a line feed somewhere in our buffer already. In such
+            // a case, we extend the result buffer with content up until that
+            // point and advance the internal buffer accordingly.
+            if let Some(pos) = self.buf[..self.buf_fill_len].iter().position(|byte| *byte == b'\n') {
+                buf.push_str(&String::from_utf8_lossy(&self.buf[..pos + 1]));
+                len += pos + 1;
+
+                self.buf.rotate_left(pos + 1);
+                self.buf_fill_len -= pos + 1;
+                return Ok(len);
+            }
+
+            // There is no line feed in our buffer. Thus, we put everything we
+            // have to the result string and fill it again with new content.
+            buf.push_str(&String::from_utf8_lossy(&self.buf[..self.buf_fill_len]));
+            len += self.buf_fill_len;
+
+            self.buf_fill_len = 0;
+            loop {
+                match self.inner.read(&mut self.buf) {
+                    Ok(0) => {
+                        // We reached the end of the input without finding any
+                        // line feed character.
+                        return Ok(len);
+                    }
+                    Ok(len) => {
+                        self.buf_fill_len = len;
+                        break;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
+                        // We do what the standard library does in case reads to a
+                        // buffer fail with interruption errors: we try again.
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+    }
+}
+
 /// An reader implementation for a stream of readers.
 ///
 /// It turns a stream of `Read` instances into one `Read` instance where bytes
@@ -197,6 +290,116 @@ mod tests {
 
         assert!(writer.iter().all(|item| *item == 0x42));
         assert!(writer.len() > limit);
+    }
+
+    #[test]
+    fn line_reader_empty() {
+        let mut reader = LineReader::new("".as_bytes());
+        let mut line = String::new();
+
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 0);
+        assert_eq!(line, "");
+    }
+
+    #[test]
+    fn line_reader_one_line_without_line_feed() {
+        let mut reader = LineReader::new("foo".as_bytes());
+        let mut line = String::new();
+
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 3);
+        assert_eq!(line, "foo");
+    }
+
+    #[test]
+    fn line_reader_one_line_with_line_feed() {
+        let mut reader = LineReader::new("foo\n".as_bytes());
+        let mut line = String::new();
+
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 4);
+        assert_eq!(line, "foo\n");
+    }
+
+    #[test]
+    fn line_reader_many_lines() {
+        let mut reader = LineReader::new("foo\nbar\nbaz".as_bytes());
+        let mut line = String::new();
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 4);
+        assert_eq!(line, "foo\n");
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 4);
+        assert_eq!(line, "bar\n");
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 3);
+        assert_eq!(line, "baz");
+    }
+
+    #[test]
+    fn line_reader_small_capacity_one_line_without_line_feed() {
+        let mut reader = LineReader::with_capacity(2, "quux".as_bytes());
+        let mut line = String::new();
+
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 4);
+        assert_eq!(line, "quux");
+    }
+
+    #[test]
+    fn line_reader_small_capacity_one_line_with_line_feed() {
+        let mut reader = LineReader::with_capacity(2, "quux\n".as_bytes());
+        let mut line = String::new();
+
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 5);
+        assert_eq!(line, "quux\n");
+    }
+
+    #[test]
+    fn line_reader_small_capacity_many_lines() {
+        let mut reader = LineReader::with_capacity(2, "foo\nbar\nbaz".as_bytes());
+        let mut line = String::new();
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 4);
+        assert_eq!(line, "foo\n");
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 4);
+        assert_eq!(line, "bar\n");
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 3);
+        assert_eq!(line, "baz");
+    }
+
+    #[test]
+    fn line_reader_invalid_utf8_without_line_feed() {
+        let mut reader = LineReader::new(&b"ba\xF0\x90\x80"[..]);
+        let mut line = String::new();
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 5);
+        assert_eq!(line, "ba�");
+    }
+
+    #[test]
+    fn line_reader_invalid_utf8_with_line_feed() {
+        let mut reader = LineReader::new(&b"ba\xF0\x90\x80\n"[..]);
+        let mut line = String::new();
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 6);
+        assert_eq!(line, "ba�\n");
+    }
+
+    #[test]
+    fn line_reader_append() {
+        let mut reader = LineReader::new("content".as_bytes());
+        let mut line = String::from("prefix");
+
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 7);
+        assert_eq!(line, "prefixcontent");
     }
 
     #[test]
