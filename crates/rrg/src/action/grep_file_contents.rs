@@ -29,18 +29,17 @@ where
     let file = std::fs::File::open(&args.path)
         .map_err(crate::session::Error::action)?;
 
-    let mut file = std::io::BufReader::new(file);
+    let mut file = crate::io::LineReader::new(file)
+        // We want to support lines only up to 1 MiB. Fleetspeak does not allow
+        // for messages bigger than 2 MiB anyway.
+        .with_max_line_len(1 * 1024 * 1024);
 
-    // TODO(@panhania): Read to a buffer of predefined size so that we do not
-    // allow reading lines of arbitrary length.
     let mut line = String::new();
     let mut offset = 0;
 
     loop {
-        use std::io::BufRead as _;
-
         line.clear();
-        let len = match file.read_line(&mut line) {
+        let len = match file.read_line_lossy(&mut line) {
             Ok(0) => return Ok(()),
             Ok(len) => len,
             Err(error) => return Err(crate::session::Error::action(error)),
