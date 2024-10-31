@@ -12,6 +12,8 @@ pub struct Args {
     max_depth: u32,
     /// Whether to collect MD5 digest of the file contents.
     md5: bool,
+    /// Whether to collect SHA-256 digest of the file contents.
+    sha256: bool,
 }
 
 /// Result of the `get_file_metadata` action.
@@ -38,6 +40,9 @@ struct Item {
     /// MD5 digest of the file contents.
     #[cfg(feature = "action-get_file_metadata-md5")]
     md5: Option<[u8; 16]>,
+    /// SHA-256 digest of the file contents.
+    #[cfg(feature = "action-get_file_metadata-sha256")]
+    sha256: Option<[u8; 32]>,
 }
 
 /// Handles invocations of the `get_file_metadata` action.
@@ -86,6 +91,13 @@ where
         None
     };
 
+    #[cfg(feature = "action-get_file_metadata-sha256")]
+    let sha256_digest = if args.sha256 && metadata.is_file() {
+        sha256(&args.path)
+    } else {
+        None
+    };
+
     session.reply(Item {
         path: path.clone(),
         metadata,
@@ -94,6 +106,8 @@ where
         symlink,
         #[cfg(feature = "action-get_file_metadata-md5")]
         md5: md5_digest,
+        #[cfg(feature = "action-get_file_metadata-sha256")]
+        sha256: sha256_digest,
     })?;
 
     if args.max_depth > 0 {
@@ -155,6 +169,13 @@ where
                 None
             };
 
+            #[cfg(feature = "action-get_file_metadata-sha256")]
+            let sha256 = if args.sha256 && entry.metadata.is_file() {
+                sha256(&entry.path)
+            } else {
+                None
+            };
+
             session.reply(Item {
                 path: entry.path,
                 metadata: entry.metadata,
@@ -163,6 +184,8 @@ where
                 symlink,
                 #[cfg(feature = "action-get_file_metadata-md5")]
                 md5,
+                #[cfg(feature = "action-get_file_metadata-sha256")]
+                sha256,
             })?;
         }
     }
@@ -207,6 +230,43 @@ fn md5(path: &Path) -> Option<[u8; 16]> {
     Some(<[u8; 16]>::from(hasher.finalize()))
 }
 
+/// Calculates an [SHA-256 digest][1] for the file on the given path.
+///
+/// [1]: https://en.wikipedia.org/wiki/SHA-2
+#[cfg(feature = "action-get_file_metadata-sha256")]
+fn sha256(path: &Path) -> Option<[u8; 32]> {
+    use sha2::{Sha256, Digest as _};
+
+    let mut file = match std::fs::File::open(path) {
+        Ok(file) => std::io::BufReader::new(file),
+        Err(error) => {
+            log::error!("failed to open '{}' for SHA-256 digest: {error}", path.display());
+            return None;
+        }
+    };
+
+    let mut hasher = Sha256::new();
+    loop {
+        use std::io::BufRead as _;
+
+        let buf = match file.fill_buf() {
+            Ok(buf) if buf.is_empty() => break,
+            Ok(buf) => buf,
+            Err(error) => {
+                log::error!("failed to read content of '{}' for SHA-256 digest: {error}", path.display());
+                return None;
+            }
+        };
+
+        hasher.update(buf);
+
+        let buf_len = buf.len();
+        file.consume(buf_len);
+    }
+
+    Some(<[u8; 32]>::from(hasher.finalize()))
+}
+
 impl crate::request::Args for Args {
 
     type Proto = rrg_proto::get_file_metadata::Args;
@@ -221,6 +281,7 @@ impl crate::request::Args for Args {
             path,
             max_depth: proto.max_depth(),
             md5: proto.md5(),
+            sha256: proto.sha256(),
         })
     }
 }
@@ -248,6 +309,10 @@ impl crate::response::Item for Item {
         #[cfg(feature = "action-get_file_metadata-md5")]
         if let Some(md5) = self.md5 {
             proto.set_md5(md5.to_vec());
+        }
+        #[cfg(feature = "action-get_file_metadata-sha256")]
+        if let Some(sha256) = self.sha256 {
+            proto.set_sha256(sha256.to_vec());
         }
 
         proto
@@ -304,6 +369,7 @@ mod tests {
             path: tempdir.path().join("foo"),
             max_depth: 0,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -316,6 +382,7 @@ mod tests {
             path: PathBuf::from("foo/bar/baz"),
             max_depth: 0,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -336,6 +403,7 @@ mod tests {
             path: tempdir.join("foo").to_path_buf(),
             max_depth: 0,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -365,6 +433,7 @@ mod tests {
             path: tempdir.join("link"),
             max_depth: 0,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -399,6 +468,7 @@ mod tests {
             path: tempfile.path().to_path_buf(),
             max_depth: 0,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -433,6 +503,7 @@ mod tests {
             path: tempfile.path().to_owned(),
             max_depth: 0,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -463,6 +534,7 @@ mod tests {
             path: tempdir.to_path_buf(),
             max_depth: 0,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -501,6 +573,7 @@ mod tests {
             path: tempdir.to_path_buf(),
             max_depth: 1,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -544,6 +617,7 @@ mod tests {
             path: tempdir.to_path_buf(),
             max_depth: 1,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -599,6 +673,7 @@ mod tests {
             path: tempdir.to_path_buf(),
             max_depth: 1,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -659,6 +734,7 @@ mod tests {
             path: tempdir.to_path_buf(),
             max_depth: 1,
             md5: false,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -698,6 +774,7 @@ mod tests {
             path: tempdir.join("file"),
             max_depth: 0,
             md5: true,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -730,6 +807,7 @@ mod tests {
             path: tempdir.clone(),
             max_depth: 1,
             md5: true,
+            sha256: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -754,6 +832,88 @@ mod tests {
             // Pre-computed by the `md5sum` tool.
             0xd4, 0x1d, 0x8c, 0xd9, 0x8f, 0x00, 0xb2, 0x04,
             0xe9, 0x80, 0x09, 0x98, 0xec, 0xf8, 0x42, 0x7e,
+        ]));
+    }
+
+    #[cfg(feature = "action-get_file_metadata-sha256")]
+    #[test]
+    fn handle_sha255_file() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::write(tempdir.join("file"), "hello\n")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.join("file"),
+            max_depth: 0,
+            md5: false,
+            sha256: true,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.sha256, Some([
+            // Pre-computed by the `sha256sum` tool.
+            0x58, 0x91, 0xb5, 0xb5, 0x22, 0xd5, 0xdf, 0x08,
+            0x6d, 0x0f, 0xf0, 0xb1, 0x10, 0xfb, 0xd9, 0xd2,
+            0x1b, 0xb4, 0xfc, 0x71, 0x63, 0xaf, 0x34, 0xd0,
+            0x82, 0x86, 0xa2, 0xe8, 0x46, 0xf6, 0xbe, 0x03,
+        ]));
+    }
+
+    #[cfg(feature = "action-get_file_metadata-sha256")]
+    #[test]
+    fn handle_sha256_dir() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::write(tempdir.join("nonempty"), "hello\n")
+            .unwrap();
+        std::fs::write(tempdir.join("empty"), "")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.clone(),
+            max_depth: 1,
+            md5: false,
+            sha256: true,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let items_by_path = session.replies::<Item>()
+            .map(|item| (item.path.clone(), item))
+            .collect::<std::collections::HashMap<_, _>>();
+
+        assert!(items_by_path.contains_key(&tempdir));
+        assert_eq!(items_by_path[&tempdir].sha256, None);
+
+        assert!(items_by_path.contains_key(&tempdir.join("nonempty")));
+        assert_eq!(items_by_path[&tempdir.join("nonempty")].sha256, Some([
+            // Pre-computed by the `sha256sum` tool.
+            0x58, 0x91, 0xb5, 0xb5, 0x22, 0xd5, 0xdf, 0x08,
+            0x6d, 0x0f, 0xf0, 0xb1, 0x10, 0xfb, 0xd9, 0xd2,
+            0x1b, 0xb4, 0xfc, 0x71, 0x63, 0xaf, 0x34, 0xd0,
+            0x82, 0x86, 0xa2, 0xe8, 0x46, 0xf6, 0xbe, 0x03,
+        ]));
+
+        assert!(items_by_path.contains_key(&tempdir.join("empty")));
+        assert_eq!(items_by_path[&tempdir.join("empty")].sha256, Some([
+            // Pre-computed by the `sha256sum` tool.
+            0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+            0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+            0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+            0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
         ]));
     }
 
