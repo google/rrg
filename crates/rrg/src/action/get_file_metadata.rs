@@ -80,6 +80,15 @@ where
     let path = path.map_err(crate::session::Error::action)?;
     let symlink = symlink.transpose().map_err(crate::session::Error::action)?;
 
+    // We log warnings here instead of the `digest` method to avoid repeated
+    // messages for (potential) child files.
+    if args.md5 && !cfg!(feature = "action-get_file_metadata-md5") {
+        log::warn!("MD5 digest requested but not supported");
+    }
+    if args.sha256 && !cfg!(feature = "action-get_file_metadata-sha256") {
+        log::warn!("SHA-256 digest requested but not supported");
+    }
+
     session.reply(Item {
         path: path.clone(),
         metadata,
