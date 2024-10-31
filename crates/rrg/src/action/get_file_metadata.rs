@@ -37,12 +37,8 @@ struct Item {
     // attributes!) and on macOS it is called "flags".
     /// Path to the file pointed by a symlink (if available).
     symlink: Option<PathBuf>,
-    /// MD5 digest of the file contents.
-    #[cfg(feature = "action-get_file_metadata-md5")]
-    md5: Option<[u8; 16]>,
-    /// SHA-256 digest of the file contents.
-    #[cfg(feature = "action-get_file_metadata-sha256")]
-    sha256: Option<[u8; 32]>,
+    /// Digest of the file contents.
+    digest: Digest,
 }
 
 /// Handles invocations of the `get_file_metadata` action.
@@ -84,30 +80,13 @@ where
     let path = path.map_err(crate::session::Error::action)?;
     let symlink = symlink.transpose().map_err(crate::session::Error::action)?;
 
-    #[cfg(feature = "action-get_file_metadata-md5")]
-    let md5_digest = if args.md5 && metadata.is_file() {
-        md5(&args.path)
-    } else {
-        None
-    };
-
-    #[cfg(feature = "action-get_file_metadata-sha256")]
-    let sha256_digest = if args.sha256 && metadata.is_file() {
-        sha256(&args.path)
-    } else {
-        None
-    };
-
     session.reply(Item {
         path: path.clone(),
         metadata,
         #[cfg(target_family = "unix")]
         ext_attrs,
         symlink,
-        #[cfg(feature = "action-get_file_metadata-md5")]
-        md5: md5_digest,
-        #[cfg(feature = "action-get_file_metadata-sha256")]
-        sha256: sha256_digest,
+        digest: digest(&args.path, &args),
     })?;
 
     if args.max_depth > 0 {
@@ -162,19 +141,7 @@ where
                 None
             };
 
-            #[cfg(feature = "action-get_file_metadata-md5")]
-            let md5 = if args.md5 && entry.metadata.is_file() {
-                md5(&entry.path)
-            } else {
-                None
-            };
-
-            #[cfg(feature = "action-get_file_metadata-sha256")]
-            let sha256 = if args.sha256 && entry.metadata.is_file() {
-                sha256(&entry.path)
-            } else {
-                None
-            };
+            let digest = digest(&entry.path, &args);
 
             session.reply(Item {
                 path: entry.path,
@@ -182,10 +149,7 @@ where
                 #[cfg(target_family = "unix")]
                 ext_attrs,
                 symlink,
-                #[cfg(feature = "action-get_file_metadata-md5")]
-                md5,
-                #[cfg(feature = "action-get_file_metadata-sha256")]
-                sha256,
+                digest,
             })?;
         }
     }
@@ -193,59 +157,46 @@ where
     Ok(())
 }
 
-/// Calculates an [MD5 digest][1] for the file on the given path.
-///
-/// [1]: https://en.wikipedia.org/wiki/MD5
-#[cfg(feature = "action-get_file_metadata-md5")]
-fn md5(path: &Path) -> Option<[u8; 16]> {
-    use md5::{Md5, Digest as _};
-
-    let mut file = match std::fs::File::open(path) {
-        Ok(file) => std::io::BufReader::new(file),
-        Err(error) => {
-            log::error!("failed to open '{}' for MD5 digest: {error}", path.display());
-            return None;
-        }
-    };
-
-    let mut hasher = Md5::new();
-    loop {
-        use std::io::BufRead as _;
-
-        let buf = match file.fill_buf() {
-            Ok(buf) if buf.is_empty() => break,
-            Ok(buf) => buf,
-            Err(error) => {
-                log::error!("failed to read content of '{}' for MD5 digest: {error}", path.display());
-                return None;
-            }
-        };
-
-        hasher.update(buf);
-
-        let buf_len = buf.len();
-        file.consume(buf_len);
-    }
-
-    Some(<[u8; 16]>::from(hasher.finalize()))
+/// Record with digest information of the file contents.
+#[derive(Default)]
+struct Digest {
+    /// MD5 digest of the file contents.
+    #[cfg(feature = "action-get_file_metadata-md5")]
+    md5: Option<[u8; 16]>,
+    /// SHA-256 digest of the file contents.
+    #[cfg(feature = "action-get_file_metadata-sha256")]
+    sha256: Option<[u8; 32]>,
 }
 
-/// Calculates an [SHA-256 digest][1] for the file on the given path.
-///
-/// [1]: https://en.wikipedia.org/wiki/SHA-2
-#[cfg(feature = "action-get_file_metadata-sha256")]
-fn sha256(path: &Path) -> Option<[u8; 32]> {
-    use sha2::{Sha256, Digest as _};
+/// Computes the digest record of the file contents using requested algorithms.
+fn digest(path: &Path, args: &Args) -> Digest {
+    if !(args.md5 || args.sha256) {
+        // If no digests were requested, we do not need to read the file.
+        return Digest::default();
+    }
 
     let mut file = match std::fs::File::open(path) {
         Ok(file) => std::io::BufReader::new(file),
         Err(error) => {
-            log::error!("failed to open '{}' for SHA-256 digest: {error}", path.display());
-            return None;
+            log::error!("failed to open '{}' for digest: {error}", path.display());
+            return Digest::default();
         }
     };
 
-    let mut hasher = Sha256::new();
+    #[cfg(feature = "action-get_file_metadata-md5")]
+    let mut md5_hasher = if args.md5 {
+        Some(<md5::Md5 as md5::Digest>::new())
+    } else {
+        None
+    };
+
+    #[cfg(feature = "action-get_file_metadata-sha256")]
+    let mut sha256_hasher = if args.sha256 {
+        Some(<sha2::Sha256 as sha2::Digest>::new())
+    } else {
+        None
+    };
+
     loop {
         use std::io::BufRead as _;
 
@@ -253,18 +204,31 @@ fn sha256(path: &Path) -> Option<[u8; 32]> {
             Ok(buf) if buf.is_empty() => break,
             Ok(buf) => buf,
             Err(error) => {
-                log::error!("failed to read content of '{}' for SHA-256 digest: {error}", path.display());
-                return None;
+                log::error!("failed to read content of '{}' for digest: {error}", path.display());
+                return Digest::default();
             }
         };
 
-        hasher.update(buf);
+        #[cfg(feature = "action-get_file_metadata-md5")]
+        if let Some(ref mut md5_hasher) = md5_hasher {
+            <_ as md5::Digest>::update(md5_hasher, buf);
+        }
+
+        #[cfg(feature = "action-get_file_metadata-sha256")]
+        if let Some(ref mut sha256_hasher) = sha256_hasher {
+            <_ as sha2::Digest>::update(sha256_hasher, buf);
+        }
 
         let buf_len = buf.len();
         file.consume(buf_len);
     }
 
-    Some(<[u8; 32]>::from(hasher.finalize()))
+    Digest {
+        #[cfg(feature = "action-get_file_metadata-md5")]
+        md5: md5_hasher.map(<_ as md5::Digest>::finalize).map(<[u8; 16]>::from),
+        #[cfg(feature = "action-get_file_metadata-sha256")]
+        sha256: sha256_hasher.map(<_ as sha2::Digest>::finalize).map(<[u8; 32]>::from),
+    }
 }
 
 impl crate::request::Args for Args {
@@ -307,11 +271,11 @@ impl crate::response::Item for Item {
         }
 
         #[cfg(feature = "action-get_file_metadata-md5")]
-        if let Some(md5) = self.md5 {
+        if let Some(md5) = self.digest.md5 {
             proto.set_md5(md5.to_vec());
         }
         #[cfg(feature = "action-get_file_metadata-sha256")]
-        if let Some(sha256) = self.sha256 {
+        if let Some(sha256) = self.digest.sha256 {
             proto.set_sha256(sha256.to_vec());
         }
 
@@ -783,7 +747,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
-        assert_eq!(item.md5, Some([
+        assert_eq!(item.digest.md5, Some([
             // Pre-computed by the `md5sum` tool.
             0xb1, 0x94, 0x6a, 0xc9, 0x24, 0x92, 0xd2, 0x34,
             0x7c, 0x62, 0x35, 0xb4, 0xd2, 0x61, 0x11, 0x84,
@@ -818,17 +782,17 @@ mod tests {
             .collect::<std::collections::HashMap<_, _>>();
 
         assert!(items_by_path.contains_key(&tempdir));
-        assert_eq!(items_by_path[&tempdir].md5, None);
+        assert_eq!(items_by_path[&tempdir].digest.md5, None);
 
         assert!(items_by_path.contains_key(&tempdir.join("nonempty")));
-        assert_eq!(items_by_path[&tempdir.join("nonempty")].md5, Some([
+        assert_eq!(items_by_path[&tempdir.join("nonempty")].digest.md5, Some([
             // Pre-computed by the `md5sum` tool.
             0xb1, 0x94, 0x6a, 0xc9, 0x24, 0x92, 0xd2, 0x34,
             0x7c, 0x62, 0x35, 0xb4, 0xd2, 0x61, 0x11, 0x84,
         ]));
 
         assert!(items_by_path.contains_key(&tempdir.join("empty")));
-        assert_eq!(items_by_path[&tempdir.join("empty")].md5, Some([
+        assert_eq!(items_by_path[&tempdir.join("empty")].digest.md5, Some([
             // Pre-computed by the `md5sum` tool.
             0xd4, 0x1d, 0x8c, 0xd9, 0x8f, 0x00, 0xb2, 0x04,
             0xe9, 0x80, 0x09, 0x98, 0xec, 0xf8, 0x42, 0x7e,
@@ -859,7 +823,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
-        assert_eq!(item.sha256, Some([
+        assert_eq!(item.digest.sha256, Some([
             // Pre-computed by the `sha256sum` tool.
             0x58, 0x91, 0xb5, 0xb5, 0x22, 0xd5, 0xdf, 0x08,
             0x6d, 0x0f, 0xf0, 0xb1, 0x10, 0xfb, 0xd9, 0xd2,
@@ -896,10 +860,10 @@ mod tests {
             .collect::<std::collections::HashMap<_, _>>();
 
         assert!(items_by_path.contains_key(&tempdir));
-        assert_eq!(items_by_path[&tempdir].sha256, None);
+        assert_eq!(items_by_path[&tempdir].digest.sha256, None);
 
         assert!(items_by_path.contains_key(&tempdir.join("nonempty")));
-        assert_eq!(items_by_path[&tempdir.join("nonempty")].sha256, Some([
+        assert_eq!(items_by_path[&tempdir.join("nonempty")].digest.sha256, Some([
             // Pre-computed by the `sha256sum` tool.
             0x58, 0x91, 0xb5, 0xb5, 0x22, 0xd5, 0xdf, 0x08,
             0x6d, 0x0f, 0xf0, 0xb1, 0x10, 0xfb, 0xd9, 0xd2,
@@ -908,7 +872,7 @@ mod tests {
         ]));
 
         assert!(items_by_path.contains_key(&tempdir.join("empty")));
-        assert_eq!(items_by_path[&tempdir.join("empty")].sha256, Some([
+        assert_eq!(items_by_path[&tempdir.join("empty")].digest.sha256, Some([
             // Pre-computed by the `sha256sum` tool.
             0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
             0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
