@@ -10,6 +10,7 @@ default = [
     "action-get_system_metadata",
     "action-get_file_metadata",
     "action-get_file_metadata-md5",
+    "action-get_file_metadata-sha1",
     "action-get_file_metadata-sha256",
     "action-get_file_contents",
     "action-grep_file_contents",
@@ -26,6 +27,7 @@ default = [
 action-get_system_metadata = []
 action-get_file_metadata = []
 action-get_file_metadata-md5 = ["action-get_file_metadata", "dep:md-5"]
+action-get_file_metadata-sha1 = ["action-get_file_metadata", "dep:sha1"]
 action-get_file_metadata-sha256 = ["action-get_file_metadata", "dep:sha2"]
 action-get_file_contents = ["dep:sha2"]
 action-grep_file_contents = []

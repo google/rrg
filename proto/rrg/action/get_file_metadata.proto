@@ -32,6 +32,13 @@ message Args {
   // [1]: https://en.wikipedia.org/wiki/MD5
   bool md5 = 3;
 
+  // Whether to collect [SHA-1 digest][1] of the file contents.
+  //
+  // Supported only if the `action-get_file_metadata-sha1` feature is enabled.
+  //
+  // [1]: https://en.wikipedia.org/wiki/SHA-1
+  bool sha1 = 5;
+
   // Whether to collect [SHA-256 digest][2] of the file contents.
   //
   // Supported only if the `action-get_file_metadata-sha256` feature is enabled.
@@ -67,6 +74,14 @@ message Result {
   //
   // [1]: https://en.wikipedia.org/wiki/MD5
   bytes md5 = 5;
+
+  // [SHA-1 digest][1] of the file contents.
+  //
+  // Collected only if the `action-get_file_metadata-sha1` feature is enabled
+  // and `sha1` argument was provided.
+  //
+  // [1]: https://en.wikipedia.org/wiki/SHA-1
+  bytes sha1 = 7;
 
   // [SHA-256 digest][1] of the file contents.
   //
