@@ -10,6 +10,8 @@ pub struct Args {
     path: PathBuf,
     /// Limit on the depth of recursion when visiting subfolders.
     max_depth: u32,
+    /// Whether to collect MD5 digest of the file contents.
+    md5: bool,
 }
 
 /// Result of the `get_file_metadata` action.
@@ -33,6 +35,9 @@ struct Item {
     // attributes!) and on macOS it is called "flags".
     /// Path to the file pointed by a symlink (if available).
     symlink: Option<PathBuf>,
+    /// MD5 digest of the file contents.
+    #[cfg(feature = "action-get_file_metadata-md5")]
+    md5: Option<[u8; 16]>,
 }
 
 /// Handles invocations of the `get_file_metadata` action.
@@ -74,12 +79,21 @@ where
     let path = path.map_err(crate::session::Error::action)?;
     let symlink = symlink.transpose().map_err(crate::session::Error::action)?;
 
+    #[cfg(feature = "action-get_file_metadata-md5")]
+    let md5_digest = if args.md5 && metadata.is_file() {
+        md5(&args.path)
+    } else {
+        None
+    };
+
     session.reply(Item {
         path: path.clone(),
         metadata,
         #[cfg(target_family = "unix")]
         ext_attrs,
         symlink,
+        #[cfg(feature = "action-get_file_metadata-md5")]
+        md5: md5_digest,
     })?;
 
     if args.max_depth > 0 {
@@ -134,17 +148,63 @@ where
                 None
             };
 
+            #[cfg(feature = "action-get_file_metadata-md5")]
+            let md5 = if args.md5 && entry.metadata.is_file() {
+                md5(&entry.path)
+            } else {
+                None
+            };
+
             session.reply(Item {
                 path: entry.path,
                 metadata: entry.metadata,
                 #[cfg(target_family = "unix")]
                 ext_attrs,
                 symlink,
+                #[cfg(feature = "action-get_file_metadata-md5")]
+                md5,
             })?;
         }
     }
 
     Ok(())
+}
+
+/// Calculates an [MD5 digest][1] for the file on the given path.
+///
+/// [1]: https://en.wikipedia.org/wiki/MD5
+#[cfg(feature = "action-get_file_metadata-md5")]
+fn md5(path: &Path) -> Option<[u8; 16]> {
+    use md5::{Md5, Digest as _};
+
+    let mut file = match std::fs::File::open(path) {
+        Ok(file) => std::io::BufReader::new(file),
+        Err(error) => {
+            log::error!("failed to open '{}' for MD5 digest: {error}", path.display());
+            return None;
+        }
+    };
+
+    let mut hasher = Md5::new();
+    loop {
+        use std::io::BufRead as _;
+
+        let buf = match file.fill_buf() {
+            Ok(buf) if buf.is_empty() => break,
+            Ok(buf) => buf,
+            Err(error) => {
+                log::error!("failed to read content of '{}' for MD5 digest: {error}", path.display());
+                return None;
+            }
+        };
+
+        hasher.update(buf);
+
+        let buf_len = buf.len();
+        file.consume(buf_len);
+    }
+
+    Some(<[u8; 16]>::from(hasher.finalize()))
 }
 
 impl crate::request::Args for Args {
@@ -160,6 +220,7 @@ impl crate::request::Args for Args {
         Ok(Args {
             path,
             max_depth: proto.max_depth(),
+            md5: proto.md5(),
         })
     }
 }
@@ -182,6 +243,11 @@ impl crate::response::Item for Item {
 
         if let Some(symlink) = self.symlink {
             proto.set_symlink(symlink.into());
+        }
+
+        #[cfg(feature = "action-get_file_metadata-md5")]
+        if let Some(md5) = self.md5 {
+            proto.set_md5(md5.to_vec());
         }
 
         proto
@@ -237,6 +303,7 @@ mod tests {
         let args = Args {
             path: tempdir.path().join("foo"),
             max_depth: 0,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -248,6 +315,7 @@ mod tests {
         let args = Args {
             path: PathBuf::from("foo/bar/baz"),
             max_depth: 0,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -267,6 +335,7 @@ mod tests {
         let args = Args {
             path: tempdir.join("foo").to_path_buf(),
             max_depth: 0,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -295,6 +364,7 @@ mod tests {
         let args = Args {
             path: tempdir.join("link"),
             max_depth: 0,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -328,6 +398,7 @@ mod tests {
         let args = Args {
             path: tempfile.path().to_path_buf(),
             max_depth: 0,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -361,6 +432,7 @@ mod tests {
         let args = Args {
             path: tempfile.path().to_owned(),
             max_depth: 0,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -390,6 +462,7 @@ mod tests {
         let args = Args {
             path: tempdir.to_path_buf(),
             max_depth: 0,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -427,6 +500,7 @@ mod tests {
         let args = Args {
             path: tempdir.to_path_buf(),
             max_depth: 1,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -469,6 +543,7 @@ mod tests {
         let args = Args {
             path: tempdir.to_path_buf(),
             max_depth: 1,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -523,6 +598,7 @@ mod tests {
         let args = Args {
             path: tempdir.to_path_buf(),
             max_depth: 1,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -582,6 +658,7 @@ mod tests {
         let args = Args {
             path: tempdir.to_path_buf(),
             max_depth: 1,
+            md5: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -604,6 +681,80 @@ mod tests {
         assert_eq!(item_file2.ext_attrs.len(), 1);
         assert_eq!(item_file2.ext_attrs[0].name, "user.attr2");
         assert_eq!(item_file2.ext_attrs[0].value, b"value2");
+    }
+
+    #[cfg(feature = "action-get_file_metadata-md5")]
+    #[test]
+    fn handle_md5_file() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::write(tempdir.join("file"), "hello\n")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.join("file"),
+            max_depth: 0,
+            md5: true,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.md5, Some([
+            // Pre-computed by the `md5sum` tool.
+            0xb1, 0x94, 0x6a, 0xc9, 0x24, 0x92, 0xd2, 0x34,
+            0x7c, 0x62, 0x35, 0xb4, 0xd2, 0x61, 0x11, 0x84,
+        ]));
+    }
+
+    #[cfg(feature = "action-get_file_metadata-md5")]
+    #[test]
+    fn handle_md5_dir() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::write(tempdir.join("nonempty"), "hello\n")
+            .unwrap();
+        std::fs::write(tempdir.join("empty"), "")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.clone(),
+            max_depth: 1,
+            md5: true,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let items_by_path = session.replies::<Item>()
+            .map(|item| (item.path.clone(), item))
+            .collect::<std::collections::HashMap<_, _>>();
+
+        assert!(items_by_path.contains_key(&tempdir));
+        assert_eq!(items_by_path[&tempdir].md5, None);
+
+        assert!(items_by_path.contains_key(&tempdir.join("nonempty")));
+        assert_eq!(items_by_path[&tempdir.join("nonempty")].md5, Some([
+            // Pre-computed by the `md5sum` tool.
+            0xb1, 0x94, 0x6a, 0xc9, 0x24, 0x92, 0xd2, 0x34,
+            0x7c, 0x62, 0x35, 0xb4, 0xd2, 0x61, 0x11, 0x84,
+        ]));
+
+        assert!(items_by_path.contains_key(&tempdir.join("empty")));
+        assert_eq!(items_by_path[&tempdir.join("empty")].md5, Some([
+            // Pre-computed by the `md5sum` tool.
+            0xd4, 0x1d, 0x8c, 0xd9, 0x8f, 0x00, 0xb2, 0x04,
+            0xe9, 0x80, 0x09, 0x98, 0xec, 0xf8, 0x42, 0x7e,
+        ]));
     }
 
     macro_rules! path {

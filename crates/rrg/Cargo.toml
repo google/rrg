@@ -9,6 +9,7 @@ edition.workspace = true
 default = [
     "action-get_system_metadata",
     "action-get_file_metadata",
+    "action-get_file_metadata-md5",
     "action-get_file_contents",
     "action-grep_file_contents",
     "action-get_filesystem_timeline",
@@ -23,6 +24,7 @@ default = [
 
 action-get_system_metadata = []
 action-get_file_metadata = []
+action-get_file_metadata-md5 = ["action-get_file_metadata", "dep:md-5"]
 action-get_file_contents = ["dep:sha2"]
 action-grep_file_contents = []
 action-get_filesystem_timeline = ["dep:flate2", "dep:sha2"]
