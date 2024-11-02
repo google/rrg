@@ -8,6 +8,8 @@ use log::{error, info};
 pub struct FleetspeakSession {
     /// A builder for responses sent through Fleetspeak to the GRR server.
     response_builder: crate::ResponseBuilder,
+    /// Maximum frequency of heartbeat messages to send to Fleetspeak.
+    heartbeat_rate: std::time::Duration,
     /// Number of bytes sent since the session was created.
     network_bytes_sent: u64,
     /// Number of bytes we are allowed to send within the session.
@@ -29,7 +31,14 @@ impl FleetspeakSession {
     /// send the error (in case on occurred) back to the server. But this we can
     /// do only within a sesssion, so we have to create a session from a perhaps
     /// invalid request.
-    pub fn dispatch(request: Result<crate::Request, crate::ParseRequestError>) {
+    ///
+    /// Long-running actions spawned by requests that need to send heartbeat
+    /// signal to Fleetspeak will do so with frequency not greater than the one
+    /// specified `heartbeat_rate`.
+    pub fn dispatch(
+        heartbeat_rate: std::time::Duration,
+        request: Result<crate::Request, crate::ParseRequestError>,
+    ) {
         let request_id = match &request {
             Ok(request) => request.id(),
             Err(error) => match error.request_id() {
@@ -50,6 +59,7 @@ impl FleetspeakSession {
                 let filters = request.take_filters();
                 let mut session = FleetspeakSession {
                     response_builder: response_builder.with_filters(filters),
+                    heartbeat_rate,
                     network_bytes_sent: 0,
                     network_bytes_limit: request.network_bytes_limit(),
                     real_time_start: std::time::Instant::now(),
@@ -148,5 +158,9 @@ impl crate::session::Session for FleetspeakSession {
         self.check_real_time_limit()?;
 
         Ok(())
+    }
+
+    fn heartbeat(&mut self) {
+        fleetspeak::heartbeat_with_throttle(self.heartbeat_rate);
     }
 }
