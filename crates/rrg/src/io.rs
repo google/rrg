@@ -283,6 +283,8 @@ mod tests {
 
     use super::*;
 
+    use quickcheck::quickcheck;
+
     #[test]
     fn test_copy_until_with_empty_buffer() {
         let mut reader: &[u8] = b"";
@@ -462,6 +464,61 @@ mod tests {
 
         assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 7);
         assert_eq!(line, "prefixcontent");
+    }
+
+    #[test]
+    fn line_reader_empty_lines() {
+        let mut reader = LineReader::new("\n\nfoo\n\n".as_bytes());
+        let mut line = String::new();
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 1);
+        assert_eq!(line, "\n");
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 1);
+        assert_eq!(line, "\n");
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 4);
+        assert_eq!(line, "foo\n");
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 1);
+        assert_eq!(line, "\n");
+
+        line.clear();
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 0);
+        assert_eq!(line, "");
+    }
+
+    quickcheck! {
+
+        fn line_reader_joined_lines(strings: Vec<String>) -> quickcheck::TestResult {
+            // This property holds only for strings without line feed chars as
+            // otherwise an input string can get an extra split when reading.
+            if strings.iter().any(|string| string.contains('\n')) {
+                return quickcheck::TestResult::discard();
+            }
+
+            let mut content = strings.join("\n");
+            content.push('\n');
+
+            let mut reader = LineReader::new(content.as_bytes());
+            let mut line = String::new();
+
+            for string in &strings {
+                line.clear();
+                if reader.read_line_lossy(&mut line).unwrap() != string.len() + 1 {
+                    return quickcheck::TestResult::failed();
+                }
+                if line != format!("{string}\n") {
+                    return quickcheck::TestResult::failed();
+                }
+            }
+
+            quickcheck::TestResult::passed()
+        }
     }
 
     #[test]
