@@ -40,9 +40,7 @@ pub trait Session {
     where I: crate::response::Item + 'static;
 
     /// Sends a heartbeat signal to the Fleetspeak process.
-    fn heartbeat(&mut self) {
-        // TODO: Create a real implementation.
-    }
+    fn heartbeat(&mut self);
 }
 
 #[cfg(test)]
