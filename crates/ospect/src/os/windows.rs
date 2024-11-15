@@ -62,7 +62,7 @@ pub fn version() -> std::io::Result<String> {
     let kernel32 = unsafe {
         GetModuleHandleW(windows_sys::w!("kernel32.dll"))
     };
-    if kernel32 == 0 {
+    if kernel32 == std::ptr::null_mut() {
         return Err(std::io::Error::last_os_error());
     }
 

@@ -14,16 +14,16 @@ path = "../rrg-macro/"
 path = "../winreg"
 
 [dependencies.log]
-version = "0.4.8"
+version = "0.4.22"
 
 [dependencies.protobuf]
-version = "~3.2.0"
+version = "3.7.1"
 
 [dev-dependencies.quickcheck]
 version = "1.0.3"
 
 [build-dependencies.protobuf-codegen]
-version = "~3.2.0"
+version = "3.7.1"
 
 [build-dependencies.tempfile]
-version = "3.1.0"
+version = "3.13.0"
