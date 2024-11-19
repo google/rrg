@@ -3,8 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-// TODO(panhania): Add support for binary paths in the `Metadata` object.
-
 /// Sends a system message with startup information to the GRR server.
 pub fn startup() {
     let startup = Startup::now();
