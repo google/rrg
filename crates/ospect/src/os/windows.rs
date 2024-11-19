@@ -66,20 +66,32 @@ pub fn version() -> std::io::Result<String> {
         return Err(std::io::Error::last_os_error());
     }
 
-    // TODO(@panhania): Migrate to `MaybeUninit::uninit_array` once stabilized.
-    let mut kernel32_path = [0; MAX_PATH as usize + 1];
+    let mut kernel32_path = {
+        [const { std::mem::MaybeUninit::<u16>::uninit() }; MAX_PATH as usize + 1]
+    };
+
     // SAFETY: We allocate a buffer of length `MAX_PATH + 1` and pass it to the
     // function given `MAX_PATH` as its size. The extra one element is required
     // to accommodate for the null terminator. See [1] for more details.
     //
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulefilenamew
     let kernel32_path_len = unsafe {
-        GetModuleFileNameW(kernel32, kernel32_path.as_mut_ptr(), MAX_PATH)
+        GetModuleFileNameW(
+            kernel32,
+            kernel32_path.as_mut_ptr().cast::<u16>(),
+            MAX_PATH,
+        )
     };
     if kernel32_path_len == 0 {
         return Err(std::io::Error::last_os_error());
     }
-    if kernel32_path[kernel32_path_len as usize] != 0 {
+    // SAFETY: We verified that the initialization of `kernel32_path` succeeded,
+    // so we can assume that the all items up to and including the specified
+    // length are initialized.
+    //
+    // We do a sanity check to ensure that we really do have a null-terminator
+    // at the end.
+    if unsafe { kernel32_path[kernel32_path_len as usize].assume_init() } != 0 {
         return Err(std::io::ErrorKind::InvalidData.into());
     }
 
@@ -89,7 +101,7 @@ pub fn version() -> std::io::Result<String> {
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winver/nf-winver-getfileversioninfosizew
     let kernel32_info_buf_len = unsafe {
         GetFileVersionInfoSizeW(
-            kernel32_path.as_ptr(),
+            kernel32_path.as_ptr().cast::<u16>(),
             std::ptr::null_mut(),
         )
     };
@@ -105,7 +117,7 @@ pub fn version() -> std::io::Result<String> {
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winver/nf-winver-getfileversioninfow
     let status = unsafe {
         GetFileVersionInfoW(
-            kernel32_path.as_ptr(),
+            kernel32_path.as_ptr().cast::<u16>(),
             0,
             kernel32_info_buf_len,
             kernel32_info_buf.as_mut_ptr().cast::<std::ffi::c_void>(),
