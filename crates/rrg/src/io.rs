@@ -125,8 +125,8 @@ impl<R: Read> LineReader<R> {
     /// them to the provided `String` buffer.
     ///
     /// Unlike [`std::io::BufRead::read_line`], this method does not fail when
-    /// an invalid UTF-8 sequence is encountered but instead uses [lossy UTF8
-    /// conversion][1].which replaces such sequences with [`U+FFFD REPLACEMENT
+    /// an invalid UTF-8 sequence is encountered but instead uses [lossy UTF-8
+    /// conversion][1], which replaces such sequences with [`U+FFFD REPLACEMENT
     /// CHARACTER`][2].
     ///
     /// # Errors
