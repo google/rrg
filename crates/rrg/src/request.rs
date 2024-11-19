@@ -312,6 +312,7 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
 
         let proto_cpu_time_limit = proto.take_cpu_time_limit();
         let cpu_time_limit = match try_from_duration(proto_cpu_time_limit) {
+            // TODO(@panhania): We should always require time limit to be set.
             Ok(limit) if limit.is_zero() => None,
             Ok(limit) => Some(limit),
             Err(error) => return Err(ParseRequestError {
@@ -323,6 +324,7 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
 
         let proto_real_time_limit = proto.take_real_time_limit();
         let real_time_limit = match try_from_duration(proto_real_time_limit) {
+            // TODO(@panhania): We should always require time limit to be set.
             Ok(limit) if limit.is_zero() => None,
             Ok(limit) => Some(limit),
             Err(error) => return Err(ParseRequestError {

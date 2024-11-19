@@ -129,4 +129,7 @@ impl crate::session::Session for FakeSession {
 
         Ok(())
     }
+
+    fn heartbeat(&mut self) {
+    }
 }
