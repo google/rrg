@@ -30,16 +30,11 @@ impl Startup {
 
     /// Creates a startup information as of now.
     pub fn now() -> Startup {
-        // TODO(rust-lang/rust#91345): Simplify with `inspect_err`.
-        let path = {
-            match std::env::current_exe().and_then(std::fs::canonicalize) {
-                Ok(path) => Some(path),
-                Err(error) => {
-                    log::error!("failed to obtain agent's path: {error}");
-                    None
-                }
-            }
-        };
+        let path = std::env::current_exe().and_then(std::fs::canonicalize)
+            .inspect_err(|error| {
+                log::error!("failed to obtain agent's path: {error}")
+            })
+            .ok();
 
         Startup {
             metadata: Metadata::from_cargo(),
