@@ -47,9 +47,6 @@ test-fuse = ["dep:fuse"]
 [dependencies.ospect]
 path = "../ospect"
 
-[dependencies.rrg-macro]
-path = "../rrg-macro"
-
 [dependencies.rrg-proto]
 path = "../rrg-proto"
 

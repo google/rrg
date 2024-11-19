@@ -3,8 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use rrg_macro::warn;
-
 /// List of all actions known by the agent.
 ///
 /// An action is a "unit of execution" and is invoked by flows (created on the
@@ -263,12 +261,12 @@ impl Request {
 
         if message.service != "GRR" {
             let service = message.service;
-            warn!("request send by service '{service}' (instead of 'GRR')");
+            log::warn!("request send by service '{service}' (instead of 'GRR')");
         }
         if message.kind.as_deref() != Some("rrg.Request") {
             match message.kind {
-                Some(kind) => warn!("request with unexpected kind '{kind}'"),
-                None => warn!("request with unspecified kind"),
+                Some(kind) => log::warn!("request with unexpected kind '{kind}'"),
+                None => log::warn!("request with unspecified kind"),
             }
         }
 
