@@ -51,11 +51,8 @@ enum Action {
 
   // TODO: Define more actions that should be supported.
 
-  // TODO(https://github.com/stepancheg/rust-protobuf/issues/671): Uncomment
-  // once `reserved` is supported in enums.
-
   // Reserved for user-defined actions.
-  // reserved 1024 to 2048;
+  reserved 1024 to 2048;
 }
 
 // An action request issued by the GRR server.
