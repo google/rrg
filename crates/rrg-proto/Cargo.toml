@@ -7,9 +7,6 @@ edition.workspace = true
 [dependencies.ospect]
 path = "../ospect"
 
-[dependencies.rrg-macro]
-path = "../rrg-macro/"
-
 [dependencies.winreg]
 path = "../winreg"
 
