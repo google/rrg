@@ -66,19 +66,37 @@ pub fn version() -> std::io::Result<String> {
         return Err(std::io::Error::last_os_error());
     }
 
-    // TODO(@panhania): Migrate to `MaybeUninit::uninit_array` once stabilized.
-    let mut kernel32_path = [0; MAX_PATH as usize + 1];
+    let mut kernel32_path_buf = {
+        [const { std::mem::MaybeUninit::<u16>::uninit() }; MAX_PATH as usize + 1]
+    };
+
     // SAFETY: We allocate a buffer of length `MAX_PATH + 1` and pass it to the
     // function given `MAX_PATH` as its size. The extra one element is required
     // to accommodate for the null terminator. See [1] for more details.
     //
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulefilenamew
     let kernel32_path_len = unsafe {
-        GetModuleFileNameW(kernel32, kernel32_path.as_mut_ptr(), MAX_PATH)
+        GetModuleFileNameW(
+            kernel32,
+            kernel32_path_buf.as_mut_ptr().cast::<u16>(),
+            MAX_PATH,
+        )
     };
     if kernel32_path_len == 0 {
         return Err(std::io::Error::last_os_error());
     }
+
+    // SAFETY: We verified that the initialization of `kernel32_path_buf`
+    // succeeded, so we can assume that all the items up to and including the
+    // specified length are initialized.
+    let kernel32_path = unsafe {
+        // TODO(rust-lang/rust#63569): Use `MaybeUninit::slice_assume_init_ref`
+        // once stable. For now we just inline its definition.
+        &*(&kernel32_path_buf[0..=kernel32_path_len as usize] as *const [_] as *const [u16])
+    };
+
+    // We do a sanity check to ensure that we really do have a null-terminator
+    // at the end.
     if kernel32_path[kernel32_path_len as usize] != 0 {
         return Err(std::io::ErrorKind::InvalidData.into());
     }
