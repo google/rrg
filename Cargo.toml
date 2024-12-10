@@ -2,7 +2,6 @@
 members = [
     "./crates/ospect",
     "./crates/rrg",
-    "./crates/rrg-macro",
     "./crates/rrg-proto",
     "./crates/winreg",
     "./crates/wmi",
