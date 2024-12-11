@@ -124,7 +124,7 @@ impl<'a> FleetspeakSession<'a> {
 impl<'a> crate::session::Session for FleetspeakSession<'a> {
 
     fn args(&self) -> &crate::args::Args {
-        &self.args
+        self.args
     }
 
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>
