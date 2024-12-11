@@ -12,15 +12,27 @@ use crate::Sink;
 /// Instead, one can use a `Fake` session. It simply accumulates responses
 /// that the action sends and lets the creator inspect them later.
 pub struct FakeSession {
+    args: crate::args::Args,
     replies: Vec<Box<dyn Any>>,
     parcels: std::collections::HashMap<Sink, Vec<Box<dyn Any>>>,
 }
 
 impl FakeSession {
 
-    /// Constructs a new fake session.
+    /// Constructs a new fake session with test default agent arguments.
     pub fn new() -> FakeSession {
+        FakeSession::with_args(crate::args::Args {
+            heartbeat_rate: std::time::Duration::from_secs(0),
+            verbosity: log::LevelFilter::Debug,
+            log_to_stdout: false,
+            log_to_file: None,
+        })
+    }
+
+    /// Constructs a new fake session with the given agent arguments.
+    pub fn with_args(args: crate::args::Args) -> FakeSession {
         FakeSession {
+            args,
             replies: Vec::new(),
             parcels: std::collections::HashMap::new(),
         }
@@ -110,6 +122,10 @@ impl FakeSession {
 }
 
 impl crate::session::Session for FakeSession {
+
+    fn args(&self) -> &crate::args::Args {
+        &self.args
+    }
 
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>
     where

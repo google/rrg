@@ -5,11 +5,11 @@ use log::{error, info};
 /// This is a normal session type that that is associated with some flow on the
 /// server. It keeps track of the responses it sends and collects statistics
 /// about network and runtime utilization to kill the action if it is needed.
-pub struct FleetspeakSession {
+pub struct FleetspeakSession<'a> {
+    /// Arguments passed to the agent.
+    args: &'a crate::args::Args,
     /// A builder for responses sent through Fleetspeak to the GRR server.
     response_builder: crate::ResponseBuilder,
-    /// Maximum frequency of heartbeat messages to send to Fleetspeak.
-    heartbeat_rate: std::time::Duration,
     /// Number of bytes sent since the session was created.
     network_bytes_sent: u64,
     /// Number of bytes we are allowed to send within the session.
@@ -20,7 +20,7 @@ pub struct FleetspeakSession {
     real_time_limit: Option<std::time::Duration>,
 }
 
-impl FleetspeakSession {
+impl<'a> FleetspeakSession<'a> {
 
     /// Dispatches the given `request` to an appropriate action handler.
     ///
@@ -34,9 +34,9 @@ impl FleetspeakSession {
     ///
     /// Long-running actions spawned by requests that need to send heartbeat
     /// signal to Fleetspeak will do so with frequency not greater than the one
-    /// specified `heartbeat_rate`.
+    /// specified the arguments passed to the agent.
     pub fn dispatch(
-        heartbeat_rate: std::time::Duration,
+        args: &'a crate::args::Args,
         request: Result<crate::Request, crate::ParseRequestError>,
     ) {
         let request_id = match &request {
@@ -58,8 +58,8 @@ impl FleetspeakSession {
             Ok(mut request) => {
                 let filters = request.take_filters();
                 let mut session = FleetspeakSession {
+                    args,
                     response_builder: response_builder.with_filters(filters),
-                    heartbeat_rate,
                     network_bytes_sent: 0,
                     network_bytes_limit: request.network_bytes_limit(),
                     real_time_start: std::time::Instant::now(),
@@ -81,7 +81,7 @@ impl FleetspeakSession {
     }
 }
 
-impl FleetspeakSession {
+impl<'a> FleetspeakSession<'a> {
 
     /// Checks whether the network bytes limit was crossed.
     ///
@@ -121,7 +121,11 @@ impl FleetspeakSession {
     }
 }
 
-impl crate::session::Session for FleetspeakSession {
+impl<'a> crate::session::Session for FleetspeakSession<'a> {
+
+    fn args(&self) -> &crate::args::Args {
+        self.args
+    }
 
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>
     where
@@ -161,6 +165,6 @@ impl crate::session::Session for FleetspeakSession {
     }
 
     fn heartbeat(&mut self) {
-        fleetspeak::heartbeat_with_throttle(self.heartbeat_rate);
+        fleetspeak::heartbeat_with_throttle(self.args.heartbeat_rate);
     }
 }
