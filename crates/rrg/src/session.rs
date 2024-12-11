@@ -31,6 +31,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Abstraction for various kinds of sessions.
 pub trait Session {
+
+    /// Provides the arguments passed to the agent.
+    fn args(&self) -> &crate::args::Args;
+
     /// Sends a reply to the flow that call the action.
     fn reply<I>(&mut self, item: I) -> Result<()>
     where I: crate::response::Item + 'static;

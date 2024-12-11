@@ -51,7 +51,7 @@ pub fn init(args: &crate::args::Args) {
 pub fn listen(args: &crate::args::Args) {
     loop {
         let request = Request::receive(args.heartbeat_rate);
-        session::FleetspeakSession::dispatch(args.heartbeat_rate, request);
+        session::FleetspeakSession::dispatch(args, request);
     }
 }
 
