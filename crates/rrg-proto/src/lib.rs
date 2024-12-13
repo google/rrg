@@ -144,6 +144,22 @@ impl From<std::net::IpAddr> for net::IpAddress {
     }
 }
 
+impl TryFrom<net::IpAddress> for std::net::IpAddr {
+
+    type Error = (); // TODO(@panhania): Define proper error type.
+
+    fn try_from(proto: net::IpAddress) -> Result<std::net::IpAddr, Self::Error> {
+        if let Ok(octets) = <[u8; 4]>::try_from(&proto.octets[..]) {
+            return Ok(std::net::IpAddr::from(octets));
+        }
+        if let Ok(octets) = <[u8; 16]>::try_from(&proto.octets[..]) {
+            return Ok(std::net::IpAddr::from(octets));
+        }
+
+        return Err(());
+    }
+}
+
 impl From<std::net::SocketAddrV4> for net::SocketAddress {
 
     fn from(addr: std::net::SocketAddrV4) -> net::SocketAddress {
@@ -173,6 +189,20 @@ impl From<std::net::SocketAddr> for net::SocketAddress {
             std::net::SocketAddr::V4(addr) => addr.into(),
             std::net::SocketAddr::V6(addr) => addr.into(),
         }
+    }
+}
+
+impl TryFrom<net::SocketAddress> for std::net::SocketAddr {
+
+    type Error = (); // TODO(@panhania): Define proper error type.
+
+    fn try_from(mut proto: net::SocketAddress) -> Result<std::net::SocketAddr, Self::Error> {
+        let addr = std::net::IpAddr::try_from(proto.take_ip_address())
+            .map_err(|_| ())?; // TODO(@panhania): Define proper errors.
+        let port = u16::try_from(proto.port)
+            .map_err(|_| ())?; // TODO(@panhania): Define proper errors.
+
+        Ok(std::net::SocketAddr::from((addr, port)))
     }
 }
 
