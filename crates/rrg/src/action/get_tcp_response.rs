@@ -70,8 +70,34 @@ impl crate::request::Args for Args {
 
     type Proto = rrg_proto::get_tcp_response::Args;
 
-    fn from_proto(proto: Self::Proto) -> Result<Self, crate::request::ParseArgsError> {
-        todo!()
+    fn from_proto(mut proto: Self::Proto) -> Result<Self, crate::request::ParseArgsError> {
+        use crate::request::ParseArgsError;
+
+        let addr = std::net::SocketAddr::try_from(proto.take_address())
+            .map_err(|error| {
+                ParseArgsError::invalid_field("address", error)
+            })?;
+
+        let connect_timeout = std::time::Duration::try_from(proto.take_connect_timeout())
+            .map_err(|error| {
+                ParseArgsError::invalid_field("connect timeout", error)
+            })?;
+        let write_timeout = std::time::Duration::try_from(proto.take_write_timeout())
+            .map_err(|error| {
+                ParseArgsError::invalid_field("write timeout", error)
+            })?;
+        let read_timeout = std::time::Duration::try_from(proto.take_read_timeout())
+            .map_err(|error| {
+                ParseArgsError::invalid_field("read timeout", error)
+            })?;
+
+        Ok(Args {
+            addr,
+            connect_timeout,
+            write_timeout,
+            read_timeout,
+            data: proto.take_data(),
+        })
     }
 }
 
@@ -80,6 +106,9 @@ impl crate::response::Item for Item {
     type Proto = rrg_proto::get_tcp_response::Result;
 
     fn into_proto(self) -> Self::Proto {
-        todo!()
+        let mut proto = rrg_proto::get_tcp_response::Result::new();
+        proto.set_data(self.data);
+
+        proto
     }
 }
