@@ -32,16 +32,28 @@ where
     let mut stream = std::net::TcpStream::connect_timeout(
         &args.addr,
         args.connect_timeout,
-    ).unwrap(); // TODO(@panhania): Add proper error handling.
+    ).map_err(|error| Error {
+        kind: ErrorKind::Connect,
+        inner: error,
+    })?;
 
     log::info!("established connection to {}", args.addr);
 
     stream.set_write_timeout(Some(args.write_timeout))
-        .unwrap(); // TODO(@panhania): Add proper error handling.
+        .map_err(|error| Error {
+            kind: ErrorKind::InvalidWriteTimeout,
+            inner: error,
+        })?;
     let data_write_len = stream.write(&args.data)
-        .unwrap(); // TODO(@panhania): Add proper error handling.
+        .map_err(|error| Error {
+            kind: ErrorKind::Write,
+            inner: error,
+        })?;
     stream.shutdown(std::net::Shutdown::Write)
-        .unwrap(); // TODO(@panhania): Add proper error handling.
+        .map_err(|error| Error {
+            kind: ErrorKind::ShutdownWrite,
+            inner: error,
+        })?;
 
     // TODO(@panhania): Charge network bytes.
     log::info!("sent {} bytes to {}", data_write_len, args.addr);
@@ -50,11 +62,20 @@ where
     let mut data = Vec::new();
 
     stream.set_read_timeout(Some(args.read_timeout))
-        .unwrap(); // TODO(@panhania): Add proper error handling.
+        .map_err(|error| Error {
+            kind: ErrorKind::InvalidReadTimeout,
+            inner: error,
+        })?;
     stream.read_to_end(&mut data)
-        .unwrap(); // TODO(@panhania): Add proper error handling.
+        .map_err(|error| Error {
+            kind: ErrorKind::Read,
+            inner: error,
+        })?;
     stream.shutdown(std::net::Shutdown::Read)
-        .unwrap(); // TODO(@panhania): Add proper error handling.
+        .map_err(|error| Error {
+            kind: ErrorKind::ShutdownRead,
+            inner: error,
+        })?;
 
     // TODO(@panhania): Charge network bytes.
     log::info!("received {} bytes from {}", data.len(), args.addr);
@@ -64,6 +85,61 @@ where
     })?;
 
     Ok(())
+}
+
+/// List of possible failure scenarios for `get_tcp_response`.
+#[derive(Debug)]
+enum ErrorKind {
+    Connect,
+    Write,
+    Read,
+    ShutdownWrite,
+    ShutdownRead,
+    InvalidWriteTimeout,
+    InvalidReadTimeout,
+}
+
+/// Error type for failures specific to `get_tcp_response`.
+#[derive(Debug)]
+struct Error {
+    kind: ErrorKind,
+    inner: std::io::Error,
+}
+
+impl std::fmt::Display for ErrorKind {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Connect => write!(fmt, "unable to connect"),
+            Self::Write => write!(fmt, "unable to write to stream"),
+            Self::Read => write!(fmt, "unable to read from stream"),
+            Self::ShutdownWrite => write!(fmt, "failed to shutdown writing"),
+            Self::ShutdownRead => write!(fmt, "failed to shutdown reading"),
+            Self::InvalidWriteTimeout => write!(fmt, "invalid write timeout"),
+            Self::InvalidReadTimeout => write!(fmt, "invalid read timeout"),
+        }
+    }
+}
+
+impl std::fmt::Display for Error {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}: {}", self.kind, self.inner)
+    }
+}
+
+impl std::error::Error for Error {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.inner)
+    }
+}
+
+impl From<Error> for crate::session::Error {
+
+    fn from(error: Error) -> crate::session::Error {
+        crate::session::Error::action(error)
+    }
 }
 
 impl crate::request::Args for Args {
