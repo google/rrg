@@ -130,3 +130,12 @@ features = [
     "Win32_Foundation",
     "Win32_Storage_FileSystem",
 ]
+
+[dependencies.ed25519-dalek]
+version = "2.1.1"
+features = [
+    "rand_core",
+]
+
+[dependencies.hex]
+version = "0.4.3"
