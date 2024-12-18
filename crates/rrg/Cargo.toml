@@ -22,6 +22,7 @@ default = [
     "action-list_winreg_values",
     "action-list_winreg_keys",
     "action-query_wmi",
+    "action-execute_signed_command",
 ]
 
 action-get_system_metadata = []
@@ -39,6 +40,7 @@ action-get_winreg_value = []
 action-list_winreg_values = []
 action-list_winreg_keys = []
 action-query_wmi = []
+action-execute_signed_command = []
 
 test-setfattr = []
 test-chattr = []
@@ -130,3 +132,12 @@ features = [
     "Win32_Foundation",
     "Win32_Storage_FileSystem",
 ]
+
+[dependencies.ed25519-dalek]
+version = "2.1.1"
+features = [
+    "rand_core",
+]
+
+[dependencies.hex]
+version = "0.4.3"
