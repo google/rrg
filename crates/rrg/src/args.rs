@@ -49,6 +49,14 @@ pub struct Args {
            arg_name="PATH",
            description="whether to log to a file")]
     pub log_to_file: Option<std::path::PathBuf>,
+
+    /// The public key for verfying signed commands.
+    #[argh(option,
+       long="command-verification-key",
+       arg_name="KEY",
+       description="verification key for signed commands",
+       from_str_fn(parse_verfication_key))]
+    pub command_verification_key: Option<ed25519_dalek::VerifyingKey>,
 }
 
 /// Parses command-line arguments.
@@ -65,4 +73,11 @@ pub fn from_env_args() -> Args {
 /// Parses a human-friendly duration description to a `Duration` object.
 fn parse_duration(value: &str) -> Result<Duration, String> {
     humantime::parse_duration(value).map_err(|error| error.to_string())
+}
+
+/// Parses a ed25519 verification key from hex data given as string to a `VerifyingKey` object.
+fn parse_verfication_key(key: &str) -> Result<ed25519_dalek::VerifyingKey, String> {
+    let bytes = hex::decode(key).map_err(|error| error.to_string())?;
+    ed25519_dalek::VerifyingKey::try_from(&bytes[..])
+       .map_err(|error| error.to_string())
 }
