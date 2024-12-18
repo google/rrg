@@ -54,6 +54,9 @@ pub mod list_winreg_keys;
 #[cfg(feature = "action-query_wmi")]
 pub mod query_wmi;
 
+#[cfg(feature = "action-execute_signed_command")]
+pub mod execute_signed_command;
+
 use log::info;
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -131,6 +134,10 @@ where
         #[cfg(feature = "action-query_wmi")]
         QueryWmi => {
             handle(session, request, self::query_wmi::handle)
+        }
+        #[cfg(feature = "action-execute_signed_command")]
+        ExecuteSignedCommand => {
+            handle(session, request, self::execute_signed_command::handle)
         }
         // We allow `unreachable_patterns` because otherwise we get a warning if
         // we compile with all the actions enabled.
