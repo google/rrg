@@ -59,6 +59,16 @@ pub struct Args {
     pub command_verification_key: Option<ed25519_dalek::VerifyingKey>,
 }
 
+#[derive(Debug)]
+struct HexDecodeError();
+
+impl std::fmt::Display for HexDecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "hex decoding failed")
+    }
+}
+
+
 /// Parses command-line arguments.
 ///
 /// This is a just a convenience function intended to be used as a shortcut for
@@ -75,9 +85,58 @@ fn parse_duration(value: &str) -> Result<Duration, String> {
     humantime::parse_duration(value).map_err(|error| error.to_string())
 }
 
+/// Decodes a Vector of hex digits to a Vector of byte values.
+fn hex_decode(hex: Vec<u8>) -> Result<Vec<u8>, HexDecodeError> {
+    if hex.len() % 2 != 0 {
+        return Err(HexDecodeError());
+    }
+
+    fn hex_char_to_int(c: u8) -> Result<u8, HexDecodeError> {
+        match c {
+            b'A'..=b'F' => Ok(c - b'A' + 10),
+            b'a'..=b'f' => Ok(c - b'a' + 10),
+            b'0'..=b'9' => Ok(c - b'0'),
+            _ => Err(HexDecodeError()),
+        }
+    }
+
+    hex.chunks(2)
+        .into_iter()
+        .map(|pair| Ok(hex_char_to_int(pair[0])? << 4 | hex_char_to_int(pair[1])?))
+        .collect()
+}
+
 /// Parses a ed25519 verification key from hex data given as string to a `VerifyingKey` object.
 fn parse_verfication_key(key: &str) -> Result<ed25519_dalek::VerifyingKey, String> {
-    let bytes = hex::decode(key).map_err(|error| error.to_string())?;
-    ed25519_dalek::VerifyingKey::try_from(&bytes[..])
-       .map_err(|error| error.to_string())
+    let bytes = hex_decode(key.as_bytes().to_vec()).map_err(|error| error.to_string())?;
+    ed25519_dalek::VerifyingKey::try_from(&bytes[..]).map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_hex_decode() {
+        let hex = vec![b'a', b'2', b'8', b'F'];
+        assert_eq!(hex_decode(hex).unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
+    }
+
+    #[test]
+    fn test_invalid_length() {
+        let hex = vec![b'a', b'b', b'c'];
+        assert!(hex_decode(hex).is_err());
+    }
+
+    #[test]
+    fn test_invalid_char() {
+        let hex = vec![b'x', b'y'];
+        assert!(hex_decode(hex).is_err());
+    }
+
+    #[test]
+    pub fn test_empty() {
+        let empty: Vec<u8> = vec![];
+        assert_eq!(hex_decode(empty).unwrap(), vec![]);
+    }
 }
