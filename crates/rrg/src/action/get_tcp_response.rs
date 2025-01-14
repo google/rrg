@@ -58,7 +58,6 @@ where
     // TODO(@panhania): Charge network bytes.
     log::info!("sent {} bytes to {}", data_write_len, args.addr);
 
-    // TODO: Limit the length of the response.
     let mut data = Vec::new();
 
     stream.set_read_timeout(Some(args.read_timeout))
@@ -66,11 +65,20 @@ where
             kind: ErrorKind::InvalidReadTimeout,
             inner: error,
         })?;
-    stream.read_to_end(&mut data)
+    // We limit the number of bytes read to 1 MiB. Fleetspeak does not allow for
+    // messages bigger than 2 MiB anyway.
+    //
+    // In the future we might lift this restriction by sending multiple results.
+    // We can then either depend on the default session network byte limit or
+    // introduce a separate argument to prevent flooding the server in case of
+    // rogue or invalid TCP server.
+    let mut limited_stream = stream.take(1 * 1024 * 1024);
+    limited_stream.read_to_end(&mut data)
         .map_err(|error| Error {
             kind: ErrorKind::Read,
             inner: error,
         })?;
+    stream = limited_stream.into_inner();
     stream.shutdown(std::net::Shutdown::Read)
         .map_err(|error| Error {
             kind: ErrorKind::ShutdownRead,
