@@ -79,11 +79,16 @@ where
             inner: error,
         })?;
     stream = limited_stream.into_inner();
-    stream.shutdown(std::net::Shutdown::Read)
-        .map_err(|error| Error {
+    match stream.shutdown(std::net::Shutdown::Read) {
+        Ok(()) => (),
+        // It is possible that the server disconnected at this point, we do not
+        // consider this to be an error.
+        Err(error) if error.kind() == std::io::ErrorKind::NotConnected => (),
+        Err(error) => return Err(Error {
             kind: ErrorKind::ShutdownRead,
             inner: error,
-        })?;
+        }.into()),
+    }
 
     // TODO(@panhania): Charge network bytes.
     log::info!("received {} bytes from {}", data.len(), args.addr);
