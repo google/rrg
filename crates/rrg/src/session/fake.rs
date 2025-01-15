@@ -23,6 +23,7 @@ impl FakeSession {
     pub fn new() -> FakeSession {
         FakeSession::with_args(crate::args::Args {
             heartbeat_rate: std::time::Duration::from_secs(0),
+            command_verification_key: Some(ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng).verifying_key()),
             verbosity: log::LevelFilter::Debug,
             log_to_stdout: false,
             log_to_file: None,

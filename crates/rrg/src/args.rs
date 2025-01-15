@@ -49,7 +49,25 @@ pub struct Args {
            arg_name="PATH",
            description="whether to log to a file")]
     pub log_to_file: Option<std::path::PathBuf>,
+
+    /// The public key for verfying signed commands.
+    #[argh(option,
+       long="command-verification-key",
+       arg_name="KEY",
+       description="verification key for signed commands",
+       from_str_fn(parse_verfication_key))]
+    pub command_verification_key: Option<ed25519_dalek::VerifyingKey>,
 }
+
+#[derive(Debug)]
+struct DecodeHexError;
+
+impl std::fmt::Display for DecodeHexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "hex decoding failed")
+    }
+}
+
 
 /// Parses command-line arguments.
 ///
@@ -65,4 +83,61 @@ pub fn from_env_args() -> Args {
 /// Parses a human-friendly duration description to a `Duration` object.
 fn parse_duration(value: &str) -> Result<Duration, String> {
     humantime::parse_duration(value).map_err(|error| error.to_string())
+}
+
+/// Decodes a slice of hex digits to a Vector of byte values.
+fn decode_hex(hex: &[u8]) -> Result<Vec<u8>, DecodeHexError> {
+    if hex.len() % 2 != 0 {
+        return Err(DecodeHexError);
+    }
+
+    fn hex_char_to_int(c: u8) -> Result<u8, DecodeHexError> {
+        match c {
+            b'A'..=b'F' => Ok(c - b'A' + 10),
+            b'a'..=b'f' => Ok(c - b'a' + 10),
+            b'0'..=b'9' => Ok(c - b'0'),
+            _ => Err(DecodeHexError),
+        }
+    }
+
+    hex.chunks(2)
+        .into_iter()
+        .map(|pair| Ok(hex_char_to_int(pair[0])? << 4 | hex_char_to_int(pair[1])?))
+        .collect()
+}
+
+/// Parses a ed25519 verification key from hex data given as string to a `VerifyingKey` object.
+fn parse_verfication_key(key: &str) -> Result<ed25519_dalek::VerifyingKey, String> {
+    let bytes = decode_hex(key.as_bytes()).map_err(|error| error.to_string())?;
+    ed25519_dalek::VerifyingKey::try_from(&bytes[..]).map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn decode_hex_capital_letters() {
+        assert_eq!(decode_hex(b"A28F").unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
+    }
+
+    #[test]
+    fn decode_hex_lower_case_letters() {
+        assert_eq!(decode_hex(b"a28f").unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
+    }
+
+    #[test]
+    fn decode_hex_invalid_length() {
+        assert!(decode_hex(b"abc").is_err());
+    }
+
+    #[test]
+    fn decode_hex_invalid_char() {
+        assert!(decode_hex(b"xy").is_err());
+    }
+
+    #[test]
+    fn decode_hex_emtpy() {
+        assert_eq!(decode_hex(b"").unwrap(), vec![]);
+    }
 }
