@@ -201,3 +201,135 @@ impl crate::response::Item for Item {
         proto
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn handle_empty_request_data() {
+        let (addr_sender, addr_receiver) = std::sync::mpsc::sync_channel(1);
+
+        std::thread::spawn(move || {
+            use std::io::Write as _;
+
+            let server = std::net::TcpListener::bind(
+                (std::net::Ipv4Addr::LOCALHOST, 0),
+            ).unwrap();
+
+            addr_sender.send(server.local_addr().unwrap())
+                .unwrap();
+
+            let (mut stream, _) = server.accept()
+                .unwrap();
+            stream.write(b"foobar")
+                .unwrap();
+            stream.flush()
+                .unwrap();
+        });
+
+        let args = Args {
+            addr: addr_receiver.recv().unwrap(),
+            connect_timeout: std::time::Duration::from_secs(1),
+            write_timeout: std::time::Duration::from_secs(1),
+            read_timeout: std::time::Duration::from_secs(1),
+            data: vec![],
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.reply::<Item>(0).data, b"foobar");
+    }
+
+    #[test]
+    fn handle_non_empty_request_data() {
+        let (addr_sender, addr_receiver) = std::sync::mpsc::sync_channel(1);
+
+        std::thread::spawn(move || {
+            use std::io::{Read as _, Write as _};
+
+            let server = std::net::TcpListener::bind(
+                (std::net::Ipv4Addr::LOCALHOST, 0),
+            ).unwrap();
+
+            addr_sender.send(server.local_addr().unwrap())
+                .unwrap();
+
+            let (mut stream, _) = server.accept()
+                .unwrap();
+
+            let mut buf = [0; 3];
+            stream.read_exact(&mut buf)
+                .unwrap();
+            assert_eq!(&buf[..], b"foo");
+
+            stream.write(b"bar")
+                .unwrap();
+            stream.flush()
+                .unwrap();
+        });
+
+        let args = Args {
+            addr: addr_receiver.recv().unwrap(),
+            connect_timeout: std::time::Duration::from_secs(1),
+            write_timeout: std::time::Duration::from_secs(1),
+            read_timeout: std::time::Duration::from_secs(1),
+            data: b"foo".to_vec(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.reply::<Item>(0).data, b"bar");
+    }
+
+    #[test]
+    fn handle_response_over_limit() {
+        let (addr_sender, addr_receiver) = std::sync::mpsc::sync_channel(1);
+
+        std::thread::spawn(move || {
+            use std::io::Write as _;
+
+            let server = std::net::TcpListener::bind(
+                (std::net::Ipv4Addr::LOCALHOST, 0),
+            ).unwrap();
+
+            addr_sender.send(server.local_addr().unwrap())
+                .unwrap();
+
+            let (mut stream, _) = server.accept()
+                .unwrap();
+
+            let data = vec![0xF0; 3 * 1024 * 1024]; // 3 MiB.
+            std::io::copy(&mut data.as_slice(), &mut stream)
+                .unwrap();
+            stream.flush()
+                .unwrap();
+        });
+
+        let args = Args {
+            addr: addr_receiver.recv().unwrap(),
+            connect_timeout: std::time::Duration::from_secs(1),
+            write_timeout: std::time::Duration::from_secs(1),
+            read_timeout: std::time::Duration::from_secs(1),
+            data: vec![],
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.reply::<Item>(0).data, vec![0xF0; 1 * 1024 * 1024]);
+    }
+
+    // Unfortunately, seems like (at least on Linux) timeouts have at least a
+    // second granularity, so in order to test them we would have to wait for at
+    // least a second which is too slow for a unit test.
+}
