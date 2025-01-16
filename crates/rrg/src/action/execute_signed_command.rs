@@ -31,11 +31,10 @@ pub struct Item {
 }
 
 enum Stdin {
-    NONE,
-    UNSIGNED(Vec<u8>),
-    SIGNED(Vec<u8>),
+    None,
+    Unsigned(Vec<u8>),
+    Signed(Vec<u8>),
 }
-
 
 /// Handles invocations of the `execute_signed_command` action.
 pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
@@ -43,33 +42,32 @@ where
     S: crate::session::Session,
 {
     // TODO(s-westphal): Add implementation.
-    Ok(())
+    todo!()
 }
 
 impl crate::request::Args for Args {
-
     type Proto = rrg_proto::execute_signed_command::Args;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
 
-        let raw_signature= proto.take_command_ed25519_signature();
+        let raw_signature = proto.take_command_ed25519_signature();
 
         let ed25519_signature = ed25519_dalek::Signature::try_from(&raw_signature[..])
             .map_err(|error| ParseArgsError::invalid_field("command_ed25519_signature", error))?;
 
         let raw_command = proto.take_command();
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::parse_from_bytes(&raw_command)
-            .map_err(|error| ParseArgsError::invalid_field("command", error))?;
-
+        let mut command =
+            rrg_proto::execute_signed_command::SignedCommand::parse_from_bytes(&raw_command)
+                .map_err(|error| ParseArgsError::invalid_field("command", error))?;
 
         let stdin: Stdin;
         if command.has_signed_stdin() {
-            stdin = Stdin::SIGNED(command.take_signed_stdin());
+            stdin = Stdin::Signed(command.take_signed_stdin());
         } else if command.unsigned_stdin() && !proto.unsigned_stdin.is_empty() {
-            stdin = Stdin::UNSIGNED(proto.take_unsigned_stdin());
+            stdin = Stdin::Unsigned(proto.take_unsigned_stdin());
         } else {
-            stdin = Stdin::NONE
+            stdin = Stdin::None
         }
 
         let timeout = std::time::Duration::try_from(proto.take_timeout())
@@ -86,11 +84,9 @@ impl crate::request::Args for Args {
 }
 
 impl crate::response::Item for Item {
-
     type Proto = rrg_proto::execute_signed_command::Result;
 
     fn into_proto(self) -> Self::Proto {
-
         let mut proto = rrg_proto::execute_signed_command::Result::new();
 
         if let Some(exit_code) = self.exit_status.code() {
@@ -99,7 +95,7 @@ impl crate::response::Item for Item {
 
         #[cfg(target_family = "unix")]
         {
-            use std::os::unix::process::ExitStatusExt;
+            use std::os::unix::process::ExitStatusExt as _;
 
             if let Some(exit_signal) = self.exit_status.signal() {
                 proto.set_exit_signal(exit_signal);
