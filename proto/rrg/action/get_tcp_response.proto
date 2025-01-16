@@ -29,4 +29,7 @@ message Args {
 message Result {
     // Data read from the TCP stream.
     bytes data = 1;
+
+    // TODO(@panhania): Consider whether we should include a `data_truncated`
+    // field to indicate whether there was more data available.
 }
