@@ -144,6 +144,24 @@ impl From<std::net::IpAddr> for net::IpAddress {
     }
 }
 
+impl TryFrom<net::IpAddress> for std::net::IpAddr {
+
+    type Error = ParseIpAddrError;
+
+    fn try_from(proto: net::IpAddress) -> Result<std::net::IpAddr, Self::Error> {
+        if let Ok(octets) = <[u8; 4]>::try_from(&proto.octets[..]) {
+            return Ok(std::net::IpAddr::from(octets));
+        }
+        if let Ok(octets) = <[u8; 16]>::try_from(&proto.octets[..]) {
+            return Ok(std::net::IpAddr::from(octets));
+        }
+
+        Err(ParseIpAddrError {
+            octets_len: proto.octets.len(),
+        })
+    }
+}
+
 impl From<std::net::SocketAddrV4> for net::SocketAddress {
 
     fn from(addr: std::net::SocketAddrV4) -> net::SocketAddress {
@@ -173,6 +191,22 @@ impl From<std::net::SocketAddr> for net::SocketAddress {
             std::net::SocketAddr::V4(addr) => addr.into(),
             std::net::SocketAddr::V6(addr) => addr.into(),
         }
+    }
+}
+
+impl TryFrom<net::SocketAddress> for std::net::SocketAddr {
+
+    type Error = ParseSocketAddrError;
+
+    fn try_from(mut proto: net::SocketAddress) -> Result<std::net::SocketAddr, Self::Error> {
+        let addr = std::net::IpAddr::try_from(proto.take_ip_address())
+            .map_err(ParseSocketAddrError::InvalidIpAddr)?;
+        let port = u16::try_from(proto.port)
+            .map_err(|_| ParseSocketAddrError::PortOutOfRange {
+                port: proto.port,
+            })?;
+
+        Ok(std::net::SocketAddr::from((addr, port)))
     }
 }
 
@@ -436,6 +470,55 @@ impl std::error::Error for ParsePathError {
 
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.0.source()
+    }
+}
+
+/// Error that can occur when parsing IP addresses.
+#[derive(Debug)]
+pub struct ParseIpAddrError {
+    octets_len: usize,
+}
+
+impl std::fmt::Display for ParseIpAddrError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "invalid length of octets: {}", self.octets_len)
+    }
+}
+
+impl std::error::Error for ParseIpAddrError {
+}
+
+/// Error that can occur when parsing socket addresses.
+#[derive(Debug)]
+pub enum ParseSocketAddrError {
+    InvalidIpAddr(ParseIpAddrError),
+    PortOutOfRange {
+        port: u32,
+    },
+}
+
+impl std::fmt::Display for ParseSocketAddrError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::InvalidIpAddr(error) => {
+                write!(fmt, "invalid IP address: {error}")
+            }
+            Self::PortOutOfRange { port } => {
+                write!(fmt, "port out of range: {port}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParseSocketAddrError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidIpAddr(error) => Some(error),
+            Self::PortOutOfRange { .. } => None,
+        }
     }
 }
 

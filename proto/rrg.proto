@@ -48,6 +48,8 @@ enum Action {
   QUERY_WMI = 16;
   /// Grep the specified file for a pattern.
   GREP_FILE_CONTENTS = 17;
+  // Connect to a TCP address, write some data and retrieve the response.
+  GET_TCP_RESPONSE = 18;
 
   // TODO: Define more actions that should be supported.
 

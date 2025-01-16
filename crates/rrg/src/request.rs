@@ -39,6 +39,8 @@ pub enum Action {
     ListUsers,
     /// Get the snapshot of the entire filesystem.
     GetFilesystemTimeline,
+    /// Connect to a TCP address, write some data and retrieve the response.
+    GetTcpResponse,
     // Get a value from the Windows Registry (Windows-only).
     GetWinregValue,
     /// List values of the Windows Registry key (Windows-only).
@@ -70,6 +72,7 @@ impl std::fmt::Display for Action {
             Action::ListWinregValues => write!(fmt, "list_winreg_values"),
             Action::ListWinregKeys => write!(fmt, "list_winreg_keys"),
             Action::QueryWmi => write!(fmt, "query_wmi"),
+            Action::GetTcpResponse => write!(fmt,  "get_tcp_response"),
         }
     }
 }
@@ -115,6 +118,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             LIST_MOUNTS => Ok(Action::ListMounts),
             LIST_USERS => Ok(Action::ListUsers),
             GET_FILESYSTEM_TIMELINE => Ok(Action::GetFilesystemTimeline),
+            GET_TCP_RESPONSE => Ok(Action::GetTcpResponse),
             GET_WINREG_VALUE => Ok(Action::GetWinregValue),
             LIST_WINREG_VALUES => Ok(Action::ListWinregValues),
             LIST_WINREG_KEYS => Ok(Action::ListWinregKeys),
