@@ -54,6 +54,11 @@ impl Error {
             error: Box::new(UnsupportedActionError { action }),
         }
     }
+
+    /// Returns the corresponding [`ErrorKind`] of this error.
+    pub fn kind(&self) -> ErrorKind {
+        self.kind
+    }
 }
 
 impl std::fmt::Display for Error {
@@ -94,7 +99,7 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {
 
-    fn cause(&self) -> Option<&dyn std::error::Error> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(self.error.as_ref())
     }
 }
