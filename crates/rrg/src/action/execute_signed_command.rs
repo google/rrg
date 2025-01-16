@@ -31,9 +31,9 @@ pub struct Item {
 }
 
 enum Stdin {
-    NONE,
-    UNSIGNED(Vec<u8>),
-    SIGNED(Vec<u8>),
+    None,
+    Unsigned(Vec<u8>),
+    Signed(Vec<u8>),
 }
 
 
@@ -43,7 +43,7 @@ where
     S: crate::session::Session,
 {
     // TODO(s-westphal): Add implementation.
-    Ok(())
+    todo!()
 }
 
 impl crate::request::Args for Args {
@@ -65,11 +65,11 @@ impl crate::request::Args for Args {
 
         let stdin: Stdin;
         if command.has_signed_stdin() {
-            stdin = Stdin::SIGNED(command.take_signed_stdin());
+            stdin = Stdin::Signed(command.take_signed_stdin());
         } else if command.unsigned_stdin() && !proto.unsigned_stdin.is_empty() {
-            stdin = Stdin::UNSIGNED(proto.take_unsigned_stdin());
+            stdin = Stdin::Unsigned(proto.take_unsigned_stdin());
         } else {
-            stdin = Stdin::NONE
+            stdin = Stdin::None
         }
 
         let timeout = std::time::Duration::try_from(proto.take_timeout())
@@ -99,7 +99,7 @@ impl crate::response::Item for Item {
 
         #[cfg(target_family = "unix")]
         {
-            use std::os::unix::process::ExitStatusExt;
+            use std::os::unix::process::ExitStatusExt as _;
 
             if let Some(exit_signal) = self.exit_status.signal() {
                 proto.set_exit_signal(exit_signal);
