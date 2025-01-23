@@ -51,7 +51,7 @@ enum Action {
   // Connect to a TCP address, write some data and retrieve the response.
   GET_TCP_RESPONSE = 18;
   /// Execute a signed command.
-  EXECUTE_SIGNED_COMMAND = 18;
+  EXECUTE_SIGNED_COMMAND = 19;
 
   // TODO: Define more actions that should be supported.
 
