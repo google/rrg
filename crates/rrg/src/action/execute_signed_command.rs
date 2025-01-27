@@ -45,6 +45,36 @@ enum Stdin {
     Signed(Vec<u8>),
 }
 
+/// An error indicating that the command signature is missing.
+#[derive(Debug)]
+struct MissingCommandSignatureError;
+
+impl std::fmt::Display for MissingCommandSignatureError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write! {
+            fmt,
+            "missing command signature"
+        }
+    }
+}
+
+impl std::error::Error for MissingCommandSignatureError {}
+
+/// An error indicating that stdin of the command couln't be captured.
+#[derive(Debug)]
+struct CommandStdinError;
+
+impl std::fmt::Display for CommandStdinError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write! {
+            fmt,
+            "failed to capture stdin when spawning the command process"
+        }
+    }
+}
+
+impl std::error::Error for CommandStdinError {}
+
 /// Handles invocations of the `execute_signed_command` action.
 pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
 where
@@ -54,7 +84,7 @@ where
         Some(key) => key
             .verify_strict(&args.raw_command, &args.ed25519_signature)
             .map_err(crate::session::Error::action)?,
-        None => panic!("missing verification key for signed command"),
+        None => return Err(crate::session::Error::action(MissingCommandSignatureError)),
     };
 
     let command_path = &std::path::PathBuf::try_from(args.command.take_path())
@@ -81,27 +111,26 @@ where
 
     let mut command_stdin = match command_process.stdin.take() {
         Some(command_stdin) => command_stdin,
-        None => panic!("command stdin pipe should not be None"),
+        None => return Err(crate::session::Error::action(CommandStdinError)),
     };
-    let handle = std::thread::spawn(move || {
-        match args.stdin {
-            Stdin::Signed(signed) => command_stdin
-                .write(&signed[..])
-                .expect("Failed to write to stdin"),
-            Stdin::Unsigned(unsigned) => command_stdin
-                .write(&unsigned[..])
-                .expect("Failed to write to stdin"),
-            Stdin::None => 0,
-        };
+
+    let handle = std::thread::spawn(move || match args.stdin {
+        Stdin::Signed(signed) => command_stdin
+            .write(&signed[..])
+            .expect("Failed to write to stdin"),
+        Stdin::Unsigned(unsigned) => command_stdin
+            .write(&unsigned[..])
+            .expect("Failed to write to stdin"),
+        Stdin::None => 0,
     });
 
     // TODO: join returns a `Box<dyn std::any::Any + Send>`
     // error which cannot be passed to crate:session:Error::action.
     let _ = handle.join().unwrap();
 
-    while std::time::SystemTime::now()
-        .duration_since(command_start_time)
-        .unwrap()
+    while command_start_time
+        .elapsed()
+        .map_err(crate::session::Error::action)?
         < args.timeout
     {
         match command_process.try_wait() {
@@ -126,6 +155,7 @@ where
         .map_err(crate::session::Error::action)?;
 
     let mut stdout = Vec::<u8>::new();
+    // TODO(swestphal): Limit amount of read bytes to prevent OOM.
     let length_stdout = match command_process.stdout.take() {
         Some(mut process_stdout) => process_stdout
             .read_to_end(&mut stdout)
@@ -138,6 +168,7 @@ where
     };
 
     let mut stderr = Vec::<u8>::new();
+    // TODO(swestphal): Limit amount of read bytes to prevent OOM.
     let length_stderr = match command_process.stderr.take() {
         Some(mut process_stderr) => process_stderr
             .read_to_end(&mut stderr)
@@ -527,7 +558,7 @@ mod tests {
         {
             use std::os::unix::process::ExitStatusExt;
 
-            assert_eq!(item.exit_status.signal(), Some(9)); // killed
+            assert_eq!(item.exit_status.signal(), Some(libc::SIGKILL));
         }
     }
 }
