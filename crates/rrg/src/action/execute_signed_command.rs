@@ -90,17 +90,17 @@ where
     let command_path = &std::path::PathBuf::try_from(args.command.take_path())
         .map_err(crate::session::Error::action)?;
 
-    // For calling `cmd /C <command>` in windows, C:\Windows\System32
-    // needs to be on the PATH, otherwise <command> is not found.
-    let filtered_env: HashMap<String, String> = env::vars()
-        .filter(|&(ref k, _)| k.to_lowercase() == "path")
-        .collect();
+    // // For calling `cmd /C <command>` in windows, C:\Windows\System32
+    // // needs to be on the PATH, otherwise <command> is not found.
+    // let filtered_env: HashMap<String, String> = env::vars()
+    //     .filter(|&(ref k, _)| k.to_lowercase() == "path")
+    //     .collect();
 
     let mut command_process = Command::new(command_path)
         .stdin(std::process::Stdio::piped())
         .args(args.command.take_args())
         .env_clear()
-        .envs(filtered_env)
+        // .envs(filtered_env)
         .envs(args.command.take_env())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -344,7 +344,9 @@ mod tests {
         {
             command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
             command.args.push(String::from("/C"));
-            command.args.push(String::from("findstr ."));
+            command
+                .args
+                .push(String::from("C:\\Windows\\System32\\findstr ."));
         }
 
         let raw_command = command.write_to_bytes().unwrap();
@@ -393,7 +395,9 @@ mod tests {
         {
             command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
             command.args.push(String::from("/C"));
-            command.args.push(String::from("findstr ."));
+            command
+                .args
+                .push(String::from("C:\\Windows\\System32\\findstr ."));
         }
 
         let raw_command = command.write_to_bytes().unwrap();
