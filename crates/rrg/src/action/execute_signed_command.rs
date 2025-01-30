@@ -4,8 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 use std::{
-    collections::HashMap,
-    env,
+    fmt::Debug,
     io::{Read, Write},
     process::{Command, ExitStatus},
 };
@@ -75,6 +74,21 @@ impl std::fmt::Display for CommandStdinError {
 
 impl std::error::Error for CommandStdinError {}
 
+/// An error indicating that stdin of the command couln't be captured.
+#[derive(Debug)]
+struct CommandExecutionError;
+
+impl std::fmt::Display for CommandExecutionError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write! {
+            fmt,
+            "failed to execute the command"
+        }
+    }
+}
+
+impl std::error::Error for CommandExecutionError {}
+
 /// Handles invocations of the `execute_signed_command` action.
 pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
 where
@@ -90,17 +104,10 @@ where
     let command_path = &std::path::PathBuf::try_from(args.command.take_path())
         .map_err(crate::session::Error::action)?;
 
-    // // For calling `cmd /C <command>` in windows, C:\Windows\System32
-    // // needs to be on the PATH, otherwise <command> is not found.
-    // let filtered_env: HashMap<String, String> = env::vars()
-    //     .filter(|&(ref k, _)| k.to_lowercase() == "path")
-    //     .collect();
-
     let mut command_process = Command::new(command_path)
         .stdin(std::process::Stdio::piped())
         .args(args.command.take_args())
         .env_clear()
-        // .envs(filtered_env)
         .envs(args.command.take_env())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -117,16 +124,18 @@ where
     let handle = std::thread::spawn(move || match args.stdin {
         Stdin::Signed(signed) => command_stdin
             .write(&signed[..])
-            .expect("Failed to write to stdin"),
+            .expect("failed to write to stdin"),
         Stdin::Unsigned(unsigned) => command_stdin
             .write(&unsigned[..])
-            .expect("Failed to write to stdin"),
+            .expect("failed to write to stdin"),
         Stdin::None => 0,
     });
 
-    // TODO: join returns a `Box<dyn std::any::Any + Send>`
+    // TODO: `join`` returns a `Box<dyn std::any::Any + Send>`
     // error which cannot be passed to crate:session:Error::action.
-    let _ = handle.join().unwrap();
+    let _ = handle
+        .join()
+        .map_err(|_| crate::session::Error::action(CommandExecutionError));
 
     while command_start_time
         .elapsed()
