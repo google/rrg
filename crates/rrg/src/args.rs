@@ -113,12 +113,12 @@ mod test {
 
     #[test]
     fn decode_hex_capital_letters() {
-        assert_eq!(decode_hex("A28F").unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
+        assert_eq!(decode_hex("A28F").unwrap(), vec![0xA2, 0x8F])
     }
 
     #[test]
     fn decode_hex_lower_case_letters() {
-        assert_eq!(decode_hex("a28f").unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
+        assert_eq!(decode_hex("a28f").unwrap(), vec![0xa2, 0x8f])
     }
 
     #[test]
