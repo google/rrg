@@ -74,15 +74,17 @@ pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
+    use crate::request::ParseArgsError;
+
     match session.args().command_verification_key {
         Some(key) => key
             .verify_strict(&args.raw_command, &args.ed25519_signature)
-            .map_err(crate::session::Error::action)?,
+            .map_err(|error| ParseArgsError::invalid_field("raw_command", error))?,
         None => return Err(crate::session::Error::action(MissingCommandVerificationKeyError)),
     };
 
     let command_path = &std::path::PathBuf::try_from(args.command.take_path())
-        .map_err(crate::session::Error::action)?;
+        .map_err(|error| ParseArgsError::invalid_field("command path", error))?;
 
     let mut command_process = Command::new(command_path)
         .stdin(std::process::Stdio::piped())
