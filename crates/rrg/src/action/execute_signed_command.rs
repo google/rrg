@@ -96,7 +96,7 @@ where
         .spawn()
         .map_err(crate::session::Error::action)?;
 
-    let command_start_time = std::time::SystemTime::now();
+    let command_start_time = std::time::Instant::now();
 
     let mut command_stdin = command_process.stdin.take()
         .expect("no stdin pipe");
@@ -115,11 +115,7 @@ where
         .map_err(CommandExecutionError)
         .map_err(crate::session::Error::action)?;
 
-    while command_start_time
-        .elapsed()
-        .map_err(crate::session::Error::action)?
-        < args.timeout
-    {
+    while command_start_time.elapsed() < args.timeout {
         match command_process.try_wait() {
             Ok(None) => {
                 log::debug!(
