@@ -46,18 +46,16 @@ enum Stdin {
 
 /// An error indicating that the command signature is missing.
 #[derive(Debug)]
-struct MissingCommandSignatureError;
+struct MissingCommandVerificationKeyError;
 
-impl std::fmt::Display for MissingCommandSignatureError {
+impl std::fmt::Display for MissingCommandVerificationKeyError {
+
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write! {
-            fmt,
-            "missing command signature"
-        }
+        write!(fmt, "missing command verification key")
     }
 }
 
-impl std::error::Error for MissingCommandSignatureError {}
+impl std::error::Error for MissingCommandVerificationKeyError {}
 
 /// An error indicating that stdin of the command couln't be captured.
 #[derive(Debug)]
@@ -95,7 +93,7 @@ where
         Some(key) => key
             .verify_strict(&args.raw_command, &args.ed25519_signature)
             .map_err(crate::session::Error::action)?,
-        None => return Err(crate::session::Error::action(MissingCommandSignatureError)),
+        None => return Err(crate::session::Error::action(MissingCommandVerificationKeyError)),
     };
 
     let command_path = &std::path::PathBuf::try_from(args.command.take_path())
