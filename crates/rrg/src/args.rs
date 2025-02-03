@@ -87,16 +87,6 @@ fn parse_duration(value: &str) -> Result<Duration, String> {
 
 /// Decodes a slice of hex digits to a Vector of byte values.
 fn decode_hex(hex: &str) -> Result<Vec<u8>, DecodeHexError> {
-
-    fn hex_char_to_int(c: char) -> Result<u8, DecodeHexError> {
-        match c {
-            'A'..='F' => Ok(c as u8 - b'A' + 10),
-            'a'..='f' => Ok(c as u8 - b'a' + 10),
-            '0'..='9' => Ok(c as u8 - b'0'),
-            _ => Err(DecodeHexError),
-        }
-    }
-
     // TODO(rust-lang/rust#74985): Use `array_chunks` once stabilized.
     let chars = hex.chars().collect::<Vec<char>>();
     let pairs = chars.chunks_exact(2);
@@ -104,9 +94,11 @@ fn decode_hex(hex: &str) -> Result<Vec<u8>, DecodeHexError> {
         return Err(DecodeHexError);
     }
 
-    pairs
-        .map(|pair| Ok(hex_char_to_int(pair[0])? << 4 | hex_char_to_int(pair[1])?))
-        .collect()
+    pairs.map(|pair| {
+        let hi = pair[0].to_digit(16).ok_or(DecodeHexError)? as u8;
+        let lo = pair[1].to_digit(16).ok_or(DecodeHexError)? as u8;
+        Ok(hi << 4 | lo)
+    }).collect()
 }
 
 /// Parses a ed25519 verification key from hex data given as string to a `VerifyingKey` object.
