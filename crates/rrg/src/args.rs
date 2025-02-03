@@ -59,16 +59,6 @@ pub struct Args {
     pub command_verification_key: Option<ed25519_dalek::VerifyingKey>,
 }
 
-#[derive(Debug)]
-struct DecodeHexError;
-
-impl std::fmt::Display for DecodeHexError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "hex decoding failed")
-    }
-}
-
-
 /// Parses command-line arguments.
 ///
 /// This is a just a convenience function intended to be used as a shortcut for
@@ -87,18 +77,40 @@ fn parse_duration(value: &str) -> Result<Duration, String> {
 
 /// Decodes a slice of hex digits to a Vector of byte values.
 fn decode_hex(hex: &str) -> Result<Vec<u8>, DecodeHexError> {
+    use DecodeHexError::*;
+
     // TODO(rust-lang/rust#74985): Use `array_chunks` once stabilized.
     let chars = hex.chars().collect::<Vec<char>>();
     let pairs = chars.chunks_exact(2);
     if !pairs.remainder().is_empty() {
-        return Err(DecodeHexError);
+        return Err(InvalidLen(chars.len()));
     }
 
     pairs.map(|pair| {
-        let hi = pair[0].to_digit(16).ok_or(DecodeHexError)? as u8;
-        let lo = pair[1].to_digit(16).ok_or(DecodeHexError)? as u8;
+        let hi = pair[0].to_digit(16).ok_or(InvalidChar(pair[0]))? as u8;
+        let lo = pair[1].to_digit(16).ok_or(InvalidChar(pair[1]))? as u8;
         Ok(hi << 4 | lo)
     }).collect()
+}
+
+#[derive(Debug)]
+enum DecodeHexError {
+    InvalidLen(usize),
+    InvalidChar(char),
+}
+
+impl std::fmt::Display for DecodeHexError {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            DecodeHexError::InvalidLen(len) => {
+                write!(f, "invalid hex string length: {len}")
+            }
+            DecodeHexError::InvalidChar(char) => {
+                write!(f, "invalid hex character: {char}")
+            }
+        }
+    }
 }
 
 /// Parses a ed25519 verification key from hex data given as string to a `VerifyingKey` object.
@@ -123,12 +135,13 @@ mod test {
 
     #[test]
     fn decode_hex_invalid_length() {
-        assert!(decode_hex("abc").is_err());
+        assert!(matches!(decode_hex("abc").unwrap_err(), DecodeHexError::InvalidLen(3)));
     }
 
     #[test]
     fn decode_hex_invalid_char() {
-        assert!(decode_hex("xy").is_err());
+        assert!(matches!(decode_hex("x0").unwrap_err(), DecodeHexError::InvalidChar('x')));
+        assert!(matches!(decode_hex("0y").unwrap_err(), DecodeHexError::InvalidChar('y')));
     }
 
     #[test]
