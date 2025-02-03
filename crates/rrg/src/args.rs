@@ -86,31 +86,32 @@ fn parse_duration(value: &str) -> Result<Duration, String> {
 }
 
 /// Decodes a slice of hex digits to a Vector of byte values.
-fn decode_hex(hex: &[u8]) -> Result<Vec<u8>, DecodeHexError> {
+fn decode_hex(hex: &str) -> Result<Vec<u8>, DecodeHexError> {
 
-    fn hex_char_to_int(c: u8) -> Result<u8, DecodeHexError> {
+    fn hex_char_to_int(c: char) -> Result<u8, DecodeHexError> {
         match c {
-            b'A'..=b'F' => Ok(c - b'A' + 10),
-            b'a'..=b'f' => Ok(c - b'a' + 10),
-            b'0'..=b'9' => Ok(c - b'0'),
+            'A'..='F' => Ok(c as u8 - b'A' + 10),
+            'a'..='f' => Ok(c as u8 - b'a' + 10),
+            '0'..='9' => Ok(c as u8 - b'0'),
             _ => Err(DecodeHexError),
         }
     }
 
-    let chunks = hex.chunks_exact(2);
-    if !chunks.remainder().is_empty() {
+    // TODO(rust-lang/rust#74985): Use `array_chunks` once stabilized.
+    let chars = hex.chars().collect::<Vec<char>>();
+    let pairs = chars.chunks_exact(2);
+    if !pairs.remainder().is_empty() {
         return Err(DecodeHexError);
     }
 
-    chunks
-        .into_iter()
+    pairs
         .map(|pair| Ok(hex_char_to_int(pair[0])? << 4 | hex_char_to_int(pair[1])?))
         .collect()
 }
 
 /// Parses a ed25519 verification key from hex data given as string to a `VerifyingKey` object.
 fn parse_verfication_key(key: &str) -> Result<ed25519_dalek::VerifyingKey, String> {
-    let bytes = decode_hex(key.as_bytes()).map_err(|error| error.to_string())?;
+    let bytes = decode_hex(key).map_err(|error| error.to_string())?;
     ed25519_dalek::VerifyingKey::try_from(&bytes[..]).map_err(|error| error.to_string())
 }
 
@@ -120,26 +121,26 @@ mod test {
 
     #[test]
     fn decode_hex_capital_letters() {
-        assert_eq!(decode_hex(b"A28F").unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
+        assert_eq!(decode_hex("A28F").unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
     }
 
     #[test]
     fn decode_hex_lower_case_letters() {
-        assert_eq!(decode_hex(b"a28f").unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
+        assert_eq!(decode_hex("a28f").unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
     }
 
     #[test]
     fn decode_hex_invalid_length() {
-        assert!(decode_hex(b"abc").is_err());
+        assert!(decode_hex("abc").is_err());
     }
 
     #[test]
     fn decode_hex_invalid_char() {
-        assert!(decode_hex(b"xy").is_err());
+        assert!(decode_hex("xy").is_err());
     }
 
     #[test]
     fn decode_hex_emtpy() {
-        assert_eq!(decode_hex(b"").unwrap(), vec![]);
+        assert_eq!(decode_hex("").unwrap(), vec![]);
     }
 }
