@@ -121,7 +121,10 @@ fn parse_verfication_key(key: &str) -> Result<ed25519_dalek::VerifyingKey, Strin
 
 #[cfg(test)]
 mod test {
+
     use super::*;
+
+    use quickcheck::quickcheck;
 
     #[test]
     fn decode_hex_capital_letters() {
@@ -147,5 +150,16 @@ mod test {
     #[test]
     fn decode_hex_emtpy() {
         assert_eq!(decode_hex("").unwrap(), vec![]);
+    }
+
+    quickcheck! {
+
+        fn decode_hex_any_byte_lower(byte: u8) -> bool {
+            decode_hex(&format!("{byte:02x}")).unwrap() == vec![byte]
+        }
+
+        fn decode_hex_any_byte_upper(byte: u8) -> bool {
+            decode_hex(&format!("{byte:02X}")).unwrap() == vec![byte]
+        }
     }
 }
