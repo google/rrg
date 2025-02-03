@@ -221,7 +221,7 @@ impl crate::request::Args for Args {
         }
 
         let timeout = std::time::Duration::try_from(proto.take_timeout())
-            .map_err(|error| ParseArgsError::invalid_field("command", error))?;
+            .map_err(|error| ParseArgsError::invalid_field("timeout", error))?;
 
         Ok(Args {
             raw_command,
