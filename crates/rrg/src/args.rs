@@ -87,9 +87,6 @@ fn parse_duration(value: &str) -> Result<Duration, String> {
 
 /// Decodes a slice of hex digits to a Vector of byte values.
 fn decode_hex(hex: &[u8]) -> Result<Vec<u8>, DecodeHexError> {
-    if hex.len() % 2 != 0 {
-        return Err(DecodeHexError);
-    }
 
     fn hex_char_to_int(c: u8) -> Result<u8, DecodeHexError> {
         match c {
@@ -100,7 +97,12 @@ fn decode_hex(hex: &[u8]) -> Result<Vec<u8>, DecodeHexError> {
         }
     }
 
-    hex.chunks(2)
+    let chunks = hex.chunks_exact(2);
+    if !chunks.remainder().is_empty() {
+        return Err(DecodeHexError);
+    }
+
+    chunks
         .into_iter()
         .map(|pair| Ok(hex_char_to_int(pair[0])? << 4 | hex_char_to_int(pair[1])?))
         .collect()
