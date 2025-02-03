@@ -76,14 +76,11 @@ impl std::error::Error for CommandStdinError {}
 
 /// An error indicating that stdin of the command couln't be captured.
 #[derive(Debug)]
-struct CommandExecutionError;
+struct CommandExecutionError(Box<dyn std::any::Any + Send + 'static>);
 
 impl std::fmt::Display for CommandExecutionError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write! {
-            fmt,
-            "failed to execute the command"
-        }
+        write!(fmt, "failed to execute the command: {:?}", self.0)
     }
 }
 
@@ -131,11 +128,9 @@ where
         Stdin::None => 0,
     });
 
-    // TODO: `join`` returns a `Box<dyn std::any::Any + Send>`
-    // error which cannot be passed to crate:session:Error::action.
-    let _ = handle
-        .join()
-        .map_err(|_| crate::session::Error::action(CommandExecutionError));
+    handle.join()
+        .map_err(CommandExecutionError)
+        .map_err(crate::session::Error::action)?;
 
     while command_start_time
         .elapsed()
