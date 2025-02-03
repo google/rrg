@@ -59,21 +59,6 @@ impl std::error::Error for MissingCommandVerificationKeyError {}
 
 /// An error indicating that stdin of the command couln't be captured.
 #[derive(Debug)]
-struct CommandStdinError;
-
-impl std::fmt::Display for CommandStdinError {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write! {
-            fmt,
-            "failed to capture stdin when spawning the command process"
-        }
-    }
-}
-
-impl std::error::Error for CommandStdinError {}
-
-/// An error indicating that stdin of the command couln't be captured.
-#[derive(Debug)]
 struct CommandExecutionError(Box<dyn std::any::Any + Send + 'static>);
 
 impl std::fmt::Display for CommandExecutionError {
@@ -111,10 +96,8 @@ where
 
     let command_start_time = std::time::SystemTime::now();
 
-    let mut command_stdin = match command_process.stdin.take() {
-        Some(command_stdin) => command_stdin,
-        None => return Err(crate::session::Error::action(CommandStdinError)),
-    };
+    let mut command_stdin = command_process.stdin.take()
+        .expect("no stdin pipe");
 
     let handle = std::thread::spawn(move || match args.stdin {
         Stdin::Signed(signed) => command_stdin
