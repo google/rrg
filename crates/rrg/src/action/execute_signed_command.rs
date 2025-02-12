@@ -39,7 +39,6 @@ pub struct Item {
 }
 
 enum Stdin {
-    None,
     Unsigned(Vec<u8>),
     Signed(Vec<u8>),
 }
@@ -108,7 +107,6 @@ where
         Stdin::Unsigned(unsigned) => command_stdin
             .write(&unsigned[..])
             .expect("failed to write to stdin"),
-        Stdin::None => 0,
     });
 
     handle.join()
@@ -190,14 +188,10 @@ impl crate::request::Args for Args {
             rrg_proto::execute_signed_command::SignedCommand::parse_from_bytes(&raw_command)
                 .map_err(|error| ParseArgsError::invalid_field("command", error))?;
 
-        let stdin: Stdin;
-        if command.has_signed_stdin() {
-            stdin = Stdin::Signed(command.take_signed_stdin());
-        } else if command.unsigned_stdin() && !proto.unsigned_stdin.is_empty() {
-            stdin = Stdin::Unsigned(proto.take_unsigned_stdin());
-        } else {
-            stdin = Stdin::None
-        }
+        let stdin = match command.unsigned_stdin() {
+            true => Stdin::Unsigned(proto.take_unsigned_stdin()),
+            false => Stdin::Signed(command.take_signed_stdin()),
+        };
 
         let timeout = std::time::Duration::try_from(proto.take_timeout())
             .map_err(|error| ParseArgsError::invalid_field("timeout", error))?;
@@ -289,7 +283,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::None,
+            stdin: Stdin::Signed(Vec::from(b"")),
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
@@ -431,7 +425,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::None,
+            stdin: Stdin::Signed(Vec::from(b"")),
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
@@ -463,7 +457,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature: invalid_signature,
-            stdin: Stdin::None,
+            stdin: Stdin::Signed(Vec::from(b"")),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -496,7 +490,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::None,
+            stdin: Stdin::Signed(Vec::from(b"")),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -531,7 +525,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::None,
+            stdin: Stdin::Signed(Vec::from(b"")),
             timeout,
         };
 
