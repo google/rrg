@@ -59,16 +59,6 @@ pub struct Args {
     pub command_verification_key: Option<ed25519_dalek::VerifyingKey>,
 }
 
-#[derive(Debug)]
-struct DecodeHexError;
-
-impl std::fmt::Display for DecodeHexError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "hex decoding failed")
-    }
-}
-
-
 /// Parses command-line arguments.
 ///
 /// This is a just a convenience function intended to be used as a shortcut for
@@ -86,58 +76,90 @@ fn parse_duration(value: &str) -> Result<Duration, String> {
 }
 
 /// Decodes a slice of hex digits to a Vector of byte values.
-fn decode_hex(hex: &[u8]) -> Result<Vec<u8>, DecodeHexError> {
-    if hex.len() % 2 != 0 {
-        return Err(DecodeHexError);
+fn decode_hex(hex: &str) -> Result<Vec<u8>, DecodeHexError> {
+    use DecodeHexError::*;
+
+    // TODO(rust-lang/rust#74985): Use `array_chunks` once stabilized.
+    let chars = hex.chars().collect::<Vec<char>>();
+    let pairs = chars.chunks_exact(2);
+    if !pairs.remainder().is_empty() {
+        return Err(InvalidLen(chars.len()));
     }
 
-    fn hex_char_to_int(c: u8) -> Result<u8, DecodeHexError> {
-        match c {
-            b'A'..=b'F' => Ok(c - b'A' + 10),
-            b'a'..=b'f' => Ok(c - b'a' + 10),
-            b'0'..=b'9' => Ok(c - b'0'),
-            _ => Err(DecodeHexError),
+    pairs.map(|pair| {
+        let hi = pair[0].to_digit(16).ok_or(InvalidChar(pair[0]))? as u8;
+        let lo = pair[1].to_digit(16).ok_or(InvalidChar(pair[1]))? as u8;
+        Ok(hi << 4 | lo)
+    }).collect()
+}
+
+#[derive(Debug)]
+enum DecodeHexError {
+    InvalidLen(usize),
+    InvalidChar(char),
+}
+
+impl std::fmt::Display for DecodeHexError {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            DecodeHexError::InvalidLen(len) => {
+                write!(f, "invalid hex string length: {len}")
+            }
+            DecodeHexError::InvalidChar(char) => {
+                write!(f, "invalid hex character: {char}")
+            }
         }
     }
-
-    hex.chunks(2)
-        .into_iter()
-        .map(|pair| Ok(hex_char_to_int(pair[0])? << 4 | hex_char_to_int(pair[1])?))
-        .collect()
 }
 
 /// Parses a ed25519 verification key from hex data given as string to a `VerifyingKey` object.
 fn parse_verfication_key(key: &str) -> Result<ed25519_dalek::VerifyingKey, String> {
-    let bytes = decode_hex(key.as_bytes()).map_err(|error| error.to_string())?;
+    let bytes = decode_hex(key).map_err(|error| error.to_string())?;
     ed25519_dalek::VerifyingKey::try_from(&bytes[..]).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
 mod test {
+
     use super::*;
+
+    use quickcheck::quickcheck;
 
     #[test]
     fn decode_hex_capital_letters() {
-        assert_eq!(decode_hex(b"A28F").unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
+        assert_eq!(decode_hex("A28F").unwrap(), vec![0xA2, 0x8F])
     }
 
     #[test]
     fn decode_hex_lower_case_letters() {
-        assert_eq!(decode_hex(b"a28f").unwrap(), vec![10 * 16 + 2, 8 * 16 + 15])
+        assert_eq!(decode_hex("a28f").unwrap(), vec![0xa2, 0x8f])
     }
 
     #[test]
     fn decode_hex_invalid_length() {
-        assert!(decode_hex(b"abc").is_err());
+        assert!(matches!(decode_hex("abc").unwrap_err(), DecodeHexError::InvalidLen(3)));
     }
 
     #[test]
     fn decode_hex_invalid_char() {
-        assert!(decode_hex(b"xy").is_err());
+        assert!(matches!(decode_hex("x0").unwrap_err(), DecodeHexError::InvalidChar('x')));
+        assert!(matches!(decode_hex("0y").unwrap_err(), DecodeHexError::InvalidChar('y')));
     }
 
     #[test]
     fn decode_hex_emtpy() {
-        assert_eq!(decode_hex(b"").unwrap(), vec![]);
+        assert_eq!(decode_hex("").unwrap(), vec![]);
+    }
+
+    quickcheck! {
+
+        fn decode_hex_any_byte_lower(byte: u8) -> bool {
+            decode_hex(&format!("{byte:02x}")).unwrap() == vec![byte]
+        }
+
+        fn decode_hex_any_byte_upper(byte: u8) -> bool {
+            decode_hex(&format!("{byte:02X}")).unwrap() == vec![byte]
+        }
     }
 }
