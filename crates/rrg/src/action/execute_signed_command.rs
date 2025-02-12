@@ -46,44 +46,24 @@ enum Stdin {
 
 /// An error indicating that the command signature is missing.
 #[derive(Debug)]
-struct MissingCommandSignatureError;
+struct MissingCommandVerificationKeyError;
 
-impl std::fmt::Display for MissingCommandSignatureError {
+impl std::fmt::Display for MissingCommandVerificationKeyError {
+
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write! {
-            fmt,
-            "missing command signature"
-        }
+        write!(fmt, "missing command verification key")
     }
 }
 
-impl std::error::Error for MissingCommandSignatureError {}
+impl std::error::Error for MissingCommandVerificationKeyError {}
 
 /// An error indicating that stdin of the command couln't be captured.
 #[derive(Debug)]
-struct CommandStdinError;
-
-impl std::fmt::Display for CommandStdinError {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write! {
-            fmt,
-            "failed to capture stdin when spawning the command process"
-        }
-    }
-}
-
-impl std::error::Error for CommandStdinError {}
-
-/// An error indicating that stdin of the command couln't be captured.
-#[derive(Debug)]
-struct CommandExecutionError;
+struct CommandExecutionError(Box<dyn std::any::Any + Send + 'static>);
 
 impl std::fmt::Display for CommandExecutionError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write! {
-            fmt,
-            "failed to execute the command"
-        }
+        write!(fmt, "failed to execute the command: {:?}", self.0)
     }
 }
 
@@ -94,15 +74,17 @@ pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
+    use crate::request::ParseArgsError;
+
     match session.args().command_verification_key {
         Some(key) => key
             .verify_strict(&args.raw_command, &args.ed25519_signature)
-            .map_err(crate::session::Error::action)?,
-        None => return Err(crate::session::Error::action(MissingCommandSignatureError)),
+            .map_err(|error| ParseArgsError::invalid_field("raw_command", error))?,
+        None => return Err(crate::session::Error::action(MissingCommandVerificationKeyError)),
     };
 
     let command_path = &std::path::PathBuf::try_from(args.command.take_path())
-        .map_err(crate::session::Error::action)?;
+        .map_err(|error| ParseArgsError::invalid_field("command path", error))?;
 
     let mut command_process = Command::new(command_path)
         .stdin(std::process::Stdio::piped())
@@ -114,12 +96,10 @@ where
         .spawn()
         .map_err(crate::session::Error::action)?;
 
-    let command_start_time = std::time::SystemTime::now();
+    let command_start_time = std::time::Instant::now();
 
-    let mut command_stdin = match command_process.stdin.take() {
-        Some(command_stdin) => command_stdin,
-        None => return Err(crate::session::Error::action(CommandStdinError)),
-    };
+    let mut command_stdin = command_process.stdin.take()
+        .expect("no stdin pipe");
 
     let handle = std::thread::spawn(move || match args.stdin {
         Stdin::Signed(signed) => command_stdin
@@ -131,17 +111,11 @@ where
         Stdin::None => 0,
     });
 
-    // TODO: `join`` returns a `Box<dyn std::any::Any + Send>`
-    // error which cannot be passed to crate:session:Error::action.
-    let _ = handle
-        .join()
-        .map_err(|_| crate::session::Error::action(CommandExecutionError));
+    handle.join()
+        .map_err(CommandExecutionError)
+        .map_err(crate::session::Error::action)?;
 
-    while command_start_time
-        .elapsed()
-        .map_err(crate::session::Error::action)?
-        < args.timeout
-    {
+    while command_start_time.elapsed() < args.timeout {
         match command_process.try_wait() {
             Ok(None) => {
                 log::debug!(
@@ -226,7 +200,7 @@ impl crate::request::Args for Args {
         }
 
         let timeout = std::time::Duration::try_from(proto.take_timeout())
-            .map_err(|error| ParseArgsError::invalid_field("command", error))?;
+            .map_err(|error| ParseArgsError::invalid_field("timeout", error))?;
 
         Ok(Args {
             raw_command,
