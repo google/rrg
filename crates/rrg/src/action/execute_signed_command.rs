@@ -19,7 +19,7 @@ const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duratio
 pub struct Args {
     raw_command: Vec<u8>,
     command: rrg_proto::execute_signed_command::SignedCommand,
-    stdin: Stdin,
+    stdin: Vec<u8>,
     ed25519_signature: ed25519_dalek::Signature,
     timeout: std::time::Duration,
 }
@@ -36,11 +36,6 @@ pub struct Item {
     stderr: Vec<u8>,
     /// Wheather stderr is truncated.
     truncated_stderr: bool,
-}
-
-enum Stdin {
-    Unsigned(Vec<u8>),
-    Signed(Vec<u8>),
 }
 
 /// An error indicating that the command signature is missing.
@@ -100,13 +95,10 @@ where
     let mut command_stdin = command_process.stdin.take()
         .expect("no stdin pipe");
 
-    let handle = std::thread::spawn(move || match args.stdin {
-        Stdin::Signed(signed) => command_stdin
-            .write(&signed[..])
-            .expect("failed to write to stdin"),
-        Stdin::Unsigned(unsigned) => command_stdin
-            .write(&unsigned[..])
-            .expect("failed to write to stdin"),
+    let handle = std::thread::spawn(move || {
+        command_stdin
+            .write(&args.stdin[..])
+            .expect("failed to write to stdin")
     });
 
     handle.join()
@@ -189,8 +181,8 @@ impl crate::request::Args for Args {
                 .map_err(|error| ParseArgsError::invalid_field("command", error))?;
 
         let stdin = match command.unsigned_stdin() {
-            true => Stdin::Unsigned(proto.take_unsigned_stdin()),
-            false => Stdin::Signed(command.take_signed_stdin()),
+            true => proto.take_unsigned_stdin(),
+            false => command.take_signed_stdin(),
         };
 
         let timeout = std::time::Duration::try_from(proto.take_timeout())
@@ -283,7 +275,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::Signed(Vec::from(b"")),
+            stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
@@ -310,7 +302,7 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let stdin = Stdin::Signed(Vec::<u8>::from("Hello, world!"));
+        let stdin = Vec::<u8>::from("Hello, world!");
 
         let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
 
@@ -360,7 +352,7 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let stdin = Stdin::Unsigned(Vec::<u8>::from("Hello, world!"));
+        let stdin = Vec::<u8>::from("Hello, world!");
 
         let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
         command.set_unsigned_stdin(true);
@@ -425,7 +417,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::Signed(Vec::from(b"")),
+            stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
@@ -457,7 +449,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature: invalid_signature,
-            stdin: Stdin::Signed(Vec::from(b"")),
+            stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -490,7 +482,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::Signed(Vec::from(b"")),
+            stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -525,7 +517,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::Signed(Vec::from(b"")),
+            stdin: Vec::from(b""),
             timeout,
         };
 
