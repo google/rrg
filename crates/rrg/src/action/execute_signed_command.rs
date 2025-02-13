@@ -96,9 +96,18 @@ where
         .expect("no stdin pipe");
 
     let handle = std::thread::spawn(move || {
+        // While writing an empty stdin should be a no-op, it is possible for
+        // the command to finish executing before we get to the writing part and
+        // the pipe will be closed. We could just ignore "broken pipe" errors
+        // but they can be relevant in case we did have something to write. So,
+        // we just avoid writing altogether if there is nothing to be written.
+        if args.stdin.is_empty() {
+            return;
+        }
+
         command_stdin
             .write(&args.stdin[..])
-            .expect("failed to write to stdin")
+            .expect("failed to write to stdin");
     });
 
     handle.join()
