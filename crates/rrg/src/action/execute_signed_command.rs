@@ -137,37 +137,28 @@ where
         .map_err(crate::session::Error::action)?;
 
     let mut stdout = Vec::<u8>::new();
-    // TODO(swestphal): Limit amount of read bytes to prevent OOM.
-    let length_stdout = match command_process.stdout.take() {
-        Some(mut process_stdout) => process_stdout
-            .read_to_end(&mut stdout)
-            .map_err(crate::session::Error::action)?,
-        None => 0,
-    };
-    let truncated_stdout = length_stdout > MAX_OUTPUT_SIZE;
-    if truncated_stdout {
-        stdout.truncate(MAX_OUTPUT_SIZE);
-    };
+    command_process.stdout
+        .expect("no stdout pipe")
+        .take(MAX_OUTPUT_SIZE as u64).read_to_end(&mut stdout)
+        .map_err(crate::session::Error::action)?;
 
     let mut stderr = Vec::<u8>::new();
-    // TODO(swestphal): Limit amount of read bytes to prevent OOM.
-    let length_stderr = match command_process.stderr.take() {
-        Some(mut process_stderr) => process_stderr
-            .read_to_end(&mut stderr)
-            .map_err(crate::session::Error::action)?,
-        None => 0,
-    };
-    let truncated_stderr = length_stderr > MAX_OUTPUT_SIZE;
-    if truncated_stderr {
-        stderr.truncate(MAX_OUTPUT_SIZE);
-    };
+    command_process.stderr
+        .expect("no stderr pipe")
+        .take(MAX_OUTPUT_SIZE as u64).read_to_end(&mut stderr)
+        .map_err(crate::session::Error::action)?;
 
     session.reply(Item {
         exit_status,
+        // Note that we will return `truncated_std*` bit even if the output was
+        // exactly `MAX_OUTPUT_SIZE`. However, because this constant is an agent
+        // implementation detail we might have as well set it to be 1 more than
+        // it is right now and we just shift the "problem". Thus, it really does
+        // not matter but makes the code simpler.
+        truncated_stdout: stdout.len() == MAX_OUTPUT_SIZE,
+        truncated_stderr: stderr.len() == MAX_OUTPUT_SIZE,
         stdout,
         stderr,
-        truncated_stdout,
-        truncated_stderr,
     })?;
 
     Ok(())
