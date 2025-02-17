@@ -19,7 +19,7 @@ const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duratio
 pub struct Args {
     raw_command: Vec<u8>,
     command: rrg_proto::execute_signed_command::SignedCommand,
-    stdin: Stdin,
+    stdin: Vec<u8>,
     ed25519_signature: ed25519_dalek::Signature,
     timeout: std::time::Duration,
 }
@@ -36,12 +36,6 @@ pub struct Item {
     stderr: Vec<u8>,
     /// Wheather stderr is truncated.
     truncated_stderr: bool,
-}
-
-enum Stdin {
-    None,
-    Unsigned(Vec<u8>),
-    Signed(Vec<u8>),
 }
 
 /// An error indicating that the command signature is missing.
@@ -101,14 +95,19 @@ where
     let mut command_stdin = command_process.stdin.take()
         .expect("no stdin pipe");
 
-    let handle = std::thread::spawn(move || match args.stdin {
-        Stdin::Signed(signed) => command_stdin
-            .write(&signed[..])
-            .expect("failed to write to stdin"),
-        Stdin::Unsigned(unsigned) => command_stdin
-            .write(&unsigned[..])
-            .expect("failed to write to stdin"),
-        Stdin::None => 0,
+    let handle = std::thread::spawn(move || {
+        // While writing an empty stdin should be a no-op, it is possible for
+        // the command to finish executing before we get to the writing part and
+        // the pipe will be closed. We could just ignore "broken pipe" errors
+        // but they can be relevant in case we did have something to write. So,
+        // we just avoid writing altogether if there is nothing to be written.
+        if args.stdin.is_empty() {
+            return;
+        }
+
+        command_stdin
+            .write(&args.stdin[..])
+            .expect("failed to write to stdin");
     });
 
     handle.join()
@@ -190,14 +189,10 @@ impl crate::request::Args for Args {
             rrg_proto::execute_signed_command::SignedCommand::parse_from_bytes(&raw_command)
                 .map_err(|error| ParseArgsError::invalid_field("command", error))?;
 
-        let stdin: Stdin;
-        if command.has_signed_stdin() {
-            stdin = Stdin::Signed(command.take_signed_stdin());
-        } else if command.unsigned_stdin() && !proto.unsigned_stdin.is_empty() {
-            stdin = Stdin::Unsigned(proto.take_unsigned_stdin());
-        } else {
-            stdin = Stdin::None
-        }
+        let stdin = match command.unsigned_stdin() {
+            true => proto.take_unsigned_stdin(),
+            false => command.take_signed_stdin(),
+        };
 
         let timeout = std::time::Duration::try_from(proto.take_timeout())
             .map_err(|error| ParseArgsError::invalid_field("timeout", error))?;
@@ -289,7 +284,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::None,
+            stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
@@ -316,7 +311,7 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let stdin = Stdin::Signed(Vec::<u8>::from("Hello, world!"));
+        let stdin = Vec::<u8>::from("Hello, world!");
 
         let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
 
@@ -366,7 +361,7 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let stdin = Stdin::Unsigned(Vec::<u8>::from("Hello, world!"));
+        let stdin = Vec::<u8>::from("Hello, world!");
 
         let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
         command.set_unsigned_stdin(true);
@@ -431,7 +426,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::None,
+            stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
@@ -463,7 +458,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature: invalid_signature,
-            stdin: Stdin::None,
+            stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -496,7 +491,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::None,
+            stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -531,7 +526,7 @@ mod tests {
             raw_command,
             command,
             ed25519_signature,
-            stdin: Stdin::None,
+            stdin: Vec::from(b""),
             timeout,
         };
 
