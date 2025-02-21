@@ -280,10 +280,7 @@ mod tests {
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
         assert!(item.stderr.is_empty());
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            format!("Hello, world!\n")
-        );
+        assert_eq!(item.stdout, "Hello, world!\n".as_bytes());
         assert!(item.exit_status.success())
     }
 
@@ -312,10 +309,7 @@ mod tests {
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
         assert!(item.stderr.is_empty());
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            format!("Hello, world!\r\n")
-        );
+        assert_eq!(item.stdout, "Hello, world!\r\n".as_bytes());
         assert!(item.exit_status.success())
     }
 
@@ -340,10 +334,7 @@ mod tests {
         handle(&mut session, args).unwrap();
         let item = session.reply::<Item>(0);
 
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            format!("Hello, world!")
-        );
+        assert_eq!(item.stdout, "Hello, world!".as_bytes());
         assert!(item.stderr.is_empty());
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
@@ -372,10 +363,7 @@ mod tests {
         handle(&mut session, args).unwrap();
         let item = session.reply::<Item>(0);
 
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            format!("Hello, world!\r\n")
-        );
+        assert_eq!(item.stdout, "Hello, world!\r\n".as_bytes());
         assert!(item.stderr.is_empty());
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
@@ -462,10 +450,7 @@ mod tests {
         handle(&mut session, args).unwrap();
         let item = session.reply::<Item>(0);
 
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            "A".repeat(MAX_OUTPUT_SIZE)
-        );
+        assert_eq!(item.stdout, "A".repeat(MAX_OUTPUT_SIZE).as_bytes());
         assert!(item.stderr.is_empty());
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
@@ -498,10 +483,7 @@ mod tests {
         handle(&mut session, args).unwrap();
         let item = session.reply::<Item>(0);
 
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            "A".repeat(MAX_OUTPUT_SIZE)
-        );
+        assert_eq!(item.stdout, "A".repeat(MAX_OUTPUT_SIZE).as_bytes());
         assert!(item.stderr.is_empty());
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
