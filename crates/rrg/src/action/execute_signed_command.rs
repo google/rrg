@@ -108,7 +108,7 @@ where
         }
 
         command_stdin
-            .write(&args.stdin[..])
+            .write_all(&args.stdin[..])
             .expect("failed to write to stdin");
     });
 
