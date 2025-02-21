@@ -18,7 +18,12 @@ const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duratio
 /// Arguments of the `execute_signed_command` action.
 pub struct Args {
     raw_command: Vec<u8>,
-    command: rrg_proto::execute_signed_command::SignedCommand,
+    /// Path to the executable file to execute.
+    path: std::path::PathBuf,
+    /// Command-line arguments to pass to the executable.
+    args: Vec<String>,
+    /// Environment in which to invoke the executable.
+    env: std::collections::HashMap<String, String>,
     stdin: Vec<u8>,
     ed25519_signature: ed25519_dalek::Signature,
     timeout: std::time::Duration,
@@ -64,7 +69,7 @@ impl std::fmt::Display for CommandExecutionError {
 impl std::error::Error for CommandExecutionError {}
 
 /// Handles invocations of the `execute_signed_command` action.
-pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
+pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
@@ -77,14 +82,11 @@ where
         None => return Err(crate::session::Error::action(MissingCommandVerificationKeyError)),
     };
 
-    let command_path = &std::path::PathBuf::try_from(args.command.take_path())
-        .map_err(|error| ParseArgsError::invalid_field("command path", error))?;
-
-    let mut command_process = Command::new(command_path)
+    let mut command_process = Command::new(args.path)
         .stdin(std::process::Stdio::piped())
-        .args(args.command.take_args())
+        .args(args.args)
         .env_clear()
-        .envs(args.command.take_env())
+        .envs(args.env)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -180,6 +182,9 @@ impl crate::request::Args for Args {
             rrg_proto::execute_signed_command::SignedCommand::parse_from_bytes(&raw_command)
                 .map_err(|error| ParseArgsError::invalid_field("command", error))?;
 
+        let path = std::path::PathBuf::try_from(command.take_path())
+            .map_err(|error| ParseArgsError::invalid_field("command path", error))?;
+
         let stdin = match command.unsigned_stdin() {
             true => proto.take_unsigned_stdin(),
             false => command.take_signed_stdin(),
@@ -190,7 +195,9 @@ impl crate::request::Args for Args {
 
         Ok(Args {
             raw_command,
-            command,
+            path,
+            args: command.take_args(),
+            env: command.take_env(),
             ed25519_signature,
             stdin,
             timeout,
@@ -254,17 +261,15 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("echo")).unwrap());
-        command.args.push(String::from("Hello,"));
-        command.args.push(String::from("world!"));
-
-        let raw_command = command.write_to_bytes().unwrap();
+        let raw_command = Vec::default();
         let ed25519_signature = signing_key.sign(&raw_command);
 
         let args = Args {
             raw_command,
-            command,
+            path: PathBuf::from("echo"),
+            args: ["Hello,", "world!"]
+                .into_iter().map(String::from).collect(),
+            env: std::collections::HashMap::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
@@ -288,19 +293,15 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
-        command.args.push(String::from("/C"));
-        command.args.push(String::from("echo"));
-        command.args.push(String::from("Hello,"));
-        command.args.push(String::from("world!"));
-
-        let raw_command = command.write_to_bytes().unwrap();
+        let raw_command = Vec::default();
         let ed25519_signature = signing_key.sign(&raw_command);
 
         let args = Args {
             raw_command,
-            command,
+            path: PathBuf::from("cmd"),
+            args: ["/C", "echo", "Hello,", "world!"]
+                .into_iter().map(String::from).collect(),
+            env: std::collections::HashMap::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
@@ -320,23 +321,20 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     #[test]
-    fn handle_signed_stdin() {
+    fn handle_stdin() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let stdin = Vec::<u8>::from("Hello, world!");
-
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cat")).unwrap());
-
-        let raw_command = command.write_to_bytes().unwrap();
+        let raw_command = Vec::default();
         let ed25519_signature = signing_key.sign(&raw_command);
 
         let args = Args {
             raw_command,
-            command,
+            path: PathBuf::from("cat"),
+            args: Vec::default(),
+            env: std::collections::HashMap::new(),
+            stdin: "Hello, world!".as_bytes().to_vec(),
             ed25519_signature,
-            stdin,
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
@@ -354,101 +352,23 @@ mod tests {
 
     #[cfg(target_family = "windows")]
     #[test]
-    fn handle_signed_stdin() {
+    fn handle_stdin() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let stdin = Vec::<u8>::from("Hello, world!");
-
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
-        command.args.push(String::from("/C"));
-        command.args.push(String::from("C:\\Windows\\System32\\findstr ."));
-
-        let raw_command = command.write_to_bytes().unwrap();
+        let raw_command = Vec::default();
         let ed25519_signature = signing_key.sign(&raw_command);
 
         let args = Args {
             raw_command,
-            command,
+            path: PathBuf::from("cmd"),
+            args: ["/C", "C:\\Windows\\System32\\findstr ."]
+                .into_iter().map(String::from).collect(),
+            env: std::collections::HashMap::new(),
             ed25519_signature,
-            stdin,
+            stdin: "Hello, world!".as_bytes().to_vec(),
             timeout: std::time::Duration::from_secs(5),
         };
-        handle(&mut session, args).unwrap();
-        let item = session.reply::<Item>(0);
-
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            format!("Hello, world!\r\n")
-        );
-        assert!(item.stderr.is_empty());
-        assert!(!item.truncated_stdout);
-        assert!(!item.truncated_stderr);
-        assert!(item.exit_status.success());
-    }
-
-    #[cfg(target_family = "unix")]
-    #[test]
-    fn handle_unsigned_stdin() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
-
-        let stdin = Vec::<u8>::from("Hello, world!");
-
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_unsigned_stdin(true);
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cat")).unwrap());
-
-        let raw_command = command.write_to_bytes().unwrap();
-        let ed25519_signature = signing_key.sign(&raw_command);
-
-        let args = Args {
-            raw_command,
-            command,
-            ed25519_signature,
-            stdin,
-            timeout: std::time::Duration::from_secs(5),
-        };
-
-        handle(&mut session, args).unwrap();
-        let item = session.reply::<Item>(0);
-
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            format!("Hello, world!")
-        );
-        assert!(item.stderr.is_empty());
-        assert!(!item.truncated_stdout);
-        assert!(!item.truncated_stderr);
-        assert!(item.exit_status.success());
-    }
-
-    #[cfg(target_family = "windows")]
-    #[test]
-    fn handle_unsigned_stdin() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
-
-        let stdin = Vec::<u8>::from("Hello, world!");
-
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_unsigned_stdin(true);
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
-        command.args.push(String::from("/C"));
-        command.args.push(String::from("C:\\Windows\\System32\\findstr ."));
-
-        let raw_command = command.write_to_bytes().unwrap();
-        let ed25519_signature = signing_key.sign(&raw_command);
-
-        let args = Args {
-            raw_command,
-            command,
-            ed25519_signature,
-            stdin,
-            timeout: std::time::Duration::from_secs(5),
-        };
-
         handle(&mut session, args).unwrap();
         let item = session.reply::<Item>(0);
 
@@ -467,18 +387,15 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("printenv")).unwrap());
-        command
-            .env
-            .insert(String::from("MY_ENV_VAR"), String::from("Hello, world!"));
-
-        let raw_command = command.write_to_bytes().unwrap();
+        let raw_command = Vec::default();
         let ed25519_signature = signing_key.sign(&raw_command);
 
         let args = Args {
             raw_command,
-            command,
+            path: PathBuf::from("printenv"),
+            args: Vec::default(),
+            env: [(String::from("MY_ENV_VAR"), String::from("Hello, world!"))]
+                .into(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
@@ -497,24 +414,28 @@ mod tests {
 
     #[test]
     fn handle_invalid_signature() {
+        use crate::request::Args as _;
+
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
         let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("ls")).unwrap());
+        command.set_path(PathBuf::from("ls").into());
 
         let raw_command = command.write_to_bytes().unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&raw_command).to_vec());
+        args_proto.set_command(raw_command);
+        args_proto.mut_timeout().seconds = 5;
+
+        let mut args = Args::from_proto(args_proto)
+            .unwrap();
 
         let invalid_signature_bytes: [u8; 64] = [4_u8; 64]; //  random bytes.
         let invalid_signature = ed25519_dalek::Signature::from_bytes(&invalid_signature_bytes);
 
-        let args = Args {
-            raw_command,
-            command,
-            ed25519_signature: invalid_signature,
-            stdin: Vec::from(b""),
-            timeout: std::time::Duration::from_secs(5),
-        };
+        args.ed25519_signature = invalid_signature;
 
         let _ = handle(&mut session, args).is_err();
     }
@@ -525,16 +446,14 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("echo")).unwrap());
-        command.args.push("A".repeat(MAX_OUTPUT_SIZE) + "truncated");
-
-        let raw_command = command.write_to_bytes().unwrap();
+        let raw_command = Vec::default();
         let ed25519_signature = signing_key.sign(&raw_command);
 
         let args = Args {
             raw_command,
-            command,
+            path: PathBuf::from("echo"),
+            args: vec!["A".repeat(MAX_OUTPUT_SIZE) + "truncated"],
+            env: std::collections::HashMap::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
@@ -559,18 +478,18 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
-        command.args.push(String::from("/C"));
-        command.args.push(String::from("echo"));
-        command.args.push("A".repeat(MAX_OUTPUT_SIZE) + "truncated");
-
-        let raw_command = command.write_to_bytes().unwrap();
+        let raw_command = Vec::default();
         let ed25519_signature = signing_key.sign(&raw_command);
 
         let args = Args {
             raw_command,
-            command,
+            path: PathBuf::from("cmd"),
+            args: vec![
+                String::from("/C"),
+                String::from("echo"),
+                "A".repeat(MAX_OUTPUT_SIZE) + "truncated",
+            ],
+            env: std::collections::HashMap::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
@@ -596,16 +515,14 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("sleep")).unwrap());
-        command.args.push((timeout.as_secs() + 1).to_string());
-
-        let raw_command = command.write_to_bytes().unwrap();
+        let raw_command = Vec::default();
         let ed25519_signature = signing_key.sign(&raw_command);
 
         let args = Args {
             raw_command,
-            command,
+            path: PathBuf::from("sleep"),
+            args: vec![(timeout.as_secs() + 1).to_string()],
+            env: std::collections::HashMap::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout,
