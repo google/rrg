@@ -392,12 +392,12 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
-        assert!(String::from_utf8_lossy(&item.stdout)
-            .find("MY_ENV_VAR=Hello, world!")
-            .is_some());
         assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
+
+        let stdout = String::from_utf8_lossy(&item.stdout);
+        assert!(stdout.contains("MY_ENV_VAR=Hello, world!"));
     }
 
     #[test]
