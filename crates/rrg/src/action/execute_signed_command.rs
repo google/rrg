@@ -279,7 +279,7 @@ mod tests {
 
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
-        assert!(item.stderr.is_empty());
+        assert_eq!(item.stderr, b"");
         assert_eq!(item.stdout, "Hello, world!\n".as_bytes());
         assert!(item.exit_status.success())
     }
@@ -308,7 +308,7 @@ mod tests {
 
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
-        assert!(item.stderr.is_empty());
+        assert_eq!(item.stderr, b"");
         assert_eq!(item.stdout, "Hello, world!\r\n".as_bytes());
         assert!(item.exit_status.success())
     }
@@ -335,7 +335,7 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert_eq!(item.stdout, "Hello, world!".as_bytes());
-        assert!(item.stderr.is_empty());
+        assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
         assert!(item.exit_status.success());
@@ -364,7 +364,7 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert_eq!(item.stdout, "Hello, world!\r\n".as_bytes());
-        assert!(item.stderr.is_empty());
+        assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
         assert!(item.exit_status.success());
@@ -394,7 +394,7 @@ mod tests {
         assert!(String::from_utf8_lossy(&item.stdout)
             .find("MY_ENV_VAR=Hello, world!")
             .is_some());
-        assert!(item.stderr.is_empty());
+        assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
         assert!(item.exit_status.success());
@@ -451,7 +451,7 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert_eq!(item.stdout, "A".repeat(MAX_OUTPUT_SIZE).as_bytes());
-        assert!(item.stderr.is_empty());
+        assert_eq!(item.stderr, b"");
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
         assert!(item.exit_status.success());
@@ -484,7 +484,7 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert_eq!(item.stdout, "A".repeat(MAX_OUTPUT_SIZE).as_bytes());
-        assert!(item.stderr.is_empty());
+        assert_eq!(item.stderr, b"");
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
         assert!(item.exit_status.success());
@@ -513,8 +513,8 @@ mod tests {
         handle(&mut session, args).unwrap();
         let item = session.reply::<Item>(0);
 
-        assert!(item.stderr.is_empty());
-        assert!(item.stdout.is_empty());
+        assert_eq!(item.stderr, b"");
+        assert_eq!(item.stdout, b"");
         assert!(!item.exit_status.success());
         #[cfg(target_family = "unix")]
         {
