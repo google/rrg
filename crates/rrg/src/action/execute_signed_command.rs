@@ -248,23 +248,14 @@ mod tests {
         })
     }
 
+    #[cfg(target_family = "unix")]
     #[test]
     fn handle_command_args() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
         let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-
-        #[cfg(target_family = "unix")]
-        {
-            command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("echo")).unwrap());
-        }
-        #[cfg(target_os = "windows")]
-        {
-            command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
-            command.args.push(String::from("/C"));
-            command.args.push(String::from("echo"));
-        }
+        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("echo")).unwrap());
         command.args.push(String::from("Hello,"));
         command.args.push(String::from("world!"));
 
@@ -284,12 +275,42 @@ mod tests {
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
         assert!(item.stderr.is_empty());
-        #[cfg(target_family = "unix")]
         assert_eq!(
             String::from_utf8_lossy(&item.stdout),
             format!("Hello, world!\n")
         );
-        #[cfg(target_os = "windows")]
+        assert!(item.exit_status.success())
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_command_args() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
+        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
+        command.args.push(String::from("/C"));
+        command.args.push(String::from("echo"));
+        command.args.push(String::from("Hello,"));
+        command.args.push(String::from("world!"));
+
+        let raw_command = command.write_to_bytes().unwrap();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            command,
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        let item = session.reply::<Item>(0);
+
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+        assert!(item.stderr.is_empty());
         assert_eq!(
             String::from_utf8_lossy(&item.stdout),
             format!("Hello, world!\r\n")
@@ -297,6 +318,7 @@ mod tests {
         assert!(item.exit_status.success())
     }
 
+    #[cfg(target_family = "unix")]
     #[test]
     fn handle_signed_stdin() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
@@ -305,18 +327,7 @@ mod tests {
         let stdin = Vec::<u8>::from("Hello, world!");
 
         let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-
-        #[cfg(target_family = "unix")]
         command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cat")).unwrap());
-
-        #[cfg(target_os = "windows")]
-        {
-            command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
-            command.args.push(String::from("/C"));
-            command
-                .args
-                .push(String::from("C:\\Windows\\System32\\findstr ."));
-        }
 
         let raw_command = command.write_to_bytes().unwrap();
         let ed25519_signature = signing_key.sign(&raw_command);
@@ -331,12 +342,42 @@ mod tests {
         handle(&mut session, args).unwrap();
         let item = session.reply::<Item>(0);
 
-        #[cfg(target_family = "unix")]
         assert_eq!(
             String::from_utf8_lossy(&item.stdout),
             format!("Hello, world!")
         );
-        #[cfg(target_os = "windows")]
+        assert!(item.stderr.is_empty());
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+        assert!(item.exit_status.success());
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_signed_stdin() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let stdin = Vec::<u8>::from("Hello, world!");
+
+        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
+        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
+        command.args.push(String::from("/C"));
+        command.args.push(String::from("C:\\Windows\\System32\\findstr ."));
+
+        let raw_command = command.write_to_bytes().unwrap();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            command,
+            ed25519_signature,
+            stdin,
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        let item = session.reply::<Item>(0);
+
         assert_eq!(
             String::from_utf8_lossy(&item.stdout),
             format!("Hello, world!\r\n")
@@ -347,6 +388,7 @@ mod tests {
         assert!(item.exit_status.success());
     }
 
+    #[cfg(target_family = "unix")]
     #[test]
     fn handle_unsigned_stdin() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
@@ -356,18 +398,7 @@ mod tests {
 
         let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
         command.set_unsigned_stdin(true);
-
-        #[cfg(target_family = "unix")]
         command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cat")).unwrap());
-
-        #[cfg(target_os = "windows")]
-        {
-            command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
-            command.args.push(String::from("/C"));
-            command
-                .args
-                .push(String::from("C:\\Windows\\System32\\findstr ."));
-        }
 
         let raw_command = command.write_to_bytes().unwrap();
         let ed25519_signature = signing_key.sign(&raw_command);
@@ -383,12 +414,44 @@ mod tests {
         handle(&mut session, args).unwrap();
         let item = session.reply::<Item>(0);
 
-        #[cfg(target_family = "unix")]
         assert_eq!(
             String::from_utf8_lossy(&item.stdout),
             format!("Hello, world!")
         );
-        #[cfg(target_os = "windows")]
+        assert!(item.stderr.is_empty());
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+        assert!(item.exit_status.success());
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_unsigned_stdin() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let stdin = Vec::<u8>::from("Hello, world!");
+
+        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
+        command.set_unsigned_stdin(true);
+        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
+        command.args.push(String::from("/C"));
+        command.args.push(String::from("C:\\Windows\\System32\\findstr ."));
+
+        let raw_command = command.write_to_bytes().unwrap();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            command,
+            ed25519_signature,
+            stdin,
+            timeout: std::time::Duration::from_secs(5),
+        };
+
+        handle(&mut session, args).unwrap();
+        let item = session.reply::<Item>(0);
+
         assert_eq!(
             String::from_utf8_lossy(&item.stdout),
             format!("Hello, world!\r\n")
@@ -456,23 +519,50 @@ mod tests {
         let _ = handle(&mut session, args).is_err();
     }
 
+    #[cfg(target_family = "unix")]
     #[test]
     fn handle_truncate_output() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
         let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
-
-        #[cfg(target_family = "unix")]
         command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("echo")).unwrap());
+        command.args.push("A".repeat(MAX_OUTPUT_SIZE) + "truncated");
 
-        #[cfg(target_os = "windows")]
-        {
-            command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
-            command.args.push(String::from("/C"));
-            command.args.push(String::from("echo"));
-        }
+        let raw_command = command.write_to_bytes().unwrap();
+        let ed25519_signature = signing_key.sign(&raw_command);
 
+        let args = Args {
+            raw_command,
+            command,
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+
+        handle(&mut session, args).unwrap();
+        let item = session.reply::<Item>(0);
+
+        assert_eq!(
+            String::from_utf8_lossy(&item.stdout),
+            "A".repeat(MAX_OUTPUT_SIZE)
+        );
+        assert!(item.stderr.is_empty());
+        assert!(item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+        assert!(item.exit_status.success());
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_truncate_output() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
+        command.set_path(rrg_proto::fs::Path::try_from(PathBuf::from("cmd")).unwrap());
+        command.args.push(String::from("/C"));
+        command.args.push(String::from("echo"));
         command.args.push("A".repeat(MAX_OUTPUT_SIZE) + "truncated");
 
         let raw_command = command.write_to_bytes().unwrap();
