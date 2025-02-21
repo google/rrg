@@ -430,7 +430,7 @@ mod tests {
 
         args.ed25519_signature = invalid_signature;
 
-        let _ = handle(&mut session, args).is_err();
+        assert!(handle(&mut session, args).is_err());
     }
 
     #[cfg(target_family = "unix")]
