@@ -275,6 +275,7 @@ mod tests {
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
@@ -304,6 +305,7 @@ mod tests {
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
@@ -332,6 +334,7 @@ mod tests {
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
@@ -361,6 +364,7 @@ mod tests {
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
@@ -389,6 +393,7 @@ mod tests {
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
@@ -448,6 +453,7 @@ mod tests {
         };
 
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
@@ -481,6 +487,7 @@ mod tests {
         };
 
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
@@ -511,6 +518,7 @@ mod tests {
         };
 
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
         assert!(!item.exit_status.success());
