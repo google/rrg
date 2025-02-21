@@ -110,6 +110,16 @@ where
         command_stdin
             .write_all(&args.stdin[..])
             .expect("failed to write to stdin");
+
+        // Dropping the pipe below will flush it but will swallow all potential
+        // errors while doing so. Thus, we flush explicitly here to be able to
+        // catch all errors.
+        command_stdin.flush()
+            .expect("failed to flush stdin");
+
+        // We explictly drop the pipe to notify the spawned command that there
+        // is no more input incoming.
+        drop(command_stdin);
     });
 
     handle.join()
