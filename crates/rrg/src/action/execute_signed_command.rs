@@ -277,16 +277,14 @@ mod tests {
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
+        assert!(item.exit_status.success());
+        assert_eq!(item.stderr, b"");
+        assert_eq!(item.stdout, "Hello, world!\n".as_bytes());
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
-        assert!(item.stderr.is_empty());
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            format!("Hello, world!\n")
-        );
-        assert!(item.exit_status.success())
     }
 
     #[cfg(target_family = "windows")]
@@ -309,16 +307,14 @@ mod tests {
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
+        assert!(item.exit_status.success());
+        assert_eq!(item.stderr, b"");
+        assert_eq!(item.stdout, "Hello, world!\r\n".as_bytes());
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
-        assert!(item.stderr.is_empty());
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            format!("Hello, world!\r\n")
-        );
-        assert!(item.exit_status.success())
     }
 
     #[cfg(target_family = "unix")]
@@ -340,16 +336,14 @@ mod tests {
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            format!("Hello, world!")
-        );
-        assert!(item.stderr.is_empty());
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, "Hello, world!".as_bytes());
+        assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
-        assert!(item.exit_status.success());
     }
 
     #[cfg(target_family = "windows")]
@@ -372,16 +366,14 @@ mod tests {
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            format!("Hello, world!\r\n")
-        );
-        assert!(item.stderr.is_empty());
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, "Hello, world!\r\n".as_bytes());
+        assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
-        assert!(item.exit_status.success());
     }
 
     #[test]
@@ -403,15 +395,16 @@ mod tests {
             timeout: std::time::Duration::from_secs(5),
         };
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
-        assert!(String::from_utf8_lossy(&item.stdout)
-            .find("MY_ENV_VAR=Hello, world!")
-            .is_some());
-        assert!(item.stderr.is_empty());
+        assert!(item.exit_status.success());
+        assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
-        assert!(item.exit_status.success());
+
+        let stdout = String::from_utf8_lossy(&item.stdout);
+        assert!(stdout.contains("MY_ENV_VAR=Hello, world!"));
     }
 
     #[test]
@@ -439,7 +432,7 @@ mod tests {
 
         args.ed25519_signature = invalid_signature;
 
-        let _ = handle(&mut session, args).is_err();
+        assert!(handle(&mut session, args).is_err());
     }
 
     #[cfg(target_family = "unix")]
@@ -462,16 +455,14 @@ mod tests {
         };
 
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            "A".repeat(MAX_OUTPUT_SIZE)
-        );
-        assert!(item.stderr.is_empty());
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, "A".repeat(MAX_OUTPUT_SIZE).as_bytes());
+        assert_eq!(item.stderr, b"");
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
-        assert!(item.exit_status.success());
     }
 
     #[cfg(target_family = "windows")]
@@ -498,16 +489,14 @@ mod tests {
         };
 
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
-        assert_eq!(
-            String::from_utf8_lossy(&item.stdout),
-            "A".repeat(MAX_OUTPUT_SIZE)
-        );
-        assert!(item.stderr.is_empty());
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, "A".repeat(MAX_OUTPUT_SIZE).as_bytes());
+        assert_eq!(item.stderr, b"");
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
-        assert!(item.exit_status.success());
     }
 
     #[test]
@@ -531,10 +520,9 @@ mod tests {
         };
 
         handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
-        assert!(item.stderr.is_empty());
-        assert!(item.stdout.is_empty());
         assert!(!item.exit_status.success());
         #[cfg(target_family = "unix")]
         {
@@ -542,5 +530,7 @@ mod tests {
 
             assert_eq!(item.exit_status.signal(), Some(libc::SIGKILL));
         }
+        assert_eq!(item.stderr, b"");
+        assert_eq!(item.stdout, b"");
     }
 }
