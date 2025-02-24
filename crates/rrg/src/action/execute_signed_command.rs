@@ -58,7 +58,7 @@ impl std::error::Error for MissingCommandVerificationKeyError {}
 
 /// An error indicating that stdin of the command couln't be captured.
 #[derive(Debug)]
-struct CommandExecutionError(Box<dyn std::any::Any + Send + 'static>);
+struct CommandExecutionError(std::io::Error);
 
 impl std::fmt::Display for CommandExecutionError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -97,24 +97,26 @@ where
     let mut command_stdin = command_process.stdin.take()
         .expect("no stdin pipe");
 
-    let handle = std::thread::spawn(move || {
-        // While writing an empty stdin should be a no-op, it is possible for
-        // the command to finish executing before we get to the writing part and
-        // the pipe will be closed. We could just ignore "broken pipe" errors
-        // but they can be relevant in case we did have something to write. So,
-        // we just avoid writing altogether if there is nothing to be written.
-        if args.stdin.is_empty() {
-            return;
-        }
+    // While writing an empty stdin should be a no-op, it is possible for the
+    // command to finish executing before we get to the writing part and the
+    // pipe will be closed. We could just ignore "broken pipe" errors but they
+    // can be relevant in case we did have something to write. So, we just avoid
+    // writing altogether if there is nothing to be written.
+    if !args.stdin.is_empty() {
+        command_stdin.write_all(&args.stdin)
+            .map_err(CommandExecutionError)
+            .map_err(crate::session::Error::action)?;
 
-        command_stdin
-            .write(&args.stdin[..])
-            .expect("failed to write to stdin");
-    });
-
-    handle.join()
-        .map_err(CommandExecutionError)
-        .map_err(crate::session::Error::action)?;
+        // Dropping the pipe below will flush it but will swallow all potential
+        // errors while doing so. Thus, we flush explicitly here to be able to
+        // catch all errors.
+        command_stdin.flush()
+            .map_err(CommandExecutionError)
+            .map_err(crate::session::Error::action)?;
+    }
+    // We explictly drop the pipe to notify the spawned command that there is no
+    // more input incoming.
+    drop(command_stdin);
 
     while command_start_time.elapsed() < args.timeout {
         match command_process.try_wait() {
