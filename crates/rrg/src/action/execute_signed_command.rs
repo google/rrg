@@ -181,7 +181,7 @@ impl crate::request::Args for Args {
 
         let raw_command = proto.take_command();
         let mut command =
-            rrg_proto::execute_signed_command::SignedCommand::parse_from_bytes(&raw_command)
+            rrg_proto::execute_signed_command::Command::parse_from_bytes(&raw_command)
                 .map_err(|error| ParseArgsError::invalid_field("command", error))?;
 
         let path = std::path::PathBuf::try_from(command.take_path())
@@ -414,7 +414,7 @@ mod tests {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
-        let mut command = rrg_proto::execute_signed_command::SignedCommand::new();
+        let mut command = rrg_proto::execute_signed_command::Command::new();
         command.set_path(PathBuf::from("ls").into());
 
         let raw_command = command.write_to_bytes().unwrap();
