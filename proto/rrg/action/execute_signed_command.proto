@@ -10,7 +10,7 @@ package rrg.action.execute_signed_command;
 import "google/protobuf/duration.proto";
 import "rrg/fs.proto";
 
-message SignedCommand {
+message Command {
   // Path to the executable file to execute.
   rrg.fs.Path path = 1;
 
@@ -34,7 +34,7 @@ message SignedCommand {
 }
 
 message Args {
-  // Serialized `SignedCommand` message to execute.
+  // Serialized `Command` message to execute.
   bytes command = 1;
 
   // Standard input to pass to the executed command.
