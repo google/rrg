@@ -187,7 +187,7 @@ impl crate::request::Args for Args {
         let path = std::path::PathBuf::try_from(command.take_path())
             .map_err(|error| ParseArgsError::invalid_field("command path", error))?;
 
-        let stdin = match command.unsigned_stdin() {
+        let stdin = match command.unsigned_stdin_allowed() {
             true => proto.take_unsigned_stdin(),
             false => command.take_signed_stdin(),
         };
