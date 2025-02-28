@@ -550,13 +550,10 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
-        assert!(!item.exit_status.success());
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::process::ExitStatusExt;
+        use std::os::unix::process::ExitStatusExt as _;
 
-            assert_eq!(item.exit_status.signal(), Some(libc::SIGKILL));
-        }
+        assert!(!item.exit_status.success());
+        assert_eq!(item.exit_status.signal(), Some(libc::SIGKILL));
         assert_eq!(item.stderr, b"");
         assert_eq!(item.stdout, b"");
     }
