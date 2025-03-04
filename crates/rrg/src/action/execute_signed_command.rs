@@ -357,9 +357,8 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("cmd"),
-            args: ["/C", "C:\\Windows\\System32\\findstr ."]
-                .into_iter().map(String::from).collect(),
+            path: PathBuf::from("findstr"),
+            args: vec![String::from("world")],
             env: std::collections::HashMap::new(),
             ed25519_signature,
             stdin: "Hello, world!".as_bytes().to_vec(),
@@ -376,6 +375,7 @@ mod tests {
         assert!(!item.truncated_stderr);
     }
 
+    #[cfg(target_family = "unix")]
     #[test]
     fn handle_env() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
@@ -405,6 +405,36 @@ mod tests {
 
         let stdout = String::from_utf8_lossy(&item.stdout);
         assert!(stdout.contains("MY_ENV_VAR=Hello, world!"));
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_env() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: PathBuf::from("cmd"),
+            args: vec![String::from("/c"), String::from("echo %MY_ENV_VAR%")],
+            env: [(String::from("MY_ENV_VAR"), String::from("Hello, world!"))]
+                .into(),
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, "Hello, world!\r\n".as_bytes());
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
     }
 
     #[test]
@@ -476,15 +506,11 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("cmd"),
-            args: vec![
-                String::from("/C"),
-                String::from("echo"),
-                "A".repeat(MAX_OUTPUT_SIZE) + "truncated",
-            ],
+            path: PathBuf::from("findstr"),
+            args: vec![String::from("truncated")],
             env: std::collections::HashMap::new(),
             ed25519_signature,
-            stdin: Vec::from(b""),
+            stdin: Vec::from("A".repeat(MAX_OUTPUT_SIZE) + "truncated"),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -499,6 +525,7 @@ mod tests {
         assert!(!item.truncated_stderr);
     }
 
+    #[cfg(target_family = "unix")]
     #[test]
     fn handle_kill_if_timeout() {
         let timeout = std::time::Duration::from_secs(5);
@@ -523,13 +550,43 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
-        assert!(!item.exit_status.success());
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::process::ExitStatusExt;
+        use std::os::unix::process::ExitStatusExt as _;
 
-            assert_eq!(item.exit_status.signal(), Some(libc::SIGKILL));
-        }
+        assert!(!item.exit_status.success());
+        assert_eq!(item.exit_status.signal(), Some(libc::SIGKILL));
+        assert_eq!(item.stderr, b"");
+        assert_eq!(item.stdout, b"");
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_kill_if_timeout() {
+        let timeout = std::time::Duration::from_secs(5);
+
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            // The `timeout` command seems to be unavailable e.g. on Wine so
+            // instead we just hang the program forever using an infinite loop.
+            path: PathBuf::from("cmd"),
+            args: ["/q", "/c", "for /l %i in () do echo off"]
+                .into_iter().map(String::from).collect(),
+            env: std::collections::HashMap::new(),
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout,
+        };
+
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(!item.exit_status.success());
         assert_eq!(item.stderr, b"");
         assert_eq!(item.stdout, b"");
     }
