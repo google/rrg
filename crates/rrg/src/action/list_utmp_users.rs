@@ -152,4 +152,23 @@ mod tests {
             })
         }
     }
+
+    #[test]
+    fn handle_var_log_wtmp_no_dupes() {
+        let args = Args {
+            path: "/var/log/wtmp".into(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let replies = session.replies::<Item>()
+            .collect::<Vec<_>>();
+
+        let mut replies_dedup = replies.clone();
+        replies_dedup.sort_by_key(|item| &item.username);
+        replies_dedup.dedup_by_key(|item| &item.username);
+
+        assert_eq!(replies.len(), replies_dedup.len());
+    }
 }
