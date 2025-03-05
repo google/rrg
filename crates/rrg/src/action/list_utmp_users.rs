@@ -143,14 +143,11 @@ mod tests {
         let mut session = crate::session::FakeSession::new();
         assert!(handle(&mut session, args).is_ok());
 
-        let username_env = std::env::var_os("USER")
+        let username = std::env::var_os("USER")
             .expect("no $USER env var");
 
-        assert! {
-            session.replies::<Item>().any(|item| {
-                item.username == username_env
-            })
-        }
+        let mut replies = session.replies::<Item>();
+        assert!(replies.any(|item| item.username == username));
     }
 
     #[test]
