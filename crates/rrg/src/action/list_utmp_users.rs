@@ -68,8 +68,14 @@ where
             })
             .map_err(crate::session::Error::action)?;
 
-        use std::os::unix::ffi::OsStringExt as _;
-        usernames.insert(std::ffi::OsString::from_vec(user.to_bytes().to_vec()));
+        use std::os::unix::ffi::OsStrExt as _;
+        let user = std::ffi::OsStr::from_bytes(user.to_bytes());
+
+        // TODO: https://github.com/rust-lang/rust/issues/60896 - Refactor once
+        //``hash_set_entry` is stabilized.
+        if !usernames.contains(user) {
+            usernames.insert(user.to_owned());
+        }
     }
 
     for username in usernames {
