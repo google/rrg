@@ -16,7 +16,7 @@ pub struct Args {
 #[cfg(target_os = "linux")]
 pub struct Item {
     /// Name of an individual user retrieved from `utmp` records.
-    username: Vec<u8>,
+    username: std::ffi::OsString,
 }
 
 /// Handles invocations of the `list_utmp_users` action.
@@ -68,7 +68,8 @@ where
             })
             .map_err(crate::session::Error::action)?;
 
-        usernames.insert(user.to_bytes().to_vec());
+        use std::os::unix::ffi::OsStringExt as _;
+        usernames.insert(std::ffi::OsString::from_vec(user.to_bytes().to_vec()));
     }
 
     for username in usernames {
@@ -112,8 +113,10 @@ impl crate::response::Item for Item {
     type Proto = rrg_proto::list_utmp_users::Result;
 
     fn into_proto(self) -> Self::Proto {
+        use std::os::unix::ffi::OsStringExt as _;
+
         let mut proto = rrg_proto::list_utmp_users::Result::new();
-        proto.set_username(self.username);
+        proto.set_username(self.username.into_vec());
 
         proto
     }
@@ -139,7 +142,7 @@ mod tests {
 
         assert! {
             session.replies::<Item>().any(|item| {
-                item.username == username_env.clone().into_encoded_bytes()
+                item.username == username_env
             })
         }
     }
