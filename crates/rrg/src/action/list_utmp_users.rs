@@ -4,16 +4,19 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 /// Arguments of the `list_utmp_users` action.
+#[cfg(target_os = "linux")]
 pub struct Args {
     // TODO.
 }
 
 /// Result of the `list_utmp_users` action.
+#[cfg(target_os = "linux")]
 pub struct Item {
     // TODO.
 }
 
 /// Handles invocations of the `list_utmp_users` action.
+#[cfg(target_os = "linux")]
 pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
@@ -21,6 +24,16 @@ where
     todo!()
 }
 
+#[cfg(not(target_os = "linux"))]
+pub fn handle<S>(_: &mut S, _: ()) -> crate::session::Result<()>
+where
+    S: crate::session::Session,
+{
+    use std::io::{Error, ErrorKind};
+    Err(crate::session::Error::action(Error::from(ErrorKind::Unsupported)))
+}
+
+#[cfg(target_os = "linux")]
 impl crate::request::Args for Args {
 
     type Proto = rrg_proto::list_utmp_users::Args;
@@ -30,6 +43,7 @@ impl crate::request::Args for Args {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl crate::response::Item for Item {
 
     type Proto = rrg_proto::list_utmp_users::Result;
