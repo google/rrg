@@ -6,8 +6,16 @@ syntax = "proto3";
 
 package rrg.action.list_utmp_users;
 
+import "rrg/fs.proto";
+
 message Args {
+    // Path to the file to use as a source for `utmp` records.
+    //
+    // Typically this should be `/var/log/wtmp`.
+    rrg.fs.Path path = 1;
 }
 
 message Result {
+    // Name of an individual user retrieved from `utmp` records.
+    bytes username = 1;
 }
