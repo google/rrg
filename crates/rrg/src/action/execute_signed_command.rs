@@ -13,7 +13,7 @@ use protobuf::Message;
 
 // TODO(s-westphal): Check and update max size.
 const MAX_OUTPUT_SIZE: usize = 4048;
-const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Arguments of the `execute_signed_command` action.
 pub struct Args {
@@ -82,7 +82,7 @@ where
         None => return Err(crate::session::Error::action(MissingCommandVerificationKeyError)),
     };
 
-    let mut command_process = Command::new(args.path)
+    let mut command_process = Command::new(&args.path)
         .stdin(std::process::Stdio::piped())
         .args(args.args)
         .env_clear()
@@ -118,14 +118,18 @@ where
     // more input incoming.
     drop(command_stdin);
 
-    while command_start_time.elapsed() < args.timeout {
+    log::info!("starting '{}' (timeout: {:?})", args.path.display(), args.timeout);
+    loop {
+        let time_elapsed = command_start_time.elapsed();
+        let time_left = args.timeout.saturating_sub(time_elapsed);
+
+        if time_left.is_zero() {
+            break;
+        }
+
         match command_process.try_wait() {
             Ok(None) => {
-                log::debug!(
-                    "command not completed, waiting {:?}",
-                    COMMAND_EXECUTION_CHECK_INTERVAL
-                );
-                std::thread::sleep(COMMAND_EXECUTION_CHECK_INTERVAL);
+                std::thread::sleep(std::cmp::min(COMMAND_EXECUTION_CHECK_INTERVAL, time_left));
             }
             _ => break,
         }
@@ -528,7 +532,7 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn handle_kill_if_timeout() {
-        let timeout = std::time::Duration::from_secs(5);
+        let timeout = std::time::Duration::from_secs(0);
 
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
@@ -561,7 +565,7 @@ mod tests {
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_kill_if_timeout() {
-        let timeout = std::time::Duration::from_secs(5);
+        let timeout = std::time::Duration::from_secs(0);
 
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
