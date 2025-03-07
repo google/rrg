@@ -13,7 +13,7 @@ use protobuf::Message;
 
 // TODO(s-westphal): Check and update max size.
 const MAX_OUTPUT_SIZE: usize = 4048;
-const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Arguments of the `execute_signed_command` action.
 pub struct Args {
