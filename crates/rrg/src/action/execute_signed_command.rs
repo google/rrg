@@ -532,7 +532,7 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn handle_kill_if_timeout() {
-        let timeout = std::time::Duration::from_secs(5);
+        let timeout = std::time::Duration::from_secs(0);
 
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
@@ -565,7 +565,7 @@ mod tests {
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_kill_if_timeout() {
-        let timeout = std::time::Duration::from_secs(5);
+        let timeout = std::time::Duration::from_secs(0);
 
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
