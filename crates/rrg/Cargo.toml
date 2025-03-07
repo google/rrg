@@ -19,6 +19,7 @@ default = [
     "action-list_connections",
     "action-list_interfaces",
     "action-list_mounts",
+    "action-list_utmp_users",
     "action-get_winreg_value",
     "action-list_winreg_values",
     "action-list_winreg_keys",
@@ -38,6 +39,7 @@ action-get_tcp_response = []
 action-list_connections = []
 action-list_interfaces = []
 action-list_mounts = []
+action-list_utmp_users = []
 action-get_winreg_value = []
 action-list_winreg_values = []
 action-list_winreg_keys = []

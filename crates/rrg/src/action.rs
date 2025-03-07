@@ -42,6 +42,9 @@ pub mod list_interfaces;
 #[cfg(feature = "action-list_mounts")]
 pub mod list_mounts;
 
+#[cfg(feature = "action-list_utmp_users")]
+pub mod list_utmp_users;
+
 #[cfg(feature = "action-get_winreg_value")]
 pub mod get_winreg_value;
 
@@ -118,6 +121,10 @@ where
         #[cfg(feature = "action-list_mounts")]
         ListMounts => {
             handle(session, request, self::list_mounts::handle)
+        }
+        #[cfg(feature = "action-list_utmp_users")]
+        ListUtmpUsers => {
+            handle(session, request, self::list_utmp_users::handle)
         }
         #[cfg(feature = "action-get_winreg_value")]
         GetWinregValue => {
