@@ -82,7 +82,7 @@ where
         None => return Err(crate::session::Error::action(MissingCommandVerificationKeyError)),
     };
 
-    let mut command_process = Command::new(args.path)
+    let mut command_process = Command::new(&args.path)
         .stdin(std::process::Stdio::piped())
         .args(args.args)
         .env_clear()
@@ -118,6 +118,7 @@ where
     // more input incoming.
     drop(command_stdin);
 
+    log::info!("starting '{}' (timeout: {:?})", args.path.display(), args.timeout);
     loop {
         let time_elapsed = command_start_time.elapsed();
         let time_left = args.timeout.saturating_sub(time_elapsed);
@@ -128,10 +129,6 @@ where
 
         match command_process.try_wait() {
             Ok(None) => {
-                log::debug!(
-                    "command not completed, waiting {:?}",
-                    COMMAND_EXECUTION_CHECK_INTERVAL
-                );
                 std::thread::sleep(std::cmp::min(COMMAND_EXECUTION_CHECK_INTERVAL, time_left));
             }
             _ => break,
