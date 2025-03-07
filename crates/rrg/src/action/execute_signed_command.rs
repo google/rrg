@@ -118,14 +118,21 @@ where
     // more input incoming.
     drop(command_stdin);
 
-    while command_start_time.elapsed() < args.timeout {
+    loop {
+        let time_elapsed = command_start_time.elapsed();
+        let time_left = args.timeout.saturating_sub(time_elapsed);
+
+        if time_left.is_zero() {
+            break;
+        }
+
         match command_process.try_wait() {
             Ok(None) => {
                 log::debug!(
                     "command not completed, waiting {:?}",
                     COMMAND_EXECUTION_CHECK_INTERVAL
                 );
-                std::thread::sleep(COMMAND_EXECUTION_CHECK_INTERVAL);
+                std::thread::sleep(std::cmp::min(COMMAND_EXECUTION_CHECK_INTERVAL, time_left));
             }
             _ => break,
         }
