@@ -35,8 +35,8 @@ pub enum Action {
     ListInterfaces,
     /// List filesystem mounts available on the system.
     ListMounts,
-    /// List users available on the system.
-    ListUsers,
+    /// List users available on the system (Linux-only).
+    ListUtmpUsers,
     /// Get the snapshot of the entire filesystem.
     GetFilesystemTimeline,
     /// Connect to a TCP address, write some data and retrieve the response.
@@ -68,7 +68,7 @@ impl std::fmt::Display for Action {
             Action::ListNamedPipes => write!(fmt, "list_named_pipes"),
             Action::ListInterfaces => write!(fmt, "list_interfaces"),
             Action::ListMounts => write!(fmt, "list_mounts"),
-            Action::ListUsers => write!(fmt, "list_users"),
+            Action::ListUtmpUsers => write!(fmt, "list_utmp_users"),
             Action::GetFilesystemTimeline => write!(fmt, "get_filesystem_timeline"),
             Action::GetWinregValue => write!(fmt, "get_winreg_value"),
             Action::ListWinregValues => write!(fmt, "list_winreg_values"),
@@ -119,7 +119,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             LIST_NAMED_PIPES => Ok(Action::ListNamedPipes),
             LIST_INTERFACES => Ok(Action::ListInterfaces),
             LIST_MOUNTS => Ok(Action::ListMounts),
-            LIST_USERS => Ok(Action::ListUsers),
+            LIST_UTMP_USERS => Ok(Action::ListUtmpUsers),
             GET_FILESYSTEM_TIMELINE => Ok(Action::GetFilesystemTimeline),
             GET_TCP_RESPONSE => Ok(Action::GetTcpResponse),
             GET_WINREG_VALUE => Ok(Action::GetWinregValue),
