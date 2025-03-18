@@ -3,14 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use std::{
-    fmt::Debug,
-    io::{Read, Write},
-    process::{Command, ExitStatus},
-};
-
-use protobuf::Message;
-
 // TODO(s-westphal): Check and update max size.
 const MAX_OUTPUT_SIZE: usize = 4048;
 const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
@@ -32,7 +24,7 @@ pub struct Args {
 /// Result of the `execute_signed_command` action.
 pub struct Item {
     /// Exit status of the command subprocess.
-    exit_status: ExitStatus,
+    exit_status: std::process::ExitStatus,
     /// Standard output of the command executiom.
     stdout: Vec<u8>,
     /// Wheather standard output is truncated.
@@ -73,6 +65,7 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
+    use std::io::{Read as _, Write as _};
     use crate::request::ParseArgsError;
 
     match session.args().command_verification_key {
@@ -82,7 +75,7 @@ where
         None => return Err(crate::session::Error::action(MissingCommandVerificationKeyError)),
     };
 
-    let mut command_process = Command::new(&args.path)
+    let mut command_process = std::process::Command::new(&args.path)
         .stdin(std::process::Stdio::piped())
         .args(args.args)
         .env_clear()
@@ -177,6 +170,7 @@ impl crate::request::Args for Args {
 
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
+        use protobuf::Message as _;
 
         let raw_signature = proto.take_command_ed25519_signature();
 
@@ -243,15 +237,11 @@ impl crate::response::Item for Item {
 #[cfg(test)]
 mod tests {
 
-    use std::path::PathBuf;
-
-    use ed25519_dalek::{Signer, VerifyingKey};
-
-    use crate::session::FakeSession;
+    use ed25519_dalek::Signer as _;
 
     use super::*;
 
-    fn prepare_session(verification_key: VerifyingKey) -> FakeSession {
+    fn prepare_session(verification_key: ed25519_dalek::VerifyingKey) -> crate::session::FakeSession {
         crate::session::FakeSession::with_args(crate::args::Args {
             heartbeat_rate: std::time::Duration::from_secs(0),
             command_verification_key: Some(verification_key),
@@ -272,7 +262,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("echo"),
+            path: "echo".into(),
             args: ["Hello,", "world!"]
                 .into_iter().map(String::from).collect(),
             env: std::collections::HashMap::new(),
@@ -302,7 +292,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("cmd"),
+            path: "cmd".into(),
             args: ["/C", "echo", "Hello,", "world!"]
                 .into_iter().map(String::from).collect(),
             env: std::collections::HashMap::new(),
@@ -332,7 +322,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("cat"),
+            path: "cat".into(),
             args: Vec::default(),
             env: std::collections::HashMap::new(),
             stdin: "Hello, world!".as_bytes().to_vec(),
@@ -361,7 +351,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("findstr"),
+            path: "findstr".into(),
             args: vec![String::from("world")],
             env: std::collections::HashMap::new(),
             ed25519_signature,
@@ -390,7 +380,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("printenv"),
+            path: "printenv".into(),
             args: Vec::default(),
             env: [(String::from("MY_ENV_VAR"), String::from("Hello, world!"))]
                 .into(),
@@ -422,7 +412,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("cmd"),
+            path: "cmd".into(),
             args: vec![String::from("/c"), String::from("echo %MY_ENV_VAR%")],
             env: [(String::from("MY_ENV_VAR"), String::from("Hello, world!"))]
                 .into(),
@@ -443,13 +433,14 @@ mod tests {
 
     #[test]
     fn handle_invalid_signature() {
+        use protobuf::Message as _;
         use crate::request::Args as _;
 
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
         let mut command = rrg_proto::execute_signed_command::Command::new();
-        command.set_path(PathBuf::from("ls").into());
+        command.set_path(std::path::PathBuf::from("ls").into());
 
         let raw_command = command.write_to_bytes().unwrap();
 
@@ -480,7 +471,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("echo"),
+            path: "echo".into(),
             args: vec!["A".repeat(MAX_OUTPUT_SIZE) + "truncated"],
             env: std::collections::HashMap::new(),
             ed25519_signature,
@@ -510,7 +501,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("findstr"),
+            path: "findstr".into(),
             args: vec![String::from("truncated")],
             env: std::collections::HashMap::new(),
             ed25519_signature,
@@ -542,7 +533,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: PathBuf::from("sleep"),
+            path: "sleep".into(),
             args: vec![(timeout.as_secs() + 1).to_string()],
             env: std::collections::HashMap::new(),
             ed25519_signature,
@@ -577,7 +568,7 @@ mod tests {
             raw_command,
             // The `timeout` command seems to be unavailable e.g. on Wine so
             // instead we just hang the program forever using an infinite loop.
-            path: PathBuf::from("cmd"),
+            path: "cmd".into(),
             args: ["/q", "/c", "for /l %i in () do echo off"]
                 .into_iter().map(String::from).collect(),
             env: std::collections::HashMap::new(),
