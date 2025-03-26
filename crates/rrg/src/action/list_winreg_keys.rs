@@ -10,6 +10,8 @@ pub struct Args {
     root: winreg::PredefinedKey,
     /// Key relative to `root` to list subkeys of.
     key: std::ffi::OsString,
+    /// Limit on the depth of recursion when visiting subkeys.
+    max_depth: u32,
 }
 
 /// A result of the `list_winreg_keys` action.
@@ -35,24 +37,82 @@ where
     let info = key.info()
         .map_err(crate::session::Error::action)?;
 
-    for subkey in info.subkeys() {
-        let subkey = match subkey {
-            Ok(subkey) => subkey,
-            Err(error) => {
-                log::error! {
-                    "failed to list subkey for key '{:?}': {}",
-                    args.key, error,
-                };
-                continue
-            }
+    struct PendingKey {
+        prefix: std::ffi::OsString,
+        key: winreg::OpenKey,
+        info: winreg::KeyInfo,
+        depth: u32,
+    }
+
+    let mut pending_keys = Vec::new();
+    pending_keys.push(PendingKey { prefix: "".into(), key, info, depth: 0 });
+
+    loop {
+        let PendingKey { prefix, key, info, depth } = match pending_keys.pop() {
+            Some(key) => key,
+            None => break,
         };
 
-        session.reply(Item {
-            root: args.root,
-            // TODO(@panhania): Add support for case-correcting the key.
-            key: args.key.clone(),
-            subkey,
-        })?;
+        for subkey in info.subkeys() {
+            let subkey = match subkey {
+                Ok(subkey) => subkey,
+                Err(error) => {
+                    log::error! {
+                        "failed to list subkey for key '{:?}': {}",
+                        args.key, error,
+                    };
+                    continue
+                }
+            };
+
+            if depth + 1 < args.max_depth {
+                match key.open(&subkey) {
+                    Ok(subkey_open) => match subkey_open.info() {
+                        Ok(subkey_info) => {
+                            let mut subkey_prefix = std::ffi::OsString::new();
+                            if !prefix.is_empty() {
+                                subkey_prefix.push(&prefix);
+                                subkey_prefix.push("\\");
+                            }
+                            subkey_prefix.push(&subkey);
+
+                            pending_keys.push(PendingKey {
+                                prefix: subkey_prefix,
+                                key: subkey_open,
+                                info: subkey_info,
+                                depth: depth + 1,
+                            });
+                        }
+                        Err(error) => {
+                            log::error! {
+                                "failed to obtain information for subkey '{:?}': {}",
+                                subkey, error,
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        log::error! {
+                            "failed to open subkey '{:?}': {}",
+                            subkey, error,
+                        }
+                    }
+                }
+            }
+
+            let mut subkey_full = std::ffi::OsString::new();
+            if !prefix.is_empty() {
+                subkey_full.push(&prefix);
+                subkey_full.push("\\");
+            }
+            subkey_full.push(&subkey);
+
+            session.reply(Item {
+                root: args.root,
+                // TODO(@panhania): Add support for case-correcting the key.
+                key: args.key.clone(),
+                subkey: subkey_full,
+            })?;
+        }
     }
 
     Ok(())
@@ -84,6 +144,7 @@ impl crate::request::Args for Args {
         Ok(Args {
             root,
             key: std::ffi::OsString::from(proto.take_key()),
+            max_depth: 1,
         })
     }
 }
@@ -114,6 +175,7 @@ mod tests {
         let args = Args {
             root: winreg::PredefinedKey::LocalMachine,
             key: std::ffi::OsString::from("FOOWARE"),
+            max_depth: 1,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -125,6 +187,7 @@ mod tests {
         let args = Args {
             root: winreg::PredefinedKey::LocalMachine,
             key: std::ffi::OsString::from(""),
+            max_depth: 1,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -144,6 +207,7 @@ mod tests {
         let args = Args {
             root: winreg::PredefinedKey::LocalMachine,
             key: std::ffi::OsString::from("SOFTWARE"),
+            max_depth: 1,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -153,5 +217,52 @@ mod tests {
                 .find(|item| item.subkey.to_ascii_uppercase() == "MICROSOFT")
                 .is_some()
         }
+    }
+
+    #[test]
+    fn handle_max_depth_2() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from(""),
+            max_depth: 2,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let subkeys_uppercase = session.replies::<Item>()
+            .map(|item| item.subkey.to_ascii_uppercase())
+            .collect::<Vec<_>>();
+
+        assert!(subkeys_uppercase.contains(&"HARDWARE".into()));
+        assert!(subkeys_uppercase.contains(&"HARDWARE\\DEVICEMAP".into()));
+        assert!(subkeys_uppercase.contains(&"SOFTWARE".into()));
+        assert!(subkeys_uppercase.contains(&"SOFTWARE\\MICROSOFT".into()));
+
+        assert!(!subkeys_uppercase.contains(&"SOFTWARE\\MICROSOFT\\WINDOWS".into()));
+        assert!(!subkeys_uppercase.contains(&"SOFTWARE\\MICROSOFT\\WINDOWS".into()));
+    }
+
+    #[test]
+    fn handle_max_depth_3() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from(""),
+            max_depth: 3,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let subkeys_uppercase = session.replies::<Item>()
+            .map(|item| item.subkey.to_ascii_uppercase())
+            .collect::<Vec<_>>();
+
+        assert!(subkeys_uppercase.contains(&"HARDWARE".into()));
+        assert!(subkeys_uppercase.contains(&"HARDWARE\\DEVICEMAP".into()));
+        assert!(subkeys_uppercase.contains(&"HARDWARE\\DEVICEMAP\\VIDEO".into()));
+        assert!(subkeys_uppercase.contains(&"SOFTWARE".into()));
+        assert!(subkeys_uppercase.contains(&"SOFTWARE\\MICROSOFT".into()));
+        assert!(subkeys_uppercase.contains(&"SOFTWARE\\MICROSOFT\\WINDOWS".into()));
     }
 }
