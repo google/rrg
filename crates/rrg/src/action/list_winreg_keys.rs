@@ -35,80 +35,105 @@ where
         .map_err(crate::session::Error::action)?;
 
     struct PendingKey {
-        prefix: std::ffi::OsString,
         key: winreg::OpenKey,
+        key_suffix: std::ffi::OsString,
         depth: u32,
     }
 
     let mut pending_keys = Vec::new();
-    pending_keys.push(PendingKey { prefix: "".into(), key, depth: 0 });
+    pending_keys.push(PendingKey {
+        key,
+        key_suffix: std::ffi::OsString::new(),
+        depth: 0,
+    });
 
     loop {
-        let PendingKey { prefix, key, depth } = match pending_keys.pop() {
-            Some(key) => key,
+        let PendingKey {
+            key,
+            key_suffix,
+            depth
+        } = match pending_keys.pop() {
+            Some(pending_key) => pending_key,
             None => break,
         };
 
         let info = match key.info() {
             Ok(info) => info,
             Err(error) => {
+                let mut key_full_name = std::ffi::OsString::new();
+                if !args.key.is_empty() {
+                    key_full_name.push(&args.key);
+                    key_full_name.push("\\");
+                }
+                key_full_name.push(&key_suffix);
+
                 log::error! {
                     "failed to obtain information for key {:?}: {}",
-                    prefix, error,
+                    key_full_name, error,
                 }
                 continue
             }
         };
 
-        for subkey in info.subkeys() {
-            let subkey = match subkey {
-                Ok(subkey) => subkey,
+        for subkey_name in info.subkeys() {
+            let subkey_name = match subkey_name {
+                Ok(subkey_name) => subkey_name,
                 Err(error) => {
+                    let mut key_full_name = std::ffi::OsString::new();
+                    if !args.key.is_empty() {
+                        key_full_name.push(&args.key);
+                        key_full_name.push(&"\\");
+                    }
+                    if !key_suffix.is_empty() {
+                        key_full_name.push(&key_suffix);
+                        key_full_name.push(&"\\");
+                    }
+
                     log::error! {
                         "failed to list subkey for key '{:?}': {}",
-                        args.key, error,
+                        key_full_name, error,
                     };
                     continue
                 }
             };
 
-            if depth + 1 < args.max_depth {
-                match key.open(&subkey) {
-                    Ok(subkey_open) => {
-                        let mut subkey_prefix = std::ffi::OsString::new();
-                        if !prefix.is_empty() {
-                            subkey_prefix.push(&prefix);
-                            subkey_prefix.push("\\");
-                        }
-                        subkey_prefix.push(&subkey);
+            let mut subkey_suffix = std::ffi::OsString::new();
+            if !key_suffix.is_empty() {
+                subkey_suffix.push(&key_suffix);
+                subkey_suffix.push("\\");
+            }
+            subkey_suffix.push(&subkey_name);
 
+            if depth + 1 < args.max_depth {
+                match key.open(&subkey_name) {
+                    Ok(subkey) => {
                         pending_keys.push(PendingKey {
-                            prefix: subkey_prefix,
-                            key: subkey_open,
+                            key: subkey,
+                            key_suffix: subkey_suffix.clone(),
                             depth: depth + 1,
                         });
                     }
                     Err(error) => {
+                        let mut subkey_full_name = std::ffi::OsString::new();
+                        if !args.key.is_empty() {
+                            subkey_full_name.push(&args.key);
+                            subkey_full_name.push("\\");
+                        }
+                        subkey_full_name.push(&subkey_suffix);
+
                         log::error! {
                             "failed to open subkey '{:?}': {}",
-                            subkey, error,
+                            subkey_full_name, error,
                         }
                     }
                 }
             }
 
-            let mut subkey_full = std::ffi::OsString::new();
-            if !prefix.is_empty() {
-                subkey_full.push(&prefix);
-                subkey_full.push("\\");
-            }
-            subkey_full.push(&subkey);
-
             session.reply(Item {
                 root: args.root,
                 // TODO(@panhania): Add support for case-correcting the key.
                 key: args.key.clone(),
-                subkey: subkey_full,
+                subkey: subkey_suffix,
             })?;
         }
     }
