@@ -36,22 +36,22 @@ where
 
     struct PendingKey {
         key: winreg::OpenKey,
-        key_suffix: std::ffi::OsString,
+        key_rel_name: std::ffi::OsString,
         depth: u32,
     }
 
     let mut pending_keys = Vec::new();
     pending_keys.push(PendingKey {
         key,
-        key_suffix: std::ffi::OsString::new(),
+        key_rel_name: std::ffi::OsString::new(),
         depth: 0,
     });
 
     loop {
         let PendingKey {
             key,
-            key_suffix,
-            depth
+            key_rel_name,
+            depth,
         } = match pending_keys.pop() {
             Some(pending_key) => pending_key,
             None => break,
@@ -65,12 +65,12 @@ where
                 key_full_name.push(&args.key);
                 key_full_name.push("\\");
             }
-            key_full_name.push(&key_suffix);
+            key_full_name.push(&key_rel_name);
             key_full_name
         };
 
-        let info = match key.info() {
-            Ok(info) => info,
+        let key_info = match key.info() {
+            Ok(key_info) => key_info,
             Err(error) => {
                 log::error! {
                     "failed to obtain information for key {:?}: {}",
@@ -80,7 +80,7 @@ where
             }
         };
 
-        for subkey_name in info.subkeys() {
+        for subkey_name in key_info.subkeys() {
             let subkey_name = match subkey_name {
                 Ok(subkey_name) => subkey_name,
                 Err(error) => {
@@ -92,12 +92,12 @@ where
                 }
             };
 
-            let mut subkey_suffix = std::ffi::OsString::new();
-            if !key_suffix.is_empty() {
-                subkey_suffix.push(&key_suffix);
-                subkey_suffix.push("\\");
+            let mut subkey_rel_name = std::ffi::OsString::new();
+            if !key_rel_name.is_empty() {
+                subkey_rel_name.push(&key_rel_name);
+                subkey_rel_name.push("\\");
             }
-            subkey_suffix.push(&subkey_name);
+            subkey_rel_name.push(&subkey_name);
 
             // Similarly to `key_full_name`, because this is used only for error
             // handling, we use a closure in order to avoid allocating a string
@@ -108,7 +108,7 @@ where
                     subkey_full_name.push(&args.key);
                     subkey_full_name.push("\\");
                 }
-                subkey_full_name.push(&subkey_suffix);
+                subkey_full_name.push(&subkey_rel_name);
                 subkey_full_name
             };
 
@@ -117,7 +117,7 @@ where
                     Ok(subkey) => {
                         pending_keys.push(PendingKey {
                             key: subkey,
-                            key_suffix: subkey_suffix.clone(),
+                            key_rel_name: subkey_rel_name.clone(),
                             depth: depth + 1,
                         });
                     }
@@ -134,7 +134,7 @@ where
                 root: args.root,
                 // TODO(@panhania): Add support for case-correcting the key.
                 key: args.key.clone(),
-                subkey: subkey_suffix,
+                subkey: subkey_rel_name,
             })?;
         }
     }
