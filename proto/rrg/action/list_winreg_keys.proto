@@ -23,6 +23,6 @@ message Result {
     // Key relative to `root` of the listed subkey.
     string key = 2;
 
-    // Listed subkey.
+    // Listed subkey relative to `root` and `key`.
     string subkey = 3;
 }

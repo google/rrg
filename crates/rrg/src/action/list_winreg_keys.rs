@@ -21,7 +21,7 @@ struct Item {
     root: winreg::PredefinedKey,
     /// Key relative to `root` of the listed subkey.
     key: std::ffi::OsString,
-    /// Listed subkey.
+    /// Listed subkey relative to `root` and `key`.
     subkey: std::ffi::OsString,
 }
 
