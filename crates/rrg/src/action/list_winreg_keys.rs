@@ -263,4 +263,36 @@ mod tests {
         assert!(subkeys_uppercase.contains(&"SOFTWARE\\MICROSOFT".into()));
         assert!(subkeys_uppercase.contains(&"SOFTWARE\\MICROSOFT\\WINDOWS".into()));
     }
+
+    #[test]
+    fn handle_root_preserved() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from(""),
+            max_depth: 3,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        for reply in session.replies::<Item>() {
+            assert_eq!(reply.root, winreg::PredefinedKey::LocalMachine);
+        }
+    }
+
+    #[test]
+    fn handle_key_preserved() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from("HARDWARE\\DEVICEMAP"),
+            max_depth: 3,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        for reply in session.replies::<Item>() {
+            assert_eq!(reply.key, "HARDWARE\\DEVICEMAP");
+        }
+    }
 }
