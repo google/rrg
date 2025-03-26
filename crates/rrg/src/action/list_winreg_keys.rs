@@ -34,23 +34,30 @@ where
     let key = args.root.open(&args.key)
         .map_err(crate::session::Error::action)?;
 
-    let info = key.info()
-        .map_err(crate::session::Error::action)?;
-
     struct PendingKey {
         prefix: std::ffi::OsString,
         key: winreg::OpenKey,
-        info: winreg::KeyInfo,
         depth: u32,
     }
 
     let mut pending_keys = Vec::new();
-    pending_keys.push(PendingKey { prefix: "".into(), key, info, depth: 0 });
+    pending_keys.push(PendingKey { prefix: "".into(), key, depth: 0 });
 
     loop {
-        let PendingKey { prefix, key, info, depth } = match pending_keys.pop() {
+        let PendingKey { prefix, key, depth } = match pending_keys.pop() {
             Some(key) => key,
             None => break,
+        };
+
+        let info = match key.info() {
+            Ok(info) => info,
+            Err(error) => {
+                log::error! {
+                    "failed to obtain information for key {:?}: {}",
+                    prefix, error,
+                }
+                continue
+            }
         };
 
         for subkey in info.subkeys() {
@@ -67,28 +74,19 @@ where
 
             if depth + 1 < args.max_depth {
                 match key.open(&subkey) {
-                    Ok(subkey_open) => match subkey_open.info() {
-                        Ok(subkey_info) => {
-                            let mut subkey_prefix = std::ffi::OsString::new();
-                            if !prefix.is_empty() {
-                                subkey_prefix.push(&prefix);
-                                subkey_prefix.push("\\");
-                            }
-                            subkey_prefix.push(&subkey);
+                    Ok(subkey_open) => {
+                        let mut subkey_prefix = std::ffi::OsString::new();
+                        if !prefix.is_empty() {
+                            subkey_prefix.push(&prefix);
+                            subkey_prefix.push("\\");
+                        }
+                        subkey_prefix.push(&subkey);
 
-                            pending_keys.push(PendingKey {
-                                prefix: subkey_prefix,
-                                key: subkey_open,
-                                info: subkey_info,
-                                depth: depth + 1,
-                            });
-                        }
-                        Err(error) => {
-                            log::error! {
-                                "failed to obtain information for subkey '{:?}': {}",
-                                subkey, error,
-                            }
-                        }
+                        pending_keys.push(PendingKey {
+                            prefix: subkey_prefix,
+                            key: subkey_open,
+                            depth: depth + 1,
+                        });
                     }
                     Err(error) => {
                         log::error! {
