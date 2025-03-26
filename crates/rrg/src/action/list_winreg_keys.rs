@@ -57,19 +57,24 @@ where
             None => break,
         };
 
+        // Used only for error handling, thus we make it a closure to avoid
+        // allocating a string in case there are no errors.
+        let key_full_name = || -> std::ffi::OsString {
+            let mut key_full_name = std::ffi::OsString::new();
+            if !args.key.is_empty() {
+                key_full_name.push(&args.key);
+                key_full_name.push("\\");
+            }
+            key_full_name.push(&key_suffix);
+            key_full_name
+        };
+
         let info = match key.info() {
             Ok(info) => info,
             Err(error) => {
-                let mut key_full_name = std::ffi::OsString::new();
-                if !args.key.is_empty() {
-                    key_full_name.push(&args.key);
-                    key_full_name.push("\\");
-                }
-                key_full_name.push(&key_suffix);
-
                 log::error! {
                     "failed to obtain information for key {:?}: {}",
-                    key_full_name, error,
+                    key_full_name(), error,
                 }
                 continue
             }
@@ -79,19 +84,9 @@ where
             let subkey_name = match subkey_name {
                 Ok(subkey_name) => subkey_name,
                 Err(error) => {
-                    let mut key_full_name = std::ffi::OsString::new();
-                    if !args.key.is_empty() {
-                        key_full_name.push(&args.key);
-                        key_full_name.push(&"\\");
-                    }
-                    if !key_suffix.is_empty() {
-                        key_full_name.push(&key_suffix);
-                        key_full_name.push(&"\\");
-                    }
-
                     log::error! {
                         "failed to list subkey for key '{:?}': {}",
-                        key_full_name, error,
+                        key_full_name(), error,
                     };
                     continue
                 }
@@ -104,6 +99,19 @@ where
             }
             subkey_suffix.push(&subkey_name);
 
+            // Similarly to `key_full_name`, because this is used only for error
+            // handling, we use a closure in order to avoid allocating a string
+            // in case there are no errors.
+            let subkey_full_name = || -> std::ffi::OsString {
+                let mut subkey_full_name = std::ffi::OsString::new();
+                if !args.key.is_empty() {
+                    subkey_full_name.push(&args.key);
+                    subkey_full_name.push("\\");
+                }
+                subkey_full_name.push(&subkey_suffix);
+                subkey_full_name
+            };
+
             if depth + 1 < args.max_depth {
                 match key.open(&subkey_name) {
                     Ok(subkey) => {
@@ -114,16 +122,9 @@ where
                         });
                     }
                     Err(error) => {
-                        let mut subkey_full_name = std::ffi::OsString::new();
-                        if !args.key.is_empty() {
-                            subkey_full_name.push(&args.key);
-                            subkey_full_name.push("\\");
-                        }
-                        subkey_full_name.push(&subkey_suffix);
-
                         log::error! {
                             "failed to open subkey '{:?}': {}",
-                            subkey_full_name, error,
+                            subkey_full_name(), error,
                         }
                     }
                 }
