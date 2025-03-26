@@ -57,24 +57,12 @@ where
             None => break,
         };
 
-        // Used only for error handling, thus we make it a closure to avoid
-        // allocating a string in case there are no errors.
-        let key_full_name = || -> std::ffi::OsString {
-            let mut key_full_name = std::ffi::OsString::new();
-            if !args.key.is_empty() {
-                key_full_name.push(&args.key);
-                key_full_name.push("\\");
-            }
-            key_full_name.push(&key_rel_name);
-            key_full_name
-        };
-
         let key_info = match key.info() {
             Ok(key_info) => key_info,
             Err(error) => {
                 log::error! {
                     "failed to obtain information for key {:?}: {}",
-                    key_full_name(), error,
+                    key_join(&args.key, &key_rel_name), error,
                 }
                 continue
             }
@@ -86,31 +74,13 @@ where
                 Err(error) => {
                     log::error! {
                         "failed to list subkey for key '{:?}': {}",
-                        key_full_name(), error,
+                        key_join(&args.key, &key_rel_name), error,
                     };
                     continue
                 }
             };
 
-            let mut subkey_rel_name = std::ffi::OsString::new();
-            if !key_rel_name.is_empty() {
-                subkey_rel_name.push(&key_rel_name);
-                subkey_rel_name.push("\\");
-            }
-            subkey_rel_name.push(&subkey_name);
-
-            // Similarly to `key_full_name`, because this is used only for error
-            // handling, we use a closure in order to avoid allocating a string
-            // in case there are no errors.
-            let subkey_full_name = || -> std::ffi::OsString {
-                let mut subkey_full_name = std::ffi::OsString::new();
-                if !args.key.is_empty() {
-                    subkey_full_name.push(&args.key);
-                    subkey_full_name.push("\\");
-                }
-                subkey_full_name.push(&subkey_rel_name);
-                subkey_full_name
-            };
+            let subkey_rel_name = key_join(&key_rel_name, &subkey_name);
 
             if depth + 1 < args.max_depth {
                 match key.open(&subkey_name) {
@@ -124,7 +94,7 @@ where
                     Err(error) => {
                         log::error! {
                             "failed to open subkey '{:?}': {}",
-                            subkey_full_name(), error,
+                            key_join(&key_rel_name, &subkey_name), error,
                         }
                     }
                 }
@@ -186,6 +156,25 @@ impl crate::response::Item for Item {
 
         proto
     }
+}
+
+/// Adjoins `left` and `right` using Windows registry key separator (`\`).
+///
+/// This is simlar to [`std::path::Path::join`] but for Windows registry keys.
+fn key_join<S>(left: &S, right: &S) -> std::ffi::OsString
+where
+    S: AsRef<std::ffi::OsStr>,
+{
+    let left = left.as_ref();
+    let right = right.as_ref();
+
+    let mut result = std::ffi::OsString::new();
+    result.push(left);
+    if !left.is_empty() && !right.is_empty() {
+        result.push("\\");
+    }
+    result.push(right);
+    result
 }
 
 #[cfg(test)]
@@ -320,5 +309,32 @@ mod tests {
         for reply in session.replies::<Item>() {
             assert_eq!(reply.key, "HARDWARE\\DEVICEMAP");
         }
+    }
+
+    #[test]
+    fn key_join_both_empty() {
+        let empty = std::ffi::OsString::new();
+        assert_eq!(key_join(&empty, &empty), "");
+    }
+
+    #[test]
+    fn key_join_left_empty() {
+        let empty = std::ffi::OsString::new();
+        let foo = std::ffi::OsString::from("foo");
+        assert_eq!(key_join(&empty, &foo), "foo");
+    }
+
+    #[test]
+    fn key_join_right_empty() {
+        let empty = std::ffi::OsString::new();
+        let foo = std::ffi::OsString::from("foo");
+        assert_eq!(key_join(&foo, &empty), "foo");
+    }
+
+    #[test]
+    fn key_join_both_not_empty() {
+        let foo = std::ffi::OsString::from("foo");
+        let bar = std::ffi::OsString::from("bar");
+        assert_eq!(key_join(&foo, &bar), "foo\\bar");
     }
 }
