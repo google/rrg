@@ -144,7 +144,7 @@ impl crate::request::Args for Args {
         Ok(Args {
             root,
             key: std::ffi::OsString::from(proto.take_key()),
-            max_depth: 1,
+            max_depth: proto.max_depth(),
         })
     }
 }
