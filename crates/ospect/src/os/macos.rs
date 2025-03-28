@@ -31,6 +31,17 @@ pub fn hostname() -> std::io::Result<std::ffi::OsString> {
 }
 
 /// Returns the FQDN of the currently running operating system.
+/// Returns the hostname if it already contains a dot.
 pub fn fqdn() -> std::io::Result<std::ffi::OsString> {
+    let hostname = crate::os::unix::hostname()?;
+
+    // If the hostname contains a dot, it's likely already a FQDN.
+    // It might not be resolvable though so calling
+    // crate::os::unix::fqdn() could fail.
+    use std::os::unix::ffi::OsStrExt;
+    if hostname.as_bytes().contains(&b'.') {
+        return Ok(hostname);
+    }
+
     crate::os::unix::fqdn()
 }
