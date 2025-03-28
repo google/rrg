@@ -286,6 +286,28 @@ mod tests {
     }
 
     #[test]
+    fn handle_max_depth_default() {
+        let args = Args {
+            root: winreg::PredefinedKey::LocalMachine,
+            key: std::ffi::OsString::from(""),
+            max_depth: Default::default(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let subkeys_uppercase = session.replies::<Item>()
+            .map(|item| item.subkey.to_ascii_uppercase())
+            .collect::<Vec<_>>();
+
+        assert!(subkeys_uppercase.contains(&"HARDWARE".into()));
+        assert!(subkeys_uppercase.contains(&"SOFTWARE".into()));
+
+        assert!(!subkeys_uppercase.contains(&"HARDWARE\\DEVICEMAP".into()));
+        assert!(!subkeys_uppercase.contains(&"SOFTWARE\\MICROSOFT".into()));
+    }
+
+    #[test]
     fn handle_root_preserved() {
         let args = Args {
             root: winreg::PredefinedKey::LocalMachine,
