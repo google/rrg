@@ -70,7 +70,7 @@ where
                 log::error! {
                     "failed to obtain information for key {:?}: {}",
                     key_join(&args.key, &key_rel_name), error,
-                }
+                };
                 continue
             }
         };
@@ -101,7 +101,7 @@ where
                         log::error! {
                             "failed to open subkey '{:?}': {}",
                             key_join(&key_rel_name, &subkey_name), error,
-                        }
+                        };
                     }
                 }
             }
