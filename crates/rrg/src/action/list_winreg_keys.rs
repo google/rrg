@@ -34,12 +34,19 @@ where
     let key = args.root.open(&args.key)
         .map_err(crate::session::Error::action)?;
 
+    /// Single "stack frame" of the recursive key listing procedure.
     struct PendingKey {
+        /// Handle to the key specified in the `key_rel_name`.
         key: winreg::OpenKey,
+        /// Name of the `key` relative to the key from which we started.
         key_rel_name: std::ffi::OsString,
+        /// Current depth of the recursive walk.
         depth: u32,
     }
 
+    // `pending_keys` represents our recursion stack. We implement the walk this
+    // way rather than using the traditional recursion to avoid stack overflow
+    // issues in case of deep registry hierarchies.
     let mut pending_keys = Vec::new();
     pending_keys.push(PendingKey {
         key,
@@ -79,7 +86,6 @@ where
                     continue
                 }
             };
-
             let subkey_rel_name = key_join(&key_rel_name, &subkey_name);
 
             if depth + 1 < args.max_depth {
