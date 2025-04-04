@@ -150,7 +150,7 @@ impl crate::request::Args for Args {
         Ok(Args {
             root,
             key: std::ffi::OsString::from(proto.take_key()),
-            max_depth: 0, // TODO(@panhania): Read this from the proto.
+            max_depth: proto.max_depth(),
         })
     }
 }
