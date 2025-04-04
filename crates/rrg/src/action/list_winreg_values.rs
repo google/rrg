@@ -65,10 +65,10 @@ where
             None => break,
         };
 
-        let info = key.info()
+        let key_info = key.info()
             .map_err(crate::session::Error::action)?;
 
-        for value in info.values() {
+        for value in key_info.values() {
             let value = match value {
                 Ok(value) => value,
                 Err(error) => {
@@ -89,7 +89,7 @@ where
         }
 
         if depth < args.max_depth {
-            for subkey_name in info.subkeys() {
+            for subkey_name in key_info.subkeys() {
                 let subkey_name = match subkey_name {
                     Ok(subkey_name) => subkey_name,
                     Err(error) => {
