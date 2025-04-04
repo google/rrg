@@ -176,6 +176,7 @@ impl crate::response::Item for Item {
 /// Adjoins `left` and `right` using Windows registry key separator (`\`).
 ///
 /// This is simlar to [`std::path::Path::join`] but for Windows registry keys.
+#[cfg(target_family = "windows")]
 fn key_join<S>(left: &S, right: &S) -> std::ffi::OsString
 where
     S: AsRef<std::ffi::OsStr>,
