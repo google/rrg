@@ -286,7 +286,7 @@ mod tests {
             // Okay, depth 1.
             session.replies::<Item>().any(|item| {
                 item.key.to_ascii_uppercase() == "HARDWARE\\Description\\System\\BIOS" &&
-                item.value.name.to_ascii_uppercase() == "BIOSVENDOR"
+                item.value.name.to_ascii_uppercase() == "BIOSVERSION"
             })
         }
     }
