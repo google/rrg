@@ -243,19 +243,17 @@ mod tests {
         assert!(handle(&mut session, args).is_ok());
 
         assert! {
-            session.replies::<Item>()
-                .find(|item| {
-                    item.key == "HARDWARE\\Description\\System" &&
-                    item.value.name == "Identifier"
-                })
-                .is_some() // Okay, depth 0.
+            // Okay, depth 0.
+            session.replies::<Item>().any(|item| {
+                item.key == "HARDWARE\\Description\\System" &&
+                item.value.name == "Identifier"
+            })
         }
         assert! {
-            session.replies::<Item>()
-                .find(|item| {
-                    item.key == "HARDWARE\\Description\\System\\BIOS"
-                })
-                .is_none() // Not okay, depth 1.
+            // Not okay, depth 1.
+            !session.replies::<Item>().any(|item| {
+                item.key == "HARDWARE\\Description\\System\\BIOS"
+            })
         }
     }
 
@@ -271,28 +269,25 @@ mod tests {
         assert!(handle(&mut session, args).is_ok());
 
         assert! {
-            session.replies::<Item>()
-                .find(|item| {
-                    item.key == "HARDWARE\\Description\\System" &&
-                    item.value.name == "Identifier"
-                })
-                .is_some() // Okay, depth 0.
+            // Okay, depth 0.
+            session.replies::<Item>().any(|item| {
+                item.key == "HARDWARE\\Description\\System" &&
+                item.value.name == "Identifier"
+            })
         }
         assert! {
-            session.replies::<Item>()
-                .find(|item| {
-                    item.key == "HARDWARE\\Description\\System\\BIOS" &&
-                    item.value.name == "BIOSVendor"
-                })
-                .is_some() // Okay, depth 1.
+            // Okay, depth 1.
+            session.replies::<Item>().any(|item| {
+                item.key == "HARDWARE\\Description\\System\\BIOS" &&
+                item.value.name == "BIOSVendor"
+            })
         }
         assert! {
-            session.replies::<Item>()
-                .find(|item| {
-                    item.key == "HARDWARE\\Description\\System\\BIOS" &&
-                    item.value.name == "BIOSVendor"
-                })
-                .is_some() // Okay, depth 1.
+            // Okay, depth 1.
+            session.replies::<Item>().any(|item| {
+                item.key == "HARDWARE\\Description\\System\\BIOS" &&
+                item.value.name == "BIOSVendor"
+            })
         }
     }
 
@@ -308,19 +303,17 @@ mod tests {
         assert!(handle(&mut session, args).is_ok());
 
         assert! {
-            session.replies::<Item>()
-                .find(|item| {
-                    item.key == "HARDWARE\\Description\\System" &&
-                    item.value.name == "Identifier"
-                })
-                .is_some() // Okay, depth 2.
+            // Okay, depth 2.
+            session.replies::<Item>().any(|item| {
+                item.key == "HARDWARE\\Description\\System" &&
+                item.value.name == "Identifier"
+            })
         }
         assert! {
-            session.replies::<Item>()
-                .find(|item| {
-                    item.key == "HARDWARE\\Description\\System\\BIOS"
-                })
-                .is_none() // Not okay, depth 3.
+            // Not okay, depth 3.
+            !session.replies::<Item>().any(|item| {
+                item.key == "HARDWARE\\Description\\System\\BIOS"
+            })
         }
     }
 
@@ -336,28 +329,25 @@ mod tests {
         assert!(handle(&mut session, args).is_ok());
 
         assert! {
-            session.replies::<Item>()
-                .find(|item| {
-                    item.key == "HARDWARE\\Description\\System" &&
-                    item.value.name == "Identifier"
-                })
-                .is_some() // Okay, depth 2.
+            // Okay, depth 2.
+            session.replies::<Item>().any(|item| {
+                item.key == "HARDWARE\\Description\\System" &&
+                item.value.name == "Identifier"
+            })
         }
         assert! {
-            session.replies::<Item>()
-                .find(|item| {
-                    item.key == "HARDWARE\\Description\\System\\BIOS" &&
-                    item.value.name == "BIOSVendor"
-                })
-                .is_some() // Okay, depth 3.
+            // Okay, depth 3.
+            session.replies::<Item>().any(|item| {
+                item.key == "HARDWARE\\Description\\System\\BIOS" &&
+                item.value.name == "BIOSVendor"
+            })
         }
         assert! {
-            session.replies::<Item>()
-                .find(|item| {
-                    item.key == "HARDWARE\\Description\\System\\BIOS" &&
-                    item.value.name == "BIOSVersion"
-                })
-                .is_some() // Okay, depth 3.
+            // Okay, depth 3.
+            session.replies::<Item>().any(|item| {
+                item.key == "HARDWARE\\Description\\System\\BIOS" &&
+                item.value.name == "BIOSVersion"
+            })
         }
     }
 
