@@ -245,14 +245,14 @@ mod tests {
         assert! {
             // Okay, depth 0.
             session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\Description\\System" &&
-                item.value.name == "Identifier"
+                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM" &&
+                item.value.name.to_ascii_uppercase() == "IDENTIFIER"
             })
         }
         assert! {
             // Not okay, depth 1.
             !session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\Description\\System\\BIOS"
+                item.key == "HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS"
             })
         }
     }
@@ -271,22 +271,22 @@ mod tests {
         assert! {
             // Okay, depth 0.
             session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\Description\\System" &&
-                item.value.name == "Identifier"
+                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM" &&
+                item.value.name.to_ascii_uppercase() == "IDENTIFIER"
             })
         }
         assert! {
             // Okay, depth 1.
             session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\Description\\System\\BIOS" &&
-                item.value.name == "BIOSVendor"
+                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS" &&
+                item.value.name.to_ascii_uppercase() == "BIOSVENDOR"
             })
         }
         assert! {
             // Okay, depth 1.
             session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\Description\\System\\BIOS" &&
-                item.value.name == "BIOSVendor"
+                item.key.to_ascii_uppercase() == "HARDWARE\\Description\\System\\BIOS" &&
+                item.value.name.to_ascii_uppercase() == "BIOSVENDOR"
             })
         }
     }
@@ -305,14 +305,14 @@ mod tests {
         assert! {
             // Okay, depth 2.
             session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\Description\\System" &&
-                item.value.name == "Identifier"
+                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM" &&
+                item.value.name.to_ascii_uppercase() == "IDENTIFIER"
             })
         }
         assert! {
             // Not okay, depth 3.
             !session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\Description\\System\\BIOS"
+                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS"
             })
         }
     }
@@ -331,22 +331,22 @@ mod tests {
         assert! {
             // Okay, depth 2.
             session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\Description\\System" &&
-                item.value.name == "Identifier"
+                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM" &&
+                item.value.name.to_ascii_uppercase() == "IDENTIFIER"
             })
         }
         assert! {
             // Okay, depth 3.
             session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\Description\\System\\BIOS" &&
-                item.value.name == "BIOSVendor"
+                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS" &&
+                item.value.name.to_ascii_uppercase() == "BIOSVENDOR"
             })
         }
         assert! {
             // Okay, depth 3.
             session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\Description\\System\\BIOS" &&
-                item.value.name == "BIOSVersion"
+                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS" &&
+                item.value.name.to_ascii_uppercase() == "BIOSVERSION"
             })
         }
     }
