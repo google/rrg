@@ -58,6 +58,8 @@ pub fn flags<P>(path: P) -> std::io::Result<u32> where
     // syscall ourselves instead of going through the `ioctls` crate?).
     #[cfg(not(target_arch = "x86_64"))]
     {
+        drop(path); // Unused.
+
         Err(std::io::ErrorKind::Unsupported.into())
     }
 }
@@ -277,8 +279,6 @@ impl<R: std::io::Read> Iterator for Mounts<R> {
 #[cfg(test)]
 pub(crate) mod tests {
 
-    use std::fs::File;
-
     use super::*;
 
     // TODO: Write tests for symlinks.
@@ -300,7 +300,7 @@ pub(crate) mod tests {
         const FS_NOATIME_FL: std::os::raw::c_long = 0x00000080;
 
         let tempdir = tempfile::tempdir().unwrap();
-        let tempfile = File::create(tempdir.path().join("foo")).unwrap();
+        let tempfile = std::fs::File::create(tempdir.path().join("foo")).unwrap();
 
         unsafe {
             use std::os::unix::io::AsRawFd as _;
