@@ -182,6 +182,8 @@ mod tests {
             &b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"[..],
         ].concat()).unwrap();
 
+        file.flush().unwrap();
+
         let args = Args {
             path: file.path().to_path_buf(),
         };
