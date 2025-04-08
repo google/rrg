@@ -113,7 +113,7 @@ where
                     Err(error) => {
                         log::error! {
                             "failed to open subkey '{:?}': {}",
-                            key_join(&key_rel_name, &subkey_name), error,
+                            key_join(&args.key, &subkey_rel_name), error,
                         };
                     }
                 }
