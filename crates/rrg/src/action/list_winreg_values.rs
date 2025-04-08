@@ -235,7 +235,7 @@ mod tests {
     fn handle_max_depth_0() {
         let args = Args {
             root: winreg::PredefinedKey::LocalMachine,
-            key: std::ffi::OsString::from("HARDWARE\\Description\\System"),
+            key: std::ffi::OsString::from("SOFTWARE\\Classes\\WINMGMTS"),
             max_depth: 0,
         };
 
@@ -245,14 +245,14 @@ mod tests {
         assert! {
             // Okay, depth 0.
             session.replies::<Item>().any(|item| {
-                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM" &&
-                item.value.name.to_ascii_uppercase() == "IDENTIFIER"
+                item.key.to_ascii_uppercase() == "SOFTWARE\\CLASSES\\WINMGMTS" &&
+                item.value.name == "" // "(default)".
             })
         }
         assert! {
             // Not okay, depth 1.
             !session.replies::<Item>().any(|item| {
-                item.key == "HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS"
+                item.key.to_ascii_uppercase() == "SOFTWARE\\CLASSES\\WINMGMTS\\CURVER"
             })
         }
     }
@@ -261,7 +261,7 @@ mod tests {
     fn handle_max_depth_1() {
         let args = Args {
             root: winreg::PredefinedKey::LocalMachine,
-            key: std::ffi::OsString::from("HARDWARE\\Description\\System"),
+            key: std::ffi::OsString::from("SOFTWARE\\Classes\\WINMGMTS"),
             max_depth: 1,
         };
 
@@ -271,22 +271,15 @@ mod tests {
         assert! {
             // Okay, depth 0.
             session.replies::<Item>().any(|item| {
-                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM" &&
-                item.value.name.to_ascii_uppercase() == "IDENTIFIER"
+                item.key.to_ascii_uppercase() == "SOFTWARE\\CLASSES\\WINMGMTS" &&
+                item.value.name == "" // "(default)".
             })
         }
         assert! {
             // Okay, depth 1.
             session.replies::<Item>().any(|item| {
-                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS" &&
-                item.value.name.to_ascii_uppercase() == "BIOSVENDOR"
-            })
-        }
-        assert! {
-            // Okay, depth 1.
-            session.replies::<Item>().any(|item| {
-                item.key.to_ascii_uppercase() == "HARDWARE\\Description\\System\\BIOS" &&
-                item.value.name.to_ascii_uppercase() == "BIOSVERSION"
+                item.key.to_ascii_uppercase() == "SOFTWARE\\CLASSES\\WINMGMTS\\CURVER" &&
+                item.value.name == "" // "(default)".
             })
         }
     }
@@ -295,7 +288,7 @@ mod tests {
     fn handle_max_depth_2() {
         let args = Args {
             root: winreg::PredefinedKey::LocalMachine,
-            key: std::ffi::OsString::from("HARDWARE"),
+            key: std::ffi::OsString::from("SOFTWARE"),
             max_depth: 2,
         };
 
@@ -305,14 +298,14 @@ mod tests {
         assert! {
             // Okay, depth 2.
             session.replies::<Item>().any(|item| {
-                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM" &&
-                item.value.name.to_ascii_uppercase() == "IDENTIFIER"
+                item.key.to_ascii_uppercase() == "SOFTWARE\\CLASSES\\WINMGMTS" &&
+                item.value.name == "" // "(default)".
             })
         }
         assert! {
             // Not okay, depth 3.
             !session.replies::<Item>().any(|item| {
-                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS"
+                item.key.to_ascii_uppercase() == "SOFTWARE\\CLASSES\\WINMGMTS\\CURVER"
             })
         }
     }
@@ -321,7 +314,7 @@ mod tests {
     fn handle_max_depth_3() {
         let args = Args {
             root: winreg::PredefinedKey::LocalMachine,
-            key: std::ffi::OsString::from("HARDWARE"),
+            key: std::ffi::OsString::from("SOFTWARE"),
             max_depth: 3,
         };
 
@@ -331,22 +324,15 @@ mod tests {
         assert! {
             // Okay, depth 2.
             session.replies::<Item>().any(|item| {
-                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM" &&
-                item.value.name.to_ascii_uppercase() == "IDENTIFIER"
+                item.key.to_ascii_uppercase() == "SOFTWARE\\CLASSES\\WINMGMTS" &&
+                item.value.name == "" // "(default)".
             })
         }
         assert! {
             // Okay, depth 3.
             session.replies::<Item>().any(|item| {
-                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS" &&
-                item.value.name.to_ascii_uppercase() == "BIOSVENDOR"
-            })
-        }
-        assert! {
-            // Okay, depth 3.
-            session.replies::<Item>().any(|item| {
-                item.key.to_ascii_uppercase() == "HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS" &&
-                item.value.name.to_ascii_uppercase() == "BIOSVERSION"
+                item.key.to_ascii_uppercase() == "SOFTWARE\\CLASSES\\WINMGMTS\\CURVER" &&
+                item.value.name == "" // "(default)".
             })
         }
     }
