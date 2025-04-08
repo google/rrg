@@ -33,21 +33,32 @@ use super::*;
 pub fn flags<P>(path: P) -> std::io::Result<u32> where
     P: AsRef<Path>
 {
-    let file = std::fs::File::open(path)?;
+    // `ioctls::fs_ioc_getflags` is only available on `x86_64`.
+    #[cfg(target_arch = "x86_64")]
+    {
+        let file = std::fs::File::open(path)?;
 
-    let mut flags = 0;
-    let code = unsafe {
-        // This block is safe: we simply pass a raw file descriptor (that is
-        // valid until the end of the scope of this function) because this is
-        // what the low-level API expects.
-        use std::os::unix::io::AsRawFd as _;
-        ioctls::fs_ioc_getflags(file.as_raw_fd(), &mut flags)
-    };
+        let mut flags = 0;
+        let code = unsafe {
+            // This block is safe: we simply pass a raw file descriptor (that
+            // is valid until the end of the scope of this function) because
+            // this is what the low-level API expects.
+            use std::os::unix::io::AsRawFd as _;
+            ioctls::fs_ioc_getflags(file.as_raw_fd(), &mut flags)
+        };
 
-    if code == 0 {
-        Ok(flags as u32)
-    } else {
-        Err(std::io::Error::from_raw_os_error(code))
+        if code == 0 {
+            Ok(flags as u32)
+        } else {
+            Err(std::io::Error::from_raw_os_error(code))
+        }
+    }
+
+    // TODO(@panhania): Add support for `aarch64` (perhaps we can implement the
+    // syscall ourselves instead of going through the `ioctls` crate?).
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        Err(std::io::ErrorKind::Unsupported.into())
     }
 }
 
@@ -272,6 +283,8 @@ pub(crate) mod tests {
 
     // TODO: Write tests for symlinks.
 
+    // TODO(@panhania): Add support for `aarch64`.
+    #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_flags_non_existing() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -279,6 +292,8 @@ pub(crate) mod tests {
         assert!(flags(tempdir.path().join("foo")).is_err());
     }
 
+    // TODO(@panhania): Add support for `aarch64`.
+    #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_flags_noatime() {
         // https://elixir.bootlin.com/linux/v5.8.14/source/include/uapi/linux/fs.h#L245
