@@ -69,7 +69,7 @@ To run only a particular test:
 
 To verify that the code compiles on all supported platforms:
 
-    $ cargo check --tests --target='x86_64-unknown-linux-gnu' --target='x86_64-apple-darwin' --target='x86_64-pc-windows-gnu'
+    $ cargo check --tests --target='x86_64-unknown-linux-gnu' --target='x86_64-apple-darwin' --target='x86_64-pc-windows-gnu' --target='aarch64-unknown-linux-gnu'
 
 Note that this requires additional toolchains for cross-compilation to be
 [installed](https://rust-lang.github.io/rustup/cross-compilation.html).
