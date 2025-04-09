@@ -36,6 +36,8 @@ pub fn flags<P>(path: P) -> std::io::Result<u32> where
     // `ioctls::fs_ioc_getflags` is only available on `x86_64`.
     #[cfg(target_arch = "x86_64")]
     {
+        use std::os::fd::AsRawFd as _;
+
         let file = std::fs::File::open(path)?;
 
         let mut flags = 0;
@@ -43,8 +45,7 @@ pub fn flags<P>(path: P) -> std::io::Result<u32> where
             // This block is safe: we simply pass a raw file descriptor (that
             // is valid until the end of the scope of this function) because
             // this is what the low-level API expects.
-            use std::os::unix::io::AsRawFd as _;
-            ioctls::fs_ioc_getflags(file.as_raw_fd(), &mut flags)
+            libc::ioctl(file.as_raw_fd(), libc::FS_IOC_GETFLAGS, &mut flags)
         };
 
         if code == 0 {
@@ -306,7 +307,7 @@ pub(crate) mod tests {
             use std::os::unix::io::AsRawFd as _;
             let fd = tempfile.as_raw_fd();
 
-            assert_eq!(ioctls::fs_ioc_setflags(fd, &FS_NOATIME_FL), 0);
+            assert_eq!(libc::ioctl(fd, libc::FS_IOC_SETFLAGS, &FS_NOATIME_FL), 0);
         }
 
         let flags = flags(tempdir.path().join("foo")).unwrap();
