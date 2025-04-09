@@ -41,10 +41,12 @@ pub fn flags<P>(path: P) -> std::io::Result<u32> where
         let file = std::fs::File::open(path)?;
 
         let mut flags = 0;
+        // SAFETY: We simply pass a raw file descriptor (that is valid until the
+        // end of the scope of this function) as expected by the the `ioctl`
+        // interface for `FS_IOC_GETFLAGS` [1] and verify the result afterward.
+        //
+        // [1]: https://man7.org/linux/man-pages/man2/ioctl_fs.2.html
         let code = unsafe {
-            // This block is safe: we simply pass a raw file descriptor (that
-            // is valid until the end of the scope of this function) because
-            // this is what the low-level API expects.
             libc::ioctl(file.as_raw_fd(), libc::FS_IOC_GETFLAGS, &mut flags)
         };
 
