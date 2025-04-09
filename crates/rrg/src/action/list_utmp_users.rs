@@ -135,6 +135,10 @@ mod tests {
     use super::*;
 
     #[test]
+    // Looks like `utmp` entries can have different size depending on the
+    // platform (e.g. on `aarch64` it has a size of 400 bytes) and so `x86_64`
+    // samples will not work there.
+    #[cfg_attr(not(target_arch = "x86_64"), ignore)]
     fn handle_custom_utmp_file() {
         use std::io::Write as _;
 
@@ -181,6 +185,8 @@ mod tests {
             &b"g\x1c\xb5\x0d\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"[..],
             &b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"[..],
         ].concat()).unwrap();
+
+        file.flush().unwrap();
 
         let args = Args {
             path: file.path().to_path_buf(),

@@ -135,6 +135,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(target_arch = "aarch64"), ignore)]
+    fn arch_aarch64() {
+        // Some systems report it as `aarch64` (Linux), some as `arm64` (macOS)
+        // and some give an enum that we "stringify" ourselves so we permit both
+        // variants.
+        assert!(matches!(arch().unwrap().as_str(), "aarch64" | "arm64"));
+    }
+
+    #[test]
     fn hostname_not_empty() {
         assert!(!hostname().unwrap().is_empty());
     }
