@@ -33,37 +33,24 @@ use super::*;
 pub fn flags<P>(path: P) -> std::io::Result<u32> where
     P: AsRef<Path>
 {
-    // `ioctls::fs_ioc_getflags` is only available on `x86_64`.
-    #[cfg(target_arch = "x86_64")]
-    {
-        use std::os::fd::AsRawFd as _;
+    use std::os::fd::AsRawFd as _;
 
-        let file = std::fs::File::open(path)?;
+    let file = std::fs::File::open(path)?;
 
-        let mut flags = 0;
-        // SAFETY: We simply pass a raw file descriptor (that is valid until the
-        // end of the scope of this function) as expected by the the `ioctl`
-        // interface for `FS_IOC_GETFLAGS` [1] and verify the result afterward.
-        //
-        // [1]: https://man7.org/linux/man-pages/man2/ioctl_fs.2.html
-        let code = unsafe {
-            libc::ioctl(file.as_raw_fd(), libc::FS_IOC_GETFLAGS, &mut flags)
-        };
+    let mut flags = 0;
+    // SAFETY: We simply pass a raw file descriptor (that is valid until the
+    // end of the scope of this function) as expected by the the `ioctl`
+    // interface for `FS_IOC_GETFLAGS` [1] and verify the result afterward.
+    //
+    // [1]: https://man7.org/linux/man-pages/man2/ioctl_fs.2.html
+    let code = unsafe {
+        libc::ioctl(file.as_raw_fd(), libc::FS_IOC_GETFLAGS, &mut flags)
+    };
 
-        if code == 0 {
-            Ok(flags as u32)
-        } else {
-            Err(std::io::Error::from_raw_os_error(code))
-        }
-    }
-
-    // TODO(@panhania): Add support for `aarch64` (perhaps we can implement the
-    // syscall ourselves instead of going through the `ioctls` crate?).
-    #[cfg(not(target_arch = "x86_64"))]
-    {
-        drop(path); // Unused.
-
-        Err(std::io::ErrorKind::Unsupported.into())
+    if code == 0 {
+        Ok(flags as u32)
+    } else {
+        Err(std::io::Error::from_raw_os_error(code))
     }
 }
 
@@ -286,8 +273,6 @@ pub(crate) mod tests {
 
     // TODO: Write tests for symlinks.
 
-    // TODO(@panhania): Add support for `aarch64`.
-    #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_flags_non_existing() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -295,8 +280,6 @@ pub(crate) mod tests {
         assert!(flags(tempdir.path().join("foo")).is_err());
     }
 
-    // TODO(@panhania): Add support for `aarch64`.
-    #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_flags_noatime() {
         // https://elixir.bootlin.com/linux/v5.8.14/source/include/uapi/linux/fs.h#L245
