@@ -3,8 +3,13 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-// TODO(s-westphal): Check and update max size.
-const MAX_OUTPUT_SIZE: usize = 4048;
+// We need to make combined `MAX_STD*_SIZE` around 1 MiB limit not to exceed the
+// Fleetspeak message size restrictions. We could make one bigger at the expense
+// of the other one but it is not clear which should take priority, so to keep
+// things simple and balanced we set the same value for both.
+const MAX_STDOUT_SIZE: usize = 512 * 1024; // 512 KiB.
+const MAX_STDERR_SIZE: usize = 512 * 1024; // 512 KiB.
+
 const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Arguments of the `execute_signed_command` action.
@@ -140,24 +145,24 @@ where
     let mut stdout = Vec::<u8>::new();
     command_process.stdout
         .expect("no stdout pipe")
-        .take(MAX_OUTPUT_SIZE as u64).read_to_end(&mut stdout)
+        .take(MAX_STDOUT_SIZE as u64).read_to_end(&mut stdout)
         .map_err(crate::session::Error::action)?;
 
     let mut stderr = Vec::<u8>::new();
     command_process.stderr
         .expect("no stderr pipe")
-        .take(MAX_OUTPUT_SIZE as u64).read_to_end(&mut stderr)
+        .take(MAX_STDERR_SIZE as u64).read_to_end(&mut stderr)
         .map_err(crate::session::Error::action)?;
 
     session.reply(Item {
         exit_status,
         // Note that we will return `truncated_std*` bit even if the output was
-        // exactly `MAX_OUTPUT_SIZE`. However, because this constant is an agent
+        // exactly `MAX_STD*_SIZE`. However, because this constant is an agent
         // implementation detail we might have as well set it to be 1 more than
         // it is right now and we just shift the "problem". Thus, it really does
         // not matter but makes the code simpler.
-        truncated_stdout: stdout.len() == MAX_OUTPUT_SIZE,
-        truncated_stderr: stderr.len() == MAX_OUTPUT_SIZE,
+        truncated_stdout: stdout.len() == MAX_STDOUT_SIZE,
+        truncated_stderr: stderr.len() == MAX_STDERR_SIZE,
         stdout,
         stderr,
     })?;
@@ -472,7 +477,7 @@ mod tests {
         let args = Args {
             raw_command,
             path: "echo".into(),
-            args: vec!["A".repeat(MAX_OUTPUT_SIZE) + "truncated"],
+            args: vec!["A".repeat(MAX_STDOUT_SIZE) + "truncated"],
             env: std::collections::HashMap::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
@@ -484,7 +489,7 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
-        assert_eq!(item.stdout, "A".repeat(MAX_OUTPUT_SIZE).as_bytes());
+        assert_eq!(item.stdout, "A".repeat(MAX_STDOUT_SIZE).as_bytes());
         assert_eq!(item.stderr, b"");
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
@@ -505,7 +510,7 @@ mod tests {
             args: vec![String::from("truncated")],
             env: std::collections::HashMap::new(),
             ed25519_signature,
-            stdin: Vec::from("A".repeat(MAX_OUTPUT_SIZE) + "truncated"),
+            stdin: Vec::from("A".repeat(MAX_STDOUT_SIZE) + "truncated"),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -514,7 +519,7 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
-        assert_eq!(item.stdout, "A".repeat(MAX_OUTPUT_SIZE).as_bytes());
+        assert_eq!(item.stdout, "A".repeat(MAX_STDOUT_SIZE).as_bytes());
         assert_eq!(item.stderr, b"");
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
