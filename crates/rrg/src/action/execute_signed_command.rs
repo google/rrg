@@ -162,6 +162,10 @@ where
     if let Some(writer) = writer {
         match writer.join() {
             Ok(Ok(())) => (),
+            Ok(Err(error)) if error.kind() == std::io::ErrorKind::BrokenPipe => {
+                // We ignore broken pipe errors when writing as this can happen
+                // if the action finished early or timed out.
+            }
             Ok(Err(error)) => {
                 return Err(crate::session::Error::action(CommandExecutionError(error)))
             }
