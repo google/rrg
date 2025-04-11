@@ -613,6 +613,44 @@ mod tests {
         assert_eq!(item.stdout, b"");
     }
 
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_kill_if_timeout_large_stdin() {
+        let timeout = std::time::Duration::from_secs(0);
+
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        // In this test we pipe 2 MiB of data to `sleep` to verify that there is
+        // no deadlock when writing input. `sleep` does not consume anthing, so
+        // it should eventually start blocking—the timeout logic should still
+        // work despite that.
+
+        let args = Args {
+            raw_command,
+            path: "sleep".into(),
+            args: vec![(timeout.as_secs() + 1).to_string()],
+            env: std::collections::HashMap::new(),
+            ed25519_signature,
+            stdin: vec![0xFF; 2 * 1024 * 1024],
+            timeout,
+        };
+
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        use std::os::unix::process::ExitStatusExt as _;
+
+        assert!(!item.exit_status.success());
+        assert_eq!(item.exit_status.signal(), Some(libc::SIGKILL));
+        assert_eq!(item.stderr, b"");
+        assert_eq!(item.stdout, b"");
+    }
+
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_kill_if_timeout() {
@@ -634,6 +672,44 @@ mod tests {
             env: std::collections::HashMap::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
+            timeout,
+        };
+
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(!item.exit_status.success());
+        assert_eq!(item.stderr, b"");
+        assert_eq!(item.stdout, b"");
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_kill_if_timeout_large_stdin() {
+        let timeout = std::time::Duration::from_secs(0);
+
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        // In this test we pipe 2 MiB of data to the subprocess to verify that
+        // there is no deadlock when writing input. The subprocess does not con-
+        // sume anthing and will eventually start blocking and the timeout logic
+        // should still work despite that.
+
+        let args = Args {
+            raw_command,
+            // The `timeout` command seems to be unavailable e.g. on Wine so
+            // instead we just hang the program forever using an infinite loop.
+            path: "cmd".into(),
+            args: ["/q", "/c", "for /l %i in () do echo off"]
+                .into_iter().map(String::from).collect(),
+            env: std::collections::HashMap::new(),
+            ed25519_signature,
+            stdin: vec![0xFF; 2 * 1024 * 1024],
             timeout,
         };
 
