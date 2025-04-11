@@ -94,27 +94,44 @@ where
 
     let mut command_stdin = command_process.stdin.take()
         .expect("no stdin pipe");
+    let command_stdout = command_process.stdout.take()
+        .expect("no stdout pipe");
+    let command_stderr = command_process.stderr.take()
+        .expect("no stderr pipe");
 
     // While writing an empty stdin should be a no-op, it is possible for the
     // command to finish executing before we get to the writing part and the
     // pipe will be closed. We could just ignore "broken pipe" errors but they
     // can be relevant in case we did have something to write. So, we just avoid
     // writing altogether if there is nothing to be written.
-    if !args.stdin.is_empty() {
-        command_stdin.write_all(&args.stdin)
-            .map_err(CommandExecutionError)
-            .map_err(crate::session::Error::action)?;
+    let writer = if !args.stdin.is_empty() {
+        Some(std::thread::spawn(move || -> std::io::Result<()> {
+            command_stdin.write_all(&args.stdin)?;
 
-        // Dropping the pipe below will flush it but will swallow all potential
-        // errors while doing so. Thus, we flush explicitly here to be able to
-        // catch all errors.
-        command_stdin.flush()
-            .map_err(CommandExecutionError)
-            .map_err(crate::session::Error::action)?;
-    }
-    // We explictly drop the pipe to notify the spawned command that there is no
-    // more input incoming.
-    drop(command_stdin);
+            // Dropping the pipe below will flush it but will swallow all poten-
+            // tial errors while doing so. Thus, we flush explicitly here to be
+            // able to catch all errors.
+            command_stdin.flush()?;
+
+            // We explictly drop the pipe to notify the spawned command that
+            // there is no more input incoming.
+            drop(command_stdin);
+
+            Ok(())
+        }))
+    } else {
+        None
+    };
+
+    let reader = std::thread::spawn(move || -> std::io::Result<(Vec<u8>, Vec<u8>)> {
+        let mut stdout = Vec::<u8>::new();
+        command_stdout.take(MAX_STDOUT_SIZE as u64).read_to_end(&mut stdout)?;
+
+        let mut stderr = Vec::<u8>::new();
+        command_stderr.take(MAX_STDERR_SIZE as u64).read_to_end(&mut stderr)?;
+
+        Ok((stdout, stderr))
+    });
 
     log::info!("starting '{}' (timeout: {:?})", args.path.display(), args.timeout);
     loop {
@@ -142,17 +159,31 @@ where
         .wait()
         .map_err(crate::session::Error::action)?;
 
-    let mut stdout = Vec::<u8>::new();
-    command_process.stdout
-        .expect("no stdout pipe")
-        .take(MAX_STDOUT_SIZE as u64).read_to_end(&mut stdout)
-        .map_err(crate::session::Error::action)?;
+    if let Some(writer) = writer {
+        match writer.join() {
+            Ok(Ok(())) => (),
+            Ok(Err(error)) => {
+                return Err(crate::session::Error::action(CommandExecutionError(error)))
+            }
+            Err(error) => {
+                // TODO(@panhania): While this should never happen, we should be
+                // able to handle it more gracefully.
+                panic!("writer thread panicked: {:?}", error);
+            }
+        }
+    }
 
-    let mut stderr = Vec::<u8>::new();
-    command_process.stderr
-        .expect("no stderr pipe")
-        .take(MAX_STDERR_SIZE as u64).read_to_end(&mut stderr)
-        .map_err(crate::session::Error::action)?;
+    let (stdout, stderr) = match reader.join() {
+        Ok(Ok((stdout, stderr))) => (stdout, stderr),
+        Ok(Err(error)) => {
+            return Err(crate::session::Error::action(CommandExecutionError(error)))
+        }
+        Err(error) => {
+            // TODO(@panhania): While this should never happen, we should be
+            // able to handle it more gracefully.
+            panic!("reader thread panicked: {:?}", error)
+        }
+    };
 
     session.reply(Item {
         exit_status,
