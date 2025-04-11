@@ -211,11 +211,7 @@ where
             Ok(Err(error)) => {
                 return Err(crate::session::Error::action(CommandExecutionError(error)))
             }
-            Err(error) => {
-                // TODO(@panhania): While this should never happen, we should be
-                // able to handle it more gracefully.
-                panic!("writer thread panicked: {:?}", error);
-            }
+            Err(error) => std::panic::resume_unwind(error),
         }
     }
 
@@ -224,11 +220,7 @@ where
         Ok(Err(error)) => {
             return Err(crate::session::Error::action(CommandExecutionError(error)))
         }
-        Err(error) => {
-            // TODO(@panhania): While this should never happen, we should be
-            // able to handle it more gracefully.
-            panic!("reader thread panicked: {:?}", error)
-        }
+        Err(error) => std::panic::resume_unwind(error),
     };
 
     let stderr = match reader_stderr.join() {
@@ -236,11 +228,7 @@ where
         Ok(Err(error)) => {
             return Err(crate::session::Error::action(CommandExecutionError(error)))
         }
-        Err(error) => {
-            // TODO(@panhania): While this should never happen, we should be
-            // able to handle it more gracefully.
-            panic!("reader thread panicked: {:?}", error)
-        }
+        Err(error) => std::panic::resume_unwind(error),
     };
 
     session.reply(Item {
