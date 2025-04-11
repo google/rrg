@@ -123,14 +123,19 @@ where
         None
     };
 
-    let reader = std::thread::spawn(move || -> std::io::Result<(Vec<u8>, Vec<u8>)> {
+    struct Output {
+        stdout: Vec<u8>,
+        stderr: Vec<u8>,
+    }
+
+    let reader = std::thread::spawn(move || -> std::io::Result<Output> {
         let mut stdout = Vec::<u8>::new();
         command_stdout.take(MAX_STDOUT_SIZE as u64).read_to_end(&mut stdout)?;
 
         let mut stderr = Vec::<u8>::new();
         command_stderr.take(MAX_STDERR_SIZE as u64).read_to_end(&mut stderr)?;
 
-        Ok((stdout, stderr))
+        Ok(Output { stdout, stderr })
     });
 
     log::info!("starting '{}' (timeout: {:?})", args.path.display(), args.timeout);
@@ -177,8 +182,8 @@ where
         }
     }
 
-    let (stdout, stderr) = match reader.join() {
-        Ok(Ok((stdout, stderr))) => (stdout, stderr),
+    let Output { stdout, stderr } = match reader.join() {
+        Ok(Ok(output)) => output,
         Ok(Err(error)) => {
             return Err(crate::session::Error::action(CommandExecutionError(error)))
         }
