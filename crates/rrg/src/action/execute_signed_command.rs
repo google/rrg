@@ -135,14 +135,42 @@ where
 
     let reader_stdout = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
         let mut stdout = Vec::<u8>::new();
-        command_stdout.take(MAX_STDOUT_SIZE as u64).read_to_end(&mut stdout)?;
+
+        let mut command_stdout_limited = command_stdout.take(MAX_STDOUT_SIZE as u64);
+        command_stdout_limited.read_to_end(&mut stdout)?;
+
+        // We are interested only in the first part of the output, but we need
+        // to consume everything in case there is more to prevent the child from
+        // blocking on full pipe.
+        let mut command_stdout = command_stdout_limited.into_inner();
+        match std::io::copy(&mut command_stdout, &mut std::io::sink()) {
+            // We are fine either with end of output or broken pipe (which might
+            // happen if the child is killed or finishes).
+            Ok(_) => (),
+            Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => (),
+            Err(error) => return Err(error),
+        }
 
         Ok(stdout)
     });
 
     let reader_stderr = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
         let mut stderr = Vec::<u8>::new();
-        command_stderr.take(MAX_STDERR_SIZE as u64).read_to_end(&mut stderr)?;
+
+        let mut command_stderr_limited = command_stderr.take(MAX_STDERR_SIZE as u64);
+        command_stderr_limited.read_to_end(&mut stderr)?;
+
+        // We are interested only in the first part of the output, but we need
+        // to consume everything in case there is more to prevent the child from
+        // blocking on full pipe.
+        let mut command_stderr = command_stderr_limited.into_inner();
+        match std::io::copy(&mut command_stderr, &mut std::io::sink()) {
+            // We are fine either with end of output or broken pipe (which might
+            // happen if the child is killed or finishes).
+            Ok(_) => (),
+            Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => (),
+            Err(error) => return Err(error),
+        }
 
         Ok(stderr)
     });
