@@ -44,6 +44,14 @@ where
             Ok(len) => len,
             Err(error) => return Err(crate::session::Error::action(error)),
         };
+        // Most lines will contain the newline character (all except maybe the
+        // last). This plays weirdly with regex `$` anchor as it will be matched
+        // to newline only in the multi-line mode which does not make much sense
+        // with the way this action operates (per-line). To be more compatible
+        // with how grep normally works, we just strip the newline.
+        if line.ends_with("\n") {
+            line.pop();
+        }
 
         for matcz in args.regex.find_iter(&line) {
             session.reply(Item {
@@ -220,5 +228,94 @@ mod tests {
         let item = session.reply::<Item>(2);
         assert_eq!(item.offset, 12);
         assert_eq!(item.content, "bar");
+    }
+
+    #[test]
+    fn handle_regex_anchors() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        std::fs::write(tempdir.path().join("file"), b"foo\nbar\nbaz")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.path().join("file"),
+            regex: regex::Regex::new("^.*$").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 3);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.offset, 0);
+        assert_eq!(item.content, "foo");
+
+        let item = session.reply::<Item>(1);
+        assert_eq!(item.offset, 4);
+        assert_eq!(item.content, "bar");
+
+        let item = session.reply::<Item>(2);
+        assert_eq!(item.offset, 8);
+        assert_eq!(item.content, "baz");
+    }
+
+    #[test]
+    fn handle_regex_anchors_empty_lines() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        std::fs::write(tempdir.path().join("file"), b"\nfoo\n\n")
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.path().join("file"),
+            regex: regex::Regex::new("^.*$").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 3);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.offset, 0);
+        assert_eq!(item.content, "");
+
+        let item = session.reply::<Item>(1);
+        assert_eq!(item.offset, 1);
+        assert_eq!(item.content, "foo");
+
+        let item = session.reply::<Item>(2);
+        assert_eq!(item.offset, 5);
+        assert_eq!(item.content, "");
+    }
+
+    #[test]
+    // procfs is available only on Linux.
+    #[cfg_attr(not(target_os = "linux"), ignore)]
+    fn handle_proc_mem_total() {
+        let args = Args {
+            path: "/proc/meminfo".into(),
+            regex: regex::Regex::new("^MemTotal:.*$").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.offset, 0);
+
+        assert! {
+            regex::Regex::new("MemTotal:\\s+\\d+\\s+kB").unwrap()
+                .find(&item.content)
+                .is_some()
+        }
     }
 }
