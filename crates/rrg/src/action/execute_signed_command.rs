@@ -123,19 +123,28 @@ where
         None
     };
 
-    struct Output {
-        stdout: Vec<u8>,
-        stderr: Vec<u8>,
-    }
+    // It might be possible that the command will output a lot of data to one of
+    // the channels. However, if we don't consuming this output, the pipe might
+    // get full and the subprocess will get stuck. Thus, we launch new threads
+    // for immediate consumption of this data.
+    //
+    // Note that we need two reader threads because we cannot guarantee which of
+    // the pipes should take precedence—the command might need to write a lot of
+    // data to either of them. So, we start consuming from both of them at the
+    // same time.
 
-    let reader = std::thread::spawn(move || -> std::io::Result<Output> {
+    let reader_stdout = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
         let mut stdout = Vec::<u8>::new();
         command_stdout.take(MAX_STDOUT_SIZE as u64).read_to_end(&mut stdout)?;
 
+        Ok(stdout)
+    });
+
+    let reader_stderr = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
         let mut stderr = Vec::<u8>::new();
         command_stderr.take(MAX_STDERR_SIZE as u64).read_to_end(&mut stderr)?;
 
-        Ok(Output { stdout, stderr })
+        Ok(stderr)
     });
 
     log::info!("starting '{}' (timeout: {:?})", args.path.display(), args.timeout);
@@ -182,8 +191,20 @@ where
         }
     }
 
-    let Output { stdout, stderr } = match reader.join() {
-        Ok(Ok(output)) => output,
+    let stdout = match reader_stdout.join() {
+        Ok(Ok(stdout)) => stdout,
+        Ok(Err(error)) => {
+            return Err(crate::session::Error::action(CommandExecutionError(error)))
+        }
+        Err(error) => {
+            // TODO(@panhania): While this should never happen, we should be
+            // able to handle it more gracefully.
+            panic!("reader thread panicked: {:?}", error)
+        }
+    };
+
+    let stderr = match reader_stderr.join() {
+        Ok(Ok(stderr)) => stderr,
         Ok(Err(error)) => {
             return Err(crate::session::Error::action(CommandExecutionError(error)))
         }
