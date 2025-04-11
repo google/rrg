@@ -507,11 +507,11 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "echo".into(),
-            args: vec!["A".repeat(MAX_STDOUT_SIZE) + "truncated"],
+            path: "cat".into(),
+            args: Vec::default(),
             env: std::collections::HashMap::new(),
             ed25519_signature,
-            stdin: Vec::from(b""),
+            stdin: ("A".repeat(MAX_STDOUT_SIZE) + "truncated").into_bytes(),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -535,13 +535,28 @@ mod tests {
         let raw_command = Vec::default();
         let ed25519_signature = signing_key.sign(&raw_command);
 
+        // There is no direct analogue to `cat` on Windows but `findstr` can act
+        // similarly: it behaves like `grep`, outputing lines from the input
+        // that match the given expression.
+        //
+        // What we do in this test is we provide a lot of "ABCD" lines and we
+        // want to match each of them. Each line in the output will have its
+        // own CLRF char and one extra (provided by `finstr`), so 8 bytes total.
+        // Thus, we expect `MAX_STDOUT_SIZE / 8` such entries in the output (the
+        // length of the "ABCD" string was chosen so that `MAX_STDOUT_SIZE` is
+        // evenly divisible by the output string length).
+        //
+        // The input "ABCD" line is repeated `MAX_STDOUT_SIZE` number of times,
+        // so the total untruncated output size should be much bigger than the
+        // limit.
+
         let args = Args {
             raw_command,
             path: "findstr".into(),
-            args: vec![String::from("truncated")],
+            args: vec![String::from("ABCD")],
             env: std::collections::HashMap::new(),
             ed25519_signature,
-            stdin: Vec::from("A".repeat(MAX_STDOUT_SIZE) + "truncated"),
+            stdin: Vec::from("ABCD\r\n".repeat(MAX_STDOUT_SIZE)),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -550,7 +565,7 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
-        assert_eq!(item.stdout, "A".repeat(MAX_STDOUT_SIZE).as_bytes());
+        assert_eq!(item.stdout, "ABCD\r\n\r\n".repeat(MAX_STDOUT_SIZE / 8).as_bytes());
         assert_eq!(item.stderr, b"");
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
