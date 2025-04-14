@@ -3,8 +3,13 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-// TODO(s-westphal): Check and update max size.
-const MAX_OUTPUT_SIZE: usize = 4048;
+// We need to make combined `MAX_STD*_SIZE` around 1 MiB limit not to exceed the
+// Fleetspeak message size restrictions. We could make one bigger at the expense
+// of the other one but it is not clear which should take priority, so to keep
+// things simple and balanced we set the same value for both.
+const MAX_STDOUT_SIZE: usize = 512 * 1024; // 512 KiB.
+const MAX_STDERR_SIZE: usize = 512 * 1024; // 512 KiB.
+
 const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Arguments of the `execute_signed_command` action.
@@ -89,27 +94,95 @@ where
 
     let mut command_stdin = command_process.stdin.take()
         .expect("no stdin pipe");
+    let command_stdout = command_process.stdout.take()
+        .expect("no stdout pipe");
+    let command_stderr = command_process.stderr.take()
+        .expect("no stderr pipe");
 
-    // While writing an empty stdin should be a no-op, it is possible for the
-    // command to finish executing before we get to the writing part and the
-    // pipe will be closed. We could just ignore "broken pipe" errors but they
-    // can be relevant in case we did have something to write. So, we just avoid
-    // writing altogether if there is nothing to be written.
-    if !args.stdin.is_empty() {
-        command_stdin.write_all(&args.stdin)
-            .map_err(CommandExecutionError)
-            .map_err(crate::session::Error::action)?;
+    // We need to write stdin that we have in a separate thread because on one
+    // hand the subprocess can wait for input and on the other hand it can also
+    // produce output that needs to be consumed.
+    //
+    // Consider a `cat` command without any arguments. It will pipe all of its
+    // standard input to the standard output. Imagine it is called with a lot of
+    // input data. It will consume part of the input and write this bit to the
+    // output. This will continue until the output pipe is full. However, if we
+    // attempt to write everything at once on the main thread, we will never get
+    // to the reading part. And thus we will be stuck on writing to the child
+    // and the child will be stuck on writing back to us (due to the pipe being
+    // full). Thus, we use threading for producing the input and consuming the
+    // output at the same time.
+    //
+    // As an optimization (because spawning a thread has a non-zero cost) we do
+    // spawn a thread only if there is any input to be written.
+    let writer = if !args.stdin.is_empty() {
+        Some(std::thread::spawn(move || -> std::io::Result<()> {
+            command_stdin.write_all(&args.stdin)?;
 
-        // Dropping the pipe below will flush it but will swallow all potential
-        // errors while doing so. Thus, we flush explicitly here to be able to
-        // catch all errors.
-        command_stdin.flush()
-            .map_err(CommandExecutionError)
-            .map_err(crate::session::Error::action)?;
-    }
-    // We explictly drop the pipe to notify the spawned command that there is no
-    // more input incoming.
-    drop(command_stdin);
+            // Dropping the pipe below will flush it but will swallow all poten-
+            // tial errors while doing so. Thus, we flush explicitly here to be
+            // able to catch all errors.
+            command_stdin.flush()?;
+
+            // We explictly drop the pipe to notify the spawned command that
+            // there is no more input incoming.
+            drop(command_stdin);
+
+            Ok(())
+        }))
+    } else {
+        None
+    };
+
+    // See the comment above on why we need threading to read output from the
+    // subprocess.
+    //
+    // Note that we need two reader threads because we cannot guarantee which of
+    // the pipes should take precedence—the command might need to write a lot of
+    // data to either of them. So, we start consuming from both of them at the
+    // same time.
+
+    let reader_stdout = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut stdout = Vec::<u8>::new();
+
+        let mut command_stdout_limited = command_stdout.take(MAX_STDOUT_SIZE as u64);
+        command_stdout_limited.read_to_end(&mut stdout)?;
+
+        // We are interested only in the first part of the output, but we need
+        // to consume everything in case there is more to prevent the child from
+        // blocking on full pipe.
+        let mut command_stdout = command_stdout_limited.into_inner();
+        match std::io::copy(&mut command_stdout, &mut std::io::sink()) {
+            // We are fine either with end of output or broken pipe (which might
+            // happen if the child is killed or finishes).
+            Ok(_) => (),
+            Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => (),
+            Err(error) => return Err(error),
+        }
+
+        Ok(stdout)
+    });
+
+    let reader_stderr = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut stderr = Vec::<u8>::new();
+
+        let mut command_stderr_limited = command_stderr.take(MAX_STDERR_SIZE as u64);
+        command_stderr_limited.read_to_end(&mut stderr)?;
+
+        // We are interested only in the first part of the output, but we need
+        // to consume everything in case there is more to prevent the child from
+        // blocking on full pipe.
+        let mut command_stderr = command_stderr_limited.into_inner();
+        match std::io::copy(&mut command_stderr, &mut std::io::sink()) {
+            // We are fine either with end of output or broken pipe (which might
+            // happen if the child is killed or finishes).
+            Ok(_) => (),
+            Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => (),
+            Err(error) => return Err(error),
+        }
+
+        Ok(stderr)
+    });
 
     log::info!("starting '{}' (timeout: {:?})", args.path.display(), args.timeout);
     loop {
@@ -137,27 +210,45 @@ where
         .wait()
         .map_err(crate::session::Error::action)?;
 
-    let mut stdout = Vec::<u8>::new();
-    command_process.stdout
-        .expect("no stdout pipe")
-        .take(MAX_OUTPUT_SIZE as u64).read_to_end(&mut stdout)
-        .map_err(crate::session::Error::action)?;
+    if let Some(writer) = writer {
+        match writer.join() {
+            Ok(Ok(())) => (),
+            Ok(Err(error)) if error.kind() == std::io::ErrorKind::BrokenPipe => {
+                // We ignore broken pipe errors when writing as this can happen
+                // if the action finished early or timed out.
+            }
+            Ok(Err(error)) => {
+                return Err(crate::session::Error::action(CommandExecutionError(error)))
+            }
+            Err(error) => std::panic::resume_unwind(error),
+        }
+    }
 
-    let mut stderr = Vec::<u8>::new();
-    command_process.stderr
-        .expect("no stderr pipe")
-        .take(MAX_OUTPUT_SIZE as u64).read_to_end(&mut stderr)
-        .map_err(crate::session::Error::action)?;
+    let stdout = match reader_stdout.join() {
+        Ok(Ok(stdout)) => stdout,
+        Ok(Err(error)) => {
+            return Err(crate::session::Error::action(CommandExecutionError(error)))
+        }
+        Err(error) => std::panic::resume_unwind(error),
+    };
+
+    let stderr = match reader_stderr.join() {
+        Ok(Ok(stderr)) => stderr,
+        Ok(Err(error)) => {
+            return Err(crate::session::Error::action(CommandExecutionError(error)))
+        }
+        Err(error) => std::panic::resume_unwind(error),
+    };
 
     session.reply(Item {
         exit_status,
         // Note that we will return `truncated_std*` bit even if the output was
-        // exactly `MAX_OUTPUT_SIZE`. However, because this constant is an agent
+        // exactly `MAX_STD*_SIZE`. However, because this constant is an agent
         // implementation detail we might have as well set it to be 1 more than
         // it is right now and we just shift the "problem". Thus, it really does
         // not matter but makes the code simpler.
-        truncated_stdout: stdout.len() == MAX_OUTPUT_SIZE,
-        truncated_stderr: stderr.len() == MAX_OUTPUT_SIZE,
+        truncated_stdout: stdout.len() == MAX_STDOUT_SIZE,
+        truncated_stderr: stderr.len() == MAX_STDERR_SIZE,
         stdout,
         stderr,
     })?;
@@ -371,6 +462,108 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     #[test]
+    fn handle_stdin_unconsumed() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "true".into(),
+            args: Vec::default(),
+            env: std::collections::HashMap::new(),
+            // In this test we write a lot of input to a command that does not
+            // care about it. This is to verify that we are never stuck on wri-
+            // ting even if it is never consumed.
+            stdin: vec![0xFF; 2 * 1024 * 1024],
+            ed25519_signature,
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, b"");
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_stdin_unconsumed() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "cmd".into(),
+            args: ["/c", "exit"]
+                .map(String::from).into(),
+            env: std::collections::HashMap::new(),
+            // In this test we write a lot of input to a command that does not
+            // care about it. This is to verify that we are never stuck on wri-
+            // ting even if it is never consumed.
+            stdin: vec![0xFF; 2 * 1024 * 1024],
+            ed25519_signature,
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, b"");
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
+    // `/dev/zero` is specifix to Linux.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn handle_stdout_large() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            // In this test we read large amount of data from the output of the
+            // child process. This should ensure we always consume the data and
+            // never get stuck on a full pipe.
+            path: "head".into(),
+            args: ["--bytes=67108864" /* 64 MiB */, "/dev/zero"]
+                .map(String::from).into(),
+            env: std::collections::HashMap::new(),
+            stdin: Vec::default(),
+            ed25519_signature,
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+
+        assert_eq!(item.stdout.len(), MAX_STDOUT_SIZE);
+        assert!(item.stdout.iter().all(|byte| *byte == 0x00));
+        assert!(item.truncated_stdout);
+
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stderr);
+    }
+
+    #[cfg(target_family = "unix")]
+    #[test]
     fn handle_env() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
@@ -471,11 +664,11 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "echo".into(),
-            args: vec!["A".repeat(MAX_OUTPUT_SIZE) + "truncated"],
+            path: "cat".into(),
+            args: Vec::default(),
             env: std::collections::HashMap::new(),
             ed25519_signature,
-            stdin: Vec::from(b""),
+            stdin: ("A".repeat(MAX_STDOUT_SIZE) + "truncated").into_bytes(),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -484,7 +677,7 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
-        assert_eq!(item.stdout, "A".repeat(MAX_OUTPUT_SIZE).as_bytes());
+        assert_eq!(item.stdout, "A".repeat(MAX_STDOUT_SIZE).as_bytes());
         assert_eq!(item.stderr, b"");
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
@@ -499,13 +692,21 @@ mod tests {
         let raw_command = Vec::default();
         let ed25519_signature = signing_key.sign(&raw_command);
 
+        // There is no direct analogue to `cat` on Windows but `findstr` can act
+        // similarly: it behaves like `grep`, outputing lines from the input
+        // that match the given expression.
+        //
+        // What we do in this test is we provide a lot of "ABCD" lines and we
+        // want to match each of them. The input line is repeated enough times,
+        // for the truncation logic to kick in.
+
         let args = Args {
             raw_command,
             path: "findstr".into(),
-            args: vec![String::from("truncated")],
+            args: vec![String::from("ABCD")],
             env: std::collections::HashMap::new(),
             ed25519_signature,
-            stdin: Vec::from("A".repeat(MAX_OUTPUT_SIZE) + "truncated"),
+            stdin: Vec::from("ABCD\r\n".repeat(MAX_STDOUT_SIZE)),
             timeout: std::time::Duration::from_secs(5),
         };
 
@@ -514,7 +715,12 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
-        assert_eq!(item.stdout, "A".repeat(MAX_OUTPUT_SIZE).as_bytes());
+        // Different environments seem to use slightly different output for
+        // `findstr` (sometimes there is an extra newline, sometimes there is
+        // not), so we only verify the very beginning and then just compare the
+        // expected truncated length.
+        assert!(item.stdout.starts_with(b"ABCD"));
+        assert_eq!(item.stdout.len(), MAX_STDOUT_SIZE);
         assert_eq!(item.stderr, b"");
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
@@ -553,6 +759,44 @@ mod tests {
         assert_eq!(item.stdout, b"");
     }
 
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_kill_if_timeout_large_stdin() {
+        let timeout = std::time::Duration::from_secs(0);
+
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        // In this test we pipe 2 MiB of data to `sleep` to verify that there is
+        // no deadlock when writing input. `sleep` does not consume anthing, so
+        // it should eventually start blocking—the timeout logic should still
+        // work despite that.
+
+        let args = Args {
+            raw_command,
+            path: "sleep".into(),
+            args: vec![(timeout.as_secs() + 1).to_string()],
+            env: std::collections::HashMap::new(),
+            ed25519_signature,
+            stdin: vec![0xFF; 2 * 1024 * 1024],
+            timeout,
+        };
+
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        use std::os::unix::process::ExitStatusExt as _;
+
+        assert!(!item.exit_status.success());
+        assert_eq!(item.exit_status.signal(), Some(libc::SIGKILL));
+        assert_eq!(item.stderr, b"");
+        assert_eq!(item.stdout, b"");
+    }
+
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_kill_if_timeout() {
@@ -574,6 +818,44 @@ mod tests {
             env: std::collections::HashMap::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
+            timeout,
+        };
+
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(!item.exit_status.success());
+        assert_eq!(item.stderr, b"");
+        assert_eq!(item.stdout, b"");
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_kill_if_timeout_large_stdin() {
+        let timeout = std::time::Duration::from_secs(0);
+
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        // In this test we pipe 2 MiB of data to the subprocess to verify that
+        // there is no deadlock when writing input. The subprocess does not con-
+        // sume anthing and will eventually start blocking and the timeout logic
+        // should still work despite that.
+
+        let args = Args {
+            raw_command,
+            // The `timeout` command seems to be unavailable e.g. on Wine so
+            // instead we just hang the program forever using an infinite loop.
+            path: "cmd".into(),
+            args: ["/q", "/c", "for /l %i in () do echo off"]
+                .into_iter().map(String::from).collect(),
+            env: std::collections::HashMap::new(),
+            ed25519_signature,
+            stdin: vec![0xFF; 2 * 1024 * 1024],
             timeout,
         };
 
