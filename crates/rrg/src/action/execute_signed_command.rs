@@ -697,15 +697,8 @@ mod tests {
         // that match the given expression.
         //
         // What we do in this test is we provide a lot of "ABCD" lines and we
-        // want to match each of them. Each line in the output will have its
-        // own CLRF char and one extra (provided by `finstr`), so 8 bytes total.
-        // Thus, we expect `MAX_STDOUT_SIZE / 8` such entries in the output (the
-        // length of the "ABCD" string was chosen so that `MAX_STDOUT_SIZE` is
-        // evenly divisible by the output string length).
-        //
-        // The input "ABCD" line is repeated `MAX_STDOUT_SIZE` number of times,
-        // so the total untruncated output size should be much bigger than the
-        // limit.
+        // want to match each of them. The input line is repeated enough times,
+        // for the truncation logic to kick in.
 
         let args = Args {
             raw_command,
@@ -722,7 +715,12 @@ mod tests {
         let item = session.reply::<Item>(0);
 
         assert!(item.exit_status.success());
-        assert_eq!(item.stdout, "ABCD\r\n\r\n".repeat(MAX_STDOUT_SIZE / 8).as_bytes());
+        // Different environments seem to use slightly different output for
+        // `findstr` (sometimes there is an extra newline, sometimes there is
+        // not), so we only verify the very beginning and then just compare the
+        // expected truncated length.
+        assert!(item.stdout.starts_with(b"ABCD"));
+        assert_eq!(item.stdout.len(), MAX_STDOUT_SIZE);
         assert_eq!(item.stderr, b"");
         assert!(item.truncated_stdout);
         assert!(!item.truncated_stderr);
