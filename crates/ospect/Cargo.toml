@@ -13,9 +13,6 @@ test-setfattr = []
 [dependencies.libc]
 version = "0.2.161"
 
-[target.'cfg(target_os = "linux")'.dependencies.ioctls]
-version = "0.6.1"
-
 [target.'cfg(target_os = "windows")'.dependencies.windows-sys]
 version = "0.59.0"
 features = [
