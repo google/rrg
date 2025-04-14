@@ -462,6 +462,108 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     #[test]
+    fn handle_stdin_unconsumed() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "true".into(),
+            args: Vec::default(),
+            env: std::collections::HashMap::new(),
+            // In this test we write a lot of input to a command that does not
+            // care about it. This is to verify that we are never stuck on wri-
+            // ting even if it is never consumed.
+            stdin: vec![0xFF; 2 * 1024 * 1024],
+            ed25519_signature,
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, b"");
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_stdin_unconsumed() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "cmd".into(),
+            args: ["/c", "exit"]
+                .map(String::from).into(),
+            env: std::collections::HashMap::new(),
+            // In this test we write a lot of input to a command that does not
+            // care about it. This is to verify that we are never stuck on wri-
+            // ting even if it is never consumed.
+            stdin: vec![0xFF; 2 * 1024 * 1024],
+            ed25519_signature,
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, b"");
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
+    // `/dev/zero` is specifix to Linux.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn handle_stdout_large() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            // In this test we read large amount of data from the output of the
+            // child process. This should ensure we always consume the data and
+            // never get stuck on a full pipe.
+            path: "head".into(),
+            args: ["--bytes=67108864" /* 64 MiB */, "/dev/zero"]
+                .map(String::from).into(),
+            env: std::collections::HashMap::new(),
+            stdin: Vec::default(),
+            ed25519_signature,
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+
+        assert_eq!(item.stdout.len(), MAX_STDOUT_SIZE);
+        assert!(item.stdout.iter().all(|byte| *byte == 0x00));
+        assert!(item.truncated_stdout);
+
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stderr);
+    }
+
+    #[cfg(target_family = "unix")]
+    #[test]
     fn handle_env() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
