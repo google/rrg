@@ -99,11 +99,22 @@ where
     let command_stderr = command_process.stderr.take()
         .expect("no stderr pipe");
 
-    // While writing an empty stdin should be a no-op, it is possible for the
-    // command to finish executing before we get to the writing part and the
-    // pipe will be closed. We could just ignore "broken pipe" errors but they
-    // can be relevant in case we did have something to write. So, we just avoid
-    // writing altogether if there is nothing to be written.
+    // We need to write stdin that we have in a separate thread because on one
+    // hand the subprocess can wait for input and on the other hand it can also
+    // produce output that needs to be consumed.
+    //
+    // Consider a `cat` command without any arguments. It will pipe all of its
+    // standard input to the standard output. Imagine it is called with a lot of
+    // input data. It will consume part of the input and write this bit to the
+    // output. This will continue until the output pipe is full. However, if we
+    // attempt to write everything at once on the main thread, we will never get
+    // to the reading part. And thus we will be stuck on writing to the child
+    // and the child will be stuck on writing back to us (due to the pipe being
+    // full). Thus, we use threading for producing the input and consuming the
+    // output at the same time.
+    //
+    // As an optimization (because spawning a thread has a non-zero cost) we do
+    // spawn a thread only if there is any input to be written.
     let writer = if !args.stdin.is_empty() {
         Some(std::thread::spawn(move || -> std::io::Result<()> {
             command_stdin.write_all(&args.stdin)?;
@@ -123,10 +134,8 @@ where
         None
     };
 
-    // It might be possible that the command will output a lot of data to one of
-    // the channels. However, if we don't consuming this output, the pipe might
-    // get full and the subprocess will get stuck. Thus, we launch new threads
-    // for immediate consumption of this data.
+    // See the comment above on why we need threading to read output from the
+    // subprocess.
     //
     // Note that we need two reader threads because we cannot guarantee which of
     // the pipes should take precedence—the command might need to write a lot of
