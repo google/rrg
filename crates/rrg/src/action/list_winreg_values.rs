@@ -83,7 +83,7 @@ where
             session.reply(Item {
                 root: args.root,
                 // TODO(@panhania): Add support for case-correcting the key.
-                key: key_join(&args.key, &key_rel_name),
+                key: winreg::path::join(&args.key, &key_rel_name),
                 value,
             })?;
         }
@@ -95,12 +95,12 @@ where
                     Err(error) => {
                         log::error! {
                             "failed to list subkey for key '{:?}': {}",
-                            key_join(&args.key, &key_rel_name), error,
+                            winreg::path::join(&args.key, &key_rel_name), error,
                         };
                         continue
                     }
                 };
-                let subkey_rel_name = key_join(&key_rel_name, &subkey_name);
+                let subkey_rel_name = winreg::path::join(&key_rel_name, &subkey_name);
 
                 match key.open(&subkey_name) {
                     Ok(subkey) => {
@@ -113,7 +113,7 @@ where
                     Err(error) => {
                         log::error! {
                             "failed to open subkey '{:?}': {}",
-                            key_join(&args.key, &subkey_rel_name), error,
+                            winreg::path::join(&args.key, &subkey_rel_name), error,
                         };
                     }
                 }
@@ -168,29 +168,6 @@ impl crate::response::Item for Item {
 
         proto
     }
-}
-
-// TODO(@panhania): This is copied from similar function for a sibiling action.
-// This should be refactored to a separate common utility.
-
-/// Adjoins `left` and `right` using Windows registry key separator (`\`).
-///
-/// This is simlar to [`std::path::Path::join`] but for Windows registry keys.
-#[cfg(target_family = "windows")]
-fn key_join<S>(left: &S, right: &S) -> std::ffi::OsString
-where
-    S: AsRef<std::ffi::OsStr>,
-{
-    let left = left.as_ref();
-    let right = right.as_ref();
-
-    let mut result = std::ffi::OsString::new();
-    result.push(left);
-    if !left.is_empty() && !right.is_empty() {
-        result.push("\\");
-    }
-    result.push(right);
-    result
 }
 
 #[cfg(test)]
@@ -335,35 +312,5 @@ mod tests {
                 item.value.name == "" // "(default)".
             })
         }
-    }
-
-    // TODO(@panhania): Remove tests below once `key_join` is refactored to a
-    // separate module.
-
-    #[test]
-    fn key_join_both_empty() {
-        let empty = std::ffi::OsString::new();
-        assert_eq!(key_join(&empty, &empty), "");
-    }
-
-    #[test]
-    fn key_join_left_empty() {
-        let empty = std::ffi::OsString::new();
-        let foo = std::ffi::OsString::from("foo");
-        assert_eq!(key_join(&empty, &foo), "foo");
-    }
-
-    #[test]
-    fn key_join_right_empty() {
-        let empty = std::ffi::OsString::new();
-        let foo = std::ffi::OsString::from("foo");
-        assert_eq!(key_join(&foo, &empty), "foo");
-    }
-
-    #[test]
-    fn key_join_both_not_empty() {
-        let foo = std::ffi::OsString::from("foo");
-        let bar = std::ffi::OsString::from("bar");
-        assert_eq!(key_join(&foo, &bar), "foo\\bar");
     }
 }
