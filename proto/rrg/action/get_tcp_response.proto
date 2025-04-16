@@ -32,4 +32,5 @@ message Result {
 
     // TODO(@panhania): Consider whether we should include a `data_truncated`
     // field to indicate whether there was more data available.
+    bool data_truncated = 2;
 }
