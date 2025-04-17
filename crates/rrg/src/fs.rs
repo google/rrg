@@ -264,7 +264,7 @@ where
             // Entry did not pass the predicate, we skip it and need to remove
             // the top `read_dir` iterator if it was added. Note that it is
             // added only if the call returns `Some(Ok(entry))` which we verify
-            // above.
+            // above and the entry can be descended into which we verify here.
             if self.inner.is_descendible(&entry) {
                 self.inner.pending_iters.pop();
             }
