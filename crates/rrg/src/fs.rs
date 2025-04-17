@@ -149,6 +149,13 @@ impl WalkDir {
     fn is_same_dev(&self, _entry: &Entry) -> bool {
         true
     }
+
+    /// Returns `true` if we can continue recursive walk into `entry`.
+    fn is_descendible(&self, entry: &Entry) -> bool {
+        entry.metadata.is_dir()
+            && self.is_same_dev(&entry)
+            && self.iter.cur_depth < self.max_depth
+    }
 }
 
 impl std::iter::Iterator for WalkDir {
@@ -163,7 +170,7 @@ impl std::iter::Iterator for WalkDir {
                     Err(error) => return Some(Err(error)),
                 };
 
-                if entry.metadata.is_dir() && self.is_same_dev(&entry) && self.iter.cur_depth < self.max_depth {
+                if self.is_descendible(&entry) {
                     self.pending_iters.push({
                         std::fs::read_dir(&entry.path).map(|iter| ListDir {
                             iter,
@@ -258,13 +265,7 @@ where
             // the top `read_dir` iterator if it was added. Note that it is
             // added only if the call returns `Some(Ok(entry))` which we verify
             // above.
-
-            // TODO(@panhania): It would be nice to avoid repeating the condi-
-            // tion from the top to ensure they are in sync.
-            if entry.metadata.is_dir() &&
-               self.inner.is_same_dev(&entry) &&
-               self.inner.iter.cur_depth < self.inner.max_depth
-            {
+            if self.inner.is_descendible(&entry) {
                 self.inner.pending_iters.pop();
             }
         }
