@@ -4,7 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::path::{Path, PathBuf};
 
-use regex::Regex;
+use regex::bytes::Regex;
 
 /// Arguments of the `get_file_metadata` action.
 pub struct Args {
@@ -112,7 +112,8 @@ where
             .map_err(crate::session::Error::action)?
             .with_max_depth(args.max_depth)
             .prune(|entry| {
-                args.path_pruning_regex.is_match(&entry.path.to_string_lossy())
+                let path_bytes = entry.path.as_os_str().as_encoded_bytes();
+                args.path_pruning_regex.is_match(&path_bytes)
             })
         {
             let entry = match entry {
@@ -1136,6 +1137,57 @@ mod tests {
         assert!(paths.contains(&&tempdir.join("bar").join("quux")));
     }
 
+    #[test]
+    // Paths with arbitrary bytes are possible only on Linux.
+    #[cfg(target_os = "linux")]
+    fn handle_path_pruning_regex_arbitrary_bytes() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::create_dir(tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB")))
+            .unwrap();
+        std::fs::create_dir(tempdir.join(OsStr::from_bytes(b"\xBA\xDD\xDD")))
+            .unwrap();
+
+        std::fs::File::create(tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/A")))
+            .unwrap();
+        std::fs::File::create(tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/B")))
+            .unwrap();
+        std::fs::File::create(tempdir.join(OsStr::from_bytes(b"\xBA\xDD\xDD/C")))
+            .unwrap();
+        std::fs::File::create(tempdir.join(OsStr::from_bytes(b"\xBA\xDD\xDD/D")))
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.to_path_buf(),
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new(&format! {
+                "(?-u)^{}($|/\\xFF\\xAA\\xBB($|/.*$))", tempdir.to_str().unwrap(),
+            }).unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let paths = session.replies::<Item>()
+            .map(|item| &item.path)
+            .collect::<Vec<_>>();
+
+        dbg!(&paths);
+        assert_eq!(paths.len(), 4);
+        assert!(paths.contains(&&tempdir));
+        assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB"))));
+        assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/A"))));
+        assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/B"))));
+    }
 
     macro_rules! path {
         ($root:expr) => {{
