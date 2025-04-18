@@ -1067,8 +1067,9 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new(&format! {
-                "^{tempdir}($|/bar($|/.*$))",
+                "^{tempdir}($|{sep}bar($|{sep}.*$))",
                 tempdir = regex::escape(tempdir.to_str().unwrap()),
+                sep = regex::escape(std::path::MAIN_SEPARATOR_STR),
             }).unwrap(),
         };
 
@@ -1120,8 +1121,9 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new(&format! {
-                "^{tempdir}($|/.*ba.*$)",
+                "^{tempdir}($|{sep}.*ba.*$)",
                 tempdir = regex::escape(tempdir.to_str().unwrap()),
+                sep = regex::escape(std::path::MAIN_SEPARATOR_STR),
             }).unwrap(),
         };
 
