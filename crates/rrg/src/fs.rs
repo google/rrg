@@ -601,7 +601,6 @@ mod tests {
         std::fs::create_dir(tempdir.join("abc"))
             .unwrap();
         File::create(tempdir.join("abc").join("def")).unwrap();
-        File::create(tempdir.join("abc").join("def")).unwrap();
         File::create(tempdir.join("abc").join("ghi")).unwrap();
 
         let mut results = walk_dir(tempdir).unwrap()
