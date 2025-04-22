@@ -123,6 +123,23 @@ impl WalkDir {
         self
     }
 
+    /// Creates an iterator which uses a closure to determine if an element
+    /// should be yielded and used for further recursive descent.
+    ///
+    /// This is similar to [`Iterator::filter`] but discards not only entries
+    /// not matching the predicate but skips the entire subtree rooted at the
+    /// discarded entry.
+    pub fn prune<P>(self, predicate: P) -> WalkDirPrune<P>
+    where
+        P: FnMut(&Entry) -> bool,
+    {
+        WalkDirPrune {
+            inner: self,
+            predicate,
+        }
+    }
+
+
     #[cfg(target_family = "unix")]
     fn is_same_dev(&self, entry: &Entry) -> bool {
         self.dev == std::os::unix::fs::MetadataExt::dev(&entry.metadata)
@@ -131,6 +148,13 @@ impl WalkDir {
     #[cfg(target_family = "windows")]
     fn is_same_dev(&self, _entry: &Entry) -> bool {
         true
+    }
+
+    /// Returns `true` if we can continue recursive walk into `entry`.
+    fn is_descendible(&self, entry: &Entry) -> bool {
+        entry.metadata.is_dir()
+            && self.is_same_dev(&entry)
+            && self.iter.cur_depth < self.max_depth
     }
 }
 
@@ -146,7 +170,7 @@ impl std::iter::Iterator for WalkDir {
                     Err(error) => return Some(Err(error)),
                 };
 
-                if entry.metadata.is_dir() && self.is_same_dev(&entry) && self.iter.cur_depth < self.max_depth {
+                if self.is_descendible(&entry) {
                     self.pending_iters.push({
                         std::fs::read_dir(&entry.path).map(|iter| ListDir {
                             iter,
@@ -206,6 +230,45 @@ impl std::iter::Iterator for ListDir {
             path: entry.path(),
             metadata,
         }))
+    }
+}
+
+/// Iterator over entries in all subdirectories with pruning.
+///
+/// This iterator is created with the [`WalkDir::prune`] method—see its documen-
+/// tation for more information and [`WalkDir`] documentation for more details
+/// on the recursive descent.
+pub struct WalkDirPrune<P> {
+    inner: WalkDir,
+    predicate: P,
+}
+
+impl<P> std::iter::Iterator for WalkDirPrune<P>
+where
+    P: FnMut(&Entry) -> bool,
+{
+    type Item = std::io::Result<Entry>;
+
+    fn next(&mut self) -> Option<std::io::Result<Entry>> {
+        loop {
+            let entry = match self.inner.next() {
+                Some(Ok(entry)) => entry,
+                Some(Err(error)) => return Some(Err(error)),
+                None => return None,
+            };
+
+            if (self.predicate)(&entry) {
+                return Some(Ok(entry));
+            }
+
+            // Entry did not pass the predicate, we skip it and need to remove
+            // the top `read_dir` iterator if it was added. Note that it is
+            // added only if the call returns `Some(Ok(entry))` which we verify
+            // above and the entry can be descended into which we verify here.
+            if self.inner.is_descendible(&entry) {
+                self.inner.pending_iters.pop();
+            }
+        }
     }
 }
 
@@ -511,5 +574,71 @@ mod tests {
 
         assert!(!paths.contains(&tempdir.join("a").join("b").join("c")));
         assert!(!paths.contains(&tempdir.join("a").join("b").join("c").join("d")));
+    }
+
+    #[test]
+    fn walk_dir_prune_root() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::create_dir(tempdir.join("abc"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("abc").join("def"))
+            .unwrap();
+
+        let results = walk_dir(tempdir).unwrap()
+            .prune(|entry| !entry.path.ends_with("abc"))
+            .filter_map(Result::ok);
+
+        assert_eq!(results.count(), 0);
+    }
+
+    #[test]
+    fn walk_dir_prune_not_dir() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::create_dir(tempdir.join("abc"))
+            .unwrap();
+        File::create(tempdir.join("abc").join("def")).unwrap();
+        File::create(tempdir.join("abc").join("ghi")).unwrap();
+
+        let mut results = walk_dir(tempdir).unwrap()
+            .prune(|entry| !entry.path.ends_with("def"))
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+        results.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].path, tempdir.join("abc"));
+        assert_eq!(results[1].path, tempdir.join("abc").join("ghi"));
+    }
+
+    #[test]
+    fn walk_dir_prune_max_depth() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::create_dir(tempdir.join("abc"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("abc").join("def"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("abc").join("def").join("jkl"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("abc").join("ghi"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("abc").join("ghi").join("mno"))
+            .unwrap();
+
+        let mut results = walk_dir(tempdir).unwrap().with_max_depth(2)
+            .prune(|entry| !entry.path.ends_with("jkl"))
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+        results.sort_by_key(|entry| entry.path.clone());
+
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].path, tempdir.join("abc"));
+        assert_eq!(results[1].path, tempdir.join("abc").join("def"));
+        assert_eq!(results[2].path, tempdir.join("abc").join("ghi"));
     }
 }
