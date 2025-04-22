@@ -4,6 +4,8 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::path::{Path, PathBuf};
 
+use regex::bytes::Regex;
+
 /// Arguments of the `get_file_metadata` action.
 pub struct Args {
     /// Root path to the file to get the metadata of.
@@ -16,6 +18,8 @@ pub struct Args {
     sha1: bool,
     /// Whether to collect SHA-256 digest of the file contents.
     sha256: bool,
+    //// Regex to restrict the results only to those with matching paths.
+    path_pruning_regex: Regex,
 }
 
 /// Result of the `get_file_metadata` action.
@@ -107,6 +111,10 @@ where
         for entry in crate::fs::walk_dir(&path)
             .map_err(crate::session::Error::action)?
             .with_max_depth(args.max_depth)
+            .prune(|entry| {
+                let path_bytes = entry.path.as_os_str().as_encoded_bytes();
+                args.path_pruning_regex.is_match(&path_bytes)
+            })
         {
             let entry = match entry {
                 Ok(entry) => entry,
@@ -272,12 +280,16 @@ impl crate::request::Args for Args {
         let path = PathBuf::try_from(proto.take_path())
             .map_err(|error| ParseArgsError::invalid_field("path", error))?;
 
+        let path_pruning_regex = Regex::new(proto.path_pruning_regex())
+            .map_err(|error| ParseArgsError::invalid_field("path_pruning_regex", error))?;
+
         Ok(Args {
             path,
             max_depth: proto.max_depth(),
             md5: proto.md5(),
             sha1: proto.sha1(),
             sha256: proto.sha256(),
+            path_pruning_regex,
         })
     }
 }
@@ -371,6 +383,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -385,6 +398,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -407,6 +421,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -438,6 +453,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -474,6 +490,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -510,6 +527,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -542,6 +560,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -582,6 +601,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -627,6 +647,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -684,6 +705,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -746,6 +768,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -787,6 +810,7 @@ mod tests {
             md5: true,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -821,6 +845,7 @@ mod tests {
             md5: true,
             sha1: false,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -865,6 +890,7 @@ mod tests {
             md5: false,
             sha1: true,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -899,6 +925,7 @@ mod tests {
             md5: false,
             sha1: true,
             sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -943,6 +970,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: true,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -979,6 +1007,7 @@ mod tests {
             md5: false,
             sha1: false,
             sha256: true,
+            path_pruning_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1008,6 +1037,161 @@ mod tests {
             0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
             0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
         ]));
+    }
+
+    #[test]
+    fn handle_path_pruning_regex_filtered() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::create_dir(tempdir.join("foo"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("bar"))
+            .unwrap();
+
+        std::fs::File::create(tempdir.join("foo").join("quux"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("foo").join("norf"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("bar").join("thud"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("bar").join("blargh"))
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.to_path_buf(),
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new(&format! {
+                "^{tempdir}($|{sep}bar($|{sep}.*$))",
+                tempdir = regex::escape(tempdir.to_str().unwrap()),
+                sep = regex::escape(std::path::MAIN_SEPARATOR_STR),
+            }).unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let paths = session.replies::<Item>()
+            .map(|item| &item.path)
+            .collect::<Vec<_>>();
+
+        assert_eq!(paths.len(), 4);
+        assert!(paths.contains(&&tempdir));
+        assert!(paths.contains(&&tempdir.join("bar")));
+        assert!(paths.contains(&&tempdir.join("bar").join("thud")));
+        assert!(paths.contains(&&tempdir.join("bar").join("blargh")));
+    }
+
+    #[test]
+    fn handle_path_pruning_regex_pruned() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::create_dir(tempdir.join("foo"))
+            .unwrap();
+        std::fs::create_dir(tempdir.join("bar"))
+            .unwrap();
+
+        // In this test we verify that paths are actually pruned, not merely
+        // filtered. We prune searching for paths containing `ba*`. In case of
+        // filtering paths like `foo/bar` would be returned. However, with pru-
+        // ning, such path should not be returned as during traversal path `foo`
+        // does not match and is discared with its entire subtree.
+
+        std::fs::File::create(tempdir.join("foo").join("bar"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("foo").join("baz"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("bar").join("baz"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("bar").join("quux"))
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.to_path_buf(),
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new(&format! {
+                "^{tempdir}($|{sep}.*ba.*$)",
+                tempdir = regex::escape(tempdir.to_str().unwrap()),
+                sep = regex::escape(std::path::MAIN_SEPARATOR_STR),
+            }).unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let paths = session.replies::<Item>()
+            .map(|item| &item.path)
+            .collect::<Vec<_>>();
+
+        assert_eq!(paths.len(), 4);
+        assert!(paths.contains(&&tempdir));
+        assert!(paths.contains(&&tempdir.join("bar")));
+        assert!(paths.contains(&&tempdir.join("bar").join("baz")));
+        assert!(paths.contains(&&tempdir.join("bar").join("quux")));
+    }
+
+    #[test]
+    // Paths with arbitrary bytes are possible only on Linux.
+    #[cfg(target_os = "linux")]
+    fn handle_path_pruning_regex_arbitrary_bytes() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::create_dir(tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB")))
+            .unwrap();
+        std::fs::create_dir(tempdir.join(OsStr::from_bytes(b"\xBA\xDD\xDD")))
+            .unwrap();
+
+        std::fs::File::create(tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/A")))
+            .unwrap();
+        std::fs::File::create(tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/B")))
+            .unwrap();
+        std::fs::File::create(tempdir.join(OsStr::from_bytes(b"\xBA\xDD\xDD/C")))
+            .unwrap();
+        std::fs::File::create(tempdir.join(OsStr::from_bytes(b"\xBA\xDD\xDD/D")))
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.to_path_buf(),
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new(&format! {
+                "(?-u)^{tempdir}($|/\\xFF\\xAA\\xBB($|/.*$))",
+                tempdir = regex::escape(tempdir.to_str().unwrap()),
+            }).unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let paths = session.replies::<Item>()
+            .map(|item| &item.path)
+            .collect::<Vec<_>>();
+
+        dbg!(&paths);
+        assert_eq!(paths.len(), 4);
+        assert!(paths.contains(&&tempdir));
+        assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB"))));
+        assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/A"))));
+        assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/B"))));
     }
 
     macro_rules! path {

@@ -45,6 +45,14 @@ message Args {
   //
   // [1]: https://en.wikipedia.org/wiki/SHA-2
   bool sha256 = 5;
+
+  // Regex to restrict the results only to those with matching paths.
+  //
+  // Note that this is not merely doing _filtering_ of the results, it is doing
+  // _pruning_. The difference is that when doing a recursive walk, path that do
+  // not match the given regex will be discarded from the results and they will
+  // not be descended into.
+  string path_pruning_regex = 6;
 }
 
 message Result {
