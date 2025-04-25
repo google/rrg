@@ -42,6 +42,68 @@ where
     })
 }
 
+/// Creates a WMI namespace object path to be used as data source for queries.
+///
+/// See [MSDN documentation][1] for more details on exact specification of the
+/// namespace paths.
+///
+/// [1]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/describing-a-wmi-namespace-object-path
+pub fn namespace<'s, S>(path: &'s S) -> std::io::Result<Namespace<'s>>
+where
+    S: AsRef<std::ffi::OsStr> + ?Sized,
+{
+    let com = self::com::init()?;
+
+    Ok(Namespace {
+        path: path.as_ref(),
+        com,
+    })
+}
+
+/// WMI namespace object path.
+///
+/// This struct is created with the [`namespace`] function.
+pub struct Namespace<'n> {
+    /// WMI namespace object path.
+    path: &'n std::ffi::OsStr,
+    /// COM library initialization guard ensuring validity.
+    com: self::com::InitGuard,
+}
+
+impl<'n> Namespace<'n> {
+
+    /// Creates a WQL query that can then be iterated to poll for results.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let query = wmi::namespace("root\\cimv2").unwrap()
+    ///     .query("SELECT Name FROM Win32_UserAccount")
+    ///     .unwrap();
+    ///
+    /// for row in query.rows().unwrap() {
+    ///     let row = row.unwrap();
+    ///
+    ///     let name = match &row[std::ffi::OsStr::new("Name")] {
+    ///         wmi::QueryValue::String(name) => name,
+    ///         _ => panic!(),
+    ///     };
+    ///
+    ///     println!("Hello, {}!", name.to_string_lossy());
+    /// }
+    /// ```
+    pub fn query<'q, Q>(self, query: &'q Q) -> Query<'n, 'q>
+    where
+        Q: AsRef<std::ffi::OsStr> + ?Sized,
+    {
+        Query {
+            namespace: self.path,
+            query: query.as_ref(),
+            com: self.com,
+        }
+    }
+}
+
 /// WQL query object tied to a particular query string.
 ///
 /// This struct is created by the [`query`] function.
