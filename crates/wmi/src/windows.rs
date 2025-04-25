@@ -33,13 +33,7 @@ pub fn query<'s, S>(query: &'s S) -> std::io::Result<Query<'static, 's>>
 where
     S: AsRef<std::ffi::OsStr> + ?Sized,
 {
-    let com = self::com::init()?;
-
-    Ok(Query {
-        namespace: std::ffi::OsStr::new("root\\cimv2"),
-        query: query.as_ref(),
-        com,
-    })
+    Ok(namespace("root\\cimv2")?.query(query))
 }
 
 /// Creates a WMI namespace object path to be used as data source for queries.
