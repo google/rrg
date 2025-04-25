@@ -29,13 +29,14 @@ use self::error::Error;
 ///     println!("Hello, {}!", name.to_string_lossy());
 /// }
 /// ```
-pub fn query<'s, S>(query: &'s S) -> std::io::Result<Query<'s>>
+pub fn query<'s, S>(query: &'s S) -> std::io::Result<Query<'static, 's>>
 where
     S: AsRef<std::ffi::OsStr> + ?Sized,
 {
     let com = self::com::init()?;
 
     Ok(Query {
+        namespace: std::ffi::OsStr::new("root\\cimv2"),
         query: query.as_ref(),
         com,
     })
@@ -44,14 +45,16 @@ where
 /// WQL query object tied to a particular query string.
 ///
 /// This struct is created by the [`query`] function.
-pub struct Query<'s> {
+pub struct Query<'n, 's> {
+    /// WMI namespace object path to query.
+    namespace: &'n std::ffi::OsStr,
     /// WQL string tied to the query.
     query: &'s std::ffi::OsStr,
     /// COM library initialization guard ensuring validity of the query.
     com: self::com::InitGuard,
 }
 
-impl<'s> Query<'s> {
+impl<'n, 's> Query<'n, 's> {
 
     /// Returns an iterator over the [rows][1] the query yielded.
     ///
@@ -69,7 +72,7 @@ impl<'s> Query<'s> {
         let status = unsafe {
             ((loc.vtable()).ConnectServer)(
                 loc.as_raw_mut(),
-                self::bstr::BString::new("root\\cimv2").as_raw_bstr(),
+                self::bstr::BString::new(self.namespace).as_raw_bstr(),
                 std::ptr::null(),
                 std::ptr::null(),
                 std::ptr::null(),
