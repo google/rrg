@@ -10,32 +10,6 @@ mod ffi;
 
 use self::error::Error;
 
-/// Creates a WQL query that can then be iterated to poll for results.
-///
-/// # Examples
-///
-/// ```no_run
-/// let query = wmi::query("SELECT Name FROM Win32_UserAccount")
-///     .unwrap();
-///
-/// for row in query.rows().unwrap() {
-///     let row = row.unwrap();
-///
-///     let name = match &row[std::ffi::OsStr::new("Name")] {
-///         wmi::QueryValue::String(name) => name,
-///         _ => panic!(),
-///     };
-///
-///     println!("Hello, {}!", name.to_string_lossy());
-/// }
-/// ```
-pub fn query<'s, S>(query: &'s S) -> std::io::Result<Query<'static, 's>>
-where
-    S: AsRef<std::ffi::OsStr> + ?Sized,
-{
-    Ok(namespace("root\\cimv2")?.query(query))
-}
-
 /// Creates a WMI namespace object path to be used as data source for queries.
 ///
 /// See [MSDN documentation][1] for more details on exact specification of the
@@ -457,8 +431,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn query_win32_operating_system() {
-        let rows = query("SELECT * FROM Win32_OperatingSystem").unwrap()
+    fn namespace_query_win32_operating_system() {
+        let rows = namespace("root\\cimv2").unwrap()
+            .query("SELECT * FROM Win32_OperatingSystem")
             .rows().unwrap()
             .collect::<std::io::Result<Vec<_>>>().unwrap();
 
@@ -478,8 +453,9 @@ mod tests {
     }
 
     #[test]
-    fn query_win32_environment() {
-        let rows = query("SELECT * FROM Win32_ComputerSystem").unwrap()
+    fn namespace_query_win32_environment() {
+        let rows = namespace("root\\cimv2").unwrap()
+            .query("SELECT * FROM Win32_ComputerSystem")
             .rows().unwrap()
             .collect::<std::io::Result<Vec<_>>>().unwrap();
 
