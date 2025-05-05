@@ -16,7 +16,7 @@ use self::error::Error;
 /// namespace paths.
 ///
 /// [1]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/describing-a-wmi-namespace-object-path
-pub fn namespace<'s, S>(path: &'s S) -> std::io::Result<Namespace<'s>>
+pub fn namespace<'n, S>(path: &'n S) -> std::io::Result<Namespace<'n>>
 where
     S: AsRef<std::ffi::OsStr> + ?Sized,
 {
@@ -74,16 +74,16 @@ impl<'n> Namespace<'n> {
 /// WQL query object tied to a particular query string.
 ///
 /// This struct is created by the [`query`] function.
-pub struct Query<'n, 's> {
+pub struct Query<'n, 'q> {
     /// WMI namespace object path to query.
     namespace: &'n std::ffi::OsStr,
     /// WQL string tied to the query.
-    query: &'s std::ffi::OsStr,
+    query: &'q std::ffi::OsStr,
     /// COM library initialization guard ensuring validity of the query.
     com: self::com::InitGuard,
 }
 
-impl<'n, 's> Query<'n, 's> {
+impl<'n, 'q> Query<'n, 'q> {
 
     /// Returns an iterator over the [rows][1] the query yielded.
     ///
