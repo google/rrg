@@ -46,8 +46,7 @@ impl<'n> Namespace<'n> {
     ///
     /// ```no_run
     /// let query = wmi::namespace("root\\cimv2").unwrap()
-    ///     .query("SELECT Name FROM Win32_UserAccount")
-    ///     .unwrap();
+    ///     .query("SELECT Name FROM Win32_UserAccount");
     ///
     /// for row in query.rows().unwrap() {
     ///     let row = row.unwrap();
