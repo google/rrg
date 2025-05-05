@@ -6,6 +6,10 @@
 /// Arguments of the `query_wmi` action.
 #[cfg(target_family = "windows")]
 pub struct Args {
+    /// WMI namespace object path [1] to use for the query.
+    ///
+    /// [1]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/describing-a-wmi-namespace-object-path
+    namespace: std::ffi::OsString,
     /// WQL query [1] to run.
     ///
     /// [1]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/wql-sql-for-wmi
@@ -25,8 +29,10 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    let query = wmi::query(&args.query)
+    let namespace = wmi::namespace(&args.namespace)
         .map_err(crate::session::Error::action)?;
+
+    let query = namespace.query(&args.query);
 
     let rows = query.rows()
         .map_err(crate::session::Error::action)?;
@@ -101,7 +107,17 @@ impl crate::request::Args for Args {
     type Proto = rrg_proto::query_wmi::Args;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
+        // TODO(@panhania): For the time being we use the default namespace in
+        // case it is not provided, but eventually we should require GRR server
+        // to always set it explicitly.
+        let namespace = if proto.query().is_empty() {
+            std::ffi::OsString::from("root\\cimv2")
+        } else {
+            std::ffi::OsString::from(proto.take_query())
+        };
+
         Ok(Args {
+            namespace,
             query: std::ffi::OsString::from(proto.take_query()),
         })
     }
@@ -176,6 +192,7 @@ mod tests {
     #[test]
     fn handle_invalid_query() {
         let args = Args {
+            namespace: "root\\cimv2".into(),
             query: "
                 INSERT
                 INTO
@@ -193,6 +210,7 @@ mod tests {
     #[test]
     fn handle_no_rows() {
         let args = Args {
+            namespace: "root\\cimv2".into(),
             query: "
                 SELECT
                   *
@@ -211,6 +229,7 @@ mod tests {
     #[test]
     fn handle_some_rows() {
         let args = Args {
+            namespace: "root\\cimv2".into(),
             query: "
                 SELECT
                   *

@@ -10,48 +10,80 @@ mod ffi;
 
 use self::error::Error;
 
-/// Creates a WQL query that can then be iterated to poll for results.
+/// Creates a WMI namespace object path to be used as data source for queries.
 ///
-/// # Examples
+/// See [MSDN documentation][1] for more details on exact specification of the
+/// namespace paths.
 ///
-/// ```no_run
-/// let query = wmi::query("SELECT Name FROM Win32_UserAccount")
-///     .unwrap();
-///
-/// for row in query.rows().unwrap() {
-///     let row = row.unwrap();
-///
-///     let name = match &row[std::ffi::OsStr::new("Name")] {
-///         wmi::QueryValue::String(name) => name,
-///         _ => panic!(),
-///     };
-///
-///     println!("Hello, {}!", name.to_string_lossy());
-/// }
-/// ```
-pub fn query<'s, S>(query: &'s S) -> std::io::Result<Query<'s>>
+/// [1]: https://learn.microsoft.com/en-us/windows/win32/wmisdk/describing-a-wmi-namespace-object-path
+pub fn namespace<'n, S>(path: &'n S) -> std::io::Result<Namespace<'n>>
 where
     S: AsRef<std::ffi::OsStr> + ?Sized,
 {
     let com = self::com::init()?;
 
-    Ok(Query {
-        query: query.as_ref(),
+    Ok(Namespace {
+        path: path.as_ref(),
         com,
     })
+}
+
+/// WMI namespace object path.
+///
+/// This struct is created with the [`namespace`] function.
+pub struct Namespace<'n> {
+    /// WMI namespace object path.
+    path: &'n std::ffi::OsStr,
+    /// COM library initialization guard ensuring validity.
+    com: self::com::InitGuard,
+}
+
+impl<'n> Namespace<'n> {
+
+    /// Creates a WQL query that can then be iterated to poll for results.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let query = wmi::namespace("root\\cimv2").unwrap()
+    ///     .query("SELECT Name FROM Win32_UserAccount");
+    ///
+    /// for row in query.rows().unwrap() {
+    ///     let row = row.unwrap();
+    ///
+    ///     let name = match &row[std::ffi::OsStr::new("Name")] {
+    ///         wmi::QueryValue::String(name) => name,
+    ///         _ => panic!(),
+    ///     };
+    ///
+    ///     println!("Hello, {}!", name.to_string_lossy());
+    /// }
+    /// ```
+    pub fn query<'q, Q>(self, query: &'q Q) -> Query<'n, 'q>
+    where
+        Q: AsRef<std::ffi::OsStr> + ?Sized,
+    {
+        Query {
+            namespace: self.path,
+            query: query.as_ref(),
+            com: self.com,
+        }
+    }
 }
 
 /// WQL query object tied to a particular query string.
 ///
 /// This struct is created by the [`query`] function.
-pub struct Query<'s> {
+pub struct Query<'n, 'q> {
+    /// WMI namespace object path to query.
+    namespace: &'n std::ffi::OsStr,
     /// WQL string tied to the query.
-    query: &'s std::ffi::OsStr,
+    query: &'q std::ffi::OsStr,
     /// COM library initialization guard ensuring validity of the query.
     com: self::com::InitGuard,
 }
 
-impl<'s> Query<'s> {
+impl<'n, 'q> Query<'n, 'q> {
 
     /// Returns an iterator over the [rows][1] the query yielded.
     ///
@@ -69,7 +101,7 @@ impl<'s> Query<'s> {
         let status = unsafe {
             ((loc.vtable()).ConnectServer)(
                 loc.as_raw_mut(),
-                self::bstr::BString::new("root\\cimv2").as_raw_bstr(),
+                self::bstr::BString::new(self.namespace).as_raw_bstr(),
                 std::ptr::null(),
                 std::ptr::null(),
                 std::ptr::null(),
@@ -398,8 +430,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn query_win32_operating_system() {
-        let rows = query("SELECT * FROM Win32_OperatingSystem").unwrap()
+    fn namespace_query_win32_operating_system() {
+        let rows = namespace("root\\cimv2").unwrap()
+            .query("SELECT * FROM Win32_OperatingSystem")
             .rows().unwrap()
             .collect::<std::io::Result<Vec<_>>>().unwrap();
 
@@ -419,8 +452,9 @@ mod tests {
     }
 
     #[test]
-    fn query_win32_environment() {
-        let rows = query("SELECT * FROM Win32_ComputerSystem").unwrap()
+    fn namespace_query_win32_environment() {
+        let rows = namespace("root\\cimv2").unwrap()
+            .query("SELECT * FROM Win32_ComputerSystem")
             .rows().unwrap()
             .collect::<std::io::Result<Vec<_>>>().unwrap();
 
