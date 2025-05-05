@@ -107,8 +107,17 @@ impl crate::request::Args for Args {
     type Proto = rrg_proto::query_wmi::Args;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
+        // TODO(@panhania): For the time being we use the default namespace in
+        // case it is not provided, but eventually we should require GRR server
+        // to always set it explicitly.
+        let namespace = if proto.query().is_empty() {
+            std::ffi::OsString::from("root\\cimv2")
+        } else {
+            std::ffi::OsString::from(proto.take_query())
+        };
+
         Ok(Args {
-            namespace: std::ffi::OsString::from("root\\cimv2"),
+            namespace,
             query: std::ffi::OsString::from(proto.take_query()),
         })
     }
