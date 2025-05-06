@@ -110,10 +110,10 @@ impl crate::request::Args for Args {
         // TODO(@panhania): For the time being we use the default namespace in
         // case it is not provided, but eventually we should require GRR server
         // to always set it explicitly.
-        let namespace = if proto.query().is_empty() {
+        let namespace = if proto.namespace().is_empty() {
             std::ffi::OsString::from("root\\cimv2")
         } else {
-            std::ffi::OsString::from(proto.take_query())
+            std::ffi::OsString::from(proto.take_namespace())
         };
 
         Ok(Args {
