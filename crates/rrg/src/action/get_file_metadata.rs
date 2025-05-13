@@ -72,21 +72,25 @@ where
         };
 
         #[cfg(target_family = "unix")]
-        let ext_attrs = match || -> std::io::Result<Vec<ospect::fs::ExtAttr>> {
-            ospect::fs::ext_attrs(path)?
-                .collect()
-        }() {
-            Ok(ext_attrs) => ext_attrs,
+        let ext_attrs = match ospect::fs::ext_attrs(path) {
+            Ok(ext_attrs) => ext_attrs.filter_map(|ext_attr| match ext_attr {
+                Ok(ext_attr) => Some(ext_attr),
+                Err(error) => {
+                    log::error! {
+                        "failed to read an extended attribute for '{}': {error}",
+                        path.display(),
+                    };
+
+                    None
+                }
+            }).collect(),
             Err(error) => {
                 log::error! {
                     "failed to list extended attributes for '{}': {error}",
                     path.display(),
                 };
-                // TODO(@panhania): The implementation currently skips the entry
-                // entirely if extended attributes could not be collected (to
-                // preserve the behaviour). But we could easily carry on without
-                // this information.
-                continue
+
+                Vec::default()
             }
         };
 
@@ -123,9 +127,8 @@ where
                     "failed to read symlink target for '{}': {error}",
                     path.display(),
                 };
-                // TODO(@panhania): Similarly to extended attributes, we could
-                // carry on even if we failed to read the symlink.
-                continue
+
+                None
             }
         };
 
