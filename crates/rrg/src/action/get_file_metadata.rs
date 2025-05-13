@@ -60,14 +60,35 @@ where
             return Err(crate::session::Error::action(error));
         }
 
-        let metadata = path.symlink_metadata()
-            .map_err(crate::session::Error::action)?;
+        let metadata = match path.symlink_metadata() {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                log::error! {
+                    "failed to collect metadata for '{}': {error}",
+                    path.display(),
+                };
+                continue
+            }
+        };
 
         #[cfg(target_family = "unix")]
-        let ext_attrs = || -> std::io::Result<Vec<ospect::fs::ExtAttr>> {
+        let ext_attrs = match || -> std::io::Result<Vec<ospect::fs::ExtAttr>> {
             ospect::fs::ext_attrs(path)?
                 .collect()
-        }().map_err(crate::session::Error::action)?;
+        }() {
+            Ok(ext_attrs) => ext_attrs,
+            Err(error) => {
+                log::error! {
+                    "failed to list extended attributes for '{}': {error}",
+                    path.display(),
+                };
+                // TODO(@panhania): The implementation currently skips the entry
+                // entirely if extended attributes could not be collected (to
+                // preserve the behaviour). But we could easily carry on without
+                // this information.
+                continue
+            }
+        };
 
         // Canonicalization of a symlink would yield a path that is fully resolved
         // (including the symlink) which is not what we want as we return metadata
@@ -84,8 +105,29 @@ where
             symlink = None;
         };
 
-        let path_canon = path_canon.map_err(crate::session::Error::action)?;
-        let symlink = symlink.transpose().map_err(crate::session::Error::action)?;
+        let path_canon = match path_canon {
+            Ok(path_canon) => path_canon,
+            Err(error) => {
+                log::error! {
+                    "failed to canonicalize path '{}': {error}",
+                    path.display(),
+                };
+                continue
+            }
+        };
+
+        let symlink = match symlink.transpose() {
+            Ok(symlink) => symlink,
+            Err(error) => {
+                log::error! {
+                    "failed to read symlink target for '{}': {error}",
+                    path.display(),
+                };
+                // TODO(@panhania): Similarly to extended attributes, we could
+                // carry on even if we failed to read the symlink.
+                continue
+            }
+        };
 
         // We log warnings here instead of the `digest` method to avoid repeated
         // messages for (potential) child files.
@@ -109,8 +151,18 @@ where
         })?;
 
         if args.max_depth > 0 {
-            for entry in crate::fs::walk_dir(&path)
-                .map_err(crate::session::Error::action)?
+            let entries = match crate::fs::walk_dir(&path) {
+                Ok(entries) => entries,
+                Err(error) => {
+                    log::error! {
+                        "failed to start recursive walk for '{}': {error}",
+                        path.display(),
+                    };
+                    continue
+                }
+            };
+
+            for entry in entries
                 .with_max_depth(args.max_depth)
                 .prune(|entry| {
                     let path_bytes = entry.path.as_os_str().as_encoded_bytes();
@@ -393,7 +445,9 @@ mod tests {
         };
 
         let mut session = crate::session::FakeSession::new();
-        assert!(handle(&mut session, args).is_err());
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
     }
 
     #[test]
@@ -1302,6 +1356,43 @@ mod tests {
 
         assert!(items_by_path.contains_key(&tempdir_2.join("file22")));
         assert!(items_by_path[&tempdir_2.join("file22")].metadata.is_file());
+    }
+
+    #[test]
+    fn handle_many_files_one_non_existing() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::File::create(tempdir.join("existing1"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("existing2"))
+            .unwrap();
+
+        let args = Args {
+            paths: vec![
+                tempdir.join("existing1").to_path_buf(),
+                tempdir.join("nonexisting").to_path_buf(),
+                tempdir.join("existing2").to_path_buf(),
+            ],
+            max_depth: 0,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 2);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, tempdir.join("existing1"));
+
+        let item = session.reply::<Item>(1);
+        assert_eq!(item.path, tempdir.join("existing2"));
     }
 
     macro_rules! path {
