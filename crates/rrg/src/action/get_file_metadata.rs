@@ -52,6 +52,18 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
+    // We log warnings here instead of the `digest` method to avoid repeated
+    // messages in case of multiple files or (potential) child files.
+    if args.md5 && !cfg!(feature = "action-get_file_metadata-md5") {
+        log::warn!("MD5 digest requested but not supported");
+    }
+    if args.sha1 && !cfg!(feature = "action-get_file_metadata-sha1") {
+        log::warn!("SHA-1 digest requested but not supported");
+    }
+    if args.sha256 && !cfg!(feature = "action-get_file_metadata-sha256") {
+        log::warn!("SHA-256 digest requested but not supported");
+    }
+
     for path in &args.paths {
         if path.is_relative() {
             use std::io::{Error, ErrorKind};
@@ -131,18 +143,6 @@ where
                 None
             }
         };
-
-        // We log warnings here instead of the `digest` method to avoid repeated
-        // messages for (potential) child files.
-        if args.md5 && !cfg!(feature = "action-get_file_metadata-md5") {
-            log::warn!("MD5 digest requested but not supported");
-        }
-        if args.sha1 && !cfg!(feature = "action-get_file_metadata-sha1") {
-            log::warn!("SHA-1 digest requested but not supported");
-        }
-        if args.sha256 && !cfg!(feature = "action-get_file_metadata-sha256") {
-            log::warn!("SHA-256 digest requested but not supported");
-        }
 
         session.reply(Item {
             path: path_canon.clone(),
