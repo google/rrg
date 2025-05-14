@@ -17,6 +17,7 @@ mod filter;
 mod request;
 mod response;
 
+pub mod ping; // TODO(@panhania): Hide this module.
 pub mod startup; // TODO(@panhania): Hide this module.
 
 // TODO(@panhania): Consider moving these to a separate submodule.
@@ -26,7 +27,7 @@ pub mod chunked;
 pub mod gzchunked;
 
 pub use request::{ParseRequestError, Request, RequestId};
-pub use response::{LogBuilder, ResponseBuilder, ResponseId, Sink};
+pub use response::{LogBuilder, Parcel, ResponseBuilder, ResponseId, Sink};
 
 /// Initializes the RRG subsystems.
 ///

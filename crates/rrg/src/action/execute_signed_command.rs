@@ -335,6 +335,7 @@ mod tests {
     fn prepare_session(verification_key: ed25519_dalek::VerifyingKey) -> crate::session::FakeSession {
         crate::session::FakeSession::with_args(crate::args::Args {
             heartbeat_rate: std::time::Duration::from_secs(0),
+            ping_rate: std::time::Duration::from_secs(0),
             command_verification_key: Some(verification_key),
             verbosity: log::LevelFilter::Debug,
             log_to_stdout: false,

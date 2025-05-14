@@ -206,6 +206,10 @@ enum Sink {
   STARTUP = 1;
   // Accepts binary blobs (e.g. fragments of files).
   BLOB = 2;
+  // Accepts periodic ping messages.
+  //
+  // TODO(@panhania): Remove once no longer needed.
+  PING = 8888;
 }
 
 // An action response-like object not directed at any particular flow.

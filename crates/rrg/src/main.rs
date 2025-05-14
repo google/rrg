@@ -15,6 +15,22 @@ fn main() {
     info!("sending RRG startup information");
     rrg::startup();
 
+    // TODO(@panhania): Remove once no longer needed.
+    std::thread::spawn(move || {
+        info!("starting the pinging thread");
+
+        for seq in 0.. {
+            info!("sending a ping message (seq: {seq})");
+
+            rrg::Parcel::new(rrg::Sink::Ping, rrg::ping::Ping {
+                sent: std::time::SystemTime::now(),
+                seq,
+            }).send_unaccounted();
+
+            std::thread::sleep(args.ping_rate);
+        }
+    });
+
     info!("listening for messages");
     rrg::listen(&args);
 }
