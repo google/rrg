@@ -34,8 +34,8 @@ pub struct Args {
     #[argh(option,
         long="ping-rate",
         arg_name="DURATION",
-        default="::std::time::Duration::from_secs(60) * 30", // 30 minutes.
-        description="frequency of ping messages sent to the GRR server",
+        default="::std::time::Duration::ZERO",
+        description="frequency of ping messages sent to the GRR server (0 means never)",
         from_str_fn(parse_duration))]
     pub ping_rate: Duration,
 
