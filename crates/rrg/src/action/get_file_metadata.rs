@@ -8,8 +8,8 @@ use regex::bytes::Regex;
 
 /// Arguments of the `get_file_metadata` action.
 pub struct Args {
-    /// Root path to the file to get the metadata of.
-    path: PathBuf,
+    /// Root paths to the files to get the metadata of.
+    paths: Vec<PathBuf>,
     /// Limit on the depth of recursion when visiting subfolders.
     max_depth: u32,
     /// Whether to collect MD5 digest of the file contents.
@@ -52,42 +52,8 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    if args.path.is_relative() {
-        use std::io::{Error, ErrorKind};
-
-        let error = Error::new(ErrorKind::InvalidInput, "relative path");
-        return Err(crate::session::Error::action(error));
-    }
-
-    let metadata = args.path.symlink_metadata()
-        .map_err(crate::session::Error::action)?;
-
-    #[cfg(target_family = "unix")]
-    let ext_attrs = || -> std::io::Result<Vec<ospect::fs::ExtAttr>> {
-        ospect::fs::ext_attrs(args.path.as_ref())?
-            .collect()
-    }().map_err(crate::session::Error::action)?;
-
-    // Canonicalization of a symlink would yield a path that is fully resolved
-    // (including the symlink) which is not what we want as we return metadata
-    // of the symlink itself and not the data it points to. Thus, we want only
-    // to canonicalize the parent part of the path.
-    let path;
-    let symlink;
-
-    if metadata.is_symlink() {
-        path = canonicalize_parent(&args.path);
-        symlink = Some(std::fs::read_link(&args.path));
-    } else {
-        path = args.path.canonicalize();
-        symlink = None;
-    };
-
-    let path = path.map_err(crate::session::Error::action)?;
-    let symlink = symlink.transpose().map_err(crate::session::Error::action)?;
-
     // We log warnings here instead of the `digest` method to avoid repeated
-    // messages for (potential) child files.
+    // messages in case of multiple files or (potential) child files.
     if args.md5 && !cfg!(feature = "action-get_file_metadata-md5") {
         log::warn!("MD5 digest requested but not supported");
     }
@@ -98,81 +64,172 @@ where
         log::warn!("SHA-256 digest requested but not supported");
     }
 
-    session.reply(Item {
-        path: path.clone(),
-        metadata,
-        #[cfg(target_family = "unix")]
-        ext_attrs,
-        symlink,
-        digest: digest(&args.path, &args),
-    })?;
+    for path in &args.paths {
+        if path.is_relative() {
+            use std::io::{Error, ErrorKind};
 
-    if args.max_depth > 0 {
-        for entry in crate::fs::walk_dir(&path)
-            .map_err(crate::session::Error::action)?
-            .with_max_depth(args.max_depth)
-            .prune(|entry| {
-                let path_bytes = entry.path.as_os_str().as_encoded_bytes();
-                args.path_pruning_regex.is_match(&path_bytes)
-            })
-        {
-            let entry = match entry {
-                Ok(entry) => entry,
+            let error = Error::new(ErrorKind::InvalidInput, "relative path");
+            return Err(crate::session::Error::action(error));
+        }
+
+        let metadata = match path.symlink_metadata() {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                log::error! {
+                    "failed to collect metadata for '{}': {error}",
+                    path.display(),
+                };
+                continue
+            }
+        };
+
+        #[cfg(target_family = "unix")]
+        let ext_attrs = match ospect::fs::ext_attrs(path) {
+            Ok(ext_attrs) => ext_attrs.filter_map(|ext_attr| match ext_attr {
+                Ok(ext_attr) => Some(ext_attr),
                 Err(error) => {
-                    log::error!("failed to read directory entry: {error}");
+                    log::error! {
+                        "failed to read an extended attribute for '{}': {error}",
+                        path.display(),
+                    };
+
+                    None
+                }
+            }).collect(),
+            Err(error) => {
+                log::error! {
+                    "failed to list extended attributes for '{}': {error}",
+                    path.display(),
+                };
+
+                Vec::default()
+            }
+        };
+
+        // Canonicalization of a symlink would yield a path that is fully resolved
+        // (including the symlink) which is not what we want as we return metadata
+        // of the symlink itself and not the data it points to. Thus, we want only
+        // to canonicalize the parent part of the path.
+        let path_canon;
+        let symlink;
+
+        if metadata.is_symlink() {
+            path_canon = canonicalize_parent(path);
+            symlink = Some(std::fs::read_link(path));
+        } else {
+            path_canon = path.canonicalize();
+            symlink = None;
+        };
+
+        let path_canon = match path_canon {
+            Ok(path_canon) => path_canon,
+            Err(error) => {
+                log::error! {
+                    "failed to canonicalize path '{}': {error}",
+                    path.display(),
+                };
+                continue
+            }
+        };
+
+        let symlink = match symlink.transpose() {
+            Ok(symlink) => symlink,
+            Err(error) => {
+                log::error! {
+                    "failed to read symlink target for '{}': {error}",
+                    path.display(),
+                };
+
+                None
+            }
+        };
+
+        session.reply(Item {
+            path: path_canon.clone(),
+            metadata,
+            #[cfg(target_family = "unix")]
+            ext_attrs,
+            symlink,
+            digest: digest(&path, &args),
+        })?;
+
+        if args.max_depth > 0 {
+            let entries = match crate::fs::walk_dir(&path) {
+                Ok(entries) => entries,
+                Err(error) => {
+                    log::error! {
+                        "failed to start recursive walk for '{}': {error}",
+                        path.display(),
+                    };
                     continue
                 }
             };
 
-            #[cfg(target_family = "unix")]
-            let ext_attrs = match ospect::fs::ext_attrs(&entry.path) {
-                Ok(ext_attrs) => ext_attrs.filter_map(|ext_attr| match ext_attr {
-                    Ok(ext_attr) => Some(ext_attr),
+            for entry in entries
+                .with_max_depth(args.max_depth)
+                .prune(|entry| {
+                    let path_bytes = entry.path.as_os_str().as_encoded_bytes();
+                    args.path_pruning_regex.is_match(&path_bytes)
+                })
+            {
+                let entry = match entry {
+                    Ok(entry) => entry,
                     Err(error) => {
-                        log::error! {
-                            "failed to read an extended attribute for '{}': {error}",
-                            entry.path.display()
-                        };
-
-                        None
+                        log::error!("failed to read directory entry: {error}");
+                        continue
                     }
-                }).collect(),
-                Err(error) => {
-                    log::error! {
-                        "failed to list extended attributes for '{}': {error}",
-                        entry.path.display()
-                    };
+                };
 
-                    Vec::default()
-                }
-            };
-
-            let symlink = if entry.metadata.is_symlink() {
-                match std::fs::read_link(&entry.path) {
-                    Ok(symlink) => Some(symlink),
-                    Err(error) => {
-                        log::error! {
-                            "failed to read symlink target for '{}': {error}",
-                            entry.path.display()
-                        };
-
-                        None
-                    }
-                }
-            } else {
-                None
-            };
-
-            let digest = digest(&entry.path, &args);
-
-            session.reply(Item {
-                path: entry.path,
-                metadata: entry.metadata,
                 #[cfg(target_family = "unix")]
-                ext_attrs,
-                symlink,
-                digest,
-            })?;
+                let ext_attrs = match ospect::fs::ext_attrs(&entry.path) {
+                    Ok(ext_attrs) => ext_attrs.filter_map(|ext_attr| match ext_attr {
+                        Ok(ext_attr) => Some(ext_attr),
+                        Err(error) => {
+                            log::error! {
+                                "failed to read an extended attribute for '{}': {error}",
+                                entry.path.display()
+                            };
+
+                            None
+                        }
+                    }).collect(),
+                    Err(error) => {
+                        log::error! {
+                            "failed to list extended attributes for '{}': {error}",
+                            entry.path.display()
+                        };
+
+                        Vec::default()
+                    }
+                };
+
+                let symlink = if entry.metadata.is_symlink() {
+                    match std::fs::read_link(&entry.path) {
+                        Ok(symlink) => Some(symlink),
+                        Err(error) => {
+                            log::error! {
+                                "failed to read symlink target for '{}': {error}",
+                                entry.path.display()
+                            };
+
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                let digest = digest(&entry.path, &args);
+
+                session.reply(Item {
+                    path: entry.path,
+                    metadata: entry.metadata,
+                    #[cfg(target_family = "unix")]
+                    ext_attrs,
+                    symlink,
+                    digest,
+                })?;
+            }
         }
     }
 
@@ -277,14 +334,18 @@ impl crate::request::Args for Args {
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
 
-        let path = PathBuf::try_from(proto.take_path())
+        let paths = proto.take_paths().into_iter()
+            .map(PathBuf::try_from)
+            // TOOO(@panhania): Improve error handling (it is not obvious which
+            // path caused the error right now).
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|error| ParseArgsError::invalid_field("path", error))?;
 
         let path_pruning_regex = Regex::new(proto.path_pruning_regex())
             .map_err(|error| ParseArgsError::invalid_field("path_pruning_regex", error))?;
 
         Ok(Args {
-            path,
+            paths,
             max_depth: proto.max_depth(),
             md5: proto.md5(),
             sha1: proto.sha1(),
@@ -378,7 +439,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.path().join("foo"),
+            paths: vec![tempdir.path().join("foo")],
             max_depth: 0,
             md5: false,
             sha1: false,
@@ -387,13 +448,15 @@ mod tests {
         };
 
         let mut session = crate::session::FakeSession::new();
-        assert!(handle(&mut session, args).is_err());
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
     }
 
     #[test]
     fn handle_relative() {
         let args = Args {
-            path: PathBuf::from("foo/bar/baz"),
+            paths: vec![PathBuf::from("foo/bar/baz")],
             max_depth: 0,
             md5: false,
             sha1: false,
@@ -416,7 +479,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.join("foo").to_path_buf(),
+            paths: vec![tempdir.join("foo").to_path_buf()],
             max_depth: 0,
             md5: false,
             sha1: false,
@@ -448,7 +511,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.join("link"),
+            paths: vec![tempdir.join("link")],
             max_depth: 0,
             md5: false,
             sha1: false,
@@ -485,7 +548,7 @@ mod tests {
         };
 
         let args = Args {
-            path: tempfile.path().to_path_buf(),
+            paths: vec![tempfile.path().to_path_buf()],
             max_depth: 0,
             md5: false,
             sha1: false,
@@ -522,7 +585,7 @@ mod tests {
         };
 
         let args = Args {
-            path: tempfile.path().to_owned(),
+            paths: vec![tempfile.path().to_owned()],
             max_depth: 0,
             md5: false,
             sha1: false,
@@ -555,7 +618,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.to_path_buf(),
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 0,
             md5: false,
             sha1: false,
@@ -596,7 +659,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.to_path_buf(),
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
             md5: false,
             sha1: false,
@@ -642,7 +705,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.to_path_buf(),
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
             md5: false,
             sha1: false,
@@ -700,7 +763,7 @@ mod tests {
         };
 
         let args = Args {
-            path: tempdir.to_path_buf(),
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
             md5: false,
             sha1: false,
@@ -763,7 +826,7 @@ mod tests {
         };
 
         let args = Args {
-            path: tempdir.to_path_buf(),
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
             md5: false,
             sha1: false,
@@ -805,7 +868,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.join("file"),
+            paths: vec![tempdir.join("file")],
             max_depth: 0,
             md5: true,
             sha1: false,
@@ -840,7 +903,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.clone(),
+            paths: vec![tempdir.clone()],
             max_depth: 1,
             md5: true,
             sha1: false,
@@ -885,7 +948,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.join("file"),
+            paths: vec![tempdir.join("file")],
             max_depth: 0,
             md5: false,
             sha1: true,
@@ -920,7 +983,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.clone(),
+            paths: vec![tempdir.clone()],
             max_depth: 1,
             md5: false,
             sha1: true,
@@ -965,7 +1028,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.join("file"),
+            paths: vec![tempdir.join("file")],
             max_depth: 0,
             md5: false,
             sha1: false,
@@ -1002,7 +1065,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.clone(),
+            paths: vec![tempdir.clone()],
             max_depth: 1,
             md5: false,
             sha1: false,
@@ -1061,7 +1124,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.to_path_buf(),
+            paths: vec![tempdir.to_path_buf()],
             max_depth: u32::MAX,
             md5: false,
             sha1: false,
@@ -1115,7 +1178,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.to_path_buf(),
+            paths: vec![tempdir.to_path_buf()],
             max_depth: u32::MAX,
             md5: false,
             sha1: false,
@@ -1168,7 +1231,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.to_path_buf(),
+            paths: vec![tempdir.to_path_buf()],
             max_depth: u32::MAX,
             md5: false,
             sha1: false,
@@ -1192,6 +1255,147 @@ mod tests {
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB"))));
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/A"))));
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/B"))));
+    }
+
+    #[test]
+    fn handle_many_regular_files() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::File::create(tempdir.join("file1"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("file2"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("file3"))
+            .unwrap();
+
+        let args = Args {
+            paths: vec![
+                tempdir.join("file1").to_path_buf(),
+                tempdir.join("file2").to_path_buf(),
+                tempdir.join("file3").to_path_buf(),
+            ],
+            max_depth: 0,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 3);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, tempdir.join("file1"));
+        assert_eq!(item.metadata.is_file(), true);
+
+        let item = session.reply::<Item>(1);
+        assert_eq!(item.path, tempdir.join("file2"));
+        assert_eq!(item.metadata.is_file(), true);
+
+        let item = session.reply::<Item>(2);
+        assert_eq!(item.path, tempdir.join("file3"));
+        assert_eq!(item.metadata.is_file(), true);
+    }
+
+    #[test]
+    fn handle_many_dirs_max_depth_1() {
+        let tempdir_1 = tempfile::tempdir()
+            .unwrap();
+        let tempdir_1 = tempdir_1.path().canonicalize()
+            .unwrap();
+
+        let tempdir_2 = tempfile::tempdir()
+            .unwrap();
+        let tempdir_2 = tempdir_2.path().canonicalize()
+            .unwrap();
+
+        std::fs::File::create(tempdir_1.join("file11"))
+            .unwrap();
+        std::fs::File::create(tempdir_1.join("file12"))
+            .unwrap();
+        std::fs::File::create(tempdir_2.join("file21"))
+            .unwrap();
+        std::fs::File::create(tempdir_2.join("file22"))
+            .unwrap();
+
+        let args = Args {
+            paths: vec![
+                tempdir_1.to_path_buf(),
+                tempdir_2.to_path_buf(),
+            ],
+            max_depth: 1,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let items_by_path = session.replies::<Item>()
+            .map(|item| (item.path.clone(), item))
+            .collect::<std::collections::HashMap<_, _>>();
+
+        assert!(items_by_path.contains_key(&tempdir_1));
+        assert!(items_by_path[&tempdir_1].metadata.is_dir());
+
+        assert!(items_by_path.contains_key(&tempdir_1.join("file11")));
+        assert!(items_by_path[&tempdir_1.join("file11")].metadata.is_file());
+
+        assert!(items_by_path.contains_key(&tempdir_1.join("file12")));
+        assert!(items_by_path[&tempdir_1.join("file12")].metadata.is_file());
+
+        assert!(items_by_path.contains_key(&tempdir_2));
+        assert!(items_by_path[&tempdir_2].metadata.is_dir());
+
+        assert!(items_by_path.contains_key(&tempdir_2.join("file21")));
+        assert!(items_by_path[&tempdir_2.join("file21")].metadata.is_file());
+
+        assert!(items_by_path.contains_key(&tempdir_2.join("file22")));
+        assert!(items_by_path[&tempdir_2.join("file22")].metadata.is_file());
+    }
+
+    #[test]
+    fn handle_many_files_one_non_existing() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path().canonicalize()
+            .unwrap();
+
+        std::fs::File::create(tempdir.join("existing1"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("existing2"))
+            .unwrap();
+
+        let args = Args {
+            paths: vec![
+                tempdir.join("existing1").to_path_buf(),
+                tempdir.join("nonexisting").to_path_buf(),
+                tempdir.join("existing2").to_path_buf(),
+            ],
+            max_depth: 0,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 2);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, tempdir.join("existing1"));
+
+        let item = session.reply::<Item>(1);
+        assert_eq!(item.path, tempdir.join("existing2"));
     }
 
     macro_rules! path {

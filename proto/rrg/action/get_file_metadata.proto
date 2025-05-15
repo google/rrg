@@ -9,7 +9,7 @@ package rrg.action.get_file_metadata;
 import "rrg/fs.proto";
 
 message Args {
-  // Root path to the file to get the metadata for.
+  // Root paths to the files to get the metadata for.
   //
   // If `max_depth` is non-zero, metadata for subfolders and their contents up
   // to that limit are returned as well.
@@ -17,7 +17,7 @@ message Args {
   // Note that if a path points to a symbolic link, the metadata associated
   // with the link itself will be returned, not the metadata of the file that
   // the link points to.
-  rrg.fs.Path path = 1;
+  repeated rrg.fs.Path paths = 1;
 
   // Limit on the depth of recursion when visiting subfolders.
   //
