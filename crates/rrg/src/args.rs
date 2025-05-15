@@ -29,6 +29,18 @@ pub struct Args {
            from_str_fn(parse_duration))]
     pub heartbeat_rate: Duration,
 
+    // TODO(@panhania): Remove once no longer needed.
+    /// A frequency of ping messages to send to the GRR server.
+    #[argh(option,
+        long="ping-rate",
+        arg_name="DURATION",
+        // TODO(@panhania): Set the default to 30 minutes once the ping sink is
+        // supported by the GRR server.
+        default="::std::time::Duration::ZERO",
+        description="frequency of ping messages sent to GRR (0 means never)",
+        from_str_fn(parse_duration))]
+    pub ping_rate: Duration,
+
     /// A verbosity of logging.
     #[argh(option,
            long="verbosity",

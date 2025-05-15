@@ -11,6 +11,7 @@ const PROTOS: &'static [&'static str] = &[
     "../../proto/rrg/fs.proto",
     "../../proto/rrg/net.proto",
     "../../proto/rrg/os.proto",
+    "../../proto/rrg/ping.proto",
     "../../proto/rrg/startup.proto",
     "../../proto/rrg/winreg.proto",
     "../../proto/rrg/action/execute_signed_command.proto",

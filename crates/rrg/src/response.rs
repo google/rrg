@@ -328,6 +328,8 @@ pub enum Sink {
     Startup,
     /// Collects binary blobs (e.g. fragments of files).
     Blob,
+    /// Collects periodic ping messages.
+    Ping, // TODO(@panhania): Remove once not longer needed.
 }
 
 impl From<Sink> for rrg_proto::rrg::Sink {
@@ -336,6 +338,7 @@ impl From<Sink> for rrg_proto::rrg::Sink {
         match sink {
             Sink::Startup => rrg_proto::rrg::Sink::STARTUP,
             Sink::Blob => rrg_proto::rrg::Sink::BLOB,
+            Sink::Ping => rrg_proto::rrg::Sink::PING,
         }
     }
 }
