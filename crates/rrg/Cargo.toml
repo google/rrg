@@ -49,6 +49,7 @@ action-execute_signed_command = []
 test-setfattr = []
 test-chattr = []
 test-fuse = ["dep:fuse"]
+test-wtmp = []
 
 [dependencies.ospect]
 path = "../ospect"
