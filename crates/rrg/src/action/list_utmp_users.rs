@@ -200,6 +200,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "test-wtmp"), ignore)]
     fn handle_var_log_wtmp_no_dupes() {
         let args = Args {
             path: "/var/log/wtmp".into(),
