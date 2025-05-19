@@ -3,14 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-/// Sends a system message with startup information to the GRR server.
-pub fn startup() {
-    let startup = Startup::now();
-
-    crate::response::Parcel::new(crate::Sink::Startup, startup)
-        .send_unaccounted();
-}
-
 /// Information about the agent startup.
 pub struct Startup {
     /// Metadata about the agent that has been started.

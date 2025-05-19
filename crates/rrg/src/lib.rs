@@ -55,12 +55,3 @@ pub fn listen(args: &crate::args::Args) {
         session::FleetspeakSession::dispatch(args, request);
     }
 }
-
-/// Sends a system message with startup information to the GRR server.
-///
-/// This function should be called only once at the beginning of RRG's process
-/// lifetime. It communicates to the GRR server that the agent has been started
-/// and sends some basic information like agent metadata.
-pub fn startup() {
-    startup::startup()
-}

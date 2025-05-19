@@ -13,7 +13,8 @@ fn main() {
     fleetspeak::startup(env!("CARGO_PKG_VERSION"));
 
     info!("sending RRG startup information");
-    rrg::startup();
+    rrg::Parcel::new(rrg::Sink::Startup, rrg::startup::Startup::now())
+        .send_unaccounted();
 
     // TODO(@panhania): Remove once no longer needed.
     if args.ping_rate > std::time::Duration::ZERO {
