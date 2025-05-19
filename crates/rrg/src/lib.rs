@@ -17,14 +17,17 @@ mod filter;
 mod request;
 mod response;
 
-pub mod ping; // TODO(@panhania): Hide this module.
-pub mod startup; // TODO(@panhania): Hide this module.
+mod ping;
+mod startup;
 
 // TODO(@panhania): Consider moving these to a separate submodule.
 #[cfg(feature = "action-get_filesystem_timeline")]
 pub mod chunked;
 #[cfg(feature = "action-get_filesystem_timeline")]
 pub mod gzchunked;
+
+pub use ping::Ping;
+pub use startup::Startup;
 
 pub use request::{ParseRequestError, Request, RequestId};
 pub use response::{LogBuilder, Parcel, ResponseBuilder, ResponseId, Sink};

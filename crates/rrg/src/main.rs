@@ -13,7 +13,7 @@ fn main() {
     fleetspeak::startup(env!("CARGO_PKG_VERSION"));
 
     info!("sending RRG startup information");
-    rrg::Parcel::new(rrg::Sink::Startup, rrg::startup::Startup::now())
+    rrg::Parcel::new(rrg::Sink::Startup, rrg::Startup::now())
         .send_unaccounted();
 
     // TODO(@panhania): Remove once no longer needed.
@@ -24,7 +24,7 @@ fn main() {
             for seq in 0.. {
                 info!("sending a ping message (seq: {seq})");
 
-                rrg::Parcel::new(rrg::Sink::Ping, rrg::ping::Ping {
+                rrg::Parcel::new(rrg::Sink::Ping, rrg::Ping {
                     sent: std::time::SystemTime::now(),
                     seq,
                 }).send_unaccounted();
