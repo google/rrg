@@ -7,7 +7,7 @@ use log::info;
 
 fn main() {
     let args = rrg::args::from_env_args();
-    rrg::init(&args);
+    rrg::log::init(&args);
 
     info!("sending Fleetspeak startup information");
     fleetspeak::startup(env!("CARGO_PKG_VERSION"));
