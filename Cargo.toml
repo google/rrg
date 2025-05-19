@@ -11,4 +11,4 @@ resolver = "2"
 [workspace.package]
 version = "0.0.1"
 authors = ["Łukasz Hanuszczak <hanuszczak@google.com>"]
-edition = "2021"
+edition = "2024"
