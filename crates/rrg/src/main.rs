@@ -37,5 +37,8 @@ fn main() {
     }
 
     info!("listening for messages");
-    rrg::listen(&args);
+    loop {
+        let request = rrg::Request::receive(args.heartbeat_rate);
+        rrg::session::FleetspeakSession::dispatch(&args, request);
+    }
 }
