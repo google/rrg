@@ -322,7 +322,10 @@ impl QueryValue {
     unsafe fn from_variant(
         variant: &windows_sys::Win32::System::Variant::VARIANT,
     ) -> std::io::Result<QueryValue> {
-        let variant = variant.Anonymous.Anonymous;
+        // SAFETY: `variant` is properly initialized (per safety precondition).
+        let variant = unsafe {
+            variant.Anonymous.Anonymous
+        };
 
         // Based on [1] and following header files:
         //
@@ -339,47 +342,76 @@ impl QueryValue {
                 Ok(QueryValue::None)
             }
             windows_sys::Win32::System::Variant::VT_BOOL => {
-                match variant.Anonymous.boolVal {
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is the boolean value.
+                match unsafe { variant.Anonymous.boolVal } {
                     0 => Ok(QueryValue::Bool(false)),
                     -1 => Ok(QueryValue::Bool(true)),
                     raw_value => Err(QueryValueBoolError { raw_value }.into()),
                 }
             }
             windows_sys::Win32::System::Variant::VT_UI1 => {
-                Ok(QueryValue::U8(variant.Anonymous.bVal))
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is 8-bit unsigned int
+                // (a byte value).
+                Ok(QueryValue::U8(unsafe { variant.Anonymous.bVal }))
             }
             windows_sys::Win32::System::Variant::VT_I1 => {
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is 8-bit signed int (a
+                // char value).
+                //
                 // According to `inc/wnet/oleauto.h`, `VT_I1` corresponds to
                 // `cVal` and should be a signed char but this is not what the
                 // type says, so we reinterpret it.
-                Ok(QueryValue::I8(variant.Anonymous.cVal as i8))
+                Ok(QueryValue::I8(unsafe { variant.Anonymous.cVal as i8 }))
             }
             windows_sys::Win32::System::Variant::VT_UI2 => {
-                Ok(QueryValue::U16(variant.Anonymous.uiVal))
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is 16-bit unsigned int.
+                Ok(QueryValue::U16(unsafe { variant.Anonymous.uiVal }))
             }
             windows_sys::Win32::System::Variant::VT_I2 => {
-                Ok(QueryValue::I16(variant.Anonymous.iVal))
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is 16-bit signed int.
+                Ok(QueryValue::I16(unsafe { variant.Anonymous.iVal }))
             }
             windows_sys::Win32::System::Variant::VT_UI4 => {
-                Ok(QueryValue::U32(variant.Anonymous.ulVal))
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is 32-bit unsigned int.
+                Ok(QueryValue::U32(unsafe { variant.Anonymous.ulVal }))
             }
             windows_sys::Win32::System::Variant::VT_I4 => {
-                Ok(QueryValue::I32(variant.Anonymous.lVal))
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is 32-bit signed int.
+                Ok(QueryValue::I32(unsafe { variant.Anonymous.lVal }))
             }
             windows_sys::Win32::System::Variant::VT_UI8 => {
-                Ok(QueryValue::U64(variant.Anonymous.ullVal))
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is 64-bit unsigned int.
+                Ok(QueryValue::U64(unsafe { variant.Anonymous.ullVal }))
             }
             windows_sys::Win32::System::Variant::VT_I8 => {
-                Ok(QueryValue::I64(variant.Anonymous.llVal))
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is 64-bit signed int.
+                Ok(QueryValue::I64(unsafe { variant.Anonymous.llVal }))
             }
             windows_sys::Win32::System::Variant::VT_R4 => {
-                Ok(QueryValue::F32(variant.Anonymous.fltVal))
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is single-precision
+                // float.
+                Ok(QueryValue::F32(unsafe { variant.Anonymous.fltVal }))
             }
             windows_sys::Win32::System::Variant::VT_R8 => {
-                Ok(QueryValue::F64(variant.Anonymous.dblVal))
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is double-precision
+                // float.
+                Ok(QueryValue::F64(unsafe { variant.Anonymous.dblVal }))
             }
             windows_sys::Win32::System::Variant::VT_BSTR => {
-                Ok(QueryValue::String({
+                // SAFETY: `variant` is properly initialized (per safety
+                // precondition) and we verified that it is a `BSTR` value.
+                Ok(QueryValue::String(unsafe {
                     self::bstr::BStr::from_raw_bstr(variant.Anonymous.bstrVal)
                         .to_os_string()
                 }))

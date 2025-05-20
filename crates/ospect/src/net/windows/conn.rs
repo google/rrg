@@ -198,22 +198,31 @@ impl Table for MIB_TCPTABLE_OWNER_PID {
 
     // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable#parameters
     unsafe fn get(buf: *mut std::ffi::c_void, buf_size: *mut u32) -> u32 {
-        GetExtendedTcpTable(
-            buf,
-            buf_size,
-            false.into(),
-            windows_sys::Win32::Networking::WinSock::AF_INET as u32,
-            TCP_TABLE_OWNER_PID_ALL,
-            0,
-        )
+        // SAFETY: `buf` has length of at least `buf_size` (per safety
+        // precondition) and thus we can ask `GetExtended*Table` to fill it with
+        // data.
+        unsafe {
+            GetExtendedTcpTable(
+                buf,
+                buf_size,
+                false.into(),
+                windows_sys::Win32::Networking::WinSock::AF_INET as u32,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            )
+        }
     }
 
     // https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcptable_owner_pid#members
     unsafe fn rows(&self) -> &[MIB_TCPROW_OWNER_PID] {
-        std::slice::from_raw_parts(
-            self.table.as_ref().as_ptr(),
-            self.dwNumEntries as usize,
-        )
+        // SAFETY: `table` is properly initialized and holds `dwNumEntries` (per
+        // safety precondition).
+        unsafe {
+            std::slice::from_raw_parts(
+                self.table.as_ref().as_ptr(),
+                self.dwNumEntries as usize,
+            )
+        }
     }
 }
 
@@ -223,22 +232,31 @@ impl Table for MIB_TCP6TABLE_OWNER_PID {
 
     // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable#parameters
     unsafe fn get(buf: *mut std::ffi::c_void, buf_size: *mut u32) -> u32 {
-        GetExtendedTcpTable(
-            buf,
-            buf_size,
-            false.into(),
-            windows_sys::Win32::Networking::WinSock::AF_INET6 as u32,
-            TCP_TABLE_OWNER_PID_ALL,
-            0,
-        )
+        // SAFETY: `buf` has length of at least `buf_size` (per safety
+        // precondition) and thus we can ask `GetExtended*Table` to fill it with
+        // data.
+        unsafe {
+            GetExtendedTcpTable(
+                buf,
+                buf_size,
+                false.into(),
+                windows_sys::Win32::Networking::WinSock::AF_INET6 as u32,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            )
+        }
     }
 
     // https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcp6table_owner_pid#members
     unsafe fn rows(&self) -> &[MIB_TCP6ROW_OWNER_PID] {
-        std::slice::from_raw_parts(
-            self.table.as_ref().as_ptr(),
-            self.dwNumEntries as usize,
-        )
+        // SAFETY: `table` is properly initialized and holds `dwNumEntries` (per
+        // safety precondition).
+        unsafe {
+            std::slice::from_raw_parts(
+                self.table.as_ref().as_ptr(),
+                self.dwNumEntries as usize,
+            )
+        }
     }
 }
 
@@ -248,22 +266,31 @@ impl Table for MIB_UDPTABLE_OWNER_PID {
 
     // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable
     unsafe fn get(buf: *mut std::ffi::c_void, buf_size: *mut u32) -> u32 {
-        GetExtendedUdpTable(
-            buf,
-            buf_size,
-            false.into(),
-            windows_sys::Win32::Networking::WinSock::AF_INET as u32,
-            UDP_TABLE_OWNER_PID,
-            0,
-        )
+        // SAFETY: `buf` has length of at least `buf_size` (per safety
+        // precondition) and thus we can ask `GetExtended*Table` to fill it with
+        // data.
+        unsafe {
+            GetExtendedUdpTable(
+                buf,
+                buf_size,
+                false.into(),
+                windows_sys::Win32::Networking::WinSock::AF_INET as u32,
+                UDP_TABLE_OWNER_PID,
+                0,
+            )
+        }
     }
 
     // https://learn.microsoft.com/en-us/windows/win32/api/udpmib/ns-udpmib-mib_udptable#members
     unsafe fn rows(&self) -> &[MIB_UDPROW_OWNER_PID] {
-        std::slice::from_raw_parts(
-            self.table.as_ref().as_ptr(),
-            self.dwNumEntries as usize,
-        )
+        // SAFETY: `table` is properly initialized and holds `dwNumEntries` (per
+        // safety precondition).
+        unsafe {
+            std::slice::from_raw_parts(
+                self.table.as_ref().as_ptr(),
+                self.dwNumEntries as usize,
+            )
+        }
     }
 }
 
@@ -273,22 +300,31 @@ impl Table for MIB_UDP6TABLE_OWNER_PID {
 
     // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable
     unsafe fn get(buf: *mut std::ffi::c_void, buf_size: *mut u32) -> u32 {
-        GetExtendedUdpTable(
-            buf,
-            buf_size,
-            false.into(),
-            windows_sys::Win32::Networking::WinSock::AF_INET6 as u32,
-            UDP_TABLE_OWNER_PID,
-            0,
-        )
+        // SAFETY: `buf` has length of at least `buf_size` (per safety
+        // precondition) and thus we can ask `GetExtended*Table` to fill it with
+        // data.
+        unsafe {
+            GetExtendedUdpTable(
+                buf,
+                buf_size,
+                false.into(),
+                windows_sys::Win32::Networking::WinSock::AF_INET6 as u32,
+                UDP_TABLE_OWNER_PID,
+                0,
+            )
+        }
     }
 
     // https://learn.microsoft.com/en-us/windows/win32/api/udpmib/ns-udpmib-mib_udp6table_owner_pid#members
     unsafe fn rows(&self) -> &[MIB_UDP6ROW_OWNER_PID] {
-        std::slice::from_raw_parts(
-            self.table.as_ref().as_ptr(),
-            self.dwNumEntries as usize,
-        )
+        // SAFETY: `table` is properly initialized and holds `dwNumEntries` (per
+        // safety precondition).
+        unsafe {
+            std::slice::from_raw_parts(
+                self.table.as_ref().as_ptr(),
+                self.dwNumEntries as usize,
+            )
+        }
     }
 }
 
