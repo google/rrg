@@ -110,23 +110,20 @@ where
             }
         };
 
-        let symlink;
-        if metadata.is_symlink() {
-            symlink = Some(std::fs::read_link(path));
-        } else {
-            symlink = None;
-        };
+        let symlink = if metadata.is_symlink() {
+            match std::fs::read_link(path) {
+                Ok(symlink) => Some(symlink),
+                Err(error) => {
+                    log::error! {
+                        "failed to read symlink target for '{}': {error}",
+                        path.display(),
+                    };
 
-        let symlink = match symlink.transpose() {
-            Ok(symlink) => symlink,
-            Err(error) => {
-                log::error! {
-                    "failed to read symlink target for '{}': {error}",
-                    path.display(),
-                };
-
-                None
+                    None
+                }
             }
+        } else {
+            None
         };
 
         let path_canon = if args.path_canon {
