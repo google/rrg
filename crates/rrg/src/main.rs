@@ -7,13 +7,14 @@ use log::info;
 
 fn main() {
     let args = rrg::args::from_env_args();
-    rrg::init(&args);
+    rrg::log::init(&args);
 
     info!("sending Fleetspeak startup information");
     fleetspeak::startup(env!("CARGO_PKG_VERSION"));
 
     info!("sending RRG startup information");
-    rrg::startup();
+    rrg::Parcel::new(rrg::Sink::Startup, rrg::Startup::now())
+        .send_unaccounted();
 
     // TODO(@panhania): Remove once no longer needed.
     if args.ping_rate > std::time::Duration::ZERO {
@@ -23,7 +24,7 @@ fn main() {
             for seq in 0.. {
                 info!("sending a ping message (seq: {seq})");
 
-                rrg::Parcel::new(rrg::Sink::Ping, rrg::ping::Ping {
+                rrg::Parcel::new(rrg::Sink::Ping, rrg::Ping {
                     sent: std::time::SystemTime::now(),
                     seq,
                 }).send_unaccounted();
@@ -36,5 +37,8 @@ fn main() {
     }
 
     info!("listening for messages");
-    rrg::listen(&args);
+    loop {
+        let request = rrg::Request::receive(args.heartbeat_rate);
+        rrg::session::FleetspeakSession::dispatch(&args, request);
+    }
 }
