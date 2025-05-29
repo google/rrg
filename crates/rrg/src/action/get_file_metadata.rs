@@ -459,8 +459,7 @@ mod tests {
     fn handle_regular_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("foo"))
             .unwrap();
@@ -490,8 +489,7 @@ mod tests {
     fn handle_symlink() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file"))
             .unwrap();
@@ -590,7 +588,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
-        assert_eq!(item.path, tempfile.path().canonicalize().unwrap());
+        assert_eq!(item.path, tempfile.path());
         assert_eq!(item.ext_attrs.len(), 1);
         assert_eq!(item.ext_attrs[0].name, "user.foo");
         assert_eq!(item.ext_attrs[0].value, b"bar");
@@ -600,8 +598,7 @@ mod tests {
     fn handle_dir_max_depth_0() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("foo"))
             .unwrap();
@@ -625,7 +622,7 @@ mod tests {
             .map(|item| item.path.clone())
             .collect::<Vec<_>>();
 
-        assert!(paths.contains((&tempdir).into()));
+        assert!(paths.contains(&tempdir.to_path_buf()));
         assert!(!paths.contains(&tempdir.join("foo")));
         assert!(!paths.contains(&tempdir.join("bar")));
     }
@@ -634,8 +631,7 @@ mod tests {
     fn handle_dir_max_depth_1() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file1"))
             .unwrap();
@@ -667,8 +663,8 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
-        assert!(items_by_path[&tempdir].metadata.is_dir());
+        assert!(items_by_path.contains_key(tempdir));
+        assert!(items_by_path[tempdir].metadata.is_dir());
 
         assert!(items_by_path.contains_key(&tempdir.join("file1")));
         assert!(items_by_path[&tempdir.join("file1")].metadata.is_file());
@@ -688,8 +684,7 @@ mod tests {
     fn handle_dir_max_depth_1_symlinks() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file"))
             .unwrap();
@@ -714,7 +709,7 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap::<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
+        assert!(items_by_path.contains_key(tempdir));
         assert!(items_by_path.contains_key(&tempdir.join("file")));
         assert!(items_by_path.contains_key(&tempdir.join("link")));
 
@@ -729,8 +724,7 @@ mod tests {
     fn handle_dir_max_depth_1_ext_attrs() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file1"))
             .unwrap();
@@ -773,7 +767,7 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap::<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
+        assert!(items_by_path.contains_key(tempdir));
         assert!(items_by_path.contains_key(&tempdir.join("file1")));
         assert!(items_by_path.contains_key(&tempdir.join("file2")));
 
@@ -793,8 +787,7 @@ mod tests {
     fn handle_dir_max_depth_1_ext_attrs() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file1"))
             .unwrap();
@@ -837,7 +830,7 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap::<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
+        assert!(items_by_path.contains_key(tempdir));
         assert!(items_by_path.contains_key(&tempdir.join("file1")));
         assert!(items_by_path.contains_key(&tempdir.join("file2")));
 
@@ -857,8 +850,7 @@ mod tests {
     fn handle_md5_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("file"), "hello\n")
             .unwrap();
@@ -891,8 +883,7 @@ mod tests {
     fn handle_md5_dir() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("nonempty"), "hello\n")
             .unwrap();
@@ -900,7 +891,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            paths: vec![tempdir.clone()],
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
             md5: true,
             sha1: false,
@@ -916,8 +907,8 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
-        assert_eq!(items_by_path[&tempdir].digest.md5, None);
+        assert!(items_by_path.contains_key(tempdir));
+        assert_eq!(items_by_path[tempdir].digest.md5, None);
 
         assert!(items_by_path.contains_key(&tempdir.join("nonempty")));
         assert_eq!(items_by_path[&tempdir.join("nonempty")].digest.md5, Some([
@@ -939,8 +930,7 @@ mod tests {
     fn handle_sha1_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("file"), "hello\n")
             .unwrap();
@@ -973,8 +963,7 @@ mod tests {
     fn handle_sha1_dir() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("nonempty"), "hello\n")
             .unwrap();
@@ -982,7 +971,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            paths: vec![tempdir.clone()],
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
             md5: false,
             sha1: true,
@@ -998,8 +987,8 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
-        assert_eq!(items_by_path[&tempdir].digest.sha1, None);
+        assert!(items_by_path.contains_key(tempdir));
+        assert_eq!(items_by_path[tempdir].digest.sha1, None);
 
         assert!(items_by_path.contains_key(&tempdir.join("nonempty")));
         assert_eq!(items_by_path[&tempdir.join("nonempty")].digest.sha1, Some([
@@ -1021,8 +1010,7 @@ mod tests {
     fn handle_sha255_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("file"), "hello\n")
             .unwrap();
@@ -1057,8 +1045,7 @@ mod tests {
     fn handle_sha256_dir() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("nonempty"), "hello\n")
             .unwrap();
@@ -1066,7 +1053,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            paths: vec![tempdir.clone()],
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
             md5: false,
             sha1: false,
@@ -1082,8 +1069,8 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
-        assert_eq!(items_by_path[&tempdir].digest.sha256, None);
+        assert!(items_by_path.contains_key(tempdir));
+        assert_eq!(items_by_path[tempdir].digest.sha256, None);
 
         assert!(items_by_path.contains_key(&tempdir.join("nonempty")));
         assert_eq!(items_by_path[&tempdir.join("nonempty")].digest.sha256, Some([
@@ -1108,8 +1095,7 @@ mod tests {
     fn handle_path_pruning_regex_filtered() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::create_dir(tempdir.join("foo"))
             .unwrap();
@@ -1147,7 +1133,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(paths.len(), 4);
-        assert!(paths.contains(&&tempdir));
+        assert!(paths.contains(&&tempdir.to_path_buf()));
         assert!(paths.contains(&&tempdir.join("bar")));
         assert!(paths.contains(&&tempdir.join("bar").join("thud")));
         assert!(paths.contains(&&tempdir.join("bar").join("blargh")));
@@ -1157,8 +1143,7 @@ mod tests {
     fn handle_path_pruning_regex_pruned() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::create_dir(tempdir.join("foo"))
             .unwrap();
@@ -1202,7 +1187,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(paths.len(), 4);
-        assert!(paths.contains(&&tempdir));
+        assert!(paths.contains(&&tempdir.to_path_buf()));
         assert!(paths.contains(&&tempdir.join("bar")));
         assert!(paths.contains(&&tempdir.join("bar").join("baz")));
         assert!(paths.contains(&&tempdir.join("bar").join("quux")));
@@ -1217,8 +1202,7 @@ mod tests {
 
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::create_dir(tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB")))
             .unwrap();
@@ -1256,7 +1240,7 @@ mod tests {
 
         dbg!(&paths);
         assert_eq!(paths.len(), 4);
-        assert!(paths.contains(&&tempdir));
+        assert!(paths.contains(&&tempdir.to_path_buf()));
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB"))));
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/A"))));
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/B"))));
@@ -1266,8 +1250,7 @@ mod tests {
     fn handle_many_regular_files() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file1"))
             .unwrap();
@@ -1312,13 +1295,11 @@ mod tests {
     fn handle_many_dirs_max_depth_1() {
         let tempdir_1 = tempfile::tempdir()
             .unwrap();
-        let tempdir_1 = tempdir_1.path().canonicalize()
-            .unwrap();
+        let tempdir_1 = tempdir_1.path();
 
         let tempdir_2 = tempfile::tempdir()
             .unwrap();
-        let tempdir_2 = tempdir_2.path().canonicalize()
-            .unwrap();
+        let tempdir_2 = tempdir_2.path();
 
         std::fs::File::create(tempdir_1.join("file11"))
             .unwrap();
@@ -1349,8 +1330,8 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir_1));
-        assert!(items_by_path[&tempdir_1].metadata.is_dir());
+        assert!(items_by_path.contains_key(tempdir_1));
+        assert!(items_by_path[tempdir_1].metadata.is_dir());
 
         assert!(items_by_path.contains_key(&tempdir_1.join("file11")));
         assert!(items_by_path[&tempdir_1.join("file11")].metadata.is_file());
@@ -1358,8 +1339,8 @@ mod tests {
         assert!(items_by_path.contains_key(&tempdir_1.join("file12")));
         assert!(items_by_path[&tempdir_1.join("file12")].metadata.is_file());
 
-        assert!(items_by_path.contains_key(&tempdir_2));
-        assert!(items_by_path[&tempdir_2].metadata.is_dir());
+        assert!(items_by_path.contains_key(tempdir_2));
+        assert!(items_by_path[tempdir_2].metadata.is_dir());
 
         assert!(items_by_path.contains_key(&tempdir_2.join("file21")));
         assert!(items_by_path[&tempdir_2.join("file21")].metadata.is_file());
@@ -1372,8 +1353,7 @@ mod tests {
     fn handle_many_files_one_non_existing() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("existing1"))
             .unwrap();
@@ -1410,7 +1390,8 @@ mod tests {
     fn handle_path_canon() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
+        let tempdir = tempdir.path();
+        let tempdir_canon = tempdir.canonicalize()
             .unwrap();
 
         std::fs::create_dir(tempdir.join("dir"))
@@ -1435,14 +1416,15 @@ mod tests {
 
         let item = session.reply::<Item>(0);
         assert_eq!(item.path, tempdir.join(".").join("dir").join("..").join("dir").join("file"));
-        assert_eq!(item.path_canon, Some(tempdir.join("dir").join("file")));
+        assert_eq!(item.path_canon, Some(tempdir_canon.join("dir").join("file")));
     }
 
     #[test]
     fn handle_path_canon_max_depth_1() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
+        let tempdir = tempdir.path();
+        let tempdir_canon = tempdir.canonicalize()
             .unwrap();
 
         std::fs::create_dir(tempdir.join("dir"))
@@ -1469,8 +1451,8 @@ mod tests {
             .map(|item| item.path_canon.clone().unwrap())
             .collect::<Vec<_>>();
 
-        assert!(paths_canon.contains(&tempdir.join("dir")));
-        assert!(paths_canon.contains(&tempdir.join("dir").join("file1")));
-        assert!(paths_canon.contains(&tempdir.join("dir").join("file2")));
+        assert!(paths_canon.contains(&tempdir_canon.join("dir")));
+        assert!(paths_canon.contains(&tempdir_canon.join("dir").join("file1")));
+        assert!(paths_canon.contains(&tempdir_canon.join("dir").join("file2")));
     }
 }
