@@ -20,12 +20,16 @@ pub struct Args {
     sha256: bool,
     //// Regex to restrict the results only to those with matching paths.
     path_pruning_regex: Regex,
+    /// Whether to collect canonical path to the file.
+    path_canon: bool,
 }
 
 /// Result of the `get_file_metadata` action.
 struct Item {
-    /// Canonical path to the file we retrieve the metadata of.
+    /// Path to the file we retrieve the metadata of.
     path: PathBuf,
+    /// Canonical path to the file.
+    path_canon: Option<PathBuf>,
     /// Retrieved metadata of the file we retrieved.
     metadata: std::fs::Metadata,
     /// Extended attributes of the file.
@@ -106,46 +110,41 @@ where
             }
         };
 
-        // Canonicalization of a symlink would yield a path that is fully resolved
-        // (including the symlink) which is not what we want as we return metadata
-        // of the symlink itself and not the data it points to. Thus, we want only
-        // to canonicalize the parent part of the path.
-        let path_canon;
-        let symlink;
+        let symlink = if metadata.is_symlink() {
+            match std::fs::read_link(path) {
+                Ok(symlink) => Some(symlink),
+                Err(error) => {
+                    log::error! {
+                        "failed to read symlink target for '{}': {error}",
+                        path.display(),
+                    };
 
-        if metadata.is_symlink() {
-            path_canon = canonicalize_parent(path);
-            symlink = Some(std::fs::read_link(path));
+                    None
+                }
+            }
         } else {
-            path_canon = path.canonicalize();
-            symlink = None;
+            None
         };
 
-        let path_canon = match path_canon {
-            Ok(path_canon) => path_canon,
-            Err(error) => {
-                log::error! {
-                    "failed to canonicalize path '{}': {error}",
-                    path.display(),
-                };
-                continue
-            }
-        };
+        let path_canon = if args.path_canon {
+            match path.canonicalize() {
+                Ok(path_canon) => Some(path_canon),
+                Err(error) => {
+                    log::error! {
+                        "failed to canonicalize path '{}': {error}",
+                        path.display(),
+                    };
 
-        let symlink = match symlink.transpose() {
-            Ok(symlink) => symlink,
-            Err(error) => {
-                log::error! {
-                    "failed to read symlink target for '{}': {error}",
-                    path.display(),
-                };
-
-                None
+                    None
+                }
             }
+        } else {
+            None
         };
 
         session.reply(Item {
-            path: path_canon.clone(),
+            path: path.clone(),
+            path_canon,
             metadata,
             #[cfg(target_family = "unix")]
             ext_attrs,
@@ -219,10 +218,27 @@ where
                     None
                 };
 
+                let path_canon = if args.path_canon {
+                    match entry.path.canonicalize() {
+                        Ok(path_canon) => Some(path_canon),
+                        Err(error) => {
+                            log::error! {
+                                "failed to canonicalize path '{}': {error}",
+                                entry.path.display(),
+                            };
+
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
                 let digest = digest(&entry.path, &args);
 
                 session.reply(Item {
                     path: entry.path,
+                    path_canon,
                     metadata: entry.metadata,
                     #[cfg(target_family = "unix")]
                     ext_attrs,
@@ -346,6 +362,7 @@ impl crate::request::Args for Args {
 
         Ok(Args {
             paths,
+            path_canon: proto.path_canonical(),
             max_depth: proto.max_depth(),
             md5: proto.md5(),
             sha1: proto.sha1(),
@@ -388,44 +405,12 @@ impl crate::response::Item for Item {
             proto.set_sha256(sha256.to_vec());
         }
 
+        if let Some(path_canon) = self.path_canon {
+            proto.set_path_canonical(path_canon.into());
+        }
+
         proto
     }
-}
-
-/// Returns the canonical, absolute form of the path.
-///
-/// This is similar to [`std::fs::canonicalize`] but modifies only the dirname
-/// part of the path. This might be important for symlinks, because we want to
-/// return the canonical path to the symlink itself, not the file it points to.
-fn canonicalize_parent<P>(path: P) -> std::io::Result<PathBuf>
-where
-    P: AsRef<Path>,
-{
-    let path = path.as_ref();
-
-    let parent = match path.parent() {
-        Some(parent) => parent,
-        None => {
-            // There is no parent, we are at root so there is no need to do any
-            // canonicalization.
-            return Ok(PathBuf::from(path));
-        }
-    };
-
-    let mut canonicalized = parent.canonicalize()?;
-
-    match path.file_name() {
-        Some(file_name) => canonicalized.push(file_name),
-        None => {
-            // This should never happen: if we are not a root path, there always
-            // should be a file name as long as we don't end with something like
-            // `..` or `.`. But then the behaviour is not well defined anyway
-            // (and we use this function on something we are sure is a symlink).
-            return Err(std::io::ErrorKind::InvalidInput.into());
-        },
-    }
-
-    Ok(canonicalized)
 }
 
 #[cfg(test)]
@@ -445,6 +430,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -462,6 +448,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -472,8 +459,7 @@ mod tests {
     fn handle_regular_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("foo"))
             .unwrap();
@@ -485,6 +471,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -502,8 +489,7 @@ mod tests {
     fn handle_symlink() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file"))
             .unwrap();
@@ -517,6 +503,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -554,6 +541,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -591,6 +579,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -599,7 +588,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
-        assert_eq!(item.path, tempfile.path().canonicalize().unwrap());
+        assert_eq!(item.path, tempfile.path());
         assert_eq!(item.ext_attrs.len(), 1);
         assert_eq!(item.ext_attrs[0].name, "user.foo");
         assert_eq!(item.ext_attrs[0].value, b"bar");
@@ -609,8 +598,7 @@ mod tests {
     fn handle_dir_max_depth_0() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("foo"))
             .unwrap();
@@ -624,6 +612,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -633,7 +622,7 @@ mod tests {
             .map(|item| item.path.clone())
             .collect::<Vec<_>>();
 
-        assert!(paths.contains((&tempdir).into()));
+        assert!(paths.contains(&tempdir.to_path_buf()));
         assert!(!paths.contains(&tempdir.join("foo")));
         assert!(!paths.contains(&tempdir.join("bar")));
     }
@@ -642,8 +631,7 @@ mod tests {
     fn handle_dir_max_depth_1() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file1"))
             .unwrap();
@@ -665,6 +653,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -674,8 +663,8 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
-        assert!(items_by_path[&tempdir].metadata.is_dir());
+        assert!(items_by_path.contains_key(tempdir));
+        assert!(items_by_path[tempdir].metadata.is_dir());
 
         assert!(items_by_path.contains_key(&tempdir.join("file1")));
         assert!(items_by_path[&tempdir.join("file1")].metadata.is_file());
@@ -695,8 +684,7 @@ mod tests {
     fn handle_dir_max_depth_1_symlinks() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file"))
             .unwrap();
@@ -711,6 +699,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -720,7 +709,7 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap::<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
+        assert!(items_by_path.contains_key(tempdir));
         assert!(items_by_path.contains_key(&tempdir.join("file")));
         assert!(items_by_path.contains_key(&tempdir.join("link")));
 
@@ -735,8 +724,7 @@ mod tests {
     fn handle_dir_max_depth_1_ext_attrs() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file1"))
             .unwrap();
@@ -769,6 +757,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -778,7 +767,7 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap::<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
+        assert!(items_by_path.contains_key(tempdir));
         assert!(items_by_path.contains_key(&tempdir.join("file1")));
         assert!(items_by_path.contains_key(&tempdir.join("file2")));
 
@@ -798,8 +787,7 @@ mod tests {
     fn handle_dir_max_depth_1_ext_attrs() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file1"))
             .unwrap();
@@ -832,6 +820,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -841,7 +830,7 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap::<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
+        assert!(items_by_path.contains_key(tempdir));
         assert!(items_by_path.contains_key(&tempdir.join("file1")));
         assert!(items_by_path.contains_key(&tempdir.join("file2")));
 
@@ -861,8 +850,7 @@ mod tests {
     fn handle_md5_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("file"), "hello\n")
             .unwrap();
@@ -874,6 +862,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -894,8 +883,7 @@ mod tests {
     fn handle_md5_dir() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("nonempty"), "hello\n")
             .unwrap();
@@ -903,12 +891,13 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            paths: vec![tempdir.clone()],
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
             md5: true,
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -918,8 +907,8 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
-        assert_eq!(items_by_path[&tempdir].digest.md5, None);
+        assert!(items_by_path.contains_key(tempdir));
+        assert_eq!(items_by_path[tempdir].digest.md5, None);
 
         assert!(items_by_path.contains_key(&tempdir.join("nonempty")));
         assert_eq!(items_by_path[&tempdir.join("nonempty")].digest.md5, Some([
@@ -941,8 +930,7 @@ mod tests {
     fn handle_sha1_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("file"), "hello\n")
             .unwrap();
@@ -954,6 +942,7 @@ mod tests {
             sha1: true,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -974,8 +963,7 @@ mod tests {
     fn handle_sha1_dir() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("nonempty"), "hello\n")
             .unwrap();
@@ -983,12 +971,13 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            paths: vec![tempdir.clone()],
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
             md5: false,
             sha1: true,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -998,8 +987,8 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
-        assert_eq!(items_by_path[&tempdir].digest.sha1, None);
+        assert!(items_by_path.contains_key(tempdir));
+        assert_eq!(items_by_path[tempdir].digest.sha1, None);
 
         assert!(items_by_path.contains_key(&tempdir.join("nonempty")));
         assert_eq!(items_by_path[&tempdir.join("nonempty")].digest.sha1, Some([
@@ -1021,8 +1010,7 @@ mod tests {
     fn handle_sha255_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("file"), "hello\n")
             .unwrap();
@@ -1034,6 +1022,7 @@ mod tests {
             sha1: false,
             sha256: true,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1056,8 +1045,7 @@ mod tests {
     fn handle_sha256_dir() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::write(tempdir.join("nonempty"), "hello\n")
             .unwrap();
@@ -1065,12 +1053,13 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            paths: vec![tempdir.clone()],
+            paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
             md5: false,
             sha1: false,
             sha256: true,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1080,8 +1069,8 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir));
-        assert_eq!(items_by_path[&tempdir].digest.sha256, None);
+        assert!(items_by_path.contains_key(tempdir));
+        assert_eq!(items_by_path[tempdir].digest.sha256, None);
 
         assert!(items_by_path.contains_key(&tempdir.join("nonempty")));
         assert_eq!(items_by_path[&tempdir.join("nonempty")].digest.sha256, Some([
@@ -1106,8 +1095,7 @@ mod tests {
     fn handle_path_pruning_regex_filtered() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::create_dir(tempdir.join("foo"))
             .unwrap();
@@ -1134,6 +1122,7 @@ mod tests {
                 tempdir = regex::escape(tempdir.to_str().unwrap()),
                 sep = regex::escape(std::path::MAIN_SEPARATOR_STR),
             }).unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1144,7 +1133,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(paths.len(), 4);
-        assert!(paths.contains(&&tempdir));
+        assert!(paths.contains(&&tempdir.to_path_buf()));
         assert!(paths.contains(&&tempdir.join("bar")));
         assert!(paths.contains(&&tempdir.join("bar").join("thud")));
         assert!(paths.contains(&&tempdir.join("bar").join("blargh")));
@@ -1154,8 +1143,7 @@ mod tests {
     fn handle_path_pruning_regex_pruned() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::create_dir(tempdir.join("foo"))
             .unwrap();
@@ -1188,6 +1176,7 @@ mod tests {
                 tempdir = regex::escape(tempdir.to_str().unwrap()),
                 sep = regex::escape(std::path::MAIN_SEPARATOR_STR),
             }).unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1198,7 +1187,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(paths.len(), 4);
-        assert!(paths.contains(&&tempdir));
+        assert!(paths.contains(&&tempdir.to_path_buf()));
         assert!(paths.contains(&&tempdir.join("bar")));
         assert!(paths.contains(&&tempdir.join("bar").join("baz")));
         assert!(paths.contains(&&tempdir.join("bar").join("quux")));
@@ -1213,8 +1202,7 @@ mod tests {
 
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::create_dir(tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB")))
             .unwrap();
@@ -1240,6 +1228,7 @@ mod tests {
                 "(?-u)^{tempdir}($|/\\xFF\\xAA\\xBB($|/.*$))",
                 tempdir = regex::escape(tempdir.to_str().unwrap()),
             }).unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1251,7 +1240,7 @@ mod tests {
 
         dbg!(&paths);
         assert_eq!(paths.len(), 4);
-        assert!(paths.contains(&&tempdir));
+        assert!(paths.contains(&&tempdir.to_path_buf()));
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB"))));
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/A"))));
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/B"))));
@@ -1261,8 +1250,7 @@ mod tests {
     fn handle_many_regular_files() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("file1"))
             .unwrap();
@@ -1282,6 +1270,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1306,13 +1295,11 @@ mod tests {
     fn handle_many_dirs_max_depth_1() {
         let tempdir_1 = tempfile::tempdir()
             .unwrap();
-        let tempdir_1 = tempdir_1.path().canonicalize()
-            .unwrap();
+        let tempdir_1 = tempdir_1.path();
 
         let tempdir_2 = tempfile::tempdir()
             .unwrap();
-        let tempdir_2 = tempdir_2.path().canonicalize()
-            .unwrap();
+        let tempdir_2 = tempdir_2.path();
 
         std::fs::File::create(tempdir_1.join("file11"))
             .unwrap();
@@ -1333,6 +1320,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1342,8 +1330,8 @@ mod tests {
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap<_, _>>();
 
-        assert!(items_by_path.contains_key(&tempdir_1));
-        assert!(items_by_path[&tempdir_1].metadata.is_dir());
+        assert!(items_by_path.contains_key(tempdir_1));
+        assert!(items_by_path[tempdir_1].metadata.is_dir());
 
         assert!(items_by_path.contains_key(&tempdir_1.join("file11")));
         assert!(items_by_path[&tempdir_1.join("file11")].metadata.is_file());
@@ -1351,8 +1339,8 @@ mod tests {
         assert!(items_by_path.contains_key(&tempdir_1.join("file12")));
         assert!(items_by_path[&tempdir_1.join("file12")].metadata.is_file());
 
-        assert!(items_by_path.contains_key(&tempdir_2));
-        assert!(items_by_path[&tempdir_2].metadata.is_dir());
+        assert!(items_by_path.contains_key(tempdir_2));
+        assert!(items_by_path[tempdir_2].metadata.is_dir());
 
         assert!(items_by_path.contains_key(&tempdir_2.join("file21")));
         assert!(items_by_path[&tempdir_2.join("file21")].metadata.is_file());
@@ -1365,8 +1353,7 @@ mod tests {
     fn handle_many_files_one_non_existing() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = tempdir.path().canonicalize()
-            .unwrap();
+        let tempdir = tempdir.path();
 
         std::fs::File::create(tempdir.join("existing1"))
             .unwrap();
@@ -1384,6 +1371,7 @@ mod tests {
             sha1: false,
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1398,121 +1386,73 @@ mod tests {
         assert_eq!(item.path, tempdir.join("existing2"));
     }
 
-    macro_rules! path {
-        ($root:expr) => {{
-            ::std::path::PathBuf::from($root)
-        }};
-        ($root:expr, $($comp:expr),*) => {{
-            let mut path = ::std::path::PathBuf::from($root);
-            $(path.push($comp);)*
-
-            path
-        }};
-    }
-
     #[test]
-    fn canonicalize_parent_empty() {
-        let canonical = canonicalize_parent("")
-            .unwrap();
-
-        assert_eq!(canonical, path!(""));
-    }
-
-    #[cfg(target_family = "unix")]
-    #[test]
-    fn canonicalize_parent_root() {
-        let canonical = canonicalize_parent("/")
-            .unwrap();
-
-        assert_eq!(canonical, path!("/"));
-    }
-
-    #[test]
-    fn canonicalize_parent_simple() {
+    fn handle_path_canon() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = &tempdir.path().canonicalize()
+        let tempdir = tempdir.path();
+        let tempdir_canon = tempdir.canonicalize()
             .unwrap();
 
-        std::fs::File::create(path!(tempdir, "foo.txt"))
+        std::fs::create_dir(tempdir.join("dir"))
+            .unwrap();
+        std::fs::File::create(tempdir.join("dir").join("file"))
             .unwrap();
 
-        assert_eq! {
-            canonicalize_parent(path!(tempdir, "foo.txt"))
-                .unwrap(),
-            path!(tempdir, "foo.txt")
-        }
+        let args = Args {
+            paths: vec![
+                tempdir.join(".").join("dir").join("..").join("dir").join("file"),
+            ],
+            max_depth: 0,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: true,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, tempdir.join(".").join("dir").join("..").join("dir").join("file"));
+        assert_eq!(item.path_canon, Some(tempdir_canon.join("dir").join("file")));
     }
 
     #[test]
-    fn canonicalize_parent_dots() {
+    fn handle_path_canon_max_depth_1() {
         let tempdir = tempfile::tempdir()
             .unwrap();
-        let tempdir = &tempdir.path().canonicalize()
+        let tempdir = tempdir.path();
+        let tempdir_canon = tempdir.canonicalize()
             .unwrap();
 
-        std::fs::create_dir_all(path!(tempdir, "a", "b"))
+        std::fs::create_dir(tempdir.join("dir"))
             .unwrap();
-        std::fs::File::create(path!(tempdir, "foo.txt"))
+        std::fs::File::create(tempdir.join("dir").join("file1"))
             .unwrap();
-        std::fs::File::create(path!(tempdir, "a", "bar.txt"))
-            .unwrap();
-
-        assert_eq! {
-            canonicalize_parent(path!(tempdir, "a", ".", "foo.txt"))
-                .unwrap(),
-            path!(tempdir, "a", "foo.txt")
-        }
-        assert_eq! {
-            canonicalize_parent(path!(tempdir, "a", "b", "..", "foo.txt"))
-                .unwrap(),
-            path!(tempdir, "a", "foo.txt")
-        }
-        assert_eq! {
-            canonicalize_parent(path!(tempdir, "a", "b", ".", "bar.txt"))
-                .unwrap(),
-            path!(tempdir, "a", "b", "bar.txt")
-        }
-        assert_eq! {
-            canonicalize_parent(path!(tempdir, "a", ".", ".", "b", "..", ".", "foo.txt"))
-                .unwrap(),
-            path!(tempdir, "a", "foo.txt")
-        }
-    }
-
-    #[cfg(target_family = "unix")]
-    #[test]
-    fn canonicalize_parent_symlinks() {
-        let tempdir = tempfile::tempdir()
-            .unwrap();
-        let tempdir = &tempdir.path().canonicalize()
+        std::fs::File::create(tempdir.join("dir").join("file2"))
             .unwrap();
 
-        std::fs::create_dir_all(path!(tempdir, "dir"))
-            .unwrap();
-        std::fs::File::create(path!(tempdir, "dir", "file"))
-            .unwrap();
+        let args = Args {
+            paths: vec![tempdir.join("dir").join("..").join("dir")],
+            max_depth: 1,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: true,
+        };
 
-        use std::os::unix::fs::symlink;
-        symlink(path!(tempdir, "dir"), path!(tempdir, "dir.l"))
-            .unwrap();
-        symlink(path!(tempdir, "dir", "file"), path!(tempdir, "dir", "file.l"))
-            .unwrap();
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
 
-        assert_eq! {
-            canonicalize_parent(path!(tempdir, "dir", "file.l"))
-                .unwrap(),
-            path!(tempdir, "dir", "file.l")
-        }
-        assert_eq! {
-            canonicalize_parent(path!(tempdir, "dir.l", "file"))
-                .unwrap(),
-            path!(tempdir, "dir", "file")
-        }
-        assert_eq! {
-            canonicalize_parent(path!(tempdir, "dir.l", "file.l"))
-                .unwrap(),
-            path!(tempdir, "dir", "file.l")
-        }
+        let paths_canon = session.replies::<Item>()
+            .map(|item| item.path_canon.clone().unwrap())
+            .collect::<Vec<_>>();
+
+        assert!(paths_canon.contains(&tempdir_canon.join("dir")));
+        assert!(paths_canon.contains(&tempdir_canon.join("dir").join("file1")));
+        assert!(paths_canon.contains(&tempdir_canon.join("dir").join("file2")));
     }
 }
