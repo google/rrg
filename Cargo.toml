@@ -9,6 +9,6 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Łukasz Hanuszczak <hanuszczak@google.com>"]
 edition = "2024"
