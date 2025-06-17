@@ -210,6 +210,13 @@ where
         .wait()
         .map_err(crate::session::Error::action)?;
 
+    log::info! {
+        "done executing '{}' after {:?}, exit status: {}",
+        args.path.display(),
+        command_start_time.elapsed(),
+        exit_status,
+    };
+
     if let Some(writer) = writer {
         match writer.join() {
             Ok(Ok(())) => (),
