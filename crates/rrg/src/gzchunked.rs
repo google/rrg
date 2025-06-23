@@ -153,7 +153,7 @@ pub struct EncodeOpts {
     /// Compression level used for the gzip encoding.
     pub compression: Compression,
     /// A rough file size limit for parts of the output file.
-    pub part_size: u64,
+    pub part_size: usize,
 }
 
 impl Default for EncodeOpts {
@@ -177,7 +177,7 @@ impl Default for EncodeOpts {
 /// [`encode`]: fn.encode.html
 /// [`encode_with_opts`]: fn.encode_with_opts.html
 pub struct Encode<I> {
-    chunked: crate::chunked::Encode<I>,
+    iter: I,
     opts: EncodeOpts,
 }
 
@@ -189,27 +189,37 @@ where
     /// Creates a new encoder instance with the specified options.
     fn with_opts(iter: I, opts: EncodeOpts) -> Encode<I> {
         Encode {
-            chunked: crate::chunked::encode(iter),
+            iter,
             opts: opts,
         }
     }
 
     /// Obtains the next part of the output file (if available).
     fn next_part(&mut self) -> std::io::Result<Option<Vec<u8>>> {
-        use crate::io::copy_until;
+        let mut encoder = flate2::write::GzEncoder::new(
+            vec!(),
+            self.opts.compression.0,
+        );
 
-        let compression = self.opts.compression.0;
-        let part_size = self.opts.part_size;
+        let mut msg_count = 0;
+        for msg in &mut self.iter {
+            msg_count += 1;
 
-        let mut encoder = flate2::write::GzEncoder::new(vec!(), compression);
-        let len = copy_until(&mut self.chunked, &mut encoder, |_, encoder| {
-            encoder.get_ref().len() as u64 >= part_size
-        })?;
+            use std::io::Write as _;
+            use protobuf::Message as _;
 
-        if len == 0 {
-            Ok(None)
+            encoder.write_all(&(msg.compute_size() as u64).to_be_bytes())?;
+            msg.write_to_writer(&mut encoder)?;
+
+            if encoder.get_ref().len() > self.opts.part_size {
+                return encoder.finish().map(Some);
+            }
+        }
+
+        if msg_count > 0 {
+            encoder.finish().map(Some)
         } else {
-            Ok(Some(encoder.finish()?))
+            Ok(None)
         }
     }
 }
