@@ -111,8 +111,12 @@ where
     I::Item: std::io::Read,
     M: protobuf::Message + Default,
 {
-    let parts = iter.map(flate2::read::GzDecoder::new);
-    crate::chunked::decode(crate::io::IterReader::new(parts))
+    Decode {
+        chunks: iter,
+        buf: Vec::new(),
+        decoder: None,
+        marker: std::marker::PhantomData,
+    }
 }
 
 /// A type describing compression level of a gzchunked output stream.
@@ -233,6 +237,98 @@ where
 
     fn next(&mut self) -> Option<std::io::Result<Vec<u8>>> {
         self.next_part().transpose()
+    }
+}
+
+/// Streaming decoder for the gzchunked format.
+///
+/// It implements the `Iterator` trait, lazily polling the underlying iterator
+/// over chunks with gzipped messages as needed and yields Protocol Buffer
+/// messages of the `M` type.
+///
+/// Instances of this type can be constructed using the [`decode`] function.
+struct Decode<I, M>
+where
+    I: Iterator,
+    I::Item: std::io::Read,
+    M: protobuf::Message,
+{
+    /// Iterator over gzipped chunks.
+    ///
+    /// Each chunk is a sequence of interleaved message lengths and serialized
+    /// Protocol Buffer messages of such length.
+    chunks: I,
+    /// gzip decoder with actively decompressed chunk.
+    ///
+    /// `None` indicates that there is no active chunk (e.g. because the last
+    /// one was depleted) and the iterator should be polled for the next one.
+    decoder: Option<flate2::read::GzDecoder<I::Item>>,
+    /// Temporary buffer for reading messages into.
+    ///
+    /// It is used to avoid repeated allocations across `next` calls on the
+    /// iterator.
+    buf: Vec<u8>,
+    /// Marker that binds the decoder to a particular message type.
+    ///
+    /// This is needed because we cannot implement the `Iterator` trait for a
+    /// decoder that yields results of arbitrary type.
+    marker: std::marker::PhantomData<M>,
+}
+
+impl<I, M> Iterator for Decode<I, M>
+where
+    I: Iterator,
+    I::Item: std::io::Read,
+    M: protobuf::Message,
+{
+    type Item = std::io::Result<M>;
+
+    fn next(&mut self) -> Option<std::io::Result<M>> {
+        loop {
+            let decoder = match self.decoder {
+                Some(ref mut decoder) => decoder,
+                None => match self.chunks.next() {
+                    Some(chunk) => {
+                        self.decoder.insert(flate2::read::GzDecoder::new(chunk))
+                    }
+                    None => return None,
+                },
+            };
+
+            use std::io::Read as _;
+
+            let mut len_buf = [0; std::mem::size_of::<u64>()];
+            match decoder.read(&mut len_buf[..]) {
+                Ok(0) => {
+                    self.decoder = None;
+                    continue;
+                },
+                Ok(len) if len == std::mem::size_of::<u64>() => (),
+                Ok(len) => match decoder.read_exact(&mut len_buf[len..]) {
+                    Ok(()) => (),
+                    Err(error) => return Some(Err(error)),
+                },
+                Err(error) => return Some(Err(error)),
+            }
+            let len = match usize::try_from(u64::from_be_bytes(len_buf)) {
+                Ok(len) => len,
+                Err(error) => return Some(Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    error,
+                ))),
+            };
+
+            self.buf.resize(len, u8::default());
+            match decoder.read_exact(&mut self.buf[..]) {
+                Ok(()) => (),
+                Err(error) => return Some(Err(error)),
+            }
+
+            return Some(match protobuf::Message::parse_from_bytes(&self.buf[..]) {
+                Ok(msg) => Ok(msg),
+                Err(error) => Err(error.into()),
+            });
+        }
     }
 }
 
