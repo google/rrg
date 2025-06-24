@@ -147,76 +147,6 @@ impl std::fmt::Display for MaxLineLenError {
 impl std::error::Error for MaxLineLenError {
 }
 
-/// An reader implementation for a stream of readers.
-///
-/// It turns a stream of `Read` instances into one `Read` instance where bytes
-/// are pulled sequentially from underlying readers. Once the first reader ends,
-/// the next one starts to be read and so on.
-///
-/// # Examples
-///
-/// ```
-/// use std::io::Read as _;
-///
-/// let items: Vec<&[u8]> = vec!(b"foo", b"bar", b"baz");
-/// let mut reader = rrg::io::IterReader::new(items.into_iter());
-///
-/// let mut buf = vec!();
-/// reader.read_to_end(&mut buf).unwrap();
-///
-/// assert_eq!(buf, b"foobarbaz");
-/// ```
-pub struct IterReader<I, R> {
-    /// Underlying iterator with pending readers.
-    iter: I,
-    /// Currently active reader.
-    curr: Option<R>,
-}
-
-impl<I, R> IterReader<I, R>
-where
-    I: Iterator<Item=R>,
-    R: Read,
-{
-    /// Constructs a new iterator reader.
-    pub fn new(iter: I) -> IterReader<I, R> {
-        IterReader {
-            iter: iter,
-            curr: None,
-        }
-    }
-}
-
-impl<I, R> Read for IterReader<I, R>
-where
-    I: Iterator<Item=R>,
-    R: Read,
-{
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        loop {
-            if self.curr.is_none() {
-                self.curr = self.iter.next();
-            }
-
-            // If after executing the previous line there is still no current
-            // buffer to read from, it means the underlying iterator is finished
-            // and there is no more data.
-            let curr = match self.curr {
-                Some(ref mut buf) => buf,
-                None => return Ok(0),
-            };
-
-            // If we read 0 bytes from the current buffer, it means it is empty
-            // now. By setting it to `None`, we will try to pull a new one in
-            // the next iteration.
-            match curr.read(buf)? {
-                0 => self.curr = None,
-                len => return Ok(len),
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -409,47 +339,5 @@ mod tests {
 
             quickcheck::TestResult::passed()
         }
-    }
-
-    #[test]
-    fn test_iter_reader_with_empty_iter() {
-        let mut reader = IterReader::new(std::iter::empty::<&[u8]>());
-        let mut buf = vec!();
-        reader.read_to_end(&mut buf).unwrap();
-
-        assert_eq!(buf, b"");
-    }
-
-    #[test]
-    fn test_iter_reader_with_empty_iter_items() {
-        let items: Vec<&[u8]> = vec!(b"", b"", b"");
-
-        let mut reader = IterReader::new(items.into_iter());
-        let mut buf = vec!();
-        reader.read_to_end(&mut buf).unwrap();
-
-        assert_eq!(buf, b"");
-    }
-
-    #[test]
-    fn test_iter_reader_with_single_iter_item() {
-        let items: Vec<&[u8]> = vec!(b"foo");
-
-        let mut reader = IterReader::new(items.into_iter());
-        let mut buf = vec!();
-        reader.read_to_end(&mut buf).unwrap();
-
-        assert_eq!(buf, b"foo");
-    }
-
-    #[test]
-    fn test_iter_reader_with_multiple_iter_items() {
-        let items: Vec<&[u8]> = vec!(b"foo", b"bar", b"baz");
-
-        let mut reader = IterReader::new(items.into_iter());
-        let mut buf = vec!();
-        reader.read_to_end(&mut buf).unwrap();
-
-        assert_eq!(buf, b"foobarbaz");
     }
 }
