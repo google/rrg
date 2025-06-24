@@ -295,6 +295,14 @@ where
 
             use std::io::Read as _;
 
+            // `read` might not always read all 8 bytes. On the other hand, we
+            // also cannot use just `read_exact` because the stream might have
+            // ended already. Hence, we combine the two. First we attempt to
+            // read some bytes with `read`: it should either return 0 (indica-
+            // ting end of the stream), 8 (indicating that we have filled the
+            // whole buffer fully) or something in between. In the last case, we
+            // use `read_exact to get the remaining bytes (which should be non-
+            // zero now).
             let mut len_buf = [0; std::mem::size_of::<u64>()];
             match decoder.read(&mut len_buf[..])? {
                 0 => {
