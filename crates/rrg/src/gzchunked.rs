@@ -93,7 +93,15 @@ where
 /// use std::fs::File;
 ///
 /// let paths = ["foo.gzc.1", "foo.gzc.2", "foo.gzc.3"];
-/// let files = paths.iter().map(|path| File::open(path).unwrap());
+/// let files = paths.iter().map(|path| {
+///     let mut buf = Vec::new();
+///
+///     use std::io::Read as _;
+///     File::open(path).unwrap()
+///         .read_to_end(&mut buf).unwrap();
+///
+///     buf
+/// });
 ///
 /// for (idx, msg) in rrg::gzchunked::decode(files).enumerate() {
 ///     let msg: protobuf::well_known_types::wrappers::StringValue = msg.unwrap();
@@ -102,8 +110,7 @@ where
 /// ```
 pub fn decode<I, M>(iter: I) -> impl Iterator<Item=std::io::Result<M>>
 where
-    I: Iterator,
-    I::Item: std::io::Read,
+    I: Iterator<Item = Vec<u8>>,
     M: protobuf::Message + Default,
 {
     Decode {
@@ -244,8 +251,7 @@ where
 /// Instances of this type can be constructed using the [`decode`] function.
 struct Decode<I, M>
 where
-    I: Iterator,
-    I::Item: std::io::Read,
+    I: Iterator<Item = Vec<u8>>,
     M: protobuf::Message,
 {
     /// Iterator over gzipped chunks.
@@ -257,7 +263,7 @@ where
     ///
     /// `None` indicates that there is no active chunk (e.g. because the last
     /// one was depleted) and the iterator should be polled for the next one.
-    decoder: Option<flate2::read::GzDecoder<I::Item>>,
+    decoder: Option<flate2::read::GzDecoder<std::io::Cursor<Vec<u8>>>>,
     /// Temporary buffer for reading messages into.
     ///
     /// It is used to avoid repeated allocations across `next` calls on the
@@ -272,8 +278,7 @@ where
 
 impl<I, M> Decode<I, M>
 where
-    I: Iterator,
-    I::Item: std::io::Read,
+    I: Iterator<Item = Vec<u8>>,
     M: protobuf::Message,
 {
     fn next_msg(&mut self) -> std::io::Result<Option<M>> {
@@ -282,6 +287,7 @@ where
                 Some(ref mut decoder) => decoder,
                 None => match self.chunks.next() {
                     Some(chunk) => {
+                        let chunk = std::io::Cursor::new(chunk);
                         self.decoder.insert(flate2::read::GzDecoder::new(chunk))
                     }
                     None => break Ok(None),
@@ -321,8 +327,7 @@ where
 
 impl<I, M> Iterator for Decode<I, M>
 where
-    I: Iterator,
-    I::Item: std::io::Read,
+    I: Iterator<Item = Vec<u8>>,
     M: protobuf::Message,
 {
     type Item = std::io::Result<M>;
@@ -366,7 +371,7 @@ mod tests {
 
     #[test]
     fn test_decode_with_empty_iter() {
-        let mut iter = decode::<_, Empty>(std::iter::empty::<&[u8]>())
+        let mut iter = decode::<_, Empty>(std::iter::empty())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), None);
@@ -378,7 +383,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode(chunks.into_iter())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), Some(string("foo")));
@@ -397,7 +402,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode(chunks.into_iter())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), Some(string("foo")));
@@ -414,7 +419,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode(chunks.into_iter())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), Some(Empty::new()));
@@ -437,7 +442,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, BytesValue>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, BytesValue>(chunks.into_iter())
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
@@ -457,7 +462,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, BytesValue>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, BytesValue>(chunks.into_iter())
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
@@ -477,7 +482,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, BytesValue>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, BytesValue>(chunks.into_iter())
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
