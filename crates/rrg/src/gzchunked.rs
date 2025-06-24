@@ -299,17 +299,16 @@ where
             // also cannot use just `read_exact` because the stream might have
             // ended already. Hence, we combine the two. First we attempt to
             // read some bytes with `read`: it should either return 0 (indica-
-            // ting end of the stream), 8 (indicating that we have filled the
-            // whole buffer fully) or something in between. In the last case, we
-            // use `read_exact to get the remaining bytes (which should be non-
-            // zero now).
+            // ting end of the stream) or non-zero value (indicating that we
+            // have read _some_ bytes, possibly all that we need) that we follow
+            // with using `read_exact to get the remaining bytes (which could be
+            // zero).
             let mut len_buf = [0; std::mem::size_of::<u64>()];
             match decoder.read(&mut len_buf[..])? {
                 0 => {
                     self.decoder = None;
                     continue;
                 },
-                len if len == std::mem::size_of::<u64>() => (),
                 len => decoder.read_exact(&mut len_buf[len..])?,
             }
             let len = u64::from_be_bytes(len_buf);
