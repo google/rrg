@@ -72,6 +72,21 @@ impl From<std::fs::Metadata> for fs::FileMetadata {
             Err(_) => (), // TODO(@panhania): Consider logging.
         }
 
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+
+            proto.set_unix_dev(metadata.dev());
+            proto.set_unix_ino(metadata.ino());
+            proto.set_unix_mode(metadata.mode());
+            proto.set_unix_nlink(metadata.nlink());
+            proto.set_unix_uid(metadata.uid());
+            proto.set_unix_gid(metadata.gid());
+            proto.set_unix_rdev(metadata.rdev());
+            proto.set_unix_blksize(metadata.blksize());
+            proto.set_unix_blocks(metadata.blocks());
+        }
+
         proto
     }
 }
