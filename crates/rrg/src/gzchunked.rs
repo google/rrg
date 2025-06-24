@@ -275,6 +275,48 @@ where
     marker: std::marker::PhantomData<M>,
 }
 
+impl<I, M> Decode<I, M>
+where
+    I: Iterator,
+    I::Item: std::io::Read,
+    M: protobuf::Message,
+{
+    fn next_msg(&mut self) -> std::io::Result<Option<M>> {
+        loop {
+            let decoder = match self.decoder {
+                Some(ref mut decoder) => decoder,
+                None => match self.chunks.next() {
+                    Some(chunk) => {
+                        self.decoder.insert(flate2::read::GzDecoder::new(chunk))
+                    }
+                    None => break Ok(None),
+                },
+            };
+
+            use std::io::Read as _;
+
+            let mut len_buf = [0; std::mem::size_of::<u64>()];
+            match decoder.read(&mut len_buf[..])? {
+                0 => {
+                    self.decoder = None;
+                    continue;
+                },
+                len if len == std::mem::size_of::<u64>() => (),
+                len => decoder.read_exact(&mut len_buf[len..])?,
+            }
+            let len = u64::from_be_bytes(len_buf);
+            let len = usize::try_from(len).map_err(|error| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+            })?;
+
+            self.buf.resize(len, u8::default());
+            decoder.read_exact(&mut self.buf[..])?;
+
+            break Ok(Some(protobuf::Message::parse_from_bytes(&self.buf[..])?));
+        }
+    }
+}
+
 impl<I, M> Iterator for Decode<I, M>
 where
     I: Iterator,
@@ -284,51 +326,7 @@ where
     type Item = std::io::Result<M>;
 
     fn next(&mut self) -> Option<std::io::Result<M>> {
-        loop {
-            let decoder = match self.decoder {
-                Some(ref mut decoder) => decoder,
-                None => match self.chunks.next() {
-                    Some(chunk) => {
-                        self.decoder.insert(flate2::read::GzDecoder::new(chunk))
-                    }
-                    None => return None,
-                },
-            };
-
-            use std::io::Read as _;
-
-            let mut len_buf = [0; std::mem::size_of::<u64>()];
-            match decoder.read(&mut len_buf[..]) {
-                Ok(0) => {
-                    self.decoder = None;
-                    continue;
-                },
-                Ok(len) if len == std::mem::size_of::<u64>() => (),
-                Ok(len) => match decoder.read_exact(&mut len_buf[len..]) {
-                    Ok(()) => (),
-                    Err(error) => return Some(Err(error)),
-                },
-                Err(error) => return Some(Err(error)),
-            }
-            let len = match usize::try_from(u64::from_be_bytes(len_buf)) {
-                Ok(len) => len,
-                Err(error) => return Some(Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    error,
-                ))),
-            };
-
-            self.buf.resize(len, u8::default());
-            match decoder.read_exact(&mut self.buf[..]) {
-                Ok(()) => (),
-                Err(error) => return Some(Err(error)),
-            }
-
-            return Some(match protobuf::Message::parse_from_bytes(&self.buf[..]) {
-                Ok(msg) => Ok(msg),
-                Err(error) => Err(error.into()),
-            });
-        }
+        self.next_msg().transpose()
     }
 }
 
