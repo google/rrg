@@ -20,9 +20,7 @@ mod response;
 mod ping;
 mod startup;
 
-// TODO(@panhania): Consider moving these to a separate submodule.
-#[cfg(feature = "action-get_filesystem_timeline")]
-pub mod chunked;
+// TODO(@panhania): Consider moving this to a separate submodule.
 #[cfg(feature = "action-get_filesystem_timeline")]
 pub mod gzchunked;
 
