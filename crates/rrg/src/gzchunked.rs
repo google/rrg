@@ -487,4 +487,32 @@ mod tests {
 
         assert!(iter.all(|item| item == sample));
     }
+
+    quickcheck::quickcheck! {
+
+        fn encode_decode_inverse(blobs: Vec<Vec<u8>>) -> bool {
+            let items = blobs.into_iter().map(bytes)
+                .collect::<Vec<BytesValue>>();
+
+            let encoded = encode(items.clone().into_iter())
+                .map(Result::unwrap);
+            let decoded = decode(encoded)
+                .map(Result::unwrap);
+
+            decoded.collect::<Vec<BytesValue>>() == items
+        }
+
+        fn decode_homomorphism(blobs: Vec<Vec<u8>>) -> bool {
+            let items = blobs.into_iter().map(bytes)
+                .collect::<Vec<BytesValue>>();
+
+            let encoded = encode(items.clone().into_iter())
+                .map(Result::unwrap);
+            let decoded = encoded.map(|chunk| decode(std::iter::once(chunk)))
+                .flatten()
+                .map(Result::unwrap);
+
+            decoded.collect::<Vec<BytesValue>>() == items
+        }
+    }
 }
