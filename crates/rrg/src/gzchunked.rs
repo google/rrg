@@ -7,24 +7,19 @@
 //!
 //! gzchunked is a simple file format used for storing large sequences of
 //! Protocol Buffers messages. A gzchunked file consists of multiple parts where
-//! each part is a gzipped fragment of a stream encoded in the [chunked] format.
+//! each part is a gzipped chunk with sequences of form: 8-byte length tag that
+//! is followed by a serialized Protocol Buffers message of such length.
 //!
-//! A high-level pseudocode for encoding and decoding procedures of the
-//! gzchunked format can be described using the following formulae:
+//! A high-level pseudocode for encoding procedure of the gzchunked format can
+//! be described using the following formulae:
 //!
-//!   * _encode(protos) = map(gzip, partition(chunk(protos)))_
-//!   * _decode(parts) = unchunk(join(map(ungzip, parts)))_
+//!   * _encode(protos) = map(gzip, partition(map(encode_proto, protos)))_
+//!   * _encode_proto(proto) = encode_u64(len(serialize(proto))) + serialize(proto)_
 //!
 //! This pseudocode uses the following subroutines:
 //!
-//!   * _chunk_ encodes a sequence of proto messages into the chunked format.
-//!   * _unchunk_ decodes a chunked stream into a sequence of messages.
 //!   * _partition_ divides a stream of bytes into multiple parts.
-//!   * _join_ sequentially combines multiple byte streams into one.
 //!   * _gzip_ encodes a byte stream into the gzip format.
-//!   * _ungzip_ decodes a byte stream from the gzip format.
-//!
-//! [chunked]: crate::chunked
 
 /// Encodes the given iterator over protobuf messages into the gzchunked format.
 ///
