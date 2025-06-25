@@ -60,16 +60,13 @@ where
         let mut buf = vec![0; std::cmp::min(len_left, MAX_BLOB_LEN)];
 
         let len_read = match file.read(&mut buf[..]) {
+            Ok(0) => break,
             Ok(len_read) => len_read,
             Err(error) => {
                 log::error!("failed to read contents of {}: {error}", args.path.display());
                 break
             }
         };
-
-        if len_read == 0 {
-            break;
-        }
 
         buf.truncate(len_read);
 
