@@ -232,6 +232,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn handle_non_existing_file() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let args = Args {
+            path: tempdir.path().join("idonotexist"),
+            offset: 0,
+            len: usize::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 0);
+
+        let error_item = session.reply::<ErrorItem>(0);
+        assert_eq!(error_item.path, tempdir.path().join("idonotexist"));
+        assert_eq!(error_item.error.kind, FileErrorKind::Open);
+    }
+
+    #[test]
     fn handle_empty_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
