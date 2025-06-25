@@ -514,5 +514,40 @@ mod tests {
 
             decoded.collect::<Vec<BytesValue>>() == items
         }
+
+        fn encode_decode_inverse_part_size_1(blobs: Vec<Vec<u8>>) -> bool {
+            let items = blobs.into_iter().map(bytes)
+                .collect::<Vec<BytesValue>>();
+
+            let opts = EncodeOpts {
+                part_size: 1,
+                ..EncodeOpts::default()
+            };
+
+            let encoded = encode_with_opts(items.clone().into_iter(), opts)
+                .map(Result::unwrap);
+            let decoded = decode(encoded)
+                .map(Result::unwrap);
+
+            decoded.collect::<Vec<BytesValue>>() == items
+        }
+
+        fn decode_homomorphism_part_size_1(blobs: Vec<Vec<u8>>) -> bool {
+            let items = blobs.into_iter().map(bytes)
+                .collect::<Vec<BytesValue>>();
+
+            let opts = EncodeOpts {
+                part_size: 1,
+                ..EncodeOpts::default()
+            };
+
+            let encoded = encode_with_opts(items.clone().into_iter(), opts)
+                .map(Result::unwrap);
+            let decoded = encoded.map(|chunk| decode(std::iter::once(chunk)))
+                .flatten()
+                .map(Result::unwrap);
+
+            decoded.collect::<Vec<BytesValue>>() == items
+        }
     }
 }
