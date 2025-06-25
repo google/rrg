@@ -214,7 +214,7 @@ where
             use std::io::Write as _;
             use protobuf::Message as _;
 
-            encoder.write_all(&(msg.compute_size() as u64).to_be_bytes())?;
+            encoder.write_all(&msg.compute_size().to_be_bytes())?;
             msg.write_to_writer(&mut encoder)?;
 
             if encoder.get_ref().len() > self.opts.part_size {
