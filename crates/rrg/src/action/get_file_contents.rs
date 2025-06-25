@@ -19,6 +19,8 @@ pub struct Args {
 
 /// Result of the `get_file_contents` action.
 pub struct Item {
+    /// Path to the file this result corresponds to.
+    path: PathBuf,
     /// Byte offset of the file part sent to the blob sink.
     offset: u64,
     /// Number of bytes of the file part sent to the blob sink.
@@ -35,7 +37,7 @@ where
     use std::io::{Read as _, Seek as _};
     use sha2::Digest as _;
 
-    let mut file = std::fs::File::open(args.path)
+    let mut file = std::fs::File::open(&args.path)
         .map_err(crate::session::Error::action)?;
 
     let mut offset = args.offset;
@@ -61,6 +63,7 @@ where
 
         session.send(crate::Sink::Blob, blob)?;
         session.reply(Item {
+            path: args.path.clone(),
             offset,
             len: len_read,
             blob_sha256,
@@ -107,6 +110,7 @@ impl crate::response::Item for Item {
 
     fn into_proto(self) -> Self::Proto {
         let mut proto = Self::Proto::default();
+        proto.set_path(self.path.into());
         proto.set_offset(self.offset);
         proto.set_length(self.len as u64);
         proto.set_blob_sha256(self.blob_sha256.into());

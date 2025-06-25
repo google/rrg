@@ -24,6 +24,9 @@ message Args {
 }
 
 message Result {
+  // Path to the file this result corresponds to.
+  rrg.fs.Path path = 4;
+
   // A byte offset of the file part sent to the blob sink.
   uint64 offset = 1;
 
