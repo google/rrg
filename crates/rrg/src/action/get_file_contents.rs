@@ -171,6 +171,7 @@ impl crate::response::Item for ErrorItem {
 }
 
 /// Error which can occur when processing the file.
+#[derive(Debug)]
 struct FileError {
     kind: FileErrorKind,
     cause: std::io::Error,
@@ -184,6 +185,7 @@ impl std::fmt::Display for FileError {
 }
 
 /// List of possible types of errors that can occur when processing the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum FileErrorKind {
     /// Failed to open the file.
     Open,
