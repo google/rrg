@@ -37,20 +37,35 @@ where
     use std::io::{Read as _, Seek as _};
     use sha2::Digest as _;
 
-    let mut file = std::fs::File::open(&args.path)
-        .map_err(crate::session::Error::action)?;
+    let mut file = match std::fs::File::open(&args.path) {
+        Ok(file) => file,
+        Err(error) => {
+            log::error!("failed to open {}: {error}", args.path.display());
+            return Ok(());
+        }
+    };
 
     let mut offset = args.offset;
     let mut len_left = args.len;
 
-    file.seek(std::io::SeekFrom::Start(offset))
-        .map_err(crate::session::Error::action)?;
+    match file.seek(std::io::SeekFrom::Start(offset)) {
+        Ok(_) => (),
+        Err(error) => {
+            log::error!("failed to seek {} to {offset}: {error}", args.path.display());
+            return Ok(());
+        }
+    }
 
     loop {
         let mut buf = vec![0; std::cmp::min(len_left, MAX_BLOB_LEN)];
 
-        let len_read = file.read(&mut buf[..])
-            .map_err(crate::session::Error::action)?;
+        let len_read = match file.read(&mut buf[..]) {
+            Ok(len_read) => len_read,
+            Err(error) => {
+                log::error!("failed to read contents of {}: {error}", args.path.display());
+                break
+            }
+        };
 
         if len_read == 0 {
             break;
