@@ -7,24 +7,19 @@
 //!
 //! gzchunked is a simple file format used for storing large sequences of
 //! Protocol Buffers messages. A gzchunked file consists of multiple parts where
-//! each part is a gzipped fragment of a stream encoded in the [chunked] format.
+//! each part is a gzipped chunk with sequences of form: 8-byte length tag that
+//! is followed by a serialized Protocol Buffers message of such length.
 //!
-//! A high-level pseudocode for encoding and decoding procedures of the
-//! gzchunked format can be described using the following formulae:
+//! A high-level pseudocode for encoding procedure of the gzchunked format can
+//! be described using the following formulae:
 //!
-//!   * _encode(protos) = map(gzip, partition(chunk(protos)))_
-//!   * _decode(parts) = unchunk(join(map(ungzip, parts)))_
+//!   * _encode(protos) = map(gzip, partition(map(encode_proto, protos)))_
+//!   * _encode_proto(proto) = encode_u64(len(serialize(proto))) + serialize(proto)_
 //!
 //! This pseudocode uses the following subroutines:
 //!
-//!   * _chunk_ encodes a sequence of proto messages into the chunked format.
-//!   * _unchunk_ decodes a chunked stream into a sequence of messages.
 //!   * _partition_ divides a stream of bytes into multiple parts.
-//!   * _join_ sequentially combines multiple byte streams into one.
 //!   * _gzip_ encodes a byte stream into the gzip format.
-//!   * _ungzip_ decodes a byte stream from the gzip format.
-//!
-//! [chunked]: crate::chunked
 
 /// Encodes the given iterator over protobuf messages into the gzchunked format.
 ///
@@ -98,7 +93,15 @@ where
 /// use std::fs::File;
 ///
 /// let paths = ["foo.gzc.1", "foo.gzc.2", "foo.gzc.3"];
-/// let files = paths.iter().map(|path| File::open(path).unwrap());
+/// let files = paths.iter().map(|path| {
+///     let mut buf = Vec::new();
+///
+///     use std::io::Read as _;
+///     File::open(path).unwrap()
+///         .read_to_end(&mut buf).unwrap();
+///
+///     buf
+/// });
 ///
 /// for (idx, msg) in rrg::gzchunked::decode(files).enumerate() {
 ///     let msg: protobuf::well_known_types::wrappers::StringValue = msg.unwrap();
@@ -107,12 +110,15 @@ where
 /// ```
 pub fn decode<I, M>(iter: I) -> impl Iterator<Item=std::io::Result<M>>
 where
-    I: Iterator,
-    I::Item: std::io::Read,
+    I: Iterator<Item = Vec<u8>>,
     M: protobuf::Message + Default,
 {
-    let parts = iter.map(flate2::read::GzDecoder::new);
-    crate::chunked::decode(crate::io::IterReader::new(parts))
+    Decode {
+        chunks: iter,
+        buf: Vec::new(),
+        decoder: None,
+        marker: std::marker::PhantomData,
+    }
 }
 
 /// A type describing compression level of a gzchunked output stream.
@@ -153,7 +159,7 @@ pub struct EncodeOpts {
     /// Compression level used for the gzip encoding.
     pub compression: Compression,
     /// A rough file size limit for parts of the output file.
-    pub part_size: u64,
+    pub part_size: usize,
 }
 
 impl Default for EncodeOpts {
@@ -177,7 +183,7 @@ impl Default for EncodeOpts {
 /// [`encode`]: fn.encode.html
 /// [`encode_with_opts`]: fn.encode_with_opts.html
 pub struct Encode<I> {
-    chunked: crate::chunked::Encode<I>,
+    iter: I,
     opts: EncodeOpts,
 }
 
@@ -189,27 +195,37 @@ where
     /// Creates a new encoder instance with the specified options.
     fn with_opts(iter: I, opts: EncodeOpts) -> Encode<I> {
         Encode {
-            chunked: crate::chunked::encode(iter),
+            iter,
             opts: opts,
         }
     }
 
     /// Obtains the next part of the output file (if available).
     fn next_part(&mut self) -> std::io::Result<Option<Vec<u8>>> {
-        use crate::io::copy_until;
+        let mut encoder = flate2::write::GzEncoder::new(
+            vec!(),
+            self.opts.compression.0,
+        );
 
-        let compression = self.opts.compression.0;
-        let part_size = self.opts.part_size;
+        let mut msg_count = 0;
+        for msg in &mut self.iter {
+            msg_count += 1;
 
-        let mut encoder = flate2::write::GzEncoder::new(vec!(), compression);
-        let len = copy_until(&mut self.chunked, &mut encoder, |_, encoder| {
-            encoder.get_ref().len() as u64 >= part_size
-        })?;
+            use std::io::Write as _;
+            use protobuf::Message as _;
 
-        if len == 0 {
-            Ok(None)
+            encoder.write_all(&msg.compute_size().to_be_bytes())?;
+            msg.write_to_writer(&mut encoder)?;
+
+            if encoder.get_ref().len() > self.opts.part_size {
+                return encoder.finish().map(Some);
+            }
+        }
+
+        if msg_count > 0 {
+            encoder.finish().map(Some)
         } else {
-            Ok(Some(encoder.finish()?))
+            Ok(None)
         }
     }
 }
@@ -223,6 +239,101 @@ where
 
     fn next(&mut self) -> Option<std::io::Result<Vec<u8>>> {
         self.next_part().transpose()
+    }
+}
+
+/// Streaming decoder for the gzchunked format.
+///
+/// It implements the `Iterator` trait, lazily polling the underlying iterator
+/// over chunks with gzipped messages as needed and yields Protocol Buffer
+/// messages of the `M` type.
+///
+/// Instances of this type can be constructed using the [`decode`] function.
+struct Decode<I, M>
+where
+    I: Iterator<Item = Vec<u8>>,
+    M: protobuf::Message,
+{
+    /// Iterator over gzipped chunks.
+    ///
+    /// Each chunk is a sequence of interleaved message lengths and serialized
+    /// Protocol Buffer messages of such length.
+    chunks: I,
+    /// gzip decoder with actively decompressed chunk.
+    ///
+    /// `None` indicates that there is no active chunk (e.g. because the last
+    /// one was depleted) and the iterator should be polled for the next one.
+    decoder: Option<flate2::read::GzDecoder<std::io::Cursor<Vec<u8>>>>,
+    /// Temporary buffer for reading messages into.
+    ///
+    /// It is used to avoid repeated allocations across `next` calls on the
+    /// iterator.
+    buf: Vec<u8>,
+    /// Marker that binds the decoder to a particular message type.
+    ///
+    /// This is needed because we cannot implement the `Iterator` trait for a
+    /// decoder that yields results of arbitrary type.
+    marker: std::marker::PhantomData<M>,
+}
+
+impl<I, M> Decode<I, M>
+where
+    I: Iterator<Item = Vec<u8>>,
+    M: protobuf::Message,
+{
+    fn next_msg(&mut self) -> std::io::Result<Option<M>> {
+        loop {
+            let decoder = match self.decoder {
+                Some(ref mut decoder) => decoder,
+                None => match self.chunks.next() {
+                    Some(chunk) => {
+                        let chunk = std::io::Cursor::new(chunk);
+                        self.decoder.insert(flate2::read::GzDecoder::new(chunk))
+                    }
+                    None => break Ok(None),
+                },
+            };
+
+            use std::io::Read as _;
+
+            // `read` might not always read all 8 bytes. On the other hand, we
+            // also cannot use just `read_exact` because the stream might have
+            // ended already. Hence, we combine the two. First we attempt to
+            // read some bytes with `read`: it should either return 0 (indica-
+            // ting end of the stream) or non-zero value (indicating that we
+            // have read _some_ bytes, possibly all that we need) that we follow
+            // with using `read_exact to get the remaining bytes (which could be
+            // zero).
+            let mut len_buf = [0; std::mem::size_of::<u64>()];
+            match decoder.read(&mut len_buf[..])? {
+                0 => {
+                    self.decoder = None;
+                    continue;
+                },
+                len => decoder.read_exact(&mut len_buf[len..])?,
+            }
+            let len = u64::from_be_bytes(len_buf);
+            let len = usize::try_from(len).map_err(|error| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+            })?;
+
+            self.buf.resize(len, u8::default());
+            decoder.read_exact(&mut self.buf[..])?;
+
+            break Ok(Some(protobuf::Message::parse_from_bytes(&self.buf[..])?));
+        }
+    }
+}
+
+impl<I, M> Iterator for Decode<I, M>
+where
+    I: Iterator<Item = Vec<u8>>,
+    M: protobuf::Message,
+{
+    type Item = std::io::Result<M>;
+
+    fn next(&mut self) -> Option<std::io::Result<M>> {
+        self.next_msg().transpose()
     }
 }
 
@@ -260,7 +371,7 @@ mod tests {
 
     #[test]
     fn test_decode_with_empty_iter() {
-        let mut iter = decode::<_, Empty>(std::iter::empty::<&[u8]>())
+        let mut iter = decode::<_, Empty>(std::iter::empty())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), None);
@@ -272,7 +383,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode(chunks.into_iter())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), Some(string("foo")));
@@ -291,7 +402,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode(chunks.into_iter())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), Some(string("foo")));
@@ -308,7 +419,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode(chunks.into_iter())
             .map(Result::unwrap);
 
         assert_eq!(iter.next(), Some(Empty::new()));
@@ -331,7 +442,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, BytesValue>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, BytesValue>(chunks.into_iter())
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
@@ -351,7 +462,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, BytesValue>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, BytesValue>(chunks.into_iter())
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
@@ -371,9 +482,72 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, BytesValue>(chunks.iter().map(Vec::as_slice))
+        let mut iter = decode::<_, BytesValue>(chunks.into_iter())
             .map(Result::unwrap);
 
         assert!(iter.all(|item| item == sample));
+    }
+
+    quickcheck::quickcheck! {
+
+        fn encode_decode_inverse(blobs: Vec<Vec<u8>>) -> bool {
+            let items = blobs.into_iter().map(bytes)
+                .collect::<Vec<BytesValue>>();
+
+            let encoded = encode(items.clone().into_iter())
+                .map(Result::unwrap);
+            let decoded = decode(encoded)
+                .map(Result::unwrap);
+
+            decoded.collect::<Vec<BytesValue>>() == items
+        }
+
+        fn decode_homomorphism(blobs: Vec<Vec<u8>>) -> bool {
+            let items = blobs.into_iter().map(bytes)
+                .collect::<Vec<BytesValue>>();
+
+            let encoded = encode(items.clone().into_iter())
+                .map(Result::unwrap);
+            let decoded = encoded.map(|chunk| decode(std::iter::once(chunk)))
+                .flatten()
+                .map(Result::unwrap);
+
+            decoded.collect::<Vec<BytesValue>>() == items
+        }
+
+        fn encode_decode_inverse_part_size_1(blobs: Vec<Vec<u8>>) -> bool {
+            let items = blobs.into_iter().map(bytes)
+                .collect::<Vec<BytesValue>>();
+
+            let opts = EncodeOpts {
+                part_size: 1,
+                ..EncodeOpts::default()
+            };
+
+            let encoded = encode_with_opts(items.clone().into_iter(), opts)
+                .map(Result::unwrap);
+            let decoded = decode(encoded)
+                .map(Result::unwrap);
+
+            decoded.collect::<Vec<BytesValue>>() == items
+        }
+
+        fn decode_homomorphism_part_size_1(blobs: Vec<Vec<u8>>) -> bool {
+            let items = blobs.into_iter().map(bytes)
+                .collect::<Vec<BytesValue>>();
+
+            let opts = EncodeOpts {
+                part_size: 1,
+                ..EncodeOpts::default()
+            };
+
+            let encoded = encode_with_opts(items.clone().into_iter(), opts)
+                .map(Result::unwrap);
+            let decoded = encoded.map(|chunk| decode(std::iter::once(chunk)))
+                .flatten()
+                .map(Result::unwrap);
+
+            decoded.collect::<Vec<BytesValue>>() == items
+        }
     }
 }
