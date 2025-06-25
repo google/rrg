@@ -28,11 +28,20 @@ message Result {
   rrg.fs.Path path = 4;
 
   // A byte offset of the file part sent to the blob sink.
+  //
+  // Set only if `error` is not set.
   uint64 offset = 1;
 
   // A number of bytes of the file part sent to the blob sink.
+  //
+  // Set only if `error` is not set.
   uint64 length = 2;
 
   // A SHA-256 hash of the file part sent to the blob sink.
+  //
+  // Set only if `error` is not set.
   bytes blob_sha256 = 3;
+
+  // Error message set if something went wrong when processing the file.
+  string error = 5;
 }

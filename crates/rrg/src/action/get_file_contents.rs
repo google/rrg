@@ -29,6 +29,14 @@ pub struct Item {
     blob_sha256: [u8; 32],
 }
 
+/// Result of the `get_file_contents` action in case of an error.
+pub struct ErrorItem {
+    /// Path to the file that cause the issue.
+    path: PathBuf,
+    /// Error that occurred when working with the file.
+    error: FileError,
+}
+
 /// Handle invocations of the `get_file_contents` action.
 pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
@@ -40,7 +48,13 @@ where
     let mut file = match std::fs::File::open(&args.path) {
         Ok(file) => file,
         Err(error) => {
-            log::error!("failed to open {}: {error}", args.path.display());
+            session.reply(ErrorItem {
+                path: args.path,
+                error: FileError {
+                    kind: FileErrorKind::Open,
+                    cause: error,
+                },
+            })?;
             return Ok(());
         }
     };
@@ -51,7 +65,13 @@ where
     match file.seek(std::io::SeekFrom::Start(offset)) {
         Ok(_) => (),
         Err(error) => {
-            log::error!("failed to seek {} to {offset}: {error}", args.path.display());
+            session.reply(ErrorItem {
+                path: args.path,
+                error: FileError {
+                    kind: FileErrorKind::Seek,
+                    cause: error,
+                },
+            })?;
             return Ok(());
         }
     }
@@ -63,7 +83,13 @@ where
             Ok(0) => break,
             Ok(len_read) => len_read,
             Err(error) => {
-                log::error!("failed to read contents of {}: {error}", args.path.display());
+                session.reply(ErrorItem {
+                    path: args.path,
+                    error: FileError {
+                        kind: FileErrorKind::Read,
+                        cause: error,
+                    },
+                })?;
                 break
             }
         };
@@ -128,6 +154,53 @@ impl crate::response::Item for Item {
         proto.set_blob_sha256(self.blob_sha256.into());
 
         proto
+    }
+}
+
+impl crate::response::Item for ErrorItem {
+
+    type Proto = rrg_proto::get_file_contents::Result;
+
+    fn into_proto(self) -> rrg_proto::get_file_contents::Result {
+        let mut proto = rrg_proto::get_file_contents::Result::new();
+        proto.set_path(self.path.into());
+        proto.set_error(self.error.to_string());
+
+        proto
+    }
+}
+
+/// Error which can occur when processing the file.
+struct FileError {
+    kind: FileErrorKind,
+    cause: std::io::Error,
+}
+
+impl std::fmt::Display for FileError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}: {}", self.kind, self.cause)
+    }
+}
+
+/// List of possible types of errors that can occur when processing the file.
+enum FileErrorKind {
+    /// Failed to open the file.
+    Open,
+    /// Failed to seek the file to the given offset.
+    Seek,
+    /// Failed to read contents of the file.
+    Read,
+}
+
+impl std::fmt::Display for FileErrorKind {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileErrorKind::Open => write!(fmt, "open failed"),
+            FileErrorKind::Seek => write!(fmt, "seek to offset failed"),
+            FileErrorKind::Read => write!(fmt, "read contents failed"),
+        }
     }
 }
 
