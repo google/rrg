@@ -69,6 +69,8 @@ where
     }
 
     for path in &args.paths {
+        log::debug!("collecting metadata for '{}'", path.display());
+
         if path.is_relative() {
             use std::io::{Error, ErrorKind};
 
@@ -164,6 +166,13 @@ where
                 }
             };
 
+            log::debug! {
+                "walking children of '{}' (max depth: {}, pruning regex: '{}')",
+                path.display(),
+                args.max_depth,
+                args.path_pruning_regex,
+            };
+
             for entry in entries
                 .with_max_depth(args.max_depth)
                 .prune(|entry| {
@@ -235,6 +244,8 @@ where
                 };
 
                 let digest = digest(&entry.path, &args);
+
+                log::debug!("sending metadata for '{}'", entry.path.display());
 
                 session.reply(Item {
                     path: entry.path,
