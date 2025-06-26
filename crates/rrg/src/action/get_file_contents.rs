@@ -9,8 +9,8 @@ const MAX_BLOB_LEN: usize = 2 * 1024 * 1024; // 2 MiB.
 
 /// Arguments of the `get_file_contents` action.
 pub struct Args {
-    /// Path to the file to get the contents of.
-    path: PathBuf,
+    /// Paths to the files to get the contents of.
+    paths: Vec<PathBuf>,
     /// Offset from which to read the file contents.
     offset: u64,
     /// Number of bytes to read from the file.
@@ -45,70 +45,72 @@ where
     use std::io::{Read as _, Seek as _};
     use sha2::Digest as _;
 
-    let mut file = match std::fs::File::open(&args.path) {
-        Ok(file) => file,
-        Err(error) => {
-            session.reply(ErrorItem {
-                path: args.path,
-                error: FileError {
-                    kind: FileErrorKind::Open,
-                    cause: error,
-                },
-            })?;
-            return Ok(());
-        }
-    };
-
-    let mut offset = args.offset;
-    let mut len_left = args.len;
-
-    match file.seek(std::io::SeekFrom::Start(offset)) {
-        Ok(_) => (),
-        Err(error) => {
-            session.reply(ErrorItem {
-                path: args.path,
-                error: FileError {
-                    kind: FileErrorKind::Seek,
-                    cause: error,
-                },
-            })?;
-            return Ok(());
-        }
-    }
-
-    loop {
-        let mut buf = vec![0; std::cmp::min(len_left, MAX_BLOB_LEN)];
-
-        let len_read = match file.read(&mut buf[..]) {
-            Ok(0) => break,
-            Ok(len_read) => len_read,
+    for path in args.paths {
+        let mut file = match std::fs::File::open(&path) {
+            Ok(file) => file,
             Err(error) => {
                 session.reply(ErrorItem {
-                    path: args.path,
+                    path,
                     error: FileError {
-                        kind: FileErrorKind::Read,
+                        kind: FileErrorKind::Open,
                         cause: error,
                     },
                 })?;
-                break
+                continue
             }
         };
 
-        buf.truncate(len_read);
+        let mut offset = args.offset;
+        let mut len_left = args.len;
 
-        let blob = crate::blob::Blob::from(buf);
-        let blob_sha256 = sha2::Sha256::digest(blob.as_bytes()).into();
+        match file.seek(std::io::SeekFrom::Start(offset)) {
+            Ok(_) => (),
+            Err(error) => {
+                session.reply(ErrorItem {
+                    path,
+                    error: FileError {
+                        kind: FileErrorKind::Seek,
+                        cause: error,
+                    },
+                })?;
+                continue
+            }
+        }
 
-        session.send(crate::Sink::Blob, blob)?;
-        session.reply(Item {
-            path: args.path.clone(),
-            offset,
-            len: len_read,
-            blob_sha256,
-        })?;
+        loop {
+            let mut buf = vec![0; std::cmp::min(len_left, MAX_BLOB_LEN)];
 
-        offset += len_read as u64;
-        len_left -= len_read;
+            let len_read = match file.read(&mut buf[..]) {
+                Ok(0) => break,
+                Ok(len_read) => len_read,
+                Err(error) => {
+                    session.reply(ErrorItem {
+                        path,
+                        error: FileError {
+                            kind: FileErrorKind::Read,
+                            cause: error,
+                        },
+                    })?;
+                    break
+                }
+            };
+
+            buf.truncate(len_read);
+
+            let blob = crate::blob::Blob::from(buf);
+            let blob_sha256 = sha2::Sha256::digest(blob.as_bytes()).into();
+
+            session.send(crate::Sink::Blob, blob)?;
+            session.reply(Item {
+                path: path.clone(),
+                offset,
+                len: len_read,
+                blob_sha256,
+            })?;
+
+            offset += len_read as u64;
+            len_left -= len_read;
+        }
     }
 
     Ok(())
@@ -121,8 +123,12 @@ impl crate::request::Args for Args {
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
 
-        let path = PathBuf::try_from(proto.take_path())
-            .map_err(|error| ParseArgsError::invalid_field("path", error))?;
+        let paths = proto.take_paths().into_iter()
+            .map(PathBuf::try_from)
+            // TOOO(@panhania): Improve error handling (it is not obvious which
+            // path caused the error right now).
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| ParseArgsError::invalid_field("paths", error))?;
 
         let len = match proto.length() {
             0 => usize::MAX,
@@ -135,7 +141,7 @@ impl crate::request::Args for Args {
         };
 
         Ok(Args {
-            path,
+            paths,
             offset: proto.offset(),
             len,
         })
@@ -237,7 +243,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.path().join("idonotexist"),
+            paths: vec![tempdir.path().join("idonotexist")],
             offset: 0,
             len: usize::MAX,
         };
@@ -263,7 +269,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.path().join("foo"),
+            paths: vec![tempdir.path().join("foo")],
             offset: 0,
             len: usize::MAX,
         };
@@ -285,7 +291,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.path().join("foo"),
+            paths: vec![tempdir.path().join("foo")],
             offset: 0,
             len: usize::MAX,
         };
@@ -315,7 +321,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.path().join("foo"),
+            paths: vec![tempdir.path().join("foo")],
             offset: 5,
             len: usize::MAX,
         };
@@ -345,7 +351,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            path: tempdir.path().join("foo"),
+            paths: vec![tempdir.path().join("foo")],
             offset: 0,
             len: 5,
         };
@@ -371,7 +377,7 @@ mod tests {
     #[cfg_attr(target_family = "windows", ignore)]
     fn handle_big_file_to_len() {
         let args = Args {
-            path: PathBuf::from("/dev/zero"),
+            paths: vec![PathBuf::from("/dev/zero")],
             offset: 0,
             len: MAX_BLOB_LEN * 2 + 1337,
         };
@@ -411,7 +417,7 @@ mod tests {
     #[cfg_attr(target_family = "windows", ignore)]
     fn handle_big_file_from_offset_to_len() {
         let args = Args {
-            path: PathBuf::from("/dev/zero"),
+            paths: vec![PathBuf::from("/dev/zero")],
             offset: 0xb33f,
             len: MAX_BLOB_LEN + 1337,
         };
@@ -429,5 +435,97 @@ mod tests {
         let item = session.reply::<Item>(1);
         assert_eq!(item.offset, 0xb33f + MAX_BLOB_LEN as u64);
         assert_eq!(item.len, 1337);
+    }
+
+    #[test]
+    fn handle_many_files() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::write(tempdir.join("foo"), b"012")
+            .unwrap();
+        std::fs::write(tempdir.join("bar"), b"345")
+            .unwrap();
+        std::fs::write(tempdir.join("baz"), b"678")
+            .unwrap();
+
+        let args = Args {
+            paths: vec![
+                tempdir.join("foo"),
+                tempdir.join("bar"),
+                tempdir.join("baz"),
+            ],
+            offset: 0,
+            len: usize::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 3);
+
+        let items_by_path = session
+            .replies::<Item>()
+            .map(|item| (item.path.clone(), item))
+            .collect::<std::collections::HashMap::<_, _>>();
+
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 3);
+
+        let blobs_by_sha256 = session
+            .parcels::<crate::blob::Blob>(crate::Sink::Blob)
+            .map(|blob| {
+                use sha2::Digest as _;
+                (sha2::Sha256::digest(blob.as_bytes()).into(), blob)
+            })
+            .collect::<std::collections::HashMap::<[u8; 32], _>>();
+
+        let item_foo = items_by_path[&tempdir.join("foo")];
+        assert_eq!(item_foo.offset, 0);
+        assert_eq!(item_foo.len, 3);
+        assert_eq!(blobs_by_sha256[&item_foo.blob_sha256].as_bytes(), b"012");
+
+        let item_bar = items_by_path[&tempdir.join("bar")];
+        assert_eq!(item_bar.offset, 0);
+        assert_eq!(item_bar.len, 3);
+        assert_eq!(blobs_by_sha256[&item_bar.blob_sha256].as_bytes(), b"345");
+
+        let item_baz = items_by_path[&tempdir.join("baz")];
+        assert_eq!(item_baz.offset, 0);
+        assert_eq!(item_baz.len, 3);
+        assert_eq!(blobs_by_sha256[&item_baz.blob_sha256].as_bytes(), b"678");
+    }
+
+    #[test]
+    fn handle_many_files_with_non_existing() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::write(tempdir.join("foo"), b"012")
+            .unwrap();
+        std::fs::write(tempdir.join("bar"), b"345")
+            .unwrap();
+
+        let args = Args {
+            paths: vec![
+                tempdir.join("foo"),
+                tempdir.join("idonotexist"),
+                tempdir.join("bar"),
+            ],
+            offset: 0,
+            len: usize::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        // TODO(@panhania): There is no way to inspect reply type of the fake
+        // session and do per-reply cast so for now we only assert on the number
+        // of replies.
+        assert_eq!(session.reply_count(), 3);
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 2);
     }
 }
