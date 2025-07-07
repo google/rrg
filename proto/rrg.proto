@@ -52,6 +52,8 @@ enum Action {
   GET_TCP_RESPONSE = 18;
   /// Execute a signed command.
   EXECUTE_SIGNED_COMMAND = 19;
+  /// Dump the contents of a currently running process' memory.
+  DUMP_PROCESS_MEMORY = 20;
 
   // TODO: Define more actions that should be supported.
 
