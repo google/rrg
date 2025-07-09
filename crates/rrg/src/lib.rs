@@ -6,10 +6,10 @@
 // TODO: Hide irrelevant modules.
 
 pub mod action;
+pub mod args;
 pub mod fs;
 pub mod io;
 pub mod log;
-pub mod args;
 pub mod session;
 
 mod blob;
@@ -30,4 +30,4 @@ pub use ping::Ping;
 pub use startup::Startup;
 
 pub use request::{ParseRequestError, Request, RequestId};
-pub use response::{LogBuilder, Parcel, ResponseBuilder, ResponseId, Sink};
+pub use response::{Item as ResponseItem, LogBuilder, Parcel, ResponseBuilder, ResponseId, Sink};
