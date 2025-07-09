@@ -15,6 +15,7 @@ default = [
     "action-get_file_contents",
     "action-grep_file_contents",
     "action-get_filesystem_timeline",
+    "action-get_filesystem_timeline_tsk",
     "action-get_tcp_response",
     "action-list_connections",
     "action-list_interfaces",
@@ -36,6 +37,7 @@ action-get_file_metadata-sha256 = ["action-get_file_metadata", "dep:sha2"]
 action-get_file_contents = ["dep:sha2"]
 action-grep_file_contents = []
 action-get_filesystem_timeline = ["dep:flate2", "dep:sha2"]
+action-get_filesystem_timeline_tsk = ["action-get_filesystem_timeline", "dep:tsk"]
 action-get_tcp_response = []
 action-list_connections = []
 action-list_interfaces = []
@@ -116,6 +118,10 @@ optional = true
 
 [dependencies.sha2]
 version = "0.10.8"
+optional = true
+
+[dependencies.tsk]
+path = "../tsk"
 optional = true
 
 # TODO(https://github.com/google/rrg/issues/47): This should be a dev dependency

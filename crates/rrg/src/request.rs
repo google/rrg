@@ -39,6 +39,8 @@ pub enum Action {
     ListUtmpUsers,
     /// Get the snapshot of the entire filesystem.
     GetFilesystemTimeline,
+    /// Get the snapshot of a raw filesystem using Sleuthkit.
+    GetFilesystemTimelineTsk,
     /// Connect to a TCP address, write some data and retrieve the response.
     GetTcpResponse,
     // Get a value from the Windows Registry (Windows-only).
@@ -72,6 +74,7 @@ impl std::fmt::Display for Action {
             Action::ListMounts => write!(fmt, "list_mounts"),
             Action::ListUtmpUsers => write!(fmt, "list_utmp_users"),
             Action::GetFilesystemTimeline => write!(fmt, "get_filesystem_timeline"),
+            Action::GetFilesystemTimelineTsk => write!(fmt, "get_filesystem_timeline_tsk"),
             Action::GetWinregValue => write!(fmt, "get_winreg_value"),
             Action::ListWinregValues => write!(fmt, "list_winreg_values"),
             Action::ListWinregKeys => write!(fmt, "list_winreg_keys"),
@@ -131,6 +134,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             QUERY_WMI => Ok(Action::QueryWmi),
             EXECUTE_SIGNED_COMMAND => Ok(Action::ExecuteSignedCommand),
             DUMP_PROCESS_MEMORY => Ok(Action::DumpProcessMemory),
+            GET_FILESYSTEM_TIMELINE_TSK => Ok(Action::GetFilesystemTimelineTsk),
             _ => {
                 let value = protobuf::Enum::value(&proto);
                 Err(UnknownAction { value })
