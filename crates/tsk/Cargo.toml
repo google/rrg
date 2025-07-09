@@ -1,0 +1,13 @@
+[package]
+name = "tsk"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies.tsk-sys]
+path = "../tsk-sys"
+
+[dev-dependencies]
+flate2 = "1.0.35"
+tempfile = "3.14.0"
+
