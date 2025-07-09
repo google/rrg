@@ -1,0 +1,9 @@
+[package]
+name = "tsk-sys"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[build-dependencies]
+bindgen = "0.71.1"
+cc = { version = "1.2.1", features = ["parallel"] }
