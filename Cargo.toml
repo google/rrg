@@ -3,6 +3,8 @@ members = [
     "./crates/ospect",
     "./crates/rrg",
     "./crates/rrg-proto",
+    "./crates/tsk",
+    "./crates/tsk-sys",
     "./crates/winreg",
     "./crates/wmi",
 ]
