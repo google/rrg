@@ -57,6 +57,15 @@ fn main() {
             .current_dir(&sleuthkit_out_dir)
             .status()
             .expect("configure failed");
+        Command::new("make")
+            .env("CC", cc_path)
+            .env("CXX", cpp_path)
+            .envs(cfg.get_compiler().env().iter().cloned())
+            .envs(cfg_cc.get_compiler().env().iter().cloned())
+            .current_dir(&sleuthkit_out_dir)
+            .status()
+            .expect("make failed");
+
     }
 
     let sleuthkit_out_dir_str = sleuthkit_out_dir
