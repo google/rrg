@@ -42,20 +42,25 @@ fn main() {
         .strip_suffix("-cc")
         .or_else(|| cc_path.strip_suffix("-gcc"))
         .or_else(|| cc_path.strip_suffix("-gcc-posix"));
-    Command::new("autoreconf")
-        .args(["--force", "--install"])
-        .current_dir(&sleuthkit_out_dir)
-        .status()
-        .expect("autoreconf failed");
-    Command::new("./configure")
-        .args(host.map(|h| format!("--host={h}")))
-        .env("CC", cc_path)
-        .env("CXX", cpp_path)
-        .envs(cfg.get_compiler().env().iter().cloned())
-        .envs(cfg_cc.get_compiler().env().iter().cloned())
-        .current_dir(&sleuthkit_out_dir)
-        .status()
-        .expect("configure failed");
+    if cfg!(target_env = "msvc") {
+        cfg_cc.flag("/std:c++17").define("NOMINMAX", None);
+    } else {
+        cfg_cc.flag("-std=c++17");
+        Command::new("autoreconf")
+            .args(["--force", "--install"])
+            .current_dir(&sleuthkit_out_dir)
+            .status()
+            .expect("autoreconf failed");
+        Command::new("./configure")
+            .args(host.map(|h| format!("--host={h}")))
+            .env("CC", cc_path)
+            .env("CXX", cpp_path)
+            .envs(cfg.get_compiler().env().iter().cloned())
+            .envs(cfg_cc.get_compiler().env().iter().cloned())
+            .current_dir(&sleuthkit_out_dir)
+            .status()
+            .expect("configure failed");
+    }
 
     let sleuthkit_out_dir_str = sleuthkit_out_dir
         .clone()
