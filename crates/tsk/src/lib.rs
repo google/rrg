@@ -1,5 +1,10 @@
+use core::panic;
+// Copyright 2025 Google LLC
+//
+// Use of this source code is governed by an MIT-style license that can be found
+// in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::cell::RefCell;
-use std::ffi::c_void;
+use std::ffi::{c_char, c_void};
 use std::marker::PhantomData;
 use std::ptr::{NonNull, null_mut};
 use std::{ffi::CStr, path::Path};
@@ -39,7 +44,7 @@ impl TskPath {
     #[cfg(target_family = "unix")]
     fn from_path(path: &Path) -> Self {
         use std::os::unix::ffi::OsStrExt as _;
-        let mut path: Vec<u8> = path.as_os_str().as_bytes().into();
+        let mut path: Vec<u8> = path.as_os_str().as_bytes().to_vec();
         path.push(0);
         Self { path }
     }
@@ -56,8 +61,8 @@ impl TskPath {
         Self { path }
     }
 
-    fn as_ptr(&self) -> *const i8 {
-        self.path.as_ptr() as *const i8
+    fn as_ptr(&self) -> *const c_char {
+        self.path.as_ptr().cast()
     }
 }
 
@@ -88,23 +93,28 @@ impl TskImage {
             #[cfg(target_family = "unix")]
             {
                 use std::os::unix::ffi::OsStrExt as _;
-                let mut path: Vec<u8> = path.as_os_str().as_bytes().to_vec();
+                let mut path: Vec<c_char> = path
+                    .as_os_str()
+                    .as_bytes()
+                    .iter()
+                    .copied()
+                    .map(|c| c as c_char)
+                    .collect();
                 path.push(0);
                 path
             }
             #[cfg(target_family = "windows")]
             {
                 use std::os::windows::ffi::OsStrExt as _;
-                path.as_os_str().encode_wide().chain(Some(0)).collect::<Vec<u16>>()
+                path.as_os_str()
+                    .encode_wide()
+                    .chain(Some(0))
+                    .collect::<Vec<u16>>()
             }
         };
-        #[cfg(target_family = "unix")]
-        let path_ptr = path.as_slice().as_ptr() as *const i8;
-        #[cfg(target_family = "windows")]
-        let path_ptr = path.as_slice().as_ptr();
         let tsk_img_result = unsafe {
             tsk_sys::tsk_img_open_sing(
-                path_ptr,
+                path.as_ptr(),
                 tsk_sys::TSK_IMG_TYPE_ENUM_TSK_IMG_TYPE_RAW_SING,
                 0,
             )
@@ -190,7 +200,7 @@ impl TskFs<'_> {
 
         unsafe extern "C" fn c_callback(
             file: *mut tsk_sys::TSK_FS_FILE,
-            path: *const i8,
+            path: *const c_char,
             ptr: *mut c_void,
         ) -> tsk_sys::TSK_WALK_RET_ENUM {
             let file =
@@ -396,12 +406,12 @@ impl TskFsMeta<'_> {
         let mut name_list_ptr = unsafe { self.inner.as_ref() }.name2;
         // SAFETY: trusting TSK to not give us a garbage non-null pointer.
         while let Some(name_list) = unsafe { name_list_ptr.as_ref() } {
-            let name: &[i8; 512] = &name_list.name;
-            // SAFETY: casting [i8; 512] to [u8; 512] is safe because they use
-            // the same memory layout.
-            let name: &[u8] = unsafe { (name.as_ptr() as *const [u8; 512]).as_ref().unwrap() };
-            let name = CStr::from_bytes_until_nul(name)
-                .expect("Invalid TSK_FS_META_NAME_LIST entry")
+            let name: &[c_char; 512] = &name_list.name;
+            if !name.contains(&('\0' as c_char)) {
+                panic!("meta name missing null terminator");
+            }
+            // SAFETY: checked for null terminator.
+            let name = unsafe { CStr::from_ptr(name_list.name.as_ptr()) }
                 .to_string_lossy()
                 .to_string();
             names.push(TskFsMetaName {
