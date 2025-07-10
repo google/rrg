@@ -252,6 +252,7 @@ pub fn get_raw_device(mounts: &[Mount], path: &Path) -> std::io::Result<RawDevic
     let mount = get_mount(mounts, path)?;
     #[cfg(not(target_os = "windows"))]
     {
+        // Comprehensive list of raw filesystem types supported by RRG.
         const SUPPORTED_FS_TYPES: &[&str] = &["ext2", "ext3", "ext4", "vfat", "ntfs", "fuseblk"];
         if !SUPPORTED_FS_TYPES.contains(&mount.fs_type.as_ref()) {
             return Err(std::io::Error::other(format!(
