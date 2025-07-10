@@ -242,7 +242,6 @@ fn main() {
     cfg_cc
         .cargo_warnings(false)
         .out_dir(&build)
-        .cpp_link_stdlib("stdc++")
         .include(&sleuthkit_out_dir)
         .include(sleuthkit_out_dir.join("tsk"))
         .files(cpp_sources.into_iter().map(|f| sleuthkit_out_dir.join(f)))
