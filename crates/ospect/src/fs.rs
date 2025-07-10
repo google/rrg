@@ -249,7 +249,6 @@ pub fn get_mount(mounts: &[Mount], path: &Path) -> std::io::Result<Mount> {
 }
 
 pub fn get_raw_device(mounts: &[Mount], path: &Path) -> std::io::Result<RawDeviceMount> {
-    // Comprehensive list of filesystem types supported by RRG.
     let mount = get_mount(mounts, path)?;
     #[cfg(not(target_os = "windows"))]
     {
