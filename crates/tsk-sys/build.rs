@@ -42,7 +42,10 @@ fn main() {
         .strip_suffix("-cc")
         .or_else(|| cc_path.strip_suffix("-gcc"))
         .or_else(|| cc_path.strip_suffix("-gcc-posix"));
-    if cfg!(not(target_env = "msvc")) {
+    if cfg!(target_env = "msvc") {
+        cfg_cc.flag("/std:c++17");
+    } else {
+        cfg_cc.flag("-std=c++17");
         Command::new("autoreconf")
             .args(["--force", "--install"])
             .current_dir(&sleuthkit_out_dir)
@@ -65,7 +68,6 @@ fn main() {
             .current_dir(&sleuthkit_out_dir)
             .status()
             .expect("make failed");
-
     }
 
     let sleuthkit_out_dir_str = sleuthkit_out_dir
