@@ -260,6 +260,9 @@ mod tests {
 
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.path().to_owned());
+        for e in entries.iter() {
+            eprintln!("{e:?}");
+        }
 
         assert_eq!(entries.len(), 3);
         assert_eq!(str_path(&entries[0]), "/dir/subdir/.");
