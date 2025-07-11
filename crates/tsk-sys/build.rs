@@ -73,6 +73,8 @@ fn main() {
     let target = target.trim_end_matches("llvm");
     let bindings = bindgen::Builder::default()
         .clang_args(&["-I", &sleuthkit_out_dir_str])
+        .clang_arg("-I")
+        .clang_arg(sleuthkit_out_dir.join("tsk").to_string_lossy())
         .clang_arg(format!("--target={target}"))
         .header("wrapper.h")
         .derive_debug(true)
