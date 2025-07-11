@@ -10,7 +10,7 @@ use std::process::Command;
 fn main() {
     println!(r"cargo:rerun-if-changed=wrapper.h");
     println!(r"cargo:rerun-if-changed=../../vendor/sleuthkit");
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = PathBuf::from(env::var("OUT_DIR").expect("missing $OUT_DIR"));
     let sleuthkit_source_dir = std::path::Path::new("../../vendor/sleuthkit");
     let sleuthkit_out_dir = out_path.join("sleuthkit");
 
@@ -74,6 +74,12 @@ fn main() {
         .clang_arg(format!("--target={target}"))
         .header("wrapper.h")
         .derive_debug(true)
+        .allowlist_function("tsk_version_get_str")
+        .allowlist_function("tsk_error_get")
+        .allowlist_item("tsk_fs_.*")
+        .allowlist_item("TSK_FS_.*")
+        .allowlist_item("tsk_img_.*")
+        .allowlist_item("TSK_IMG_.*")
         .generate()
         .expect("Unable to generate bindings");
 
