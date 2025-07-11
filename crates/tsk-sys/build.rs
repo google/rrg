@@ -10,7 +10,9 @@ use std::process::Command;
 fn main() {
     println!(r"cargo:rerun-if-changed=wrapper.h");
     println!(r"cargo:rerun-if-changed=../../vendor/sleuthkit");
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = PathBuf::from(env::var("OUT_DIR").expect("missing $OUT_DIR"))
+        .canonicalize()
+        .expect("Failed to canonicalize OUT_DIR");
     let sleuthkit_source_dir = std::path::Path::new("../../vendor/sleuthkit");
     let sleuthkit_out_dir = out_path.join("sleuthkit");
 
