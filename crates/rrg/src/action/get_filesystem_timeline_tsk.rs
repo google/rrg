@@ -402,9 +402,8 @@ mod tests {
         let reply_count = session.reply_count();
         assert_eq!(blob_count, reply_count);
 
-        let chunks = session
-            .parcels::<crate::blob::Blob>(crate::Sink::Blob)
-            .map(crate::blob::Blob::as_bytes);
+        let chunks = session.parcels::<crate::blob::Blob>(crate::Sink::Blob)
+            .map(|blob| blob.as_bytes().to_vec());
 
         let entries = crate::gzchunked::decode(chunks)
             .map(Result::unwrap)
