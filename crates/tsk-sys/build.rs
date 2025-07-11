@@ -32,10 +32,7 @@ fn main() {
         .status()
         .expect("Failed to copy sleuthkit source");
 
-    let dst = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    let build = dst.join("build");
-
-    let mut cfg = cc::Build::new();
+    let cfg = cc::Build::new();
     let mut cfg_cc = cc::Build::new();
 
     // Run autotools. Needed for some generated headers.
@@ -51,7 +48,9 @@ fn main() {
     let target = target.trim_end_matches("llvm");
     if cfg!(target_env = "msvc") {
         cfg_cc.flag("/std:c++17").define("NOMINMAX", None);
-        Command::new("msbuild")
+        eprintln!("{cpp:?}");
+        eprintln!("{cpp_path:?}");
+        Command::new("msbuild.exe")
             .args([
                 r"-target:libtsk",
                 r"/p:PlatformToolset=v142",
@@ -87,6 +86,7 @@ fn main() {
         Command::new("make")
             .arg("-j")
             .arg(env::var("NUM_JOBS").expect("$NUM_JOBS not set"))
+            .arg("tsk/libtsk.la")
             .env("CC", cc_path)
             .env("CXX", cpp_path)
             .envs(cfg.get_compiler().env().iter().cloned())
@@ -94,7 +94,6 @@ fn main() {
             .current_dir(&sleuthkit_out_dir)
             .status()
             .expect("make failed");
-        println!(r"cargo:rustc-link-search={}/tsk", &sleuthkit_out_dir_str);
         println!(r"cargo:rustc-link-search={}/tsk/.libs", &sleuthkit_out_dir_str);
         println!(r"cargo:rustc-link-lib=tsk");
     }
