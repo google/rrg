@@ -263,6 +263,7 @@ impl<'a> TskFsDir<'a> {
             .map(TskFsFile::new)
             .expect("TSK_FS_DIR file is null")
     }
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         let inner_ref = unsafe { self.inner.as_ref() };
         unsafe { tsk_sys::tsk_fs_dir_getsize(inner_ref) }
