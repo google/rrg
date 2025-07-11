@@ -439,12 +439,13 @@ impl TskFsMeta<'_> {
 
 #[cfg(test)]
 mod test {
-    use std::fs::File;
     use std::io::{Read as _, Write as _};
 
     use tempfile::NamedTempFile;
 
     use super::*;
+
+    const SMOL_NTFS_GZ: &[u8] = include_bytes!("../test_data/smol.ntfs.gz");
     #[test]
     fn test_get_tsk_version() {
         assert_eq!(get_tsk_version(), "4.13.0");
@@ -452,9 +453,7 @@ mod test {
 
     #[test]
     fn test_ntfs() {
-        let source = "test_data/smol.ntfs.gz";
-        let file = File::open(source).expect("Failed to load test data");
-        let mut gz = flate2::read::GzDecoder::new(file);
+        let mut gz = flate2::read::GzDecoder::new(SMOL_NTFS_GZ);
         let mut ntfs_raw = Vec::new();
         gz.read_to_end(&mut ntfs_raw)
             .expect("Failed to read test data");
@@ -516,9 +515,7 @@ mod test {
 
     #[test]
     fn test_walk() {
-        let source = "test_data/smol.ntfs.gz";
-        let file = File::open(source).expect("Failed to load test data");
-        let mut gz = flate2::read::GzDecoder::new(file);
+        let mut gz = flate2::read::GzDecoder::new(SMOL_NTFS_GZ);
         let mut ntfs_raw = Vec::new();
         gz.read_to_end(&mut ntfs_raw)
             .expect("Failed to read test data");
