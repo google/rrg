@@ -43,7 +43,7 @@ fn main() {
         .or_else(|| cc_path.strip_suffix("-gcc"))
         .or_else(|| cc_path.strip_suffix("-gcc-posix"));
     if cfg!(target_env = "msvc") {
-        cfg_cc.flag("/std:c++17");
+        cfg_cc.flag("/std:c++17").define("NOMINMAX", None);
     } else {
         cfg_cc.flag("-std=c++17");
         Command::new("autoreconf")
