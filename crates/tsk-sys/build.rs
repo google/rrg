@@ -49,19 +49,6 @@ fn main() {
         .or_else(|| cc_path.strip_suffix("-gcc-posix"));
 
     let target = target.trim_end_matches("llvm");
-    let bindings = bindgen::Builder::default()
-        .clang_args(&["-I", &sleuthkit_out_dir_str])
-        .clang_arg(format!("--target={target}"))
-        .header("wrapper.h")
-        .derive_debug(true)
-        .derive_default(true)
-        .generate()
-        .expect("Unable to generate bindings");
-
-    bindings
-        .write_to_file(out_path.join("bindings.rs"))
-        .expect("Couldn't write bindings!");
-
     if cfg!(target_env = "msvc") {
         cfg_cc.flag("/std:c++17").define("NOMINMAX", None);
         Command::new("msbuild")
@@ -108,6 +95,20 @@ fn main() {
             .status()
             .expect("make failed");
         println!(r"cargo:rustc-link-search={}/tsk", &sleuthkit_out_dir_str);
-        println!(r"cargo:rustc-link-lib=static=libtsk");
+        println!(r"cargo:rustc-link-search={}/tsk/.libs", &sleuthkit_out_dir_str);
+        println!(r"cargo:rustc-link-lib=tsk");
     }
+    let bindings = bindgen::Builder::default()
+        .clang_args(&["-I", &sleuthkit_out_dir_str])
+        .clang_arg(format!("--target={target}"))
+        .header("wrapper.h")
+        .derive_debug(true)
+        .derive_default(true)
+        .generate()
+        .expect("Unable to generate bindings");
+
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .expect("Couldn't write bindings!");
+
 }
