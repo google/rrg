@@ -2,9 +2,11 @@
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
+
 //! Developer command to run a Fleetspeakless one-shot RRG action.
 //!
 //! e.g. you may run an action as root with:
+//! ```text
 //! cargo build && (protoc --proto_path=proto/ --encode=rrg.Request proto/rrg.proto proto/rrg/action/*.proto | sudo -A ./target/debug/rrg_oneshot) <<EOF
 //! action: GET_FILESYSTEM_TIMELINE_TSK
 //! args {
@@ -15,6 +17,7 @@
 //!   }
 //! }
 //! EOF
+//! ```
 use protobuf::Message as _;
 
 struct OneshotSession {
@@ -47,7 +50,7 @@ impl rrg::session::Session for OneshotSession {
 
     fn reply<I>(&mut self, item: I) -> rrg::session::Result<()>
     where
-        I: rrg::ResponseItem + 'static,
+        I: rrg::Item + 'static,
     {
         println!(
             "Reply: {}",
@@ -58,7 +61,7 @@ impl rrg::session::Session for OneshotSession {
 
     fn send<I>(&mut self, sink: rrg::Sink, item: I) -> rrg::session::Result<()>
     where
-        I: rrg::ResponseItem + 'static,
+        I: rrg::Item + 'static,
     {
         println!(
             "Sent to {sink:?}: {}",
@@ -74,10 +77,9 @@ fn main() {
     // rust-protobuf does not support Any in text or JSON formats, so we're
     // stuck taking in encoded protobufs.
     // See https://github.com/stepancheg/rust-protobuf/issues/628
-    let mut request = rrg_proto::rrg::Request::parse_from_reader(&mut std::io::stdin()).unwrap();
-    request.flow_id = 123;
-    request.request_id = 1;
-    let request = rrg::Request::try_from(request).unwrap();
+    let request_proto = rrg_proto::rrg::Request::parse_from_reader(&mut std::io::stdin())
+        .expect("Failed to parse request protobuf");
+    let request = rrg::Request::try_from(request_proto).expect("Failed to parse request");
     let mut session = OneshotSession::new();
     rrg::action::dispatch(&mut session, request).unwrap();
 }
