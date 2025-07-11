@@ -74,7 +74,12 @@ fn main() {
         .clang_arg(format!("--target={target}"))
         .header("wrapper.h")
         .derive_debug(true)
-        .translate_enum_integer_types(true)
+        .allowlist_function("tsk_version_get_str")
+        .allowlist_function("tsk_error_get")
+        .allowlist_item("tsk_fs_.*")
+        .allowlist_item("TSK_FS_.*")
+        .allowlist_item("tsk_img_.*")
+        .allowlist_item("TSK_IMG_.*")
         .generate()
         .expect("Unable to generate bindings");
 
