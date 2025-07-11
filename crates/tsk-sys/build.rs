@@ -74,7 +74,6 @@ fn main() {
         .clang_arg(format!("--target={target}"))
         .header("wrapper.h")
         .derive_debug(true)
-        .derive_default(true)
         .generate()
         .expect("Unable to generate bindings");
 
