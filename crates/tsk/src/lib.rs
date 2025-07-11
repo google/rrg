@@ -389,8 +389,10 @@ impl TskFsMeta<'_> {
         unsafe { self.inner.as_ref() }.gid
     }
     /// Unix-style permissions.
+    // mode is a C enum that may either be u32 or i32 (on MSVC)
+    #[allow(clippy::unnecessary_cast)]
     pub fn mode(&self) -> u32 {
-        unsafe { self.inner.as_ref() }.mode
+        unsafe { self.inner.as_ref() }.mode as u32
     }
     /// Last file content modification time (stored in number of seconds since Jan 1, 1970 UTC)
     pub fn mtime(&self) -> i64 {
