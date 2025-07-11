@@ -51,12 +51,12 @@ impl TskPath {
 
     #[cfg(target_os = "windows")]
     fn from_path(path: &Path) -> Self {
-        use std::os::windows::ffi::OsStrExt;
         let path: Vec<u8> = path
-            .as_os_str()
-            .encode_wide()
+            .to_string_lossy()
+            .as_bytes()
+            .into_iter()
+            .copied()
             .chain(Some(0))
-            .flat_map(|c| c.to_be_bytes())
             .collect();
         Self { path }
     }
