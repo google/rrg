@@ -76,11 +76,7 @@ fn main() {
         .clang_arg(format!("--target={target}"))
         .header("wrapper.h")
         .derive_debug(true)
-        .derive_default(true)
         .translate_enum_integer_types(true)
-        .allowlist_file(format!("{sleuthkit_out_dir_str}/tsk/base/tsk_base.h"))
-        .allowlist_file(format!("{sleuthkit_out_dir_str}/tsk/img/tsk_img.h"))
-        .allowlist_file(format!("{sleuthkit_out_dir_str}/tsk/fs/tsk_fs.h"))
         .generate()
         .expect("Unable to generate bindings");
 
