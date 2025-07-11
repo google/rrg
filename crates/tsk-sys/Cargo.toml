@@ -6,4 +6,8 @@ edition.workspace = true
 
 [build-dependencies]
 bindgen = "0.71.1"
+cc = { version = "1.2.1" }
+
+# Parallel compilation on MSVC causes permission errors due to file locking.
+[target.'cfg(not(target_env = "msvc"))'.build-dependencies]
 cc = { version = "1.2.1", features = ["parallel"] }
