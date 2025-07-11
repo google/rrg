@@ -10,9 +10,7 @@ use std::process::Command;
 fn main() {
     println!(r"cargo:rerun-if-changed=wrapper.h");
     println!(r"cargo:rerun-if-changed=../../vendor/sleuthkit");
-    let out_path = PathBuf::from(env::var("OUT_DIR").expect("missing $OUT_DIR"))
-        .canonicalize()
-        .expect("Failed to canonicalize OUT_DIR");
+    let out_path = PathBuf::from(env::var("OUT_DIR").expect("missing $OUT_DIR"));
     let sleuthkit_source_dir = std::path::Path::new("../../vendor/sleuthkit");
     let sleuthkit_out_dir = out_path.join("sleuthkit");
 
@@ -73,8 +71,6 @@ fn main() {
     let target = target.trim_end_matches("llvm");
     let bindings = bindgen::Builder::default()
         .clang_args(&["-I", &sleuthkit_out_dir_str])
-        .clang_arg("-I")
-        .clang_arg(sleuthkit_out_dir.join("tsk").to_string_lossy())
         .clang_arg(format!("--target={target}"))
         .header("wrapper.h")
         .derive_debug(true)
