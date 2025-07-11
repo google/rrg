@@ -191,19 +191,16 @@ fn serialize_entry(
 #[cfg(test)]
 mod tests {
 
-    use std::{
-        fs::File,
-        io::{Read, Write},
-        path::Path,
-    };
+    use std::io::{Read, Write};
 
     use tempfile::NamedTempFile;
 
     use super::*;
 
-    fn load_gzipped_test_data(path: &Path) -> NamedTempFile {
-        let file = File::open(path).expect("Failed to load test data");
-        let mut gz = flate2::read::GzDecoder::new(file);
+    const SMOL_NTFS_GZ: &[u8] = include_bytes!("../../../tsk/test_data/smol.ntfs.gz");
+
+    fn load_gzipped_test_data(gzipped_ntfs_bytes: &[u8]) -> NamedTempFile {
+        let mut gz = flate2::read::GzDecoder::new(gzipped_ntfs_bytes);
         let mut ntfs_raw = Vec::new();
         gz.read_to_end(&mut ntfs_raw)
             .expect("Failed to read test data");
@@ -229,7 +226,7 @@ mod tests {
 
     #[test]
     fn handle_empty_dir() {
-        let tempfile = load_gzipped_test_data(Path::new("../tsk/test_data/smol.ntfs.gz"));
+        let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
             raw_fs: tempfile.path().into(),
@@ -248,7 +245,7 @@ mod tests {
 
     #[test]
     fn handle_dir_with_files() {
-        let tempfile = load_gzipped_test_data(Path::new("../tsk/test_data/smol.ntfs.gz"));
+        let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
             raw_fs: tempfile.path().into(),
@@ -269,7 +266,7 @@ mod tests {
 
     #[test]
     fn handle_dir_with_nested_dirs() {
-        let tempfile = load_gzipped_test_data(Path::new("../tsk/test_data/smol.ntfs.gz"));
+        let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
             raw_fs: tempfile.path().into(),
@@ -294,7 +291,7 @@ mod tests {
 
     #[test]
     fn handle_dir_with_circular_symlinks() {
-        let tempfile = load_gzipped_test_data(Path::new("../tsk/test_data/smol.ntfs.gz"));
+        let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
             raw_fs: tempfile.path().into(),
@@ -316,7 +313,7 @@ mod tests {
 
     #[test]
     fn handle_ucs2_encoding() {
-        let tempfile = load_gzipped_test_data(Path::new("../tsk/test_data/smol.ntfs.gz"));
+        let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
             raw_fs: tempfile.path().into(),
@@ -347,7 +344,7 @@ mod tests {
 
     #[test]
     fn handle_file_metadata() {
-        let tempfile = load_gzipped_test_data(Path::new("../tsk/test_data/smol.ntfs.gz"));
+        let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
             raw_fs: tempfile.path().into(),
@@ -370,7 +367,7 @@ mod tests {
 
     #[test]
     fn handle_hardlink_metadata() {
-        let tempfile = load_gzipped_test_data(Path::new("../tsk/test_data/smol.ntfs.gz"));
+        let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
             raw_fs: tempfile.path().into(),
@@ -402,7 +399,8 @@ mod tests {
         let reply_count = session.reply_count();
         assert_eq!(blob_count, reply_count);
 
-        let chunks = session.parcels::<crate::blob::Blob>(crate::Sink::Blob)
+        let chunks = session
+            .parcels::<crate::blob::Blob>(crate::Sink::Blob)
             .map(|blob| blob.as_bytes().to_vec());
 
         let entries = crate::gzchunked::decode(chunks)
