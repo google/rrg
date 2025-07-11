@@ -12,4 +12,5 @@
 // LLVM. Remove this when https://github.com/rust-lang/rust/pull/137306 makes it
 // into the latest stable release.
 #![allow(improper_ctypes)]
+#![allow(clippy::all)]
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
