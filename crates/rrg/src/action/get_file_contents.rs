@@ -18,7 +18,11 @@ pub struct Args {
 }
 
 /// Result of the `get_file_contents` action.
-pub struct Item {
+type Item = Result<OkItem, ErrorItem>;
+
+/// Result of the `get_file_contents` action in case of success.
+#[derive(Debug)]
+struct OkItem {
     /// Path to the file this result corresponds to.
     path: PathBuf,
     /// Byte offset of the file part sent to the blob sink.
@@ -30,7 +34,8 @@ pub struct Item {
 }
 
 /// Result of the `get_file_contents` action in case of an error.
-pub struct ErrorItem {
+#[derive(Debug)]
+struct ErrorItem {
     /// Path to the file that cause the issue.
     path: PathBuf,
     /// Error that occurred when working with the file.
@@ -49,13 +54,13 @@ where
         let mut file = match std::fs::File::open(&path) {
             Ok(file) => file,
             Err(error) => {
-                session.reply(ErrorItem {
+                session.reply(Err(ErrorItem {
                     path,
                     error: FileError {
                         kind: FileErrorKind::Open,
                         cause: error,
                     },
-                })?;
+                }))?;
                 continue
             }
         };
@@ -66,13 +71,13 @@ where
         match file.seek(std::io::SeekFrom::Start(offset)) {
             Ok(_) => (),
             Err(error) => {
-                session.reply(ErrorItem {
+                session.reply(Err(ErrorItem {
                     path,
                     error: FileError {
                         kind: FileErrorKind::Seek,
                         cause: error,
                     },
-                })?;
+                }))?;
                 continue
             }
         }
@@ -84,13 +89,13 @@ where
                 Ok(0) => break,
                 Ok(len_read) => len_read,
                 Err(error) => {
-                    session.reply(ErrorItem {
+                    session.reply(Err(ErrorItem {
                         path,
                         error: FileError {
                             kind: FileErrorKind::Read,
                             cause: error,
                         },
-                    })?;
+                    }))?;
                     break
                 }
             };
@@ -101,12 +106,12 @@ where
             let blob_sha256 = sha2::Sha256::digest(blob.as_bytes()).into();
 
             session.send(crate::Sink::Blob, blob)?;
-            session.reply(Item {
+            session.reply(Ok(OkItem {
                 path: path.clone(),
                 offset,
                 len: len_read,
                 blob_sha256,
-            })?;
+            }))?;
 
             offset += len_read as u64;
             len_left -= len_read;
@@ -152,25 +157,21 @@ impl crate::response::Item for Item {
 
     type Proto = rrg_proto::get_file_contents::Result;
 
-    fn into_proto(self) -> Self::Proto {
-        let mut proto = Self::Proto::default();
-        proto.set_path(self.path.into());
-        proto.set_offset(self.offset);
-        proto.set_length(self.len as u64);
-        proto.set_blob_sha256(self.blob_sha256.into());
-
-        proto
-    }
-}
-
-impl crate::response::Item for ErrorItem {
-
-    type Proto = rrg_proto::get_file_contents::Result;
-
     fn into_proto(self) -> rrg_proto::get_file_contents::Result {
         let mut proto = rrg_proto::get_file_contents::Result::new();
-        proto.set_path(self.path.into());
-        proto.set_error(self.error.to_string());
+
+        match self {
+            Ok(item) => {
+                proto.set_path(item.path.into());
+                proto.set_offset(item.offset);
+                proto.set_length(item.len as u64);
+                proto.set_blob_sha256(item.blob_sha256.into());
+            }
+            Err(item) => {
+                proto.set_path(item.path.into());
+                proto.set_error(item.error.to_string());
+            }
+        }
 
         proto
     }
@@ -255,7 +256,8 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
         assert_eq!(session.parcel_count(crate::Sink::Blob), 0);
 
-        let error_item = session.reply::<ErrorItem>(0);
+        let error_item = session.reply::<Item>(0)
+            .as_ref().unwrap_err();
         assert_eq!(error_item.path, tempdir.path().join("idonotexist"));
         assert_eq!(error_item.error.kind, FileErrorKind::Open);
     }
@@ -302,7 +304,8 @@ mod tests {
 
         assert_eq!(session.reply_count(), 1);
 
-        let item = session.reply::<Item>(0);
+        let item = session.reply::<Item>(0)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 0);
         assert_eq!(item.len, 10);
 
@@ -332,7 +335,8 @@ mod tests {
 
         assert_eq!(session.reply_count(), 1);
 
-        let item = session.reply::<Item>(0);
+        let item = session.reply::<Item>(0)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 5);
         assert_eq!(item.len, 5);
 
@@ -362,7 +366,8 @@ mod tests {
 
         assert_eq!(session.reply_count(), 1);
 
-        let item = session.reply::<Item>(0);
+        let item = session.reply::<Item>(0)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 0);
         assert_eq!(item.len, 5);
 
@@ -388,15 +393,18 @@ mod tests {
 
         assert_eq!(session.reply_count(), 3);
 
-        let item = session.reply::<Item>(0);
+        let item = session.reply::<Item>(0)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 0);
         assert_eq!(item.len, MAX_BLOB_LEN);
 
-        let item = session.reply::<Item>(1);
+        let item = session.reply::<Item>(1)
+            .as_ref().unwrap();
         assert_eq!(item.offset, MAX_BLOB_LEN as u64);
         assert_eq!(item.len, MAX_BLOB_LEN);
 
-        let item = session.reply::<Item>(2);
+        let item = session.reply::<Item>(2)
+            .as_ref().unwrap();
         assert_eq!(item.offset, MAX_BLOB_LEN as u64 * 2);
         assert_eq!(item.len, 1337);
 
@@ -428,11 +436,13 @@ mod tests {
 
         assert_eq!(session.reply_count(), 2);
 
-        let item = session.reply::<Item>(0);
+        let item = session.reply::<Item>(0)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 0xb33f);
         assert_eq!(item.len, MAX_BLOB_LEN);
 
-        let item = session.reply::<Item>(1);
+        let item = session.reply::<Item>(1)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 0xb33f + MAX_BLOB_LEN as u64);
         assert_eq!(item.len, 1337);
     }
@@ -468,6 +478,7 @@ mod tests {
 
         let items_by_path = session
             .replies::<Item>()
+            .map(|item| item.as_ref().unwrap())
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap::<_, _>>();
 
@@ -522,10 +533,45 @@ mod tests {
         handle(&mut session, args)
             .unwrap();
 
-        // TODO(@panhania): There is no way to inspect reply type of the fake
-        // session and do per-reply cast so for now we only assert on the number
-        // of replies.
         assert_eq!(session.reply_count(), 3);
+
+        let items_by_path = session
+            .replies::<Item>()
+            .map(|item| {
+                let path = match item {
+                    Ok(item) => &item.path,
+                    Err(item) => &item.path,
+                };
+
+                (path.clone(), item)
+            })
+            .collect::<std::collections::HashMap::<_, _>>();
+
         assert_eq!(session.parcel_count(crate::Sink::Blob), 2);
+
+        let blobs_by_sha256 = session
+            .parcels::<crate::blob::Blob>(crate::Sink::Blob)
+            .map(|blob| {
+                use sha2::Digest as _;
+                (sha2::Sha256::digest(blob.as_bytes()).into(), blob)
+            })
+            .collect::<std::collections::HashMap::<[u8; 32], _>>();
+
+
+        let item_foo = items_by_path[&tempdir.join("foo")]
+            .as_ref().unwrap();
+        assert_eq!(item_foo.offset, 0);
+        assert_eq!(item_foo.len, 3);
+        assert_eq!(blobs_by_sha256[&item_foo.blob_sha256].as_bytes(), b"012");
+
+        let item_bar = items_by_path[&tempdir.join("bar")]
+            .as_ref().unwrap();
+        assert_eq!(item_bar.offset, 0);
+        assert_eq!(item_bar.len, 3);
+        assert_eq!(blobs_by_sha256[&item_bar.blob_sha256].as_bytes(), b"345");
+
+        let item_error = items_by_path[&tempdir.join("idonotexist")]
+            .as_ref().unwrap_err();
+        assert_eq!(item_error.error.kind, FileErrorKind::Open);
     }
 }
