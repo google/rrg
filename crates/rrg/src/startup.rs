@@ -14,6 +14,7 @@ pub struct Startup {
     /// Time at which the agent was started.
     pub agent_started: std::time::SystemTime,
     // TOOD(@panhania): Add support for the `os_booted` field.
+    pub os_kind: ospect::os::Kind,
 }
 
 impl Startup {
@@ -31,6 +32,7 @@ impl Startup {
             path,
             args: std::env::args().collect(),
             agent_started: std::time::SystemTime::now(),
+            os_kind: ospect::os::kind(),
         }
     }
 }
@@ -105,6 +107,7 @@ impl Into<rrg_proto::startup::Startup> for Startup {
         }
         proto.set_args(self.args.into());
         proto.set_agent_startup_time(into_timestamp(self.agent_started));
+        proto.set_os_type(self.os_kind.into());
 
         proto
     }
