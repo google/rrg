@@ -3,11 +3,24 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use log::info;
+use log::{error, info};
 
 fn main() {
     let args = rrg::args::from_env_args();
     rrg::log::init(&args);
+
+    // TODO: https://github.com/rust-lang/rust/issues/92649
+    //
+    // Refactor once `panic_update_hook` is stable.
+
+    // Because Fleetspeak does not necessarily capture RRG's standard error, it
+    // might be difficult to find reason behind a crash. Thus, we extend the
+    // standard panic hook to also log the panic message.
+    let panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        error!("thread panicked: {info}");
+        panic_hook(info)
+    }));
 
     info!("sending Fleetspeak startup information");
     fleetspeak::startup(env!("CARGO_PKG_VERSION"));
