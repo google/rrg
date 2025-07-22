@@ -133,7 +133,7 @@ where
     let (tx, rx) = std::sync::mpsc::sync_channel(0);
     let tsk_thread = std::thread::spawn(move || -> tsk::TskResult<()> {
         let image = tsk::TskImage::open(&raw_fs)?;
-        let mut fs = image.open_fs()?;
+        let mut fs = tsk::TskFs::open(&image)?;
         let dir = fs.open_dir(&embedded_path)?;
         let root_bytes = embedded_path.as_os_str().as_encoded_bytes();
         fs.walk_dir(dir.addr(), |file, path| {
@@ -579,5 +579,4 @@ mod tests {
             }
         );
     }
-
 }

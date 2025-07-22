@@ -118,16 +118,6 @@ impl TskImage {
         };
         get_tsk_result(tsk_img_result).map(|inner| Self { inner })
     }
-
-    pub fn open_fs<'a>(&'a self) -> TskResult<TskFs<'a>> {
-        let tsk_fs_result = unsafe {
-            tsk_sys::tsk_fs_open_img(self.inner.as_ptr(), 0, TSK_FS_TYPE_ENUM_TSK_FS_TYPE_DETECT)
-        };
-        get_tsk_result(tsk_fs_result).map(|inner| TskFs {
-            inner,
-            _marker: PhantomData,
-        })
-    }
 }
 
 impl Drop for TskImage {
@@ -149,6 +139,16 @@ pub enum WalkDirCallbackResult {
 }
 
 impl TskFs<'_> {
+    pub fn open(image: &TskImage) -> TskResult<Self> {
+        let tsk_fs_result = unsafe {
+            tsk_sys::tsk_fs_open_img(image.inner.as_ptr(), 0, TSK_FS_TYPE_ENUM_TSK_FS_TYPE_DETECT)
+        };
+        get_tsk_result(tsk_fs_result).map(|inner| TskFs {
+            inner,
+            _marker: PhantomData,
+        })
+    }
+
     pub fn root_inum(&self) -> u64 {
         unsafe { self.inner.as_ref() }.root_inum
     }
@@ -463,7 +463,7 @@ mod test {
             .write_all(&ntfs_raw)
             .expect("Failed to write tempfile");
         let image = TskImage::open(tempfile.path()).expect("Failed to open ntfs image");
-        let fs = image.open_fs().expect("Failed to open NTFS FS");
+        let fs = TskFs::open(&image).expect("Failed to open NTFS FS");
         assert_eq!(fs.get_fs_type().unwrap(), "ntfs");
         let root_f = fs
             .open_file("/".as_ref())
@@ -525,7 +525,7 @@ mod test {
             .write_all(&ntfs_raw)
             .expect("Failed to write tempfile");
         let image = TskImage::open(tempfile.path()).expect("Failed to open ntfs image");
-        let mut fs = image.open_fs().expect("Failed to open NTFS FS");
+        let mut fs = TskFs::open(&image).expect("Failed to open NTFS FS");
         let mut paths = std::collections::HashSet::new();
         fs.walk_dir(fs.root_inum(), |file, path| {
             let mut full_path = String::from_utf8_lossy(path).to_string();
