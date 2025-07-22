@@ -51,7 +51,7 @@ impl TskPath {
 
     #[cfg(target_os = "windows")]
     fn from_path(path: &Path) -> Self {
-        let path: Vec<u8> = path.to_string_lossy().as_bytes().to_vec();
+        let mut path: Vec<u8> = path.to_string_lossy().as_bytes().to_vec();
         path.push(0);
         Self { path }
     }
