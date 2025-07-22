@@ -1,4 +1,3 @@
-use core::panic;
 // Copyright 2025 Google LLC
 //
 // Use of this source code is governed by an MIT-style license that can be found
@@ -13,10 +12,11 @@ use tsk_sys::{
     TSK_FS_TYPE_ENUM_TSK_FS_TYPE_DETECT, tsk_fs_dir_open, tsk_fs_dir_open_meta, tsk_fs_file_open,
 };
 
-pub fn get_tsk_version() -> String {
+/// Returns the version reported by the underlying sleuthkit library.
+pub fn version() -> String {
     // SAFETY: TSK returns a pointer to a static string.
     let cstr = unsafe { CStr::from_ptr(tsk_sys::tsk_version_get_str()) };
-    String::from_utf8_lossy(cstr.to_bytes()).to_string()
+    String::from_utf8_lossy(cstr.to_bytes()).into_owned()
 }
 
 #[derive(Debug)]
@@ -51,13 +51,8 @@ impl TskPath {
 
     #[cfg(target_os = "windows")]
     fn from_path(path: &Path) -> Self {
-        let path: Vec<u8> = path
-            .to_string_lossy()
-            .as_bytes()
-            .into_iter()
-            .copied()
-            .chain(Some(0))
-            .collect();
+        let path: Vec<u8> = path.to_string_lossy().as_bytes().to_vec();
+        path.push(0);
         Self { path }
     }
 
@@ -66,7 +61,7 @@ impl TskPath {
     }
 }
 
-fn try_get_tsk_error() -> TskError {
+fn last_tsk_error() -> TskError {
     let message_ptr = unsafe { tsk_sys::tsk_error_get() };
     if message_ptr.is_null() {
         return TskError {
@@ -80,7 +75,7 @@ fn try_get_tsk_error() -> TskError {
 }
 
 fn get_tsk_result<T>(result: *mut T) -> Result<NonNull<T>, TskError> {
-    NonNull::new(result).ok_or_else(try_get_tsk_error)
+    NonNull::new(result).ok_or_else(last_tsk_error)
 }
 
 pub struct TskImage {
@@ -89,6 +84,8 @@ pub struct TskImage {
 
 impl TskImage {
     pub fn open(path: &Path) -> TskResult<Self> {
+        // TSK takes in host paths as UTF-16 or UTF-8 depending on the platform.
+        // See TSK_TCHAR in https://www.sleuthkit.org/sleuthkit/docs/api-docs/4.5/basepage.html
         let path = {
             #[cfg(target_family = "unix")]
             {
@@ -232,7 +229,11 @@ impl TskFs<'_> {
                 (&refcell) as *const _ as *mut c_void,
             )
         };
-        (result == 0).then_some(()).ok_or_else(try_get_tsk_error)
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(last_tsk_error())
+        }
     }
 }
 
@@ -448,7 +449,7 @@ mod test {
     const SMOL_NTFS_GZ: &[u8] = include_bytes!("../test_data/smol.ntfs.gz");
     #[test]
     fn test_get_tsk_version() {
-        assert_eq!(get_tsk_version(), "4.13.0");
+        assert_eq!(version(), "4.13.0");
     }
 
     #[test]
