@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use ospect::fs::RawDeviceMount;
+use ospect::fs::Mount;
 
 use crate::session::Error;
 
@@ -26,6 +26,70 @@ pub struct Item {
     blob_sha256: [u8; 32],
     // Number of entries in the batch sent to the blob sink.
     entry_count: usize,
+}
+
+/// Information about a mounted raw filesystem.
+#[derive(Debug, PartialEq, Eq)]
+pub struct RawDeviceMount {
+    /// Path to the raw filesystem image.
+    /// e.g. /dev/sda1, /dev/mapper/root, /dev/loop0.
+    pub image_path: std::path::PathBuf,
+    /// Path to which the raw filesystem is mounted.
+    pub mountpoint: std::path::PathBuf,
+}
+
+/// Returns the mount that contains the file at the given path.
+pub fn get_mount(mounts: &[Mount], path: &Path) -> std::io::Result<Mount> {
+    // Note: std::path::absolute does not follow symlinks like std::fs::canonicalize does.
+    // It also returns C:\-style paths on windows rather than \\?\C:\-style paths.
+    let path: PathBuf = std::path::absolute(path)?;
+    mounts
+        .iter()
+        .cloned()
+        .filter_map(|mut m| {
+            std::path::absolute(&m.path).ok().map(move |abs_path| {
+                m.path = abs_path;
+                m
+            })
+        })
+        .filter(|m| path.starts_with(&m.path))
+        // Filter out dummy and remote filesystems whose names may start with /.
+        .max_by_key(|m| m.path.as_os_str().len())
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Failed to locate mount for {path:?}"),
+            )
+        })
+}
+
+pub fn get_raw_device(mounts: &[Mount], path: &Path) -> std::io::Result<RawDeviceMount> {
+    let mount = get_mount(mounts, path)?;
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Comprehensive list of raw filesystem types supported by RRG.
+        const SUPPORTED_FS_TYPES: &[&str] = &["ext2", "ext3", "ext4", "vfat", "ntfs", "fuseblk"];
+        if !SUPPORTED_FS_TYPES.contains(&mount.fs_type.as_ref()) {
+            return Err(std::io::Error::other(format!(
+                "Unsupported filesystem type: {}",
+                mount.fs_type
+            )));
+        }
+        Ok(RawDeviceMount {
+            image_path: mount.name.into(),
+            mountpoint: mount.path.to_path_buf(),
+        })
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Ok(RawDeviceMount {
+            // The "name" of the mount is the volume GUID path: \\?\Volume{...}\
+            // Opening \\?\Volume{...}\ opens the directory.
+            // Opening \\?\Volume{...} opens the raw bytes of the volume.
+            image_path: mount.name.trim_end_matches('\\').into(),
+            mountpoint: mount.path.to_path_buf(),
+        })
+    }
 }
 
 /// Given an absolute path and the raw device that contains it, computes the path
@@ -60,8 +124,7 @@ where
         let mounts = ospect::fs::mounts()
             .and_then(|iter| iter.collect::<Result<Vec<_>, _>>())
             .map_err(crate::session::Error::action)?;
-        let mount = ospect::fs::get_raw_device(&mounts, &args.root)
-            .map_err(crate::session::Error::action)?;
+        let mount = get_raw_device(&mounts, &args.root).map_err(crate::session::Error::action)?;
         embedded_path = get_embedded_path(&mount, &args.root);
         // The raw fs path may be e.g. /dev/sda1 on Linux or \\?\C: on Windows.
         raw_fs = mount.image_path;
@@ -209,6 +272,46 @@ mod tests {
             .write_all(&ntfs_raw)
             .expect("Failed to write tempfile");
         tempfile
+    }
+
+    fn get_sample_mounts() -> Vec<Mount> {
+        vec![
+            Mount {
+                name: "sysfs".to_string(),
+                path: "/sys".parse().unwrap(),
+                fs_type: "sysfs".to_string(),
+            },
+            Mount {
+                name: "proc".to_string(),
+                path: "/proc".parse().unwrap(),
+                fs_type: "proc".to_string(),
+            },
+            Mount {
+                name: "/dev/mapper/root".to_string(),
+                path: "/".parse().unwrap(),
+                fs_type: "ext4".to_string(),
+            },
+            Mount {
+                name: "tmpfs".to_string(),
+                path: "/dev/shm".parse().unwrap(),
+                fs_type: "tmpfs".to_string(),
+            },
+            Mount {
+                name: "/dev/sda2".to_string(),
+                path: "/boot".parse().unwrap(),
+                fs_type: "ext2".to_string(),
+            },
+            Mount {
+                name: "/dev/sda1".to_string(),
+                path: "/boot/efi".parse().unwrap(),
+                fs_type: "vfat".to_string(),
+            },
+            Mount {
+                name: "/etc/auto.home.local".to_string(),
+                path: "/home".parse().unwrap(),
+                fs_type: "autofs".to_string(),
+            },
+        ]
     }
 
     #[test]
@@ -420,4 +523,61 @@ mod tests {
     fn str_path(entry: &rrg_proto::get_filesystem_timeline::Entry) -> &str {
         std::str::from_utf8(entry.path()).unwrap()
     }
+
+    #[test]
+    fn get_mount_empty() {
+        assert_eq!(
+            get_mount(&[], "/asdf".as_ref()).err().unwrap().kind(),
+            std::io::ErrorKind::NotFound
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn get_mount_linux() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let mounts = get_sample_mounts();
+        assert_eq!(&get_mount(&mounts, "/".as_ref()).unwrap(), &mounts[2]);
+        let root_path = "/foo/bar/baz".as_ref();
+        assert_eq!(&get_mount(&mounts, root_path).unwrap(), &mounts[2]);
+        let home_path = "/home/foo/bar/baz".as_ref();
+        assert_eq!(&get_mount(&mounts, home_path).unwrap(), &mounts[6]);
+        assert_eq!(&get_mount(&mounts, "/boot".as_ref()).unwrap(), &mounts[4]);
+        let boot_path = std::path::PathBuf::from(OsStr::from_bytes(b"/boot/efi\xff\xff\xff"));
+        assert_eq!(&get_mount(&mounts, &boot_path).unwrap(), &mounts[4]);
+        let efi_path = "/boot/efi/EFI".as_ref();
+        assert_eq!(&get_mount(&mounts, efi_path).unwrap(), &mounts[5]);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn get_raw_device_linux() {
+        use std::os::unix::ffi::OsStrExt;
+        let mounts = get_sample_mounts();
+        assert!(
+            get_raw_device(&mounts, "/home/foo/bar/baz".as_ref())
+                .err()
+                .unwrap()
+                .kind()
+                == std::io::ErrorKind::Other
+        );
+        let boot_path = std::path::PathBuf::from(OsStr::from_bytes(b"/boot/\xff\xff"));
+        assert_eq!(
+            get_raw_device(&mounts, &boot_path).unwrap(),
+            RawDeviceMount {
+                image_path: std::path::PathBuf::from("/dev/sda2"),
+                mountpoint: std::path::PathBuf::from("/boot"),
+            }
+        );
+        let root_path = "/".as_ref();
+        assert_eq!(
+            get_raw_device(&mounts, root_path).unwrap(),
+            RawDeviceMount {
+                image_path: std::path::PathBuf::from("/dev/mapper/root"),
+                mountpoint: std::path::PathBuf::from("/"),
+            }
+        );
+    }
+
 }

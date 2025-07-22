@@ -10,59 +10,60 @@ use std::process::Command;
 fn main() {
     println!(r"cargo:rerun-if-changed=wrapper.h");
     println!(r"cargo:rerun-if-changed=../../vendor/sleuthkit");
-    let out_path = PathBuf::from(env::var("OUT_DIR").expect("missing $OUT_DIR"));
-    let sleuthkit_source_dir = std::path::Path::new("../../vendor/sleuthkit");
-    let sleuthkit_out_dir = out_path.join("sleuthkit");
+    let out_path = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR was not set"));
+    let sleuthkit_source_path = std::path::Path::new("../../vendor/sleuthkit");
+    let sleuthkit_out_path = out_path.join("sleuthkit");
 
     let target = env::var("TARGET").expect("TARGET was not set");
 
-    // Sleuthkit relies on autotools, which create a configure script and other
+    // sleuthkit relies on autotools, which create a configure script and other
     // files in the sleuthkit source directory.  This isn't kosher for Rust
     // build scripts, which are only supposed to mutate the out directory, so
     // this copies the entire sleuthkit source into the out directory first.
     Command::new("cp")
         .arg("-r")
-        .arg(sleuthkit_source_dir)
-        .arg(&sleuthkit_out_dir)
+        .arg(sleuthkit_source_path)
+        .arg(&sleuthkit_out_path)
         .status()
-        .expect("Failed to copy sleuthkit source");
+        .expect("failed to copy sleuthkit source");
 
-    let dst = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    let build = dst.join("build");
+    let build_path = out_path.join("build");
 
     let mut cfg = cc::Build::new();
     let mut cfg_cc = cc::Build::new();
 
     // Run autotools. Needed for some generated headers.
     let cc = cfg.get_compiler();
-    let cc_path = cc.path().to_str().unwrap();
+    let cc_path_str = cc.path().to_str().unwrap();
     let cpp = cfg_cc.get_compiler();
-    let cpp_path = cpp.path().to_str().unwrap();
-    let host = cc_path
-        .strip_suffix("-cc")
-        .or_else(|| cc_path.strip_suffix("-gcc"))
-        .or_else(|| cc_path.strip_suffix("-gcc-posix"));
+    let cpp_path_str = cpp.path().to_str().unwrap();
     if cfg!(target_env = "msvc") {
-        cfg_cc.flag("/std:c++17").define("NOMINMAX", None);
+        cfg_cc.flag("/std:c++17");
+        // Disables min/max macros brought in by windows.h. Sleuthkit relies on std::min/max.
+        cfg_cc.define("NOMINMAX", None);
     } else {
+        let host = cc_path_str
+            .strip_suffix("-cc")
+            .or_else(|| cc_path_str.strip_suffix("-gcc"))
+            .or_else(|| cc_path_str.strip_suffix("-gcc-posix"));
         cfg_cc.flag("-std=c++17");
         Command::new("autoreconf")
             .args(["--force", "--install"])
-            .current_dir(&sleuthkit_out_dir)
+            .current_dir(&sleuthkit_out_path)
             .status()
             .expect("autoreconf failed");
         Command::new("./configure")
             .args(host.map(|h| format!("--host={h}")))
-            .env("CC", cc_path)
-            .env("CXX", cpp_path)
+            .env("CC", cc_path_str)
+            .env("CXX", cpp_path_str)
             .envs(cfg.get_compiler().env().iter().cloned())
             .envs(cfg_cc.get_compiler().env().iter().cloned())
-            .current_dir(&sleuthkit_out_dir)
+            .current_dir(&sleuthkit_out_path)
             .status()
             .expect("configure failed");
     }
 
-    let sleuthkit_out_dir_str = sleuthkit_out_dir
+    let sleuthkit_out_path_str = sleuthkit_out_path
         .clone()
         .into_os_string()
         .into_string()
@@ -70,7 +71,7 @@ fn main() {
 
     let target = target.trim_end_matches("llvm");
     let bindings = bindgen::Builder::default()
-        .clang_args(&["-I", &sleuthkit_out_dir_str])
+        .clang_args(&["-I", &sleuthkit_out_path_str])
         .clang_arg(format!("--target={target}"))
         .header("wrapper.h")
         .derive_debug(true)
@@ -134,11 +135,11 @@ fn main() {
         "tsk/vs/mm_types.c",
         "tsk/vs/sun.c",
     ];
-    cfg.out_dir(&build)
+    cfg.out_dir(&build_path)
         .cargo_warnings(false)
-        .include(&sleuthkit_out_dir)
-        .include(sleuthkit_out_dir.join("tsk"))
-        .files(c_sources.into_iter().map(|f| sleuthkit_out_dir.join(f)))
+        .include(&sleuthkit_out_path)
+        .include(sleuthkit_out_path.join("tsk"))
+        .files(c_sources.into_iter().map(|f| sleuthkit_out_path.join(f)))
         .compile("tsk");
     // Separate build for C++ files, get the list of files with:
     // make --dry-run VERBOSE=1 tsk/libtsk.la | rg -o 'tsk/[^ ]+\.cpp\b'
@@ -251,10 +252,10 @@ fn main() {
     ];
     cfg_cc
         .cargo_warnings(false)
-        .out_dir(&build)
-        .include(&sleuthkit_out_dir)
-        .include(sleuthkit_out_dir.join("tsk"))
-        .files(cpp_sources.into_iter().map(|f| sleuthkit_out_dir.join(f)))
+        .out_dir(&build_path)
+        .include(&sleuthkit_out_path)
+        .include(sleuthkit_out_path.join("tsk"))
+        .files(cpp_sources.into_iter().map(|f| sleuthkit_out_path.join(f)))
         .cpp(true)
         .compile("tsk_cc");
 }
