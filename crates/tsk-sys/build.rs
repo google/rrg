@@ -27,24 +27,24 @@ fn main() {
         .status()
         .expect("failed to copy sleuthkit source");
 
-    let mut cfg = cc::Build::new();
     let mut cfg_cc = cc::Build::new();
+    let mut cfg_cxx = cc::Build::new();
 
     // Run autotools. Needed for some generated headers.
-    let cc = cfg.get_compiler();
+    let cc = cfg_cc.get_compiler();
     let cc_path_str = cc.path().to_str().unwrap();
-    let cpp = cfg_cc.get_compiler();
+    let cpp = cfg_cxx.get_compiler();
     let cpp_path_str = cpp.path().to_str().unwrap();
     if cfg!(target_env = "msvc") {
-        cfg_cc.flag("/std:c++17");
+        cfg_cxx.flag("/std:c++17");
         // Disables min/max macros brought in by windows.h. Sleuthkit relies on std::min/max.
-        cfg_cc.define("NOMINMAX", None);
+        cfg_cxx.define("NOMINMAX", None);
     } else {
         let host = cc_path_str
             .strip_suffix("-cc")
             .or_else(|| cc_path_str.strip_suffix("-gcc"))
             .or_else(|| cc_path_str.strip_suffix("-gcc-posix"));
-        cfg_cc.flag("-std=c++17");
+        cfg_cxx.flag("-std=c++17");
         Command::new("autoreconf")
             .args(["--force", "--install"])
             .current_dir(&sleuthkit_out_path)
@@ -54,8 +54,8 @@ fn main() {
             .args(host.map(|h| format!("--host={h}")))
             .env("CC", cc_path_str)
             .env("CXX", cpp_path_str)
-            .envs(cfg.get_compiler().env().iter().cloned())
             .envs(cfg_cc.get_compiler().env().iter().cloned())
+            .envs(cfg_cxx.get_compiler().env().iter().cloned())
             .current_dir(&sleuthkit_out_path)
             .status()
             .expect("configure failed");
@@ -133,7 +133,7 @@ fn main() {
         "tsk/vs/mm_types.c",
         "tsk/vs/sun.c",
     ];
-    cfg.out_dir(out_path.join("build"))
+    cfg_cc.out_dir(out_path.join("build"))
         .cargo_warnings(false)
         .include(&sleuthkit_out_path)
         .include(sleuthkit_out_path.join("tsk"))
@@ -248,7 +248,7 @@ fn main() {
         "tsk/util/crypto.cpp",
         "tsk/util/file_system_utils.cpp",
     ];
-    cfg_cc
+    cfg_cxx
         .cargo_warnings(false)
         .out_dir(out_path.join("build"))
         .include(&sleuthkit_out_path)
