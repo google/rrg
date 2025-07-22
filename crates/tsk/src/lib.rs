@@ -119,7 +119,7 @@ impl TskImage {
         get_tsk_result(tsk_img_result).map(|inner| Self { inner })
     }
 
-    pub fn open_fs(&self) -> TskResult<TskFs> {
+    pub fn open_fs<'a>(&'a self) -> TskResult<TskFs<'a>> {
         let tsk_fs_result = unsafe {
             tsk_sys::tsk_fs_open_img(self.inner.as_ptr(), 0, TSK_FS_TYPE_ENUM_TSK_FS_TYPE_DETECT)
         };
