@@ -67,7 +67,7 @@ fn main() {
         .clone()
         .into_os_string()
         .into_string()
-        .expect("Failed to convert out directory path to a string");
+        .expect("failed to convert out directory path to a string");
 
     let target = target.trim_end_matches("llvm");
     let bindings = bindgen::Builder::default()
@@ -82,11 +82,11 @@ fn main() {
         .allowlist_item("tsk_img_.*")
         .allowlist_item("TSK_IMG_.*")
         .generate()
-        .expect("Unable to generate bindings");
+        .expect("unable to generate bindings");
 
     bindings
         .write_to_file(out_path.join("bindings.rs"))
-        .expect("Couldn't write bindings!");
+        .expect("couldn't write bindings!");
 
     // Build all C sources. In the submodule, get the list of files with:
     // make --dry-run VERBOSE=1 tsk/libtsk.la | rg -o 'tsk/[^ ]+\.c\b'

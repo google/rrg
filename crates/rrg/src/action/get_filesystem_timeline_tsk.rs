@@ -178,7 +178,7 @@ where
 
     tsk_thread
         .join()
-        .expect("TSK file walker thread panicked")
+        .expect("tsk file walker thread panicked")
         .map_err(Error::action)?;
     // Check this after the thread joined.
     encode_and_send_result?;
@@ -266,11 +266,11 @@ mod tests {
         let mut gz = flate2::read::GzDecoder::new(gzipped_ntfs_bytes);
         let mut ntfs_raw = Vec::new();
         gz.read_to_end(&mut ntfs_raw)
-            .expect("Failed to read test data");
-        let mut tempfile = NamedTempFile::new().expect("Failed to open tempfile");
+            .expect("failed to read test data");
+        let mut tempfile = NamedTempFile::new().expect("failed to open tempfile");
         tempfile
             .write_all(&ntfs_raw)
-            .expect("Failed to write tempfile");
+            .expect("failed to write tempfile");
         tempfile
     }
 
