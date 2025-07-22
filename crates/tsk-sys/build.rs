@@ -17,9 +17,9 @@ fn main() {
     let target = env::var("TARGET").expect("TARGET was not set");
 
     // sleuthkit relies on autotools, which create a configure script and other
-    // files in the sleuthkit source directory.  This isn't kosher for Rust
-    // build scripts, which are only supposed to mutate the out directory, so
-    // this copies the entire sleuthkit source into the out directory first.
+    // files in the sleuthkit source directory. This isn't kosher for Rust build
+    // scripts, which are only supposed to mutate the out directory, so this
+    // copies the entire sleuthkit source into the out directory first.
     Command::new("cp")
         .arg("-r")
         .arg(sleuthkit_source_path)
