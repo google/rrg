@@ -27,8 +27,6 @@ fn main() {
         .status()
         .expect("failed to copy sleuthkit source");
 
-    let build_path = out_path.join("build");
-
     let mut cfg = cc::Build::new();
     let mut cfg_cc = cc::Build::new();
 
@@ -135,7 +133,7 @@ fn main() {
         "tsk/vs/mm_types.c",
         "tsk/vs/sun.c",
     ];
-    cfg.out_dir(&build_path)
+    cfg.out_dir(out_path.join("build"))
         .cargo_warnings(false)
         .include(&sleuthkit_out_path)
         .include(sleuthkit_out_path.join("tsk"))
@@ -252,7 +250,7 @@ fn main() {
     ];
     cfg_cc
         .cargo_warnings(false)
-        .out_dir(&build_path)
+        .out_dir(out_path.join("build"))
         .include(&sleuthkit_out_path)
         .include(sleuthkit_out_path.join("tsk"))
         .files(cpp_sources.into_iter().map(|f| sleuthkit_out_path.join(f)))
