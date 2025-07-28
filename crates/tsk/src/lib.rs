@@ -20,19 +20,19 @@ pub fn version() -> String {
 }
 
 #[derive(Debug)]
-pub struct TskError {
+pub struct Error {
     message: String,
 }
 
-impl std::fmt::Display for TskError {
+impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.message)
     }
 }
 
-impl std::error::Error for TskError {}
+impl std::error::Error for Error {}
 
-pub type TskResult<T> = Result<T, TskError>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Path suitable for passing to libTSK functions that deal with paths embedded
 /// inside filesystem images.
@@ -61,20 +61,20 @@ impl TskPath {
     }
 }
 
-fn last_tsk_error() -> TskError {
+fn last_tsk_error() -> Error {
     let message_ptr = unsafe { tsk_sys::tsk_error_get() };
     if message_ptr.is_null() {
-        return TskError {
+        return Error {
             message: String::from("unknown"),
         };
     }
     let message = unsafe { CStr::from_ptr(message_ptr) }
         .to_string_lossy()
         .to_string();
-    TskError { message }
+    Error { message }
 }
 
-fn get_tsk_result<T>(result: *mut T) -> Result<NonNull<T>, TskError> {
+fn get_tsk_result<T>(result: *mut T) -> Result<NonNull<T>> {
     NonNull::new(result).ok_or_else(last_tsk_error)
 }
 
@@ -83,7 +83,7 @@ pub struct TskImage {
 }
 
 impl TskImage {
-    pub fn open(path: &Path) -> TskResult<Self> {
+    pub fn open(path: &Path) -> Result<Self> {
         // TSK takes in host paths as UTF-16 or UTF-8 depending on the platform.
         // See TSK_TCHAR in https://www.sleuthkit.org/sleuthkit/docs/api-docs/4.5/basepage.html
         let path = {
@@ -128,7 +128,7 @@ impl Drop for TskImage {
 
 pub struct TskFs<'a> {
     pub(crate) inner: NonNull<tsk_sys::TSK_FS_INFO>,
-    _marker: PhantomData<&'a tsk_sys::TSK_FS_INFO>,
+    marker: PhantomData<&'a tsk_sys::TSK_FS_INFO>,
 }
 
 pub enum WalkDirCallbackResult {
@@ -138,14 +138,14 @@ pub enum WalkDirCallbackResult {
     Stop,
 }
 
-impl TskFs<'_> {
-    pub fn open(image: &TskImage) -> TskResult<Self> {
+impl<'image> TskFs<'image> {
+    pub fn open(image: &'image TskImage) -> Result<Self> {
         let tsk_fs_result = unsafe {
             tsk_sys::tsk_fs_open_img(image.inner.as_ptr(), 0, TSK_FS_TYPE_ENUM_TSK_FS_TYPE_DETECT)
         };
         get_tsk_result(tsk_fs_result).map(|inner| TskFs {
             inner,
-            _marker: PhantomData,
+            marker: PhantomData,
         })
     }
 
@@ -153,51 +153,57 @@ impl TskFs<'_> {
         unsafe { self.inner.as_ref() }.root_inum
     }
     /// Returns the string name of a file system type id, e.g. "ntfs".
-    pub fn get_fs_type(&self) -> TskResult<String> {
+    pub fn get_fs_type(&self) -> Result<String> {
         let ty = unsafe { self.inner.as_ref().ftype };
         let name_ptr = unsafe { tsk_sys::tsk_fs_type_toname(ty) };
-        get_tsk_result(name_ptr as _)
+        get_tsk_result(name_ptr as *mut c_char)
             .map(|non_null| unsafe { CStr::from_ptr(non_null.as_ptr()).to_bytes() })
             .map(|bytes| String::from_utf8_lossy(bytes).to_string())
     }
 
     /// Opens a directory given its path.
-    pub fn open_dir(&self, path: &Path) -> TskResult<TskFsDir> {
+    pub fn open_dir(&self, path: &Path) -> Result<TskFsDir> {
         let tsk_path = TskPath::from_path(path);
         let result = unsafe { tsk_fs_dir_open(self.inner.as_ptr(), tsk_path.as_ptr()) };
-        get_tsk_result(result as _).map(TskFsDir::new)
+        get_tsk_result(result).map(TskFsDir::new)
     }
 
     /// Opens a file given its metadata address.
-    pub fn open_dir_meta(&self, meta: u64) -> TskResult<TskFsDir> {
+    pub fn open_dir_meta(&self, meta: u64) -> Result<TskFsDir> {
         let result = unsafe { tsk_fs_dir_open_meta(self.inner.as_ptr(), meta) };
-        get_tsk_result(result as _).map(TskFsDir::new)
+        get_tsk_result(result).map(TskFsDir::new)
     }
 
     /// Opens a file given its path.
-    pub fn open_file(&self, path: &Path) -> TskResult<TskFsFile> {
+    pub fn open_file(&self, path: &Path) -> Result<TskFsFile> {
         let tsk_path = TskPath::from_path(path);
         let result =
             unsafe { tsk_fs_file_open(self.inner.as_ptr(), null_mut(), tsk_path.as_ptr()) };
-        get_tsk_result(result as _).map(TskFsFile::new)
+        get_tsk_result(result).map(TskFsFile::new)
     }
 
     /// Recursively walks the directory with the given metadata address. Calls
-    /// `callback` for each file and directory.
+    /// `callback` for each file and directory with two arguments: a reference
+    /// to the file and the full path to the file.
     pub fn walk_dir(
         &mut self,
         dir_addr: u64,
         mut callback: impl FnMut(TskFsFile, &[u8]) -> WalkDirCallbackResult,
-    ) -> TskResult<()> {
+    ) -> Result<()> {
         // References to trait objects are "fat" and cannot be passed as
         // raw pointers.
         #[allow(clippy::complexity)]
         let refcell: RefCell<&mut dyn FnMut(TskFsFile, &[u8]) -> WalkDirCallbackResult> =
             RefCell::new(&mut callback);
 
+        // See https://www.sleuthkit.org/sleuthkit/docs/api-docs/4.5/tsk__fs_8h.html#ad381d6cb96ae78351e88b7aa54d81008 for the type of this callback function.
         unsafe extern "C" fn c_callback(
+            // Pointer to the current file in the directory.
             file: *mut tsk_sys::TSK_FS_FILE,
+            // Path of the file.
             path: *const c_char,
+            // Pointer that was originally passed by caller to tsk_fs_dir_walk.
+            // This is a pointer to the refcell above.
             ptr: *mut c_void,
         ) -> tsk_sys::TSK_WALK_RET_ENUM {
             let file =
@@ -217,7 +223,6 @@ impl TskFs<'_> {
         }
 
         let flags = tsk_sys::TSK_FS_DIR_WALK_FLAG_ENUM_TSK_FS_DIR_WALK_FLAG_RECURSE
-            | tsk_sys::TSK_FS_DIR_WALK_FLAG_ENUM_TSK_FS_DIR_WALK_FLAG_UNALLOC
             | tsk_sys::TSK_FS_DIR_WALK_FLAG_ENUM_TSK_FS_DIR_WALK_FLAG_ALLOC;
         // Returns 1 on error and 0 on success.
         let result = unsafe {
