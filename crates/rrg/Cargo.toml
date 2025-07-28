@@ -15,7 +15,6 @@ default = [
     "action-get_file_contents",
     "action-grep_file_contents",
     "action-get_filesystem_timeline",
-    "action-get_filesystem_timeline_tsk",
     "action-get_tcp_response",
     "action-list_connections",
     "action-list_interfaces",
