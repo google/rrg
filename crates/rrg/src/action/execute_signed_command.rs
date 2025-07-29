@@ -76,6 +76,23 @@ where
     #[cfg(feature = "action-execute_signed_command-preverified")]
     {
         #[derive(Debug)]
+        struct InvalidPreverifiedCommandsError(protobuf::Error);
+
+        impl std::fmt::Display for InvalidPreverifiedCommandsError {
+
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "invalid preverified commands: {}", self.0)
+            }
+        }
+
+        impl std::error::Error for InvalidPreverifiedCommandsError {
+
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(&self.0)
+            }
+        }
+
+        #[derive(Debug)]
         struct PreverifiedCommandError;
 
         impl std::fmt::Display for PreverifiedCommandError {
@@ -92,7 +109,7 @@ where
 
         let commands = rrg_proto::execute_signed_command::CommandList::parse_from_bytes({
             include_bytes!(env!("RRG_EXECUTE_SIGNED_COMMAND_PREVERIFIED"))
-        }).map_err(|error| crate::session::Error::action(error))?;
+        }).map_err(|error| crate::session::Error::action(InvalidPreverifiedCommandsError(error)))?;
 
         if !commands.commands().iter().any(|command| &args.raw_command == command) {
             return Err(ParseArgsError::invalid_field("command", PreverifiedCommandError).into());
