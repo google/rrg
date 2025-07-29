@@ -73,6 +73,33 @@ where
     use std::io::{Read as _, Write as _};
     use crate::request::ParseArgsError;
 
+    #[cfg(feature = "action-execute_signed_command-preverified")]
+    {
+        #[derive(Debug)]
+        struct PreverifiedCommandError;
+
+        impl std::fmt::Display for PreverifiedCommandError {
+
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "no matching preverified command found")
+            }
+        }
+
+        impl std::error::Error for PreverifiedCommandError {
+        }
+
+        use protobuf::Message as _;
+
+        let commands = rrg_proto::execute_signed_command::CommandList::parse_from_bytes({
+            include_bytes!(env!("RRG_EXECUTE_SIGNED_COMMAND_PREVERIFIED"))
+        }).map_err(|error| crate::session::Error::action(error))?;
+
+        if !commands.commands().iter().any(|command| &args.raw_command == command) {
+            return Err(ParseArgsError::invalid_field("command", PreverifiedCommandError).into());
+        }
+    }
+
+    #[cfg(not(feature = "action-execute_signed_command-preverified"))]
     match session.args().command_verification_key {
         Some(key) => key
             .verify_strict(&args.raw_command, &args.ed25519_signature)
