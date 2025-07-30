@@ -27,6 +27,7 @@ jobs:
           submodules: true
       - name: 'Setup the Rust toolchain'
         run: |
+          rustup update ${{ matrix.toolchain }}
           rustup override set ${{ matrix.toolchain }}
           rustup --version
           rustc --version
