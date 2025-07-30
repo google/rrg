@@ -25,6 +25,7 @@ default = [
     "action-list_winreg_keys",
     "action-query_wmi",
     "action-execute_signed_command",
+    "action-dump_process_memory",
 ]
 
 action-get_system_metadata = []
@@ -45,6 +46,7 @@ action-list_winreg_values = []
 action-list_winreg_keys = []
 action-query_wmi = []
 action-execute_signed_command = []
+action-dump_process_memory = []
 
 test-setfattr = []
 test-chattr = []
