@@ -25,18 +25,14 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: true
-      - name: 'Install the Rust toolchain'
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.toolchain }}
+      - name: 'Setup the Rust toolchain'
+        run: |
+          rustup override set ${{ matrix.toolchain }}
+          rustup --version
+          rustc --version
+          cargo --version
       - name: 'Build RRG executable'
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
+        run: cargo build
       # TODO: Add a step that runs tests with all action features disabled.
       - name: 'Run RRG tests'
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: >
-            --features 'test-chattr test-setfattr test-fuse test-wtmp'
+        run: cargo test --features 'test-chattr test-setfattr test-fuse test-wtmp'
