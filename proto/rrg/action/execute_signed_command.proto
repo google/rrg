@@ -33,6 +33,16 @@ message Command {
   }
 }
 
+// TODO: https://github.com/google/rrg/issues/137
+//
+// This exists solely to support reading preverified commands from a file. Once
+// the mechanism of preverified commands is no longer needed, this should be
+// deleted.
+message CommandList {
+  // Serialized `Command` messages.
+  repeated bytes commands = 1;
+}
+
 message Args {
   // Serialized `Command` message to execute.
   bytes command = 1;

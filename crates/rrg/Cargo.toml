@@ -45,6 +45,12 @@ action-list_winreg_values = []
 action-list_winreg_keys = []
 action-query_wmi = []
 action-execute_signed_command = []
+# TODO: https://github.com/google/rrg/issues/137
+#
+# This feature exists to prevent preverified commands logic from being available
+# in most RRG builds. Once that mechanism is no longer needed, this should be
+# deleted.
+action-execute_signed_command-preverified = ["action-execute_signed_command"]
 
 test-setfattr = []
 test-chattr = []

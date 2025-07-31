@@ -73,6 +73,50 @@ where
     use std::io::{Read as _, Write as _};
     use crate::request::ParseArgsError;
 
+    #[cfg(feature = "action-execute_signed_command-preverified")]
+    {
+        #[derive(Debug)]
+        struct InvalidPreverifiedCommandsError(protobuf::Error);
+
+        impl std::fmt::Display for InvalidPreverifiedCommandsError {
+
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "invalid preverified commands: {}", self.0)
+            }
+        }
+
+        impl std::error::Error for InvalidPreverifiedCommandsError {
+
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(&self.0)
+            }
+        }
+
+        #[derive(Debug)]
+        struct PreverifiedCommandError;
+
+        impl std::fmt::Display for PreverifiedCommandError {
+
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "no matching preverified command found")
+            }
+        }
+
+        impl std::error::Error for PreverifiedCommandError {
+        }
+
+        use protobuf::Message as _;
+
+        let commands = rrg_proto::execute_signed_command::CommandList::parse_from_bytes({
+            include_bytes!(env!("RRG_EXECUTE_SIGNED_COMMAND_PREVERIFIED"))
+        }).map_err(|error| crate::session::Error::action(InvalidPreverifiedCommandsError(error)))?;
+
+        if !commands.commands().iter().any(|command| &args.raw_command == command) {
+            return Err(ParseArgsError::invalid_field("command", PreverifiedCommandError).into());
+        }
+    }
+
+    #[cfg(not(feature = "action-execute_signed_command-preverified"))]
     match session.args().command_verification_key {
         Some(key) => key
             .verify_strict(&args.raw_command, &args.ed25519_signature)
@@ -333,6 +377,12 @@ impl crate::response::Item for Item {
 }
 
 #[cfg(test)]
+// TODO: https://github.com/google/rrg/issues/137
+//
+// Most of these tests rely on custom commands which does not work with the
+// predefined mode. Once support for predefined commands is gone, we can enable
+// them for all builds again.
+#[cfg(not(feature = "action-execute_signed_command-preverified"))]
 mod tests {
 
     use ed25519_dalek::Signer as _;
@@ -874,5 +924,77 @@ mod tests {
         assert!(!item.exit_status.success());
         assert_eq!(item.stderr, b"");
         assert_eq!(item.stdout, b"");
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "action-execute_signed_command-preverified")]
+mod tests {
+    use super::*;
+
+    // We just want to test preverification logic so we stick to Unix to keep
+    // things simple and be able to rely on the `echo` command.
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_all_preverified() {
+        use protobuf::Message as _;
+
+        let mut commands = rrg_proto::execute_signed_command::CommandList::parse_from_bytes({
+            include_bytes!(env!("RRG_EXECUTE_SIGNED_COMMAND_PREVERIFIED"))
+        }).unwrap();
+
+        for raw_command in commands.take_commands() {
+            let args = Args {
+                raw_command,
+                // In this test we use real raw preverified commands but only to
+                // ensure that the verification lets it through. For actual exe-
+                // ecution we just run `echo` (as this is safe and preverified
+                // commands could have some dangerous stuff in there).
+                path: "echo".into(),
+                args: vec![String::from("foo")],
+                env: std::collections::HashMap::new(),
+                // Again, we provide a signature of just 0. This should not pass
+                // the normal verification but we want to test that it is not
+                // actually verified.
+                ed25519_signature: ed25519_dalek::Signature::from_bytes({
+                    &[0; ed25519_dalek::Signature::BYTE_SIZE]
+                }),
+                stdin: Vec::from(b""),
+                timeout: std::time::Duration::from_secs(5),
+            };
+
+            let mut session = crate::session::FakeSession::new();
+            handle(&mut session, args).unwrap();
+
+            assert_eq!(session.reply_count(), 1);
+
+            let item = session.reply::<Item>(0);
+            assert!(item.exit_status.success());
+            assert_eq!(item.stdout, b"foo\n");
+            assert_eq!(item.stderr, b"");
+        }
+    }
+
+    #[test]
+    fn handle_unverified() {
+        use protobuf::Message as _;
+
+        let mut command = rrg_proto::execute_signed_command::Command::new();
+        command.mut_path().set_raw_bytes(b"/usr/sbin/iamnotverified".to_vec());
+
+        let args = Args {
+            raw_command: command.write_to_bytes().unwrap(),
+            path: "/usr/sbin/iamnotverified".into(),
+            args: vec![],
+            env: std::collections::HashMap::new(),
+            ed25519_signature: ed25519_dalek::Signature::from_bytes({
+                &[0; ed25519_dalek::Signature::BYTE_SIZE]
+            }),
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_err());
     }
 }
