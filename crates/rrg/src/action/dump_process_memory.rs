@@ -4,7 +4,77 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::collections::VecDeque;
 use std::fs::File;
+use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::PathBuf;
+
+/// A memory mapping in a running process' virtual address space.
+/// [`MappedRegionIterator`] allows you to iterate through a process' memory mappings.
+#[derive(Default, Debug, Clone)]
+pub struct MappedRegion {
+    /// The offset in the process' virtual address space at which this mapping starts, in bytes.
+    address_start: u64,
+    /// The size of this mapping in bytes.
+    size: u64,
+    /// Permissions associated with this mapping.
+    pub permissions: Permissions,
+    /// If this mapping is backed by a file, this field will contain said file's inode.
+    pub inode: Option<u64>,
+    /// If this mapping is backed by a file, this field will contain the path to said file.
+    /// It can also contain a pseudo-path that indicates the type of mapping, otherwise.
+    /// For example, [heap] or [stack]. Refer to `man 5 proc_pid_maps` for more information.
+    pub path: Option<PathBuf>,
+}
+
+impl MappedRegion {
+    /// Constructs a fake region of memory corresponding to the address range `\[start..end\]`.
+    /// All other parameters than the region boundaries will be set according to [`MappedRegion::default`].
+    /// Mainly useful for testing.
+    pub fn from_bounds(start: u64, end: u64) -> Self {
+        MappedRegion {
+            address_start: start,
+            size: (end - start),
+            ..Default::default()
+        }
+    }
+
+    /// Returns the offset in the process' virtual address space at which this mapping starts, in bytes.
+    pub fn start_address(&self) -> u64 {
+        self.address_start
+    }
+
+    /// Returns the offset in the process' virtual address space at which this mapping ends (exclusive), in bytes.
+    pub fn end_address(&self) -> u64 {
+        self.address_start + self.size
+    }
+
+    /// Returns the size of this mapping, in bytes.
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+}
+
+/// Allows to read the contents of a running process' memory.
+pub struct ReadableProcessMemory {
+    mem_file: File,
+}
+
+impl ReadableProcessMemory {
+    pub fn from_file(mem_file: File) -> Self {
+        Self { mem_file }
+    }
+
+    /// Reads a slice `\[offset..(offset+length)\]` of the opened process' memory
+    /// and returns it as a [`Vec<u8>`]. `offset` is considered as an absolute offset
+    /// in the process' address space. If the slice falls outside the memory's address space,
+    /// the returned buffer will be truncated.
+    pub fn read_chunk(&mut self, offset: u64, length: usize) -> std::io::Result<Vec<u8>> {
+        self.mem_file.seek(SeekFrom::Start(offset))?;
+        let mut buf = vec![0u8; length];
+        let read_size = self.mem_file.read(&mut buf)?;
+        buf.truncate(read_size);
+        Ok(buf)
+    }
+}
 
 #[cfg(target_os = "linux")]
 pub use linux::*;
@@ -13,37 +83,6 @@ pub use linux::*;
 mod linux {
     use super::*;
     use std::io::BufRead;
-
-    /// A memory mapping in a running process' virtual address space.
-    /// [`MappedRegionIterator`] allows you to iterate through a process' memory mappings.
-    #[derive(Default, Debug, Clone)]
-    pub struct MappedRegion {
-        /// The offset in the process' virtual address space at which this mapping starts, in bytes.
-        address_start: u64,
-        /// The size of this mapping in bytes.
-        size: u64,
-        /// Permissions associated with this mapping.
-        pub permissions: Permissions,
-        /// If this mapping is backed by a file, this field will contain said file's inode.
-        pub inode: Option<u64>,
-        /// If this mapping is backed by a file, this field will contain the path to said file.
-        /// It can also contain a pseudo-path that indicates the type of mapping, otherwise.
-        /// For example, [heap] or [stack]. Refer to `man 5 proc_pid_maps` for more information.
-        pub path: Option<PathBuf>,
-    }
-
-    impl MappedRegion {
-        /// Constructs a fake region of memory corresponding to the address range `\[start..end\]`.
-        /// All other parameters than the region boundaries will be set according to [`MappedRegion::default`].
-        /// Mainly useful for testing.
-        pub fn from_bounds(start: u64, end: u64) -> Self {
-            MappedRegion {
-                address_start: start,
-                size: (end - start),
-                ..Default::default()
-            }
-        }
-    }
 
     /// An error that occurred during parsing of a process' memory mappings file.
     #[derive(Debug)]
@@ -103,21 +142,6 @@ mod linux {
     }
 
     impl MappedRegion {
-        /// Returns the offset in the process' virtual address space at which this mapping starts, in bytes.
-        pub fn start_address(&self) -> u64 {
-            self.address_start
-        }
-
-        /// Returns the offset in the process' virtual address space at which this mapping ends (exclusive), in bytes.
-        pub fn end_address(&self) -> u64 {
-            self.address_start + self.size
-        }
-
-        /// Returns the size of this mapping, in bytes.
-        pub fn size(&self) -> u64 {
-            self.size
-        }
-
         /// Parses a single mapping from a line in a process' mappings file.
         fn parse(line: &str) -> Result<Self, ParseRegionError> {
             let mut parts = line.split_ascii_whitespace();
@@ -181,34 +205,11 @@ mod linux {
         }
     }
 
-    /// Allows to read the contents of a running process' memory.
-    pub struct ReadableProcessMemory {
-        mem_file: File,
-    }
-
-    use std::io::{Read as _, Seek as _, SeekFrom};
-
     impl ReadableProcessMemory {
         /// Opens the contents of process `pid`'s memory for reading.
         pub fn open(pid: u32) -> std::io::Result<Self> {
             let mem_file = File::open(format!("/proc/{pid}/mem"))?;
             Ok(Self::from_file(mem_file))
-        }
-
-        pub fn from_file(mem_file: File) -> Self {
-            Self { mem_file }
-        }
-
-        /// Reads a slice `\[offset..(offset+length)\]` of the opened process' memory
-        /// and returns it as a [`Vec<u8>`]. `offset` is considered as an absolute offset
-        /// in the process' address space. If the slice falls outside the memory's address space,
-        /// the returned buffer will be truncated.
-        pub fn read_chunk(&mut self, offset: u64, length: usize) -> std::io::Result<Vec<u8>> {
-            self.mem_file.seek(SeekFrom::Start(offset))?;
-            let mut buf = vec![0u8; length];
-            let read_size = self.mem_file.read(&mut buf)?;
-            buf.truncate(read_size);
-            Ok(buf)
         }
     }
 
@@ -631,7 +632,7 @@ where
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
+pub fn handle<S>(_session: &mut S, _args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
