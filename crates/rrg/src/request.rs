@@ -51,6 +51,8 @@ pub enum Action {
     QueryWmi,
     /// Execute a signed command.
     ExecuteSignedCommand,
+    /// Dump the contents of a specified process' memory.
+    DumpProcessMemory,
 }
 
 impl std::fmt::Display for Action {
@@ -76,6 +78,7 @@ impl std::fmt::Display for Action {
             Action::QueryWmi => write!(fmt, "query_wmi"),
             Action::GetTcpResponse => write!(fmt,  "get_tcp_response"),
             Action::ExecuteSignedCommand => write!(fmt, "execute_signed_command"),
+            Action::DumpProcessMemory => write!(fmt, "dump_process_memory"),
         }
     }
 }
@@ -127,6 +130,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             LIST_WINREG_KEYS => Ok(Action::ListWinregKeys),
             QUERY_WMI => Ok(Action::QueryWmi),
             EXECUTE_SIGNED_COMMAND => Ok(Action::ExecuteSignedCommand),
+            DUMP_PROCESS_MEMORY => Ok(Action::DumpProcessMemory),
             _ => {
                 let value = protobuf::Enum::value(&proto);
                 Err(UnknownAction { value })

@@ -60,6 +60,9 @@ pub mod query_wmi;
 #[cfg(feature = "action-execute_signed_command")]
 pub mod execute_signed_command;
 
+#[cfg(feature = "action-dump_process_memory")]
+pub mod dump_process_memory;
+
 use log::info;
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -146,12 +149,16 @@ where
         ExecuteSignedCommand => {
             handle(session, request, self::execute_signed_command::handle)
         }
+        #[cfg(feature = "action-dump_process_memory")]
+        DumpProcessMemory => {
+            handle(session, request, self::dump_process_memory::handle)
+        }
         // We allow `unreachable_patterns` because otherwise we get a warning if
         // we compile with all the actions enabled.
         #[allow(unreachable_patterns)]
         action => {
             return Err(crate::session::Error::unsupported_action(action));
-        },
+        }
     };
 
     info!("finished dispatching request '{request_id}'");

@@ -25,6 +25,7 @@ default = [
     "action-list_winreg_keys",
     "action-query_wmi",
     "action-execute_signed_command",
+    "action-dump_process_memory",
 ]
 
 action-get_system_metadata = []
@@ -51,6 +52,7 @@ action-execute_signed_command = []
 # in most RRG builds. Once that mechanism is no longer needed, this should be
 # deleted.
 action-execute_signed_command-preverified = ["action-execute_signed_command"]
+action-dump_process_memory = []
 
 test-setfattr = []
 test-chattr = []
