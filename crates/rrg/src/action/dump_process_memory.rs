@@ -67,11 +67,13 @@ impl ReadableProcessMemory {
     /// and returns it as a [`Vec<u8>`]. `offset` is considered as an absolute offset
     /// in the process' address space. If the slice falls outside the memory's address space,
     /// the returned buffer will be truncated.
-    pub fn read_chunk(&mut self, offset: u64, length: usize) -> std::io::Result<Vec<u8>> {
+    pub fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
         self.mem_file.seek(SeekFrom::Start(offset))?;
-        let mut buf = vec![0u8; length];
-        let read_size = self.mem_file.read(&mut buf)?;
-        buf.truncate(read_size);
+        let mut buf = Vec::new();
+        let mem_file = self.mem_file.by_ref();
+        // Limit amount of bytes that can be read
+        let mut mem_file_limited = mem_file.take(length);
+        mem_file_limited.read_to_end(&mut buf)?;
         Ok(buf)
     }
 }
@@ -278,7 +280,7 @@ mod linux {
             assert! {
                 regions.iter().any(|region| memory.read_chunk(
                     region.start_address(),
-                    region.size() as usize,
+                    region.size(),
                 ).is_ok())
             }
         }
@@ -594,7 +596,7 @@ where
             let offset_in_region = offset - region.start_address();
             let size = region.end_address() - offset;
             let size = size.min(MAX_BLOB_SIZE).min(*total_size_left);
-            match memory.read_chunk(offset, size as usize) {
+            match memory.read_chunk(offset, size) {
                 Err(cause) => {
                     session.reply(Err(ErrorItem {
                         pid,
@@ -869,6 +871,7 @@ mod test {
         assert_eq!(second_region.region.end_address(), 3000);
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn handle_dumps_current_process_regions() {
         let mut session = crate::session::FakeSession::new();
@@ -887,6 +890,7 @@ mod test {
         assert!(session.replies::<Item>().any(Result::is_ok));
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn filters_regions() {
         let mut session = crate::session::FakeSession::new();
