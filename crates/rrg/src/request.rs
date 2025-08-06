@@ -51,7 +51,7 @@ pub enum Action {
     QueryWmi,
     /// Execute a signed command.
     ExecuteSignedCommand,
-    /// Dump the contents of a currently running process' memory.
+    /// Dump the contents of a specified process' memory.
     DumpProcessMemory,
 }
 

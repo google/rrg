@@ -60,8 +60,7 @@ pub mod query_wmi;
 #[cfg(feature = "action-execute_signed_command")]
 pub mod execute_signed_command;
 
-// Currently only supported on Linux
-#[cfg(all(target_os = "linux", feature = "action-dump_process_memory"))]
+#[cfg(feature = "action-dump_process_memory")]
 pub mod dump_process_memory;
 
 use log::info;
@@ -150,7 +149,7 @@ where
         ExecuteSignedCommand => {
             handle(session, request, self::execute_signed_command::handle)
         }
-        #[cfg(all(target_os = "linux", feature = "action-dump_process_memory"))]
+        #[cfg(feature = "action-dump_process_memory")]
         DumpProcessMemory => {
             handle(session, request, self::dump_process_memory::handle)
         }

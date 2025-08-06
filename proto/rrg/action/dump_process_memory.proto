@@ -12,14 +12,15 @@ message Args {
   // PIDs of the processes whose memory we are interested in.
   repeated uint32 pids = 1;
 
-  // Maximum amount of process memory to dump. Applies across all processes specified in `pids`.
-  // The first memory region that exceeds the limit will be dumped partially.
+  // Maximum amount of process memory to dump. Applies across all processes 
+  // specified in `pids`. The first memory region that exceeds the limit
+  // will be dumped partially.
   optional uint64 total_size_limit = 2;
 
-  // Memory offsets to prioritize when the process memory size is greater 
-  // than the limit specified in `total_size_limit`. First, memory pages containing the 
-  // offsets will be dumped up to size_limit.
-  // If not reached, the remaining memory pages will be dumped up to size_limit.
+  // Memory offsets to prioritize when the process memory size is greater than
+  // the limit specified in `total_size_limit`. First, memory pages containing
+  // the offsets will be dumped up to size_limit. If not reached, the 
+  // remaining memory pages will be dumped up to size_limit.
   repeated uint64 priority_offsets = 3;
 
   // Set this flag to avoid dumping mapped files. Applies to Linux only.
@@ -51,8 +52,8 @@ message Permissions {
 // The result of the dump_process_memory action.
 // Represents one chunk of a single memory region of a running process.
 // The chunk can be smaller than the memory region if the size of the region
-// exceeds the maximum blob size of the blob sink. In that case, multiple `Result`s
-// will be returned, each with a different `offset` and `size`.
+// exceeds the maximum blob size of the blob sink. In that case, multiple
+// `Result`s will be returned, each with a different `offset` and `size`.
 message Result {
   // PID of the process this region belongs to.
   uint32 pid = 1;
@@ -67,12 +68,13 @@ message Result {
   // Set only if `error` is not set.
   bytes blob_sha256 = 4;
 
-  // Offset within the memory region that this chunk starts at.
+  // Offset relative to `region_start` that this chunk starts at.
   //
   // Set only if `error` is not set.
   uint64 offset = 5;
 
-  // Size of the chunk of memory that was sent to the blob sink. Will be <= `region_end - region_start`
+  // Size of the chunk of memory that was sent to the blob sink.
+  // Will be <= `region_end - region_start`
   //
   // Set only if `error` is not set.
   uint64 size = 6;

@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC;
+// Copyright 2025 Google LLC
 //
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
@@ -49,11 +49,11 @@ mod linux {
     #[derive(Debug)]
     pub struct ParseRegionError {
         field_name: &'static str,
-        kind: ParseErrorKind,
+        kind: ParseRegionErrorKind,
     }
 
     #[derive(Debug)]
-    enum ParseErrorKind {
+    enum ParseRegionErrorKind {
         /// An expected field was not present.
         MissingField,
         /// A field had an invalid format.
@@ -63,10 +63,12 @@ mod linux {
     impl std::fmt::Display for ParseRegionError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self.kind {
-                ParseErrorKind::MissingField => write!(f, "Missing field \"{}\"", self.field_name),
-                ParseErrorKind::InvalidField(error) => write!(
+                ParseRegionErrorKind::MissingField => {
+                    write!(f, "missing field \"{}\"", self.field_name)
+                }
+                ParseRegionErrorKind::InvalidField(error) => write!(
                     f,
-                    "Invalid format for field \"{}\": {}",
+                    "invalid format for field \"{}\": {}",
                     self.field_name, error
                 ),
             }
@@ -75,7 +77,7 @@ mod linux {
     impl std::error::Error for ParseRegionError {
         fn cause(&self) -> Option<&dyn std::error::Error> {
             match &self.kind {
-                ParseErrorKind::InvalidField(error) => Some(error.as_ref()),
+                ParseRegionErrorKind::InvalidField(error) => Some(error.as_ref()),
                 _ => None,
             }
         }
@@ -85,7 +87,7 @@ mod linux {
         fn missing_field(field_name: &'static str) -> Self {
             Self {
                 field_name,
-                kind: ParseErrorKind::MissingField,
+                kind: ParseRegionErrorKind::MissingField,
             }
         }
 
@@ -95,7 +97,7 @@ mod linux {
         ) -> Self {
             Self {
                 field_name,
-                kind: ParseErrorKind::InvalidField(Box::new(cause)),
+                kind: ParseRegionErrorKind::InvalidField(Box::new(cause)),
             }
         }
     }
@@ -164,9 +166,9 @@ mod linux {
                 .next()
                 .ok_or_else(|| ParseRegionError::missing_field("inode"))?;
             let inode = inode
-                .parse()
+                .parse::<u64>()
                 .map_err(|e| ParseRegionError::invalid_field("inode", e))?;
-            let inode = Some(inode).filter(|&inode| inode != 0);
+            let inode = if inode != 0 { Some(inode) } else { None };
 
             let path = parts.next().map(PathBuf::from);
             Ok(MappedRegion {
@@ -184,6 +186,8 @@ mod linux {
         mem_file: File,
     }
 
+    use std::io::{Read as _, Seek as _, SeekFrom};
+
     impl ReadableProcessMemory {
         /// Opens the contents of process `pid`'s memory for reading.
         pub fn open(pid: u32) -> std::io::Result<Self> {
@@ -196,7 +200,9 @@ mod linux {
         }
 
         /// Reads a slice `\[offset..(offset+length)\]` of the opened process' memory
-        /// and returns it as a [`Vec<u8>`].
+        /// and returns it as a [`Vec<u8>`]. `offset` is considered as an absolute offset
+        /// in the process' address space. If the slice falls outside the memory's address space,
+        /// the returned buffer will be truncated.
         pub fn read_chunk(&mut self, offset: u64, length: usize) -> std::io::Result<Vec<u8>> {
             self.mem_file.seek(SeekFrom::Start(offset))?;
             let mut buf = vec![0u8; length];
@@ -206,12 +212,10 @@ mod linux {
         }
     }
 
-    use std::io::{Read, Seek, SeekFrom};
-
     /// Iterator over a running process' memory mappings.
     /// To avoid inconsistencies in observed mappings, the mappings are not updated lazily as the iterator advances,
     /// but are effectively a snapshot of a process' memory space at the time the iterator is created.
-    pub struct MappedRegionIterator {
+    pub struct MappedRegionIter {
         // We do not use a `BufReader<File>` here for two reasons:
         // 1. So that we have a consistent snapshot of the process memory maps,
         // taken at the moment the iterator is created.
@@ -221,7 +225,7 @@ mod linux {
         lines: std::io::Lines<std::io::Cursor<String>>,
     }
 
-    impl MappedRegionIterator {
+    impl MappedRegionIter {
         /// Creates a new [`MappedRegionIterator`] of the process with id `pid`.
         pub fn from_pid(pid: u32) -> std::io::Result<Self> {
             let file = File::open(format!("/proc/{pid}/maps"))?;
@@ -237,7 +241,7 @@ mod linux {
         }
     }
 
-    impl Iterator for MappedRegionIterator {
+    impl Iterator for MappedRegionIter {
         type Item = Result<MappedRegion, ParseRegionError>;
 
         fn next(&mut self) -> Option<Self::Item> {
@@ -253,48 +257,42 @@ mod linux {
         use super::*;
 
         #[test]
-        fn test_iterate_this_process_regions() {
+        fn iterate_this_process_regions() {
             let pid = std::process::id();
-            let iterator = MappedRegionIterator::from_pid(pid)
+            let iterator = MappedRegionIter::from_pid(pid)
                 .expect("Could not read memory regions of current process");
             assert!(iterator.collect::<Result<Vec<MappedRegion>, _>>().is_ok());
         }
 
         #[test]
-        fn test_can_read_this_process_memory() {
+        fn can_read_this_process_memory() {
             let pid = std::process::id();
-            let regions = MappedRegionIterator::from_pid(pid)
+            let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(pid)
                 .expect("Could not read memory regions of current process")
-                .collect::<Result<Vec<_>, _>>()
+                .collect::<Result<_, _>>()
                 .expect("Reading maps");
 
             let mut memory =
                 ReadableProcessMemory::open(pid).expect("Could not open process memory");
-            for region in regions {
-                if memory
-                    .read_chunk(region.start_address(), region.size() as usize)
-                    .is_ok()
-                {
-                    // Single Ok result is okay, bail out early
-                    return;
-                }
+            assert! {
+                regions.iter().any(|region| memory.read_chunk(
+                    region.start_address(),
+                    region.size() as usize,
+                ).is_ok())
             }
-            unreachable!("Expected to read at least one mapping succesfully")
         }
 
         #[test]
-        fn test_iterator_detects_mmap() {
+        fn region_iter_detects_mmap() {
             // `mmap` a file and check that the mapping is detected among those returned by
-            // `MappedRegionIterator`.
+            // `MappedRegionIter`.
+            use std::io::Write as _;
             use std::os::unix::fs::MetadataExt;
             use std::os::unix::io::AsRawFd;
 
-            let tempdir = tempfile::tempdir().unwrap();
-            let file_path = tempdir.path().join("memfile.txt");
+            let mut file = tempfile::tempfile().unwrap();
+            writeln!(file, "hello there").unwrap();
 
-            std::fs::write(&file_path, "hello there").unwrap();
-
-            let file = File::open(&file_path).unwrap();
             let meta = file.metadata().unwrap();
             let length = meta.len() as usize;
 
@@ -312,7 +310,7 @@ mod linux {
                 }
             }
 
-            let _mapped_ptr = unsafe {
+            let mapped_ptr = unsafe {
                 let ptr = libc::mmap(
                     std::ptr::null_mut(),
                     length,
@@ -325,10 +323,12 @@ mod linux {
                 MappedPtr { ptr, length }
             };
 
-            let regions = MappedRegionIterator::from_pid(std::process::id())
+            let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(std::process::id())
                 .expect("Could not read memory regions of current process")
-                .collect::<Result<Vec<_>, _>>()
+                .collect::<Result<_, _>>()
                 .expect("Reading maps");
+
+            drop(mapped_ptr);
 
             assert!(regions.into_iter().any(|r| r.inode == Some(meta.ino())
                 && r.permissions.private
@@ -381,8 +381,8 @@ pub struct Args {
 
     // Memory offsets to prioritize when the process memory size is greater
     // than the limit specified in `total_size_limit`. First, memory pages containing the
-    // offsets will be dumped up to size_limit.
-    // If not reached, the remaining memory pages will be dumped up to size_limit.
+    // offsets will be dumped up to `total_size_limit`.
+    // If not reached, the remaining memory pages will be dumped up to `total_size_limit`.
     priority_offsets: Option<Vec<u64>>,
 
     // Set this flag to avoid dumping mapped files.
@@ -418,15 +418,44 @@ impl crate::request::Args for Args {
             ));
         }
 
+        let priority_offsets = proto.take_priority_offsets();
+        let priority_offsets = if priority_offsets.is_empty() {
+            None
+        } else {
+            Some(priority_offsets)
+        };
         Ok(Self {
             pids: proto.take_pids(),
             total_size_limit: proto.total_size_limit,
-            priority_offsets: Some(proto.take_priority_offsets()).filter(|v| !v.is_empty()),
+            priority_offsets,
             skip_mapped_files: proto.skip_mapped_files,
             skip_shared_regions: proto.skip_shared_regions,
             skip_executable_regions: proto.skip_executable_regions,
             skip_readonly_regions: proto.skip_readonly_regions,
         })
+    }
+}
+
+impl Args {
+    /// Whether `region` should be dumped according to `self`'s filtering parameters.
+    fn should_dump(&self, region: &MappedRegion) -> bool {
+        if self.skip_shared_regions && region.permissions.shared {
+            return false;
+        }
+        if self.skip_executable_regions && region.permissions.execute {
+            return false;
+        }
+        if self.skip_mapped_files && region.inode.is_some() {
+            return false;
+        }
+        if self.skip_readonly_regions
+            && region.permissions.read
+            && !region.permissions.write
+            && !region.permissions.execute
+        {
+            return false;
+        }
+        true
     }
 }
 
@@ -469,11 +498,6 @@ struct ErrorItem {
 /// Result of the `dump_process_memory` action.
 type Item = Result<OkItem, ErrorItem>;
 
-fn set_region(region: &MappedRegion, proto: &mut rrg_proto::dump_process_memory::Result) {
-    proto.set_region_start(region.start_address());
-    proto.set_region_end(region.end_address());
-}
-
 impl crate::response::Item for Item {
     type Proto = rrg_proto::dump_process_memory::Result;
 
@@ -483,7 +507,8 @@ impl crate::response::Item for Item {
             Err(ErrorItem { pid, cause, kind }) => {
                 proto.set_pid(pid);
                 if let ErrorKind::ReadRegionMemory(region) = kind {
-                    set_region(&region, &mut proto);
+                    proto.set_region_start(region.start_address());
+                    proto.set_region_end(region.end_address());
                 }
                 proto.set_error(cause.to_string());
             }
@@ -495,7 +520,8 @@ impl crate::response::Item for Item {
                 size,
             }) => {
                 proto.set_pid(pid);
-                set_region(&region, &mut proto);
+                proto.set_region_start(region.start_address());
+                proto.set_region_end(region.end_address());
                 proto.set_blob_sha256(blob_sha256.into());
                 proto.set_offset(offset);
                 proto.set_size(size);
@@ -507,27 +533,6 @@ impl crate::response::Item for Item {
         }
         proto
     }
-}
-
-/// Whether `region` should be dumped according to the filtering parameters set in `args`
-fn should_dump(region: &MappedRegion, args: &Args) -> bool {
-    if args.skip_shared_regions && region.permissions.shared {
-        return false;
-    }
-    if args.skip_executable_regions && region.permissions.execute {
-        return false;
-    }
-    if args.skip_mapped_files && region.inode.is_some() {
-        return false;
-    }
-    if args.skip_readonly_regions
-        && region.permissions.read
-        && !region.permissions.write
-        && !region.permissions.execute
-    {
-        return false;
-    }
-    true
 }
 
 /// Orders the memory regions yielded by `regions` such that
@@ -562,8 +567,8 @@ pub fn sort_by_priority(
             deque.push_front(reg);
         }
     }
-
-    debug_assert!(regions.next().is_none(), "Did not consume all regions");
+    // Add all remaining regions in whatever order they came in
+    deque.extend(regions);
     deque
 }
 
@@ -625,6 +630,18 @@ where
     Ok(())
 }
 
+#[cfg(not(target_os = "linux"))]
+pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
+where
+    S: crate::session::Session,
+{
+    use std::io::{Error, ErrorKind};
+    Err(crate::session::Error::action(Error::from(
+        ErrorKind::Unsupported,
+    )))
+}
+
+#[cfg(target_os = "linux")]
 pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
@@ -633,26 +650,28 @@ where
     // Circumvent borrow checker complaint about partial moves with `take`
     let pids = std::mem::take(&mut args.pids);
     for pid in pids {
-        let regions = MappedRegionIterator::from_pid(pid);
-        if let Err(cause) = regions {
-            session.reply(Err(ErrorItem {
-                pid,
-                cause,
-                kind: ErrorKind::OpenMemory,
-            }))?;
-            continue;
+        let regions = match MappedRegionIter::from_pid(pid) {
+            Ok(regions) => regions,
+            Err(cause) => {
+                session.reply(Err(ErrorItem {
+                    pid,
+                    cause,
+                    kind: ErrorKind::OpenMemory,
+                }))?;
+                continue;
+            }
         };
-        let regions = regions.unwrap();
-        let memory = ReadableProcessMemory::open(pid);
-        if let Err(cause) = memory {
-            session.reply(Err(ErrorItem {
-                pid,
-                cause,
-                kind: ErrorKind::OpenMemory,
-            }))?;
-            continue;
+        let mut memory = match ReadableProcessMemory::open(pid) {
+            Ok(memory) => memory,
+            Err(cause) => {
+                session.reply(Err(ErrorItem {
+                    pid,
+                    cause,
+                    kind: ErrorKind::OpenMemory,
+                }))?;
+                continue;
+            }
         };
-        let mut memory = memory.unwrap();
 
         // ParseRegionErrors are internal errors, so wrap them in `Error::action`
         // and bail early if any error is encountered.
@@ -664,7 +683,7 @@ where
         // so we enforce that by `take`ing it here.
         // This too is a workaround for partial moves.
         let offsets = args.priority_offsets.take();
-        let regions = regions.into_iter().filter(|reg| should_dump(reg, &args));
+        let regions = regions.into_iter().filter(|reg| args.should_dump(reg));
 
         let regions = if let Some(offsets) = offsets {
             sort_by_priority(regions, offsets)
@@ -689,7 +708,7 @@ mod test {
     use std::io::Write;
 
     #[test]
-    fn test_offset_priority() {
+    fn offset_priority() {
         let regions = [
             MappedRegion::from_bounds(0, 1000),
             MappedRegion::from_bounds(1000, 1500),
@@ -717,7 +736,7 @@ mod test {
     }
 
     #[test]
-    fn test_offset_priority_multiple_offset_same_region() {
+    fn offset_priority_multiple_offset_same_region() {
         let regions = [
             MappedRegion::from_bounds(0, 1000),
             MappedRegion::from_bounds(1000, 1500),
@@ -740,7 +759,25 @@ mod test {
     }
 
     #[test]
-    fn test_dump_regions() {
+    fn offset_priority_offset_before_regions() {
+        let regions = [
+            MappedRegion::from_bounds(1000, 1500),
+            MappedRegion::from_bounds(2000, 3000),
+            MappedRegion::from_bounds(4000, 5000),
+        ];
+        // One offset that is before any region
+        let offsets = vec![0];
+        let regions: Vec<MappedRegion> = sort_by_priority(regions.into_iter(), offsets).into();
+
+        // No guarantee about order, just check the contents
+        assert_eq!(regions.len(), 3);
+        assert!(regions.iter().any(|reg| reg.start_address() == 1000));
+        assert!(regions.iter().any(|reg| reg.start_address() == 2000));
+        assert!(regions.iter().any(|reg| reg.start_address() == 4000));
+    }
+
+    #[test]
+    fn dumps_regions() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let regions = vec![
@@ -782,7 +819,7 @@ mod test {
     }
 
     #[test]
-    fn test_size_limit() {
+    fn size_limit() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let regions = vec![
@@ -850,7 +887,7 @@ mod test {
     }
 
     #[test]
-    fn test_filters_regions() {
+    fn filters_regions() {
         let mut session = crate::session::FakeSession::new();
         let args = Args {
             pids: vec![std::process::id()],
