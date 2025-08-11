@@ -208,9 +208,8 @@ impl<'image> Filesystem<'image> {
     ) -> Result<()> {
         // References to trait objects are "fat" and cannot be passed as
         // raw pointers.
-        #[allow(clippy::complexity)]
-        let refcell: RefCell<&mut dyn FnMut(File, &[u8]) -> WalkDirCallbackResult> =
-            RefCell::new(&mut callback);
+        type CallbackRefCell<'a> = RefCell<&'a mut dyn FnMut(File, &[u8]) -> WalkDirCallbackResult>;
+        let refcell: CallbackRefCell = RefCell::new(&mut callback);
 
         // See https://www.sleuthkit.org/sleuthkit/docs/api-docs/4.5/tsk__fs_8h.html#ad381d6cb96ae78351e88b7aa54d81008 for the type of this callback function.
         extern "C" fn c_callback(
@@ -251,7 +250,7 @@ impl<'image> Filesystem<'image> {
                 dir_addr,
                 flags,
                 Some(c_callback),
-                (&refcell).as_ptr() as *mut c_void,
+                (&refcell) as *const CallbackRefCell as *mut c_void,
             )
         };
         if result == 0 {
