@@ -323,7 +323,7 @@ impl<'a> Iterator for DirectoryIterator<'a> {
     type Item = Result<File<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.dir.len() >= self.idx {
+        if self.idx >= self.dir.len() {
             return None;
         }
         // SAFETY: trusting the TSK C API.
@@ -573,9 +573,10 @@ mod test {
             .write_all(&ntfs_raw)
             .expect("failed to write tempfile");
         let image = Image::open(tempfile.path()).expect("failed to open ntfs image");
-        let mut fs = Filesystem::open(&image).expect("failed to open NTFS FS");
+        let fs = Filesystem::open(&image).expect("failed to open NTFS FS");
         let mut paths = std::collections::HashSet::new();
-        fs.walk_dir(fs.root_inum(), |file, path| {
+        let root = fs.open_dir(Path::new("/")).expect("Failed to open root");
+        fs.walk_dir(&root, |file, path| {
             let mut full_path = String::from_utf8_lossy(path).to_string();
             full_path.push_str(&file.name().unwrap());
             paths.insert(full_path);
