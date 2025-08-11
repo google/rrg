@@ -16,7 +16,7 @@ use crate::session::Error;
 
 /// Arguments of the `get_filesystem_timeline` action.
 pub struct Args {
-    raw_fs: PathBuf,
+    raw_fs: Option<PathBuf>,
     root: PathBuf,
 }
 
@@ -112,12 +112,10 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    use sha2::Digest as _;
-
     let raw_fs: PathBuf;
     let embedded_path;
-    if !args.raw_fs.as_os_str().is_empty() {
-        raw_fs = args.raw_fs;
+    if let Some(raw_fs_arg) = args.raw_fs {
+        raw_fs = raw_fs_arg;
         embedded_path = args.root;
     } else {
         // Detect raw filesystem
@@ -137,7 +135,7 @@ where
         let dir = fs.open_dir(&embedded_path)?;
         let root_bytes = embedded_path.as_os_str().as_encoded_bytes();
         fs.walk_dir(dir.addr(), |file, path| {
-            match tx.send(serialize_entry(root_bytes, path, file)) {
+            match tx.send(make_entry(root_bytes, path, file)) {
                 Ok(()) => tsk::WalkDirCallbackResult::Continue,
                 // rx disconnected, no need to keep searching.
                 Err(_) => tsk::WalkDirCallbackResult::Stop,
@@ -159,6 +157,7 @@ where
     let result_iter = rx.into_iter().inspect(|_| *entry_count.borrow_mut() += 1);
 
     let encode_and_send_result = (move || -> crate::session::Result<()> {
+        use sha2::Digest as _;
         for batch in crate::gzchunked::encode(result_iter) {
             let batch = batch.map_err(crate::session::Error::action)?;
 
@@ -192,8 +191,12 @@ impl crate::request::Args for Args {
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
 
-        let raw_fs = PathBuf::try_from(proto.take_raw_fs())
-            .map_err(|error| ParseArgsError::invalid_field("raw_fs", error))?;
+        let raw_fs = Some(
+            PathBuf::try_from(proto.take_raw_fs())
+                .map_err(|error| ParseArgsError::invalid_field("raw_fs", error))?,
+        )
+        .filter(|path| !path.as_os_str().is_empty());
+
         let root = PathBuf::try_from(proto.take_root())
             .map_err(|error| ParseArgsError::invalid_field("root", error))?;
 
@@ -213,7 +216,7 @@ impl crate::response::Item for Item {
     }
 }
 
-fn serialize_entry(
+fn make_entry(
     // Absolute path to the start of the search.
     root: &[u8],
     // Relative path to the parent directory from the root.
@@ -274,52 +277,12 @@ mod tests {
         tempfile
     }
 
-    fn get_sample_mounts() -> Vec<Mount> {
-        vec![
-            Mount {
-                name: "sysfs".to_string(),
-                path: "/sys".parse().unwrap(),
-                fs_type: "sysfs".to_string(),
-            },
-            Mount {
-                name: "proc".to_string(),
-                path: "/proc".parse().unwrap(),
-                fs_type: "proc".to_string(),
-            },
-            Mount {
-                name: "/dev/mapper/root".to_string(),
-                path: "/".parse().unwrap(),
-                fs_type: "ext4".to_string(),
-            },
-            Mount {
-                name: "tmpfs".to_string(),
-                path: "/dev/shm".parse().unwrap(),
-                fs_type: "tmpfs".to_string(),
-            },
-            Mount {
-                name: "/dev/sda2".to_string(),
-                path: "/boot".parse().unwrap(),
-                fs_type: "ext2".to_string(),
-            },
-            Mount {
-                name: "/dev/sda1".to_string(),
-                path: "/boot/efi".parse().unwrap(),
-                fs_type: "vfat".to_string(),
-            },
-            Mount {
-                name: "/etc/auto.home.local".to_string(),
-                path: "/home".parse().unwrap(),
-                fs_type: "autofs".to_string(),
-            },
-        ]
-    }
-
     #[test]
     fn handle_non_existent_path() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let request = Args {
-            raw_fs: tempdir.path().join("ntfs"),
+            raw_fs: Some(tempdir.path().join("ntfs")),
             root: tempdir.path().join("foo"),
         };
 
@@ -332,7 +295,7 @@ mod tests {
         let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
-            raw_fs: tempfile.path().into(),
+            raw_fs: Some(tempfile.path().into()),
             root: "/emptydir".into(),
         };
 
@@ -351,7 +314,7 @@ mod tests {
         let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
-            raw_fs: tempfile.path().into(),
+            raw_fs: Some(tempfile.path().into()),
             root: "/dir/subdir".into(),
         };
 
@@ -372,7 +335,7 @@ mod tests {
         let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
-            raw_fs: tempfile.path().into(),
+            raw_fs: Some(tempfile.path().into()),
             root: "/dir".into(),
         };
 
@@ -397,7 +360,7 @@ mod tests {
         let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
-            raw_fs: tempfile.path().into(),
+            raw_fs: Some(tempfile.path().into()),
             root: "/circular".into(),
         };
 
@@ -419,7 +382,7 @@ mod tests {
         let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
-            raw_fs: tempfile.path().into(),
+            raw_fs: Some(tempfile.path().into()),
             root: "/encoding".into(),
         };
 
@@ -450,7 +413,7 @@ mod tests {
         let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
-            raw_fs: tempfile.path().into(),
+            raw_fs: Some(tempfile.path().into()),
             root: "/dir/subdir".into(),
         };
 
@@ -473,7 +436,7 @@ mod tests {
         let tempfile = load_gzipped_test_data(SMOL_NTFS_GZ);
 
         let request = Args {
-            raw_fs: tempfile.path().into(),
+            raw_fs: Some(tempfile.path().into()),
             root: "/hardlinks".into(),
         };
 
@@ -537,7 +500,33 @@ mod tests {
     fn get_mount_linux() {
         use std::os::unix::ffi::OsStrExt;
 
-        let mounts = get_sample_mounts();
+        let mounts = vec![
+            Mount {
+                name: "sysfs".to_string(),
+                path: "/sys".parse().unwrap(),
+                fs_type: "sysfs".to_string(),
+            },
+            Mount {
+                name: "/dev/mapper/root".to_string(),
+                path: "/".parse().unwrap(),
+                fs_type: "ext4".to_string(),
+            },
+            Mount {
+                name: "/etc/auto.home.local".to_string(),
+                path: "/home".parse().unwrap(),
+                fs_type: "autofs".to_string(),
+            },
+            Mount {
+                name: "/dev/sda2".to_string(),
+                path: "/boot".parse().unwrap(),
+                fs_type: "ext2".to_string(),
+            },
+            Mount {
+                name: "/dev/sda1".to_string(),
+                path: "/boot/efi".parse().unwrap(),
+                fs_type: "vfat".to_string(),
+            },
+        ];
         assert_eq!(&get_mount(&mounts, "/".as_ref()).unwrap(), &mounts[2]);
         let root_path = "/foo/bar/baz".as_ref();
         assert_eq!(&get_mount(&mounts, root_path).unwrap(), &mounts[2]);
@@ -550,11 +539,32 @@ mod tests {
         assert_eq!(&get_mount(&mounts, efi_path).unwrap(), &mounts[5]);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(target_family = "unix")]
     #[test]
     fn get_raw_device_linux() {
         use std::os::unix::ffi::OsStrExt;
-        let mounts = get_sample_mounts();
+        let mounts = vec![
+            Mount {
+                name: "/dev/mapper/root".to_string(),
+                path: "/".parse().unwrap(),
+                fs_type: "ext4".to_string(),
+            },
+            Mount {
+                name: "/dev/sda2".to_string(),
+                path: "/boot".parse().unwrap(),
+                fs_type: "ext2".to_string(),
+            },
+            Mount {
+                name: "/dev/sda1".to_string(),
+                path: "/boot/efi".parse().unwrap(),
+                fs_type: "vfat".to_string(),
+            },
+            Mount {
+                name: "/etc/auto.home.local".to_string(),
+                path: "/home".parse().unwrap(),
+                fs_type: "autofs".to_string(),
+            },
+        ];
         assert!(
             get_raw_device(&mounts, "/home/foo/bar/baz".as_ref())
                 .err()
