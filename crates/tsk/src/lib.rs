@@ -301,7 +301,10 @@ impl<'a> Directory<'a> {
         // SAFETY: This pointer was checked to be non-null, and we trust the TSK C API.
         unsafe { tsk_sys::tsk_fs_dir_getsize(self.inner.as_ptr()) }
     }
-    pub fn iter_entries(&'a mut self) -> impl Iterator<Item = File<'a>> + 'a {
+    /// Returns an iterator containing file entries for this directory.
+    ///
+    /// May return errors if the file entries fail to parse, e.g. if there is filesystem corruption.
+    pub fn iter_entries(&'a mut self) -> impl Iterator<Item = Result<File<'a>>> + 'a {
         DirectoryIterator::new(self)
     }
 }
@@ -318,16 +321,17 @@ impl<'a> DirectoryIterator<'a> {
 }
 
 impl<'a> Iterator for DirectoryIterator<'a> {
-    type Item = File<'a>;
+    type Item = Result<File<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.dir.len() >= self.idx {
+            return None;
+        }
         // SAFETY: trusting the TSK C API.
         let file_ptr = unsafe { tsk_sys::tsk_fs_dir_get(self.dir.as_raw(), self.idx) };
-        let file = NonNull::new(file_ptr).map(File::new);
-        if file.is_some() {
-            self.idx += 1;
-        }
-        file
+        let result = handle_result(file_ptr).map(File::new);
+        self.idx += 1;
+        Some(result)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -516,7 +520,10 @@ mod test {
         let mut root_dir = fs.open_dir("/".as_ref()).expect("Failed to open root dir");
         let root_f2 = root_dir.file();
         assert_eq!(root_f2.meta().unwrap().addr(), 5);
-        let mut root_dir_entries = root_dir.iter_entries().collect::<Vec<_>>();
+        let mut root_dir_entries = root_dir
+            .iter_entries()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
         let names = root_dir_entries
             .iter_mut()
             .map(|e| e.name().unwrap())
