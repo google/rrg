@@ -227,8 +227,7 @@ impl<'image> Filesystem<'image> {
                 NonNull::new(path as *mut c_char).expect("null path passed into walk_dir callback");
             // SAFETY: path was checked for null. We trust TSK to pass us a null-terminated string.
             let path: &[u8] = unsafe { CStr::from_ptr(path.as_ptr()).to_bytes() };
-            let callback_ptr =
-                ptr as *const RefCell<&mut dyn FnMut(File, &[u8]) -> WalkDirCallbackResult>;
+            let callback_ptr = ptr as *const CallbackRefCell;
             // SAFETY: we trust TSK to pass in the same pointer we passed into tsk_fs_dir_walk.
             let mut callback = unsafe { callback_ptr.as_ref() }
                 .expect("null ptr passed to tsk_fs_dir_walk callback")
