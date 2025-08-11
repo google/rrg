@@ -463,7 +463,7 @@ impl Metadata<'_> {
             // SAFETY: checked for null terminator.
             let name = unsafe { CStr::from_ptr(name_list.name.as_ptr()) }
                 .to_string_lossy()
-                .to_string();
+                .into_owned();
             names.push(MetaName {
                 name,
                 par_inode: name_list.par_inode,
@@ -494,7 +494,7 @@ mod test {
 
     const SMOL_NTFS_GZ: &[u8] = include_bytes!("../test_data/smol.ntfs.gz");
     #[test]
-    fn test_get_tsk_version() {
+    fn test_version() {
         assert_eq!(version(), "4.13.0");
     }
 
@@ -503,21 +503,21 @@ mod test {
         let mut gz = flate2::read::GzDecoder::new(SMOL_NTFS_GZ);
         let mut ntfs_raw = Vec::new();
         gz.read_to_end(&mut ntfs_raw)
-            .expect("Failed to read test data");
-        let mut tempfile = NamedTempFile::new().expect("Failed to open tempfile");
+            .expect("failed to read test data");
+        let mut tempfile = NamedTempFile::new().expect("failed to open tempfile");
         tempfile
             .write_all(&ntfs_raw)
-            .expect("Failed to write tempfile");
-        let image = Image::open(tempfile.path()).expect("Failed to open ntfs image");
-        let fs = Filesystem::open(&image).expect("Failed to open NTFS FS");
+            .expect("failed to write tempfile");
+        let image = Image::open(tempfile.path()).expect("failed to open ntfs image");
+        let fs = Filesystem::open(&image).expect("failed to open NTFS FS");
         assert_eq!(fs.fs_type().unwrap(), "ntfs");
         let root_f = fs
             .open_file("/".as_ref())
-            .expect("Failed to open root file");
+            .expect("failed to open root file");
         assert_eq!(root_f.meta().unwrap().addr(), 5);
-        let root_name = root_f.name().expect("No root name");
+        let root_name = root_f.name().expect("no root name");
         assert_eq!(root_name, "");
-        let mut root_dir = fs.open_dir("/".as_ref()).expect("Failed to open root dir");
+        let mut root_dir = fs.open_dir("/".as_ref()).expect("failed to open root dir");
         let root_f2 = root_dir.file();
         assert_eq!(root_f2.meta().unwrap().addr(), 5);
         let mut root_dir_entries = root_dir
@@ -568,13 +568,13 @@ mod test {
         let mut gz = flate2::read::GzDecoder::new(SMOL_NTFS_GZ);
         let mut ntfs_raw = Vec::new();
         gz.read_to_end(&mut ntfs_raw)
-            .expect("Failed to read test data");
-        let mut tempfile = NamedTempFile::new().expect("Failed to open tempfile");
+            .expect("failed to read test data");
+        let mut tempfile = NamedTempFile::new().expect("failed to open tempfile");
         tempfile
             .write_all(&ntfs_raw)
-            .expect("Failed to write tempfile");
-        let image = Image::open(tempfile.path()).expect("Failed to open ntfs image");
-        let mut fs = Filesystem::open(&image).expect("Failed to open NTFS FS");
+            .expect("failed to write tempfile");
+        let image = Image::open(tempfile.path()).expect("failed to open ntfs image");
+        let mut fs = Filesystem::open(&image).expect("failed to open NTFS FS");
         let mut paths = std::collections::HashSet::new();
         fs.walk_dir(fs.root_inum(), |file, path| {
             let mut full_path = String::from_utf8_lossy(path).to_string();
