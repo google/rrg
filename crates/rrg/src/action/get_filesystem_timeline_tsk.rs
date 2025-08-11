@@ -131,9 +131,9 @@ where
     };
 
     let (tx, rx) = std::sync::mpsc::sync_channel(0);
-    let tsk_thread = std::thread::spawn(move || -> tsk::TskResult<()> {
-        let image = tsk::TskImage::open(&raw_fs)?;
-        let mut fs = tsk::TskFs::open(&image)?;
+    let tsk_thread = std::thread::spawn(move || -> tsk::Result<()> {
+        let image = tsk::Image::open(&raw_fs)?;
+        let mut fs = tsk::Filesystem::open(&image)?;
         let dir = fs.open_dir(&embedded_path)?;
         let root_bytes = embedded_path.as_os_str().as_encoded_bytes();
         fs.walk_dir(dir.addr(), |file, path| {
@@ -218,11 +218,11 @@ fn serialize_entry(
     root: &[u8],
     // Relative path to the parent directory from the root.
     parent_path: &[u8],
-    // Base name of the file.
-    file: tsk::TskFsFile,
+    // Handle to the file.
+    file: tsk::File,
 ) -> rrg_proto::get_filesystem_timeline::Entry {
     let mut proto = rrg_proto::get_filesystem_timeline::Entry::default();
-    if let Some(name) = file.get_name() {
+    if let Some(name) = file.name() {
         let mut path = Vec::from(root);
         path.push(b'/');
         path.extend_from_slice(parent_path);
@@ -234,7 +234,7 @@ fn serialize_entry(
         seconds * 1_000_000_000 + nanos as i64
     }
 
-    if let Some(meta) = file.get_meta() {
+    if let Some(meta) = file.meta() {
         if let Ok(size) = meta.size().try_into() {
             proto.set_size(size);
         }
