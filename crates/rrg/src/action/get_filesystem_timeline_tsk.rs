@@ -446,15 +446,13 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.path().to_owned());
 
-        assert_eq!(entries.len(), 5);
+        assert_eq!(entries.len(), 4);
         assert_eq!(str_path(&entries[0]), "/hardlinks/.");
         assert_eq!(str_path(&entries[1]), "/hardlinks/..");
-        // Note: /hardlinks/bar is a deleted file.
-        assert_eq!(str_path(&entries[2]), "/hardlinks/bar");
-        assert_eq!(str_path(&entries[3]), "/hardlinks/one");
+        assert_eq!(str_path(&entries[2]), "/hardlinks/one");
+        assert_eq!(entries[2].unix_ino(), 88);
+        assert_eq!(str_path(&entries[3]), "/hardlinks/two");
         assert_eq!(entries[3].unix_ino(), 88);
-        assert_eq!(str_path(&entries[4]), "/hardlinks/two");
-        assert_eq!(entries[4].unix_ino(), 88);
     }
 
     /// Retrieves timeline entries from the given session object.
@@ -500,71 +498,76 @@ mod tests {
     fn get_mount_linux() {
         use std::os::unix::ffi::OsStrExt;
 
+        let sysfs_mount = Mount {
+            name: "sysfs".to_string(),
+            path: "/sys".parse().unwrap(),
+            fs_type: "sysfs".to_string(),
+        };
+        let root_mount = Mount {
+            name: "/dev/mapper/root".to_string(),
+            path: "/".parse().unwrap(),
+            fs_type: "ext4".to_string(),
+        };
+        let home_mount = Mount {
+            name: "/etc/auto.home.local".to_string(),
+            path: "/home".parse().unwrap(),
+            fs_type: "autofs".to_string(),
+        };
+        let boot_mount = Mount {
+            name: "/dev/sda2".to_string(),
+            path: "/boot".parse().unwrap(),
+            fs_type: "ext2".to_string(),
+        };
+        let efi_mount = Mount {
+            name: "/dev/sda1".to_string(),
+            path: "/boot/efi".parse().unwrap(),
+            fs_type: "vfat".to_string(),
+        };
+
         let mounts = vec![
-            Mount {
-                name: "sysfs".to_string(),
-                path: "/sys".parse().unwrap(),
-                fs_type: "sysfs".to_string(),
-            },
-            Mount {
-                name: "/dev/mapper/root".to_string(),
-                path: "/".parse().unwrap(),
-                fs_type: "ext4".to_string(),
-            },
-            Mount {
-                name: "/etc/auto.home.local".to_string(),
-                path: "/home".parse().unwrap(),
-                fs_type: "autofs".to_string(),
-            },
-            Mount {
-                name: "/dev/sda2".to_string(),
-                path: "/boot".parse().unwrap(),
-                fs_type: "ext2".to_string(),
-            },
-            Mount {
-                name: "/dev/sda1".to_string(),
-                path: "/boot/efi".parse().unwrap(),
-                fs_type: "vfat".to_string(),
-            },
+            sysfs_mount.clone(),
+            home_mount.clone(),
+            boot_mount.clone(),
+            efi_mount.clone(),
+            root_mount.clone(),
         ];
-        assert_eq!(&get_mount(&mounts, "/".as_ref()).unwrap(), &mounts[2]);
+        assert_eq!(&get_mount(&mounts, "/".as_ref()).unwrap(), &root_mount);
         let root_path = "/foo/bar/baz".as_ref();
-        assert_eq!(&get_mount(&mounts, root_path).unwrap(), &mounts[2]);
+        assert_eq!(&get_mount(&mounts, root_path).unwrap(), &root_mount);
         let home_path = "/home/foo/bar/baz".as_ref();
-        assert_eq!(&get_mount(&mounts, home_path).unwrap(), &mounts[6]);
-        assert_eq!(&get_mount(&mounts, "/boot".as_ref()).unwrap(), &mounts[4]);
+        assert_eq!(&get_mount(&mounts, home_path).unwrap(), &home_mount);
+        assert_eq!(&get_mount(&mounts, "/boot".as_ref()).unwrap(), &boot_mount);
         let boot_path = std::path::PathBuf::from(OsStr::from_bytes(b"/boot/efi\xff\xff\xff"));
-        assert_eq!(&get_mount(&mounts, &boot_path).unwrap(), &mounts[4]);
+        assert_eq!(&get_mount(&mounts, &boot_path).unwrap(), &boot_mount);
         let efi_path = "/boot/efi/EFI".as_ref();
-        assert_eq!(&get_mount(&mounts, efi_path).unwrap(), &mounts[5]);
+        assert_eq!(&get_mount(&mounts, efi_path).unwrap(), &efi_mount);
     }
 
     #[cfg(target_family = "unix")]
     #[test]
     fn get_raw_device_linux() {
         use std::os::unix::ffi::OsStrExt;
-        let mounts = vec![
-            Mount {
-                name: "/dev/mapper/root".to_string(),
-                path: "/".parse().unwrap(),
-                fs_type: "ext4".to_string(),
-            },
-            Mount {
-                name: "/dev/sda2".to_string(),
-                path: "/boot".parse().unwrap(),
-                fs_type: "ext2".to_string(),
-            },
-            Mount {
-                name: "/dev/sda1".to_string(),
-                path: "/boot/efi".parse().unwrap(),
-                fs_type: "vfat".to_string(),
-            },
-            Mount {
-                name: "/etc/auto.home.local".to_string(),
-                path: "/home".parse().unwrap(),
-                fs_type: "autofs".to_string(),
-            },
-        ];
+        let root_mount = Mount {
+            name: "/dev/mapper/root".to_string(),
+            path: "/".parse().unwrap(),
+            fs_type: "ext4".to_string(),
+        };
+        let boot_mount = Mount {
+            name: "/dev/sda2".to_string(),
+            path: "/boot".parse().unwrap(),
+            fs_type: "ext2".to_string(),
+        };
+        let efi_mount = Mount {
+            name: "/dev/sda1".to_string(),
+            path: "/boot/efi".parse().unwrap(),
+            fs_type: "vfat".to_string(),
+        };
+        let home_mount = Mount {
+            name: "/etc/auto.home.local".to_string(),
+            path: "/home".parse().unwrap(),
+            fs_type: "autofs".to_string(),
+        };
+        let mounts = vec![root_mount, boot_mount, efi_mount, home_mount];
         assert!(
             get_raw_device(&mounts, "/home/foo/bar/baz".as_ref())
                 .err()
