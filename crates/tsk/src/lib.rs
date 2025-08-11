@@ -202,8 +202,8 @@ impl<'image> Filesystem<'image> {
     /// `callback` for each file and directory with two arguments: a reference
     /// to the file and the full path to the file.
     pub fn walk_dir(
-        &mut self,
-        dir_addr: u64,
+        &self,
+        dir: &Directory,
         mut callback: impl FnMut(File, &[u8]) -> WalkDirCallbackResult,
     ) -> Result<()> {
         // References to trait objects are "fat" and cannot be passed as
@@ -247,7 +247,7 @@ impl<'image> Filesystem<'image> {
         let result = unsafe {
             tsk_sys::tsk_fs_dir_walk(
                 self.inner.as_ptr(),
-                dir_addr,
+                dir.addr(),
                 flags,
                 Some(c_callback),
                 (&refcell) as *const CallbackRefCell as *mut c_void,

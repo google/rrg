@@ -131,10 +131,10 @@ where
     let (tx, rx) = std::sync::mpsc::sync_channel(0);
     let tsk_thread = std::thread::spawn(move || -> tsk::Result<()> {
         let image = tsk::Image::open(&raw_fs)?;
-        let mut fs = tsk::Filesystem::open(&image)?;
+        let fs = tsk::Filesystem::open(&image)?;
         let dir = fs.open_dir(&embedded_path)?;
         let root_bytes = embedded_path.as_os_str().as_encoded_bytes();
-        fs.walk_dir(dir.addr(), |file, path| {
+        fs.walk_dir(&dir, |file, path| {
             match tx.send(make_entry(root_bytes, path, file)) {
                 Ok(()) => tsk::WalkDirCallbackResult::Continue,
                 // rx disconnected, no need to keep searching.
