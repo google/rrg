@@ -189,7 +189,7 @@ where
 }
 
 /// Information about a mounted filesystem.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Mount {
     /// Name of the mounted device.
     pub name: String,

@@ -30,6 +30,9 @@ pub mod grep_file_contents;
 #[cfg(feature = "action-get_filesystem_timeline")]
 pub mod get_filesystem_timeline;
 
+#[cfg(feature = "action-get_filesystem_timeline_tsk")]
+pub mod get_filesystem_timeline_tsk;
+
 #[cfg(feature = "action-get_tcp_response")]
 pub mod get_tcp_response;
 
@@ -108,6 +111,10 @@ where
         #[cfg(feature = "action-get_filesystem_timeline")]
         GetFilesystemTimeline => {
             handle(session, request, self::get_filesystem_timeline::handle)
+        }
+        #[cfg(feature = "action-get_filesystem_timeline_tsk")]
+        GetFilesystemTimelineTsk => {
+            handle(session, request, self::get_filesystem_timeline_tsk::handle)
         }
         #[cfg(feature = "action-get_tcp_response")]
         GetTcpResponse => {

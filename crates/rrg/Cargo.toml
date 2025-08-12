@@ -36,6 +36,7 @@ action-get_file_metadata-sha256 = ["action-get_file_metadata", "dep:sha2"]
 action-get_file_contents = ["dep:sha2"]
 action-grep_file_contents = []
 action-get_filesystem_timeline = ["dep:flate2", "dep:sha2"]
+action-get_filesystem_timeline_tsk = ["action-get_filesystem_timeline", "dep:tsk"]
 action-get_tcp_response = []
 action-list_connections = []
 action-list_interfaces = []
@@ -64,6 +65,10 @@ path = "../ospect"
 
 [dependencies.rrg-proto]
 path = "../rrg-proto"
+
+[dependencies.tsk]
+path = "../tsk"
+optional = true
 
 [dependencies.winreg]
 path = "../winreg"
