@@ -63,6 +63,36 @@ impl std::fmt::Display for CommandExecutionError {
     }
 }
 
+// An error indicating that the unsigned arg was required but not provided.
+#[derive(Debug)]
+struct MissingUnsignedArgError {
+    idx: usize,
+}
+
+impl std::fmt::Display for MissingUnsignedArgError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "missing unsigned arg #{}", self.idx)
+    }
+}
+
+impl std::error::Error for MissingUnsignedArgError {}
+
+// An error indicating that there more unsigned args provided than expected.
+#[derive(Debug)]
+struct ExcessiveUnsignedArgsError {
+    count: usize,
+}
+
+impl std::fmt::Display for ExcessiveUnsignedArgsError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{} excessive unsigned arguments", self.count)
+    }
+}
+
+impl std::error::Error for ExcessiveUnsignedArgsError {}
+
 impl std::error::Error for CommandExecutionError {}
 
 /// Handles invocations of the `execute_signed_command` action.
@@ -327,6 +357,40 @@ impl crate::request::Args for Args {
         let path = std::path::PathBuf::try_from(command.take_path())
             .map_err(|error| ParseArgsError::invalid_field("command path", error))?;
 
+        let mut args = Vec::new();
+
+        // We use `args_signed` for compatibility reasons. Once the field is not
+        // in active use anymore, this should be deleted.
+        args.extend(command.take_args_signed());
+
+        let mut unsigned_args = proto.take_unsigned_args();
+        let mut unsigned_arg_idx = 0;
+
+        for mut arg in command.take_args().into_iter() {
+            let arg = if arg.unsigned_arg_allowed() {
+                match unsigned_args.get_mut(unsigned_arg_idx) {
+                    Some(arg) => {
+                        unsigned_arg_idx += 1;
+                        std::mem::take(arg)
+                    }
+                    None => {
+                        return Err(ParseArgsError::invalid_field("unsigned args", MissingUnsignedArgError {
+                            idx: unsigned_arg_idx,
+                        }))
+                    }
+                }
+            } else {
+                arg.take_signed_arg()
+            };
+
+            args.push(arg);
+        }
+        if unsigned_arg_idx != unsigned_args.len() {
+            return Err(ParseArgsError::invalid_field("unsigned args", ExcessiveUnsignedArgsError {
+                count: unsigned_args.len() - unsigned_arg_idx,
+            }));
+        }
+
         let stdin = match command.unsigned_stdin_allowed() {
             true => proto.take_unsigned_stdin(),
             false => command.take_signed_stdin(),
@@ -338,7 +402,7 @@ impl crate::request::Args for Args {
         Ok(Args {
             raw_command,
             path,
-            args: command.take_args(),
+            args,
             env: command.take_env(),
             ed25519_signature,
             stdin,
