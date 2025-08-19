@@ -72,7 +72,7 @@ struct MissingUnsignedArgError {
 impl std::fmt::Display for MissingUnsignedArgError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "missing unsigned arg #{}", self.idx)
+        write!(fmt, "missing unsigned arg at {}", self.idx)
     }
 }
 
@@ -366,7 +366,7 @@ impl crate::request::Args for Args {
         let mut unsigned_args = proto.take_unsigned_args();
         let mut unsigned_arg_idx = 0;
 
-        for mut arg in command.take_args().into_iter() {
+        for (arg_idx, mut arg) in command.take_args().into_iter().enumerate() {
             let arg = if arg.unsigned_arg_allowed() {
                 match unsigned_args.get_mut(unsigned_arg_idx) {
                     Some(arg) => {
@@ -375,7 +375,7 @@ impl crate::request::Args for Args {
                     }
                     None => {
                         return Err(ParseArgsError::invalid_field("unsigned args", MissingUnsignedArgError {
-                            idx: unsigned_arg_idx,
+                            idx: arg_idx,
                         }))
                     }
                 }
