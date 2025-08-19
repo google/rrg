@@ -363,16 +363,12 @@ impl crate::request::Args for Args {
         // in active use anymore, this should be deleted.
         args.extend(command.take_args_signed());
 
-        let mut unsigned_args = proto.take_unsigned_args();
-        let mut unsigned_arg_idx = 0;
+        let mut unsigned_args_iter = proto.take_unsigned_args().into_iter();
 
         for (arg_idx, mut arg) in command.take_args().into_iter().enumerate() {
             let arg = if arg.unsigned_arg_allowed() {
-                match unsigned_args.get_mut(unsigned_arg_idx) {
-                    Some(arg) => {
-                        unsigned_arg_idx += 1;
-                        std::mem::take(arg)
-                    }
+                match unsigned_args_iter.next() {
+                    Some(arg) => arg,
                     None => {
                         return Err(ParseArgsError::invalid_field("unsigned args", MissingUnsignedArgError {
                             idx: arg_idx,
@@ -385,9 +381,10 @@ impl crate::request::Args for Args {
 
             args.push(arg);
         }
-        if unsigned_arg_idx != unsigned_args.len() {
+        let unsigned_args_left = unsigned_args_iter.count();
+        if unsigned_args_left > 0 {
             return Err(ParseArgsError::invalid_field("unsigned args", ExcessiveUnsignedArgsError {
-                count: unsigned_args.len() - unsigned_arg_idx,
+                count: unsigned_args_left,
             }));
         }
 
