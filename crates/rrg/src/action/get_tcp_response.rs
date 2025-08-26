@@ -44,7 +44,7 @@ where
             kind: ErrorKind::InvalidWriteTimeout,
             inner: error,
         })?;
-    let data_write_len = stream.write(&args.data)
+    stream.write_all(&args.data)
         .map_err(|error| Error {
             kind: ErrorKind::Write,
             inner: error,
@@ -56,7 +56,7 @@ where
         })?;
 
     // TODO(@panhania): Charge network bytes.
-    log::info!("sent {} bytes to {}", data_write_len, args.addr);
+    log::info!("sent {} bytes to {}", args.data.len(), args.addr);
 
     let mut data = Vec::new();
 
@@ -223,7 +223,7 @@ mod tests {
 
             let (mut stream, _) = server.accept()
                 .unwrap();
-            stream.write(b"foobar")
+            stream.write_all(b"foobar")
                 .unwrap();
             stream.flush()
                 .unwrap();
