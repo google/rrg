@@ -81,6 +81,9 @@ impl ReadableProcessMemory {
 #[cfg(target_os = "linux")]
 pub use linux::*;
 
+#[cfg(target_os = "windows")]
+pub use windows::*;
+
 #[cfg(target_os = "linux")]
 mod linux {
     use super::*;
@@ -336,6 +339,108 @@ mod linux {
             assert!(regions.into_iter().any(|r| r.inode == Some(meta.ino())
                 && r.permissions.private
                 && r.permissions.read));
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use super::*;
+    use core::ffi::c_void;
+    use std::mem::MaybeUninit;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::Memory::{MEMORY_BASIC_INFORMATION, VirtualQueryEx};
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
+
+    struct ProcessHandle(HANDLE);
+
+    impl ProcessHandle {
+        fn open(pid: u32) -> std::io::Result<Self> {
+            // Open a handle to the process with all access rights
+            let handle: HANDLE = unsafe { OpenProcess(PROCESS_ALL_ACCESS, 0, pid) };
+            if handle.is_null() {
+                Err(std::io::Error::last_os_error())
+            } else {
+                Ok(Self(handle))
+            }
+        }
+    }
+
+    impl Drop for ProcessHandle {
+        fn drop(&mut self) {
+            unsafe { CloseHandle(self.0) };
+        }
+    }
+
+    impl MappedRegion {
+        fn query(handle: &ProcessHandle, address_start: u64) -> std::io::Result<Self> {
+            let mut mem: std::mem::MaybeUninit<MEMORY_BASIC_INFORMATION> = MaybeUninit::zeroed();
+            if unsafe {
+                VirtualQueryEx(
+                    handle.0,
+                    address_start as *const c_void,
+                    mem.as_mut_ptr(),
+                    std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                ) == 0
+            } {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            let mem = unsafe { mem.assume_init() };
+            // let permissions = ...;
+            Ok(Self {
+                address_start,
+                size: mem.RegionSize as u64,
+                ..Default::default()
+            })
+        }
+    }
+
+    pub struct MappedRegionIter {
+        process: ProcessHandle,
+        cur_addr: u64,
+    }
+
+    impl MappedRegionIter {
+        /// Creates a new [`MappedRegionIterator`] of the process with id `pid`.
+        pub fn from_pid(pid: u32) -> std::io::Result<Self> {
+            let process = ProcessHandle::open(pid)?;
+            Ok(Self {
+                process,
+                cur_addr: 0,
+            })
+        }
+    }
+
+    impl Iterator for MappedRegionIter {
+        type Item = Result<MappedRegion, crate::session::Error>;
+        fn next(&mut self) -> Option<Self::Item> {
+            let result = MappedRegion::query(&self.process, self.cur_addr);
+            match &result {
+                Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => {
+                    // Invalid input is returned when the address falls outside of the accessible
+                    // memory bounds of the process, so we can stop iteration here
+                    return None;
+                }
+                Ok(region) => self.cur_addr = region.end_address(),
+                _ => (),
+            }
+            Some(result.map_err(crate::session::Error::action))
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn iterate_this_process_regions() {
+            let pid = std::process::id();
+            let iterator = MappedRegionIter::from_pid(pid)
+                .expect("Could not read memory regions of current process");
+            let result = iterator.collect::<Result<Vec<MappedRegion>, _>>().unwrap();
+            dbg!(&result);
+            assert!(!result.is_empty());
         }
     }
 }
