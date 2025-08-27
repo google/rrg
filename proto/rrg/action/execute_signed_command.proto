@@ -36,7 +36,10 @@ message Command {
   //
   // Note that environment variables are not inherited from the RRG process
   // and are empty if not specified.
-  map<string, string> env = 3;
+  map<string, string> env_signed = 3;
+
+  // Environment variables that can be specified outside of the command.
+  repeated string env_unsigned_allowed = 7;
 
   oneof stdin {
     // Fixed standard input to pass to the executed command.
@@ -73,6 +76,12 @@ message Args {
   // i-th argument specified here will be provided to the i-th argument of the
   // signed command that has `unsigned_arg_allowed` flag set.
   repeated string unsigned_args = 5;
+
+  // Environment variables to invoke the executed command with.
+  //
+  // For this option to work, the command that has been signed has to have each
+  // key from this map be present in `env_unsigned_allowed`.
+  map<string, string> unsigned_env = 6;
 
   // An [Ed25519][1] signature of the command.
   //

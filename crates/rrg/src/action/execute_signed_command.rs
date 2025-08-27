@@ -95,6 +95,38 @@ impl std::error::Error for ExcessiveUnsignedArgsError {}
 
 impl std::error::Error for CommandExecutionError {}
 
+/// An error indicating that the given unsigned environment variable was not
+/// allowed.
+#[derive(Debug)]
+struct UnallowedUnsignedEnvError {
+    name: String,
+}
+
+impl std::fmt::Display for UnallowedUnsignedEnvError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "'{}' not allowed as unsigned", self.name)
+    }
+}
+
+impl std::error::Error for UnallowedUnsignedEnvError {}
+
+/// An error indicating that the given unsigned environment variable has
+/// conflicting values.
+#[derive(Debug)]
+struct DupUnsignedEnvError {
+    name: String,
+}
+
+impl std::fmt::Display for DupUnsignedEnvError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "'{}' not allowed as unsigned", self.name)
+    }
+}
+
+impl std::error::Error for DupUnsignedEnvError {}
+
 /// Handles invocations of the `execute_signed_command` action.
 pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
@@ -388,6 +420,29 @@ impl crate::request::Args for Args {
             }));
         }
 
+        let mut env = std::collections::HashMap::new();
+        env.extend(command.take_env_signed());
+
+        for (name, value) in proto.take_unsigned_env().into_iter() {
+            if !command.env_unsigned_allowed().contains(&name) {
+                return Err(ParseArgsError::invalid_field("unsigned env", UnallowedUnsignedEnvError {
+                    name,
+                }))
+            }
+
+            use std::collections::hash_map::Entry::*;
+            match env.entry(name) {
+                Vacant(entry) => {
+                    entry.insert(value);
+                }
+                Occupied(entry) => {
+                    return Err(ParseArgsError::invalid_field("unsigned env", DupUnsignedEnvError {
+                        name: String::from(entry.key()),
+                    }))
+                }
+            }
+        }
+
         let stdin = match command.unsigned_stdin_allowed() {
             true => proto.take_unsigned_stdin(),
             false => command.take_signed_stdin(),
@@ -400,7 +455,7 @@ impl crate::request::Args for Args {
             raw_command,
             path,
             args,
-            env: command.take_env(),
+            env,
             ed25519_signature,
             stdin,
             timeout,
@@ -1138,6 +1193,102 @@ mod tests {
         args_proto.mut_unsigned_args().push(String::from("quux"));
         args_proto.mut_unsigned_args().push(String::from("norf"));
         args_proto.mut_unsigned_args().push(String::from("thud"));
+
+        // TODO(@panhania): Assert details of the error once exposed in
+        // `ParseArgsError`.
+        assert!(<Args as crate::request::Args>::from_proto(args_proto).is_err());
+    }
+
+    #[test]
+    fn args_from_proto_env_signed() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+        command_proto.mut_env_signed().insert("FOO".to_owned(), "quux".to_owned());
+        command_proto.mut_env_signed().insert("BAR".to_owned(), "thud".to_owned());
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+
+        let args = <Args as crate::request::Args>::from_proto(args_proto)
+            .unwrap();
+        assert_eq!(args.path, std::path::Path::new("/foo/bar"));
+        assert_eq!(args.env["FOO"], "quux");
+        assert_eq!(args.env["BAR"], "thud");
+    }
+
+    #[test]
+    fn args_from_proto_env_unsigned() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+        command_proto.mut_env_unsigned_allowed().push("FOO".to_owned());
+        command_proto.mut_env_unsigned_allowed().push("BAR".to_owned());
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+        args_proto.mut_unsigned_env().insert("FOO".to_owned(), "quux".to_owned());
+        args_proto.mut_unsigned_env().insert("BAR".to_owned(), "thud".to_owned());
+
+        let args = <Args as crate::request::Args>::from_proto(args_proto)
+            .unwrap();
+        assert_eq!(args.path, std::path::Path::new("/foo/bar"));
+        assert_eq!(args.env["FOO"], "quux");
+        assert_eq!(args.env["BAR"], "thud");
+    }
+
+    #[test]
+    fn args_from_proto_env_unsigned_unallowed() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+        command_proto.mut_env_unsigned_allowed().push("FOO".to_owned());
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+        args_proto.mut_unsigned_env().insert("FOO".to_owned(), "quux".to_owned());
+        args_proto.mut_unsigned_env().insert("BAR".to_owned(), "thud".to_owned());
+
+        // TODO(@panhania): Assert details of the error once exposed in
+        // `ParseArgsError`.
+        assert!(<Args as crate::request::Args>::from_proto(args_proto).is_err());
+    }
+
+    #[test]
+    fn args_from_proto_env_unsigned_dup() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+        command_proto.mut_env_signed().insert("FOO".to_owned(), "quux".to_owned());
+        command_proto.mut_env_unsigned_allowed().push("FOO".to_owned());
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+        args_proto.mut_unsigned_env().insert("FOO".to_owned(), "thud".to_owned());
 
         // TODO(@panhania): Assert details of the error once exposed in
         // `ParseArgsError`.
