@@ -366,7 +366,7 @@ impl crate::request::Args for Args {
         let mut unsigned_args_iter = proto.take_unsigned_args().into_iter();
 
         for (arg_idx, mut arg) in command.take_args().into_iter().enumerate() {
-            let arg = if arg.unsigned_arg_allowed() {
+            let arg = if arg.unsigned_allowed() {
                 match unsigned_args_iter.next() {
                     Some(arg) => arg,
                     None => {
@@ -376,7 +376,7 @@ impl crate::request::Args for Args {
                     }
                 }
             } else {
-                arg.take_signed_arg()
+                arg.take_signed()
             };
 
             args.push(arg);
@@ -997,11 +997,11 @@ mod tests {
         command_proto.mut_args_signed().push(String::from("bar"));
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_signed_arg(String::from("quux"));
+        arg_quux.set_signed(String::from("quux"));
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_signed_arg(String::from("norf"));
+        arg_norf.set_signed(String::from("norf"));
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1026,11 +1026,11 @@ mod tests {
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_unsigned_arg_allowed(true);
+        arg_quux.set_unsigned_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_unsigned_arg_allowed(true);
+        arg_norf.set_unsigned_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1057,11 +1057,11 @@ mod tests {
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_unsigned_arg_allowed(true);
+        arg_quux.set_unsigned_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_unsigned_arg_allowed(true);
+        arg_norf.set_unsigned_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1086,11 +1086,11 @@ mod tests {
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_unsigned_arg_allowed(true);
+        arg_quux.set_unsigned_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_unsigned_arg_allowed(true);
+        arg_norf.set_unsigned_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;

@@ -15,11 +15,11 @@ message Command {
   message Arg {
     oneof arg {
       // Fixed argument to pass to the executed command.
-      string signed_arg = 1;
+      string signed = 1;
 
       // Whether to allow execution of arbitrary argument passed in the request
       // without it being pre-signed.
-      bool unsigned_arg_allowed = 2;
+      bool unsigned_allowed = 2;
     }
   }
 
