@@ -21,7 +21,8 @@ fn main() {
     // scripts, which are only supposed to mutate the out directory, so this
     // copies the entire sleuthkit source into the out directory first.
     Command::new("cp")
-        .arg("-r")
+        .arg("--recursive")
+        .arg("--no-target-directory")
         .arg(sleuthkit_source_path)
         .arg(&sleuthkit_out_path)
         .status()
