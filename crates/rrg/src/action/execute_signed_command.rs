@@ -988,7 +988,7 @@ mod tests {
     }
 
     #[test]
-    fn args_from_proto_args_only_signed() {
+    fn args_from_proto_args_signed() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
 
         let mut command_proto = rrg_proto::execute_signed_command::Command::new();
@@ -1019,7 +1019,7 @@ mod tests {
     }
 
     #[test]
-    fn args_from_proto_args_only_unsigned() {
+    fn args_from_proto_args_unsigned() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
 
         let mut command_proto = rrg_proto::execute_signed_command::Command::new();
@@ -1050,7 +1050,7 @@ mod tests {
     }
 
     #[test]
-    fn args_from_proto_args_only_unsigned_missing() {
+    fn args_from_proto_args_unsigned_missing() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
 
         let mut command_proto = rrg_proto::execute_signed_command::Command::new();
@@ -1079,7 +1079,7 @@ mod tests {
     }
 
     #[test]
-    fn args_from_proto_args_only_unsigned_excessive() {
+    fn args_from_proto_args_unsigned_excessive() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
 
         let mut command_proto = rrg_proto::execute_signed_command::Command::new();
