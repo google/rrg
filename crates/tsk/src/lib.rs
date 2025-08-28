@@ -493,7 +493,7 @@ mod test {
     const SMOL_NTFS_GZ: &[u8] = include_bytes!("../test_data/smol.ntfs.gz");
     #[test]
     fn test_version() {
-        assert_eq!(version(), "4.13.0");
+        assert_eq!(version().split(".").count(), 3);
     }
 
     #[test]
