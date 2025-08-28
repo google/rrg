@@ -143,18 +143,11 @@ fn main() {
     // make --dry-run VERBOSE=1 tsk/libtsk.la | rg -o 'tsk/[^ ]+\.cpp\b'
     let cpp_sources = [
         "tsk/auto/auto.cpp",
-        "tsk/auto/auto.cpp",
-        "tsk/auto/auto_db.cpp",
         "tsk/auto/auto_db.cpp",
         "tsk/auto/case_db.cpp",
-        "tsk/auto/case_db.cpp",
-        "tsk/auto/db_sqlite.cpp",
         "tsk/auto/db_sqlite.cpp",
         "tsk/auto/guid.cpp",
-        "tsk/auto/guid.cpp",
         "tsk/auto/is_image_supported.cpp",
-        "tsk/auto/is_image_supported.cpp",
-        "tsk/auto/tsk_db.cpp",
         "tsk/auto/tsk_db.cpp",
         "tsk/base/tsk_error_win32.cpp",
         "tsk/fs/apfs_compat.cpp",
