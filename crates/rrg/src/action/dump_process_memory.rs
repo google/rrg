@@ -53,29 +53,13 @@ impl MappedRegion {
     }
 }
 
-/// Allows to read the contents of a running process' memory.
-pub struct ReadableProcessMemory {
-    mem_file: File,
-}
-
-impl ReadableProcessMemory {
-    pub fn from_file(mem_file: File) -> Self {
-        Self { mem_file }
-    }
-
+// Represents a handle to read another process' memory.
+pub trait MemoryReader {
     /// Reads a slice `\[offset..(offset+length)\]` of the opened process' memory
     /// and returns it as a [`Vec<u8>`]. `offset` is considered as an absolute offset
     /// in the process' address space. If the slice falls outside the memory's address space,
     /// the returned buffer will be truncated.
-    pub fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
-        self.mem_file.seek(SeekFrom::Start(offset))?;
-        let mut buf = Vec::new();
-        let mem_file = self.mem_file.by_ref();
-        // Limit amount of bytes that can be read
-        let mut mem_file_limited = mem_file.take(length);
-        mem_file_limited.read_to_end(&mut buf)?;
-        Ok(buf)
-    }
+    fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>>;
 }
 
 #[cfg(target_os = "linux")]
@@ -210,11 +194,36 @@ mod linux {
         }
     }
 
+    /// Allows to read the contents of a running process' memory.
+    pub struct ReadableProcessMemory {
+        mem_file: File,
+    }
+
     impl ReadableProcessMemory {
         /// Opens the contents of process `pid`'s memory for reading.
         pub fn open(pid: u32) -> std::io::Result<Self> {
             let mem_file = File::open(format!("/proc/{pid}/mem"))?;
             Ok(Self::from_file(mem_file))
+        }
+
+        pub fn from_file(mem_file: File) -> Self {
+            Self { mem_file }
+        }
+    }
+
+    impl MemoryReader for ReadableProcessMemory {
+        /// Reads a slice `\[offset..(offset+length)\]` of the opened process' memory
+        /// and returns it as a [`Vec<u8>`]. `offset` is considered as an absolute offset
+        /// in the process' address space. If the slice falls outside the memory's address space,
+        /// the returned buffer will be truncated.
+        fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
+            self.mem_file.seek(SeekFrom::Start(offset))?;
+            let mut buf = Vec::new();
+            let mem_file = self.mem_file.by_ref();
+            // Limit amount of bytes that can be read
+            let mut mem_file_limited = mem_file.take(length);
+            mem_file_limited.read_to_end(&mut buf)?;
+            Ok(buf)
         }
     }
 
@@ -258,35 +267,8 @@ mod linux {
     }
 
     #[cfg(test)]
-    mod tests {
-
+    mod test {
         use super::*;
-
-        #[test]
-        fn iterate_this_process_regions() {
-            let pid = std::process::id();
-            let iterator = MappedRegionIter::from_pid(pid)
-                .expect("Could not read memory regions of current process");
-            assert!(iterator.collect::<Result<Vec<MappedRegion>, _>>().is_ok());
-        }
-
-        #[test]
-        fn can_read_this_process_memory() {
-            let pid = std::process::id();
-            let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(pid)
-                .expect("Could not read memory regions of current process")
-                .collect::<Result<_, _>>()
-                .expect("Reading maps");
-
-            let mut memory =
-                ReadableProcessMemory::open(pid).expect("Could not open process memory");
-            assert! {
-                regions.iter().any(|region| memory.read_chunk(
-                    region.start_address(),
-                    region.size(),
-                ).is_ok())
-            }
-        }
 
         #[test]
         fn region_iter_detects_mmap() {
@@ -349,6 +331,7 @@ mod windows {
     use core::ffi::c_void;
     use std::mem::MaybeUninit;
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
     use windows_sys::Win32::System::Memory::{MEMORY_BASIC_INFORMATION, VirtualQueryEx};
     use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
 
@@ -429,18 +412,42 @@ mod windows {
         }
     }
 
-    #[cfg(test)]
-    mod tests {
-        use super::*;
+    /// Allows to read the contents of a running process' memory.
+    pub struct ReadableProcessMemory {
+        process: ProcessHandle,
+    }
 
-        #[test]
-        fn iterate_this_process_regions() {
-            let pid = std::process::id();
-            let iterator = MappedRegionIter::from_pid(pid)
-                .expect("Could not read memory regions of current process");
-            let result = iterator.collect::<Result<Vec<MappedRegion>, _>>().unwrap();
-            dbg!(&result);
-            assert!(!result.is_empty());
+    impl ReadableProcessMemory {
+        /// Opens the contents of process `pid`'s memory for reading.
+        pub fn open(pid: u32) -> std::io::Result<Self> {
+            Ok(Self {
+                process: ProcessHandle::open(pid)?,
+            })
+        }
+    }
+
+    impl MemoryReader for ReadableProcessMemory {
+        /// Reads a slice `\[offset..(offset+length)\]` of the opened process' memory
+        /// and returns it as a [`Vec<u8>`]. `offset` is considered as an absolute offset
+        /// in the process' address space. If the slice falls outside the memory's address space,
+        /// the returned buffer will be truncated.
+        fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
+            let mut buf = vec![0; length as usize];
+            let mut bytes_read = 0;
+            if unsafe {
+                ReadProcessMemory(
+                    self.process.0,
+                    std::ptr::without_provenance_mut(offset as usize),
+                    buf.as_mut_ptr().cast(),
+                    buf.len(),
+                    &mut bytes_read,
+                )
+            } == 0
+            {
+                return Err(std::io::Error::last_os_error());
+            }
+            buf.truncate(bytes_read);
+            Ok(buf)
         }
     }
 }
@@ -683,15 +690,16 @@ pub fn sort_by_priority(
 /// Reads the contents of all of process `pid`'s memory mappings
 /// and sends them to the session.
 /// `regions` and `memory` are passed as arguments for testability.
-pub fn dump_regions<S>(
+pub fn dump_regions<S, Mem>(
     session: &mut S,
     regions: impl Iterator<Item = MappedRegion>,
-    memory: &mut ReadableProcessMemory,
+    memory: &mut Mem,
     pid: u32,
     total_size_left: &mut u64,
 ) -> crate::session::Result<()>
 where
     S: crate::session::Session,
+    Mem: MemoryReader,
 {
     use sha2::Digest as _;
 
@@ -738,7 +746,7 @@ where
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub fn handle<S>(_session: &mut S, _args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
@@ -749,7 +757,7 @@ where
     )))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
@@ -813,7 +821,46 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::io::Write;
+
+    struct FakeProcessMemory {
+        contents: Vec<u8>,
+    }
+
+    impl MemoryReader for FakeProcessMemory {
+        fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
+            let start = offset as usize;
+            let end = (offset + length) as usize;
+            Ok(self.contents[start..end].to_owned())
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[test]
+    fn iterate_this_process_regions() {
+        let pid = std::process::id();
+        let iterator = MappedRegionIter::from_pid(pid)
+            .expect("Could not read memory regions of current process");
+        let result = iterator.collect::<Result<Vec<MappedRegion>, _>>().unwrap();
+        assert!(!result.is_empty());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[test]
+    fn can_read_this_process_memory() {
+        let pid = std::process::id();
+        let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(pid)
+            .expect("Could not read memory regions of current process")
+            .collect::<Result<_, _>>()
+            .expect("Reading maps");
+
+        let mut memory = ReadableProcessMemory::open(pid).expect("Could not open process memory");
+        assert! {
+            regions.iter().any(|region| memory.read_chunk(
+                region.start_address(),
+                region.size(),
+            ).is_ok())
+        }
+    }
 
     #[test]
     fn offset_priority() {
@@ -886,8 +933,6 @@ mod test {
 
     #[test]
     fn dumps_regions() {
-        let tempdir = tempfile::tempdir().unwrap();
-
         let regions = vec![
             MappedRegion::from_bounds(0, 1000),
             MappedRegion::from_bounds(1000, 3000),
@@ -895,16 +940,12 @@ mod test {
         ];
 
         // Write fake memory contents and check that they're read correctly
-        let file_path = tempdir.path().join("memfile.txt");
-        let mut file = File::create_new(file_path).expect("could not create memfile");
-        file.write_all(vec![1; 1000].as_slice())
-            .expect("could not write to memfile");
-        file.write_all(vec![2; 2000].as_slice())
-            .expect("could not write to memfile");
-        file.write_all(vec![3; 500].as_slice())
-            .expect("could not write to memfile");
+        let mut fake_mem = Vec::new();
+        fake_mem.extend(std::iter::repeat_n(1, 1000));
+        fake_mem.extend(std::iter::repeat_n(2, 2000));
+        fake_mem.extend(std::iter::repeat_n(3, 500));
 
-        let mut memory = ReadableProcessMemory::from_file(file);
+        let mut memory = FakeProcessMemory { contents: fake_mem };
 
         let mut session = crate::session::FakeSession::new();
         let mut limit = u64::MAX;
@@ -928,24 +969,19 @@ mod test {
 
     #[test]
     fn size_limit() {
-        let tempdir = tempfile::tempdir().unwrap();
-
         let regions = vec![
             MappedRegion::from_bounds(0, 1000),
             MappedRegion::from_bounds(1000, 3000),
             MappedRegion::from_bounds(3000, 3500),
         ];
 
-        let file_path = tempdir.path().join("memfile.txt");
-        let mut file = File::create_new(file_path).expect("could not create memfile");
-        file.write_all(vec![1; 1000].as_slice())
-            .expect("could not write to memfile");
-        file.write_all(vec![2; 2000].as_slice())
-            .expect("could not write to memfile");
-        file.write_all(vec![3; 500].as_slice())
-            .expect("could not write to memfile");
+        // Write fake memory contents and check that they're read correctly
+        let mut fake_mem = Vec::new();
+        fake_mem.extend(std::iter::repeat_n(1, 1000));
+        fake_mem.extend(std::iter::repeat_n(2, 2000));
+        fake_mem.extend(std::iter::repeat_n(3, 500));
 
-        let mut memory = ReadableProcessMemory::from_file(file);
+        let mut memory = FakeProcessMemory { contents: fake_mem };
 
         let mut session = crate::session::FakeSession::new();
         // Should dump first region fully, second partially
@@ -976,7 +1012,7 @@ mod test {
         assert_eq!(second_region.region.end_address(), 3000);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]
     fn handle_dumps_current_process_regions() {
         let mut session = crate::session::FakeSession::new();
@@ -995,7 +1031,7 @@ mod test {
         assert!(session.replies::<Item>().any(Result::is_ok));
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]
     fn filters_regions() {
         let mut session = crate::session::FakeSession::new();
