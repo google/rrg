@@ -3,8 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::collections::VecDeque;
-use std::fs::File;
-use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::PathBuf;
 
 /// A memory mapping in a running process' virtual address space.
@@ -18,6 +16,7 @@ pub struct MappedRegion {
     /// Permissions associated with this mapping.
     pub permissions: Permissions,
     /// If this mapping is backed by a file, this field will contain said file's inode.
+    /// Only valid on Linux.
     pub inode: Option<u64>,
     /// If this mapping is backed by a file, this field will contain the path to said file.
     /// It can also contain a pseudo-path that indicates the type of mapping, otherwise.
@@ -71,7 +70,8 @@ pub use windows::*;
 #[cfg(target_os = "linux")]
 mod linux {
     use super::*;
-    use std::io::BufRead;
+    use std::fs::File;
+    use std::io::{BufRead, Read as _, Seek as _, SeekFrom};
 
     /// An error that occurred during parsing of a process' memory mappings file.
     #[derive(Debug)]
@@ -332,7 +332,7 @@ mod windows {
     use std::mem::MaybeUninit;
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
     use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
-    use windows_sys::Win32::System::Memory::{MEMORY_BASIC_INFORMATION, VirtualQueryEx};
+    use windows_sys::Win32::System::Memory::{MEM_FREE, MEMORY_BASIC_INFORMATION, VirtualQueryEx};
     use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
 
     struct ProcessHandle(HANDLE);
@@ -355,33 +355,9 @@ mod windows {
         }
     }
 
-    impl MappedRegion {
-        fn query(handle: &ProcessHandle, address_start: u64) -> std::io::Result<Self> {
-            let mut mem: std::mem::MaybeUninit<MEMORY_BASIC_INFORMATION> = MaybeUninit::zeroed();
-            if unsafe {
-                VirtualQueryEx(
-                    handle.0,
-                    address_start as *const c_void,
-                    mem.as_mut_ptr(),
-                    std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
-                ) == 0
-            } {
-                return Err(std::io::Error::last_os_error());
-            }
-
-            let mem = unsafe { mem.assume_init() };
-            // let permissions = ...;
-            Ok(Self {
-                address_start,
-                size: mem.RegionSize as u64,
-                ..Default::default()
-            })
-        }
-    }
-
     pub struct MappedRegionIter {
         process: ProcessHandle,
-        cur_addr: u64,
+        cur_addr: *mut c_void,
     }
 
     impl MappedRegionIter {
@@ -390,25 +366,106 @@ mod windows {
             let process = ProcessHandle::open(pid)?;
             Ok(Self {
                 process,
-                cur_addr: 0,
+                cur_addr: std::ptr::null_mut(),
             })
         }
     }
 
+    fn parse_permissions(mem_info: &MEMORY_BASIC_INFORMATION) -> Permissions {
+        use windows_sys::Win32::System::Memory::*;
+
+        // Info obtained from https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants
+        // and https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-memory_basic_information
+
+        const EXECUTE_FLAGS: u32 =
+            PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+        const WRITE_FLAGS: u32 =
+            PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY | PAGE_READWRITE | PAGE_WRITECOPY;
+
+        // Use the protection information of the actual committed memory if available,
+        // otherwise the flags with which the memory mapping was created.
+        let flags = if mem_info.State == MEM_COMMIT {
+            mem_info.Protect
+        } else {
+            mem_info.AllocationProtect
+        };
+
+        let execute = flags & EXECUTE_FLAGS != 0;
+        let write = flags & WRITE_FLAGS != 0;
+        // The only flag which disables write access is PAGE_NOACCESS
+        let read = flags & PAGE_NOACCESS == 0;
+        let private = mem_info.Type == MEM_PRIVATE;
+        Permissions {
+            read,
+            write,
+            execute,
+            private,
+            shared: false,
+        }
+    }
+
+    fn get_mapped_filename(addr: *const c_void, process: &ProcessHandle) -> Option<PathBuf> {
+        use windows_sys::Win32::Foundation::MAX_PATH;
+        use windows_sys::Win32::System::ProcessStatus::GetMappedFileNameW;
+
+        use std::ffi::OsString;
+        use std::os::windows::ffi::OsStringExt;
+
+        let mut buf = [0u16; (MAX_PATH + 1) as usize];
+        let len = unsafe { GetMappedFileNameW(process.0, addr, buf.as_mut_ptr(), buf.len() as u32) }
+            as usize;
+        // A return value of 0 indicates an error, and nSize indicates that the path was
+        // truncated. We treat both cases as errors and just return None.
+        if len == 0 || len == buf.len() {
+            return None;
+        }
+        Some(PathBuf::from(OsString::from_wide(&buf[..len])))
+    }
+
     impl Iterator for MappedRegionIter {
-        type Item = Result<MappedRegion, crate::session::Error>;
+        type Item = std::io::Result<MappedRegion>;
         fn next(&mut self) -> Option<Self::Item> {
-            let result = MappedRegion::query(&self.process, self.cur_addr);
-            match &result {
-                Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => {
-                    // Invalid input is returned when the address falls outside of the accessible
-                    // memory bounds of the process, so we can stop iteration here
-                    return None;
+            loop {
+                let mem_info: MEMORY_BASIC_INFORMATION = {
+                    let mut mem: std::mem::MaybeUninit<MEMORY_BASIC_INFORMATION> =
+                        MaybeUninit::zeroed();
+                    if unsafe {
+                        VirtualQueryEx(
+                            self.process.0,
+                            self.cur_addr,
+                            mem.as_mut_ptr(),
+                            std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                        ) == 0
+                    } {
+                        let err = std::io::Error::last_os_error();
+                        // InvalidInput is returned when the given address
+                        // falls beyond the last page accessible by the process,
+                        // so we know we are done iterating when we receive that.
+                        if err.kind() == std::io::ErrorKind::InvalidInput {
+                            return None;
+                        }
+                        break Some(Err(err));
+                    }
+                    unsafe { mem.assume_init() }
+                };
+
+                let address_start = mem_info.BaseAddress;
+                let address_end = address_start.wrapping_byte_add(mem_info.RegionSize);
+                self.cur_addr = address_end;
+
+                if mem_info.State == MEM_FREE {
+                    // Skip over chunks of free memory
+                    continue;
                 }
-                Ok(region) => self.cur_addr = region.end_address(),
-                _ => (),
+
+                break Some(Ok(MappedRegion {
+                    address_start: address_start as u64,
+                    size: mem_info.RegionSize as u64,
+                    permissions: parse_permissions(&mem_info),
+                    inode: None,
+                    path: get_mapped_filename(address_start, &self.process),
+                }));
             }
-            Some(result.map_err(crate::session::Error::action))
         }
     }
 
@@ -450,6 +507,88 @@ mod windows {
             Ok(buf)
         }
     }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[test]
+        fn region_iter_detects_mmap() {
+            // `mmap` a file and check that the mapping is detected among those returned by
+            // `MappedRegionIter`.
+            use std::io::Write as _;
+            use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+            use windows_sys::Win32::System::Memory::{
+                CreateFileMappingW, FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile,
+                PAGE_READWRITE, UnmapViewOfFile,
+            };
+
+            let mut file = tempfile::tempfile().unwrap();
+            writeln!(file, "hello there").unwrap();
+
+            let meta = file.metadata().unwrap();
+            let length = meta.len() as usize;
+
+            // Create a file mapping object for the file
+            let mapping = unsafe {
+                CreateFileMappingW(
+                    file.as_raw_handle(),
+                    std::ptr::null(), // default security
+                    PAGE_READWRITE,   // read/write permission
+                    0,                // size of mapping object, high
+                    length as u32,    // size of mapping object, low
+                    std::ptr::null(),
+                )
+            };
+
+            if mapping.is_null() {
+                panic!("Could not create file mapping");
+            }
+
+            let mapping = unsafe { OwnedHandle::from_raw_handle(mapping) };
+
+            /// RAII wrapper around a `mmap`ed pointer that will `munmap` on drop.
+            struct MappedView {
+                addr: MEMORY_MAPPED_VIEW_ADDRESS,
+            }
+
+            impl Drop for MappedView {
+                fn drop(&mut self) {
+                    unsafe {
+                        UnmapViewOfFile(self.addr);
+                    }
+                }
+            }
+
+            // Map the view and test the results.
+
+            let view = unsafe {
+                let addr = MapViewOfFile(
+                    mapping.as_raw_handle(), // handle to mapping object
+                    FILE_MAP_ALL_ACCESS,     // read/write
+                    0,                       // high-order 32 bits of file offset
+                    0,                       // low-order 32 bits of file offset
+                    length,
+                );
+                assert!(!addr.Value.is_null());
+                MappedView { addr }
+            };
+
+            let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(std::process::id())
+                .expect("Could not read memory regions of current process")
+                .collect::<Result<_, _>>()
+                .expect("Reading maps");
+
+            assert!(regions.into_iter().any(|r| {
+                r.address_start == view.addr.Value as u64
+                    && r.permissions.read
+                    && r.permissions.write
+                    && r.path.is_some()
+            }));
+
+            drop(view);
+        }
+    }
 }
 
 /// A set of permissions associated with a [`MappedRegion`].
@@ -464,10 +603,11 @@ pub struct Permissions {
     /// Whether this mapping was created as `shared`.
     /// Writes to a shared mapping (usually backed by a file)
     /// can be observed by other processes which map the same file.
+    /// Currently only supported on Linux.
     shared: bool,
     /// Whether this mapping was created as 'private'.
     /// Writes to a private mapping (usually backed by a file)
-    /// are private to a proess and cannot be observed by other processes which map the same file.
+    /// are private to a process and cannot be observed by other processes which map the same file.
     private: bool,
 }
 
@@ -560,7 +700,7 @@ impl Args {
         if self.skip_executable_regions && region.permissions.execute {
             return false;
         }
-        if self.skip_mapped_files && region.inode.is_some() {
+        if self.skip_mapped_files && region.inode.is_some() || region.path.is_some() {
             return false;
         }
         if self.skip_readonly_regions

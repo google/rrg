@@ -23,7 +23,7 @@ message Args {
   // remaining memory pages will be dumped up to size_limit.
   repeated uint64 priority_offsets = 3;
 
-  // Set this flag to avoid dumping mapped files. Applies to Linux only.
+  // Set this flag to avoid dumping mapped files.
   bool skip_mapped_files = 4;
   // Set this flag to avoid dumping shared memory regions. Applies to Linux only.
   bool skip_shared_regions = 5;
@@ -45,7 +45,6 @@ message Permissions {
   // Applies to Linux only.
   bool shared = 4;
   // Indicates a region of memory that was mapped in private mode. 
-  // Applies to Linux only.
   bool private = 5;
 }
 
