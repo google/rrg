@@ -78,7 +78,7 @@ impl std::fmt::Display for MissingUnsignedArgError {
 
 impl std::error::Error for MissingUnsignedArgError {}
 
-// An error indicating that there more unsigned args provided than expected.
+// An error indicating that there are more unsigned args provided than expected.
 #[derive(Debug)]
 struct ExcessiveUnsignedArgsError {
     count: usize,
