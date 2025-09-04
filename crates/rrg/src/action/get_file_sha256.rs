@@ -21,10 +21,9 @@ where
 {
     use sha2::Digest as _;
 
-    let mut file = match std::fs::File::open(&args.path) {
-        Ok(file) => std::io::BufReader::new(file),
-        Err(error) => return Err(crate::session::Error::action(error)),
-    };
+    let file = std::fs::File::open(&args.path)
+        .map_err(crate::session::Error::action)?;
+    let mut file = std::io::BufReader::new(file);
 
     use std::io::Seek as _;
     file.seek(std::io::SeekFrom::Start(args.offset))
