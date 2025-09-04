@@ -20,8 +20,8 @@ enum Action {
   GET_FILE_METADATA = 2;
   // Get contents of the specified file.
   GET_FILE_CONTENTS = 3;
-  // Get hash of the specified file.
-  GET_FILE_HASH = 4;
+  // Get SHA-256 hash of the specified file.
+  GET_FILE_SHA256 = 4;
   // List contents of a directory.
   LIST_DIRECTORY = 5;
   // List processes available on the system.

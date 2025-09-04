@@ -16,7 +16,7 @@ const PROTOS: &'static [&'static str] = &[
     "../../proto/rrg/winreg.proto",
     "../../proto/rrg/action/execute_signed_command.proto",
     "../../proto/rrg/action/get_file_contents.proto",
-    "../../proto/rrg/action/get_file_hash.proto",
+    "../../proto/rrg/action/get_file_sha256.proto",
     "../../proto/rrg/action/get_file_metadata.proto",
     "../../proto/rrg/action/get_filesystem_timeline.proto",
     "../../proto/rrg/action/get_filesystem_timeline_tsk.proto",
