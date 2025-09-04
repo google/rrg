@@ -24,6 +24,9 @@ pub mod get_file_metadata;
 #[cfg(feature = "action-get_file_contents")]
 pub mod get_file_contents;
 
+#[cfg(feature = "action-get_file_sha256")]
+pub mod get_file_sha256;
+
 #[cfg(feature = "action-grep_file_contents")]
 pub mod grep_file_contents;
 
@@ -103,6 +106,10 @@ where
         #[cfg(feature = "action-get_file_contents")]
         GetFileContents => {
             handle(session, request, self::get_file_contents::handle)
+        }
+        #[cfg(feature = "action-get_file_sha256")]
+        GetFileSha256 => {
+            handle(session, request, self::get_file_sha256::handle)
         }
         #[cfg(feature = "action-grep_file_contents")]
         GrepFileContents => {
