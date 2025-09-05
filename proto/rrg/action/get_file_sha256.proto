@@ -19,6 +19,9 @@ message Args {
 
   // Number of bytes to hash (from the start offset).
   //
+  // This is value serves as an upper bound: if the file is shorter than the
+  // specified length, only bytes that actually exist are going to be hashed.
+  //
   // If unset, hashes until the end of the file.
   uint64 length = 3;
 }
