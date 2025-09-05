@@ -32,7 +32,6 @@ where
     S: crate::session::Session,
 {
     use std::io::{BufRead as _, Read as _, Seek as _};
-    use sha2::Digest as _;
 
     let file = std::fs::File::open(&args.path)
         .map_err(crate::session::Error::action)?;
@@ -46,19 +45,20 @@ where
         None => u64::MAX,
     });
 
-    let mut hasher = sha2::Sha256::new();
+    use sha2::Digest as _;
+    let mut sha256 = sha2::Sha256::new();
     loop {
         let buf = match file.fill_buf() {
             Ok(buf) if buf.is_empty() => break,
             Ok(buf) => buf,
             Err(error) => return Err(crate::session::Error::action(error)),
         };
-        hasher.update(&buf[..]);
+        sha256.update(&buf[..]);
 
         let buf_len = buf.len();
         file.consume(buf_len);
     }
-    let sha256 = <[u8; 32]>::from(hasher.finalize());
+    let sha256 = <[u8; 32]>::from(sha256.finalize());
 
     let len = file.stream_position()
         .map_err(crate::session::Error::action)?;
