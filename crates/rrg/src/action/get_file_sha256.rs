@@ -7,11 +7,13 @@ use std::path::PathBuf;
 pub struct Args {
     path: PathBuf,
     offset: u64,
+    len: u64,
 }
 
 struct Item {
     path: PathBuf,
     offset: u64,
+    len: u64,
     sha256: [u8; 32],
 }
 
@@ -19,20 +21,20 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
+    use std::io::{BufRead as _, Read as _, Seek as _};
     use sha2::Digest as _;
 
     let file = std::fs::File::open(&args.path)
         .map_err(crate::session::Error::action)?;
     let mut file = std::io::BufReader::new(file);
 
-    use std::io::Seek as _;
     file.seek(std::io::SeekFrom::Start(args.offset))
         .map_err(crate::session::Error::action)?;
 
+    let mut file = file.take(args.len);
+
     let mut hasher = sha2::Sha256::new();
     loop {
-        use std::io::BufRead as _;
-
         let buf = match file.fill_buf() {
             Ok(buf) if buf.is_empty() => break,
             Ok(buf) => buf,
@@ -45,9 +47,13 @@ where
     }
     let sha256 = <[u8; 32]>::from(hasher.finalize());
 
+    let len = file.stream_position()
+        .map_err(crate::session::Error::action)?;
+
     session.reply(Item {
         path: args.path,
         offset: args.offset,
+        len,
         sha256,
     })?;
 
@@ -67,6 +73,10 @@ impl crate::request::Args for Args {
         Ok(Args {
             path,
             offset: proto.offset(),
+            len: match proto.length() {
+                0 => u64::MAX,
+                len => len,
+            }
         })
     }
 }
@@ -79,6 +89,7 @@ impl crate::response::Item for Item {
         let mut proto = rrg_proto::get_file_sha256::Result::new();
         proto.set_path(self.path.into());
         proto.set_offset(self.offset);
+        proto.set_length(self.len);
         proto.set_sha256(self.sha256.to_vec());
 
         proto
@@ -102,6 +113,7 @@ mod tests {
         let args = Args {
             path: tempfile.path().to_path_buf(),
             offset: 0,
+            len: u64::MAX,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -132,6 +144,38 @@ mod tests {
         let args = Args {
             path: tempfile.path().to_path_buf(),
             offset: u64::try_from("<ignore me>".len()).unwrap(),
+            len: u64::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, tempfile.path());
+        assert_eq!(item.sha256, [
+            // Pre-computed by the `sha256sum` tool.
+            0x58, 0x91, 0xb5, 0xb5, 0x22, 0xd5, 0xdf, 0x08,
+            0x6d, 0x0f, 0xf0, 0xb1, 0x10, 0xfb, 0xd9, 0xd2,
+            0x1b, 0xb4, 0xfc, 0x71, 0x63, 0xaf, 0x34, 0xd0,
+            0x82, 0x86, 0xa2, 0xe8, 0x46, 0xf6, 0xbe, 0x03,
+        ]);
+    }
+
+    #[test]
+    fn handle_len() {
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        use std::io::Write as _;
+        tempfile.as_file_mut().write_all(b"hello\n<ignore me>")
+            .unwrap();
+
+        let args = Args {
+            path: tempfile.path().to_path_buf(),
+            offset: 0,
+            len: u64::try_from(b"hello\n".len()).unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
