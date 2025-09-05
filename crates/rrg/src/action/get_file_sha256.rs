@@ -4,19 +4,29 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::path::PathBuf;
 
+/// Arguments of the `get_file_sha256` action.
 pub struct Args {
+    /// Absolute path to the file to get the SHA-256 hash of.
     path: PathBuf,
+    /// Byte offset from which the content should be hashed.
     offset: u64,
+    /// Number of bytes to hash (from the start offset).
     len: Option<std::num::NonZero<u64>>,
 }
 
+/// Result of the `get_file_sha256` action.
 struct Item {
+    /// Absolute path of the file this result corresponds to.
     path: PathBuf,
+    /// Byte offset from which the file content was hashed.
     offset: u64,
+    /// Number of bytes of the file used to produce the hash.
     len: u64,
+    /// SHA-256 hash digest of the file content.
     sha256: [u8; 32],
 }
 
+/// Handle invocations of the `get_file_sha256` action.
 pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,

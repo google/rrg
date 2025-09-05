@@ -9,7 +9,7 @@ package rrg.action.get_file_sha256;
 import "rrg/fs.proto";
 
 message Args {
-  // Absolute path to the file to get the hash of.
+  // Absolute path to the file to get the SHA-256 hash of.
   rrg.fs.Path path = 1;
 
   // Byte offset from which the content should be hashed.
@@ -24,7 +24,7 @@ message Args {
 }
 
 message Result {
-  // Canonical path of the file.
+  // Absolute path of the file this result corresponds to.
   rrg.fs.Path path = 1;
 
   // Byte offset from which the file content was hashed.
