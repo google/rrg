@@ -7,7 +7,7 @@ use std::path::PathBuf;
 pub struct Args {
     path: PathBuf,
     offset: u64,
-    len: u64,
+    len: Option<std::num::NonZero<u64>>,
 }
 
 struct Item {
@@ -31,7 +31,10 @@ where
     file.seek(std::io::SeekFrom::Start(args.offset))
         .map_err(crate::session::Error::action)?;
 
-    let mut file = file.take(args.len);
+    let mut file = file.take(match args.len {
+        Some(len) => u64::from(len),
+        None => u64::MAX,
+    });
 
     let mut hasher = sha2::Sha256::new();
     loop {
@@ -73,10 +76,7 @@ impl crate::request::Args for Args {
         Ok(Args {
             path,
             offset: proto.offset(),
-            len: match proto.length() {
-                0 => u64::MAX,
-                len => len,
-            }
+            len: std::num::NonZero::new(proto.length()),
         })
     }
 }
@@ -113,7 +113,7 @@ mod tests {
         let args = Args {
             path: tempfile.path().to_path_buf(),
             offset: 0,
-            len: u64::MAX,
+            len: None,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -146,7 +146,7 @@ mod tests {
         let args = Args {
             path: tempfile.path().to_path_buf(),
             offset: u64::try_from("<ignore me>".len()).unwrap(),
-            len: u64::MAX,
+            len: None,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -179,7 +179,7 @@ mod tests {
         let args = Args {
             path: tempfile.path().to_path_buf(),
             offset: 0,
-            len: u64::try_from(b"hello\n".len()).unwrap(),
+            len: std::num::NonZero::new(b"hello\n".len().try_into().unwrap()),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -212,7 +212,7 @@ mod tests {
         let args = Args {
             path: tempfile.path().to_path_buf(),
             offset: 0,
-            len: u64::MAX,
+            len: None,
         };
 
         let mut session = crate::session::FakeSession::new();
