@@ -199,4 +199,37 @@ mod tests {
             0x82, 0x86, 0xa2, 0xe8, 0x46, 0xf6, 0xbe, 0x03,
         ]);
     }
+
+    #[test]
+    fn handle_large() {
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        use std::io::Read as _;
+        std::io::copy(&mut std::io::repeat(0).take(13371337), &mut tempfile)
+            .unwrap();
+
+        let args = Args {
+            path: tempfile.path().to_path_buf(),
+            offset: 0,
+            len: u64::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, tempfile.path());
+        assert_eq!(item.offset, 0);
+        assert_eq!(item.len, 13371337);
+        assert_eq!(item.sha256, [
+            // Pre-computed by `head --bytes=13371337 < /dev/zero | sha256sum`.
+            0xda, 0xa6, 0x04, 0x11, 0x35, 0x03, 0xdb, 0x38,
+            0xe3, 0x62, 0xfe, 0xff, 0x8f, 0x73, 0xc1, 0xf9,
+            0xb2, 0x6f, 0x02, 0x85, 0x3d, 0x2f, 0x47, 0x8d,
+            0x52, 0x16, 0xc5, 0x70, 0x32, 0x54, 0x1c, 0xf8,
+        ]);
+    }
 }
