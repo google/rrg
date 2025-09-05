@@ -123,6 +123,8 @@ mod tests {
 
         let item = session.reply::<Item>(0);
         assert_eq!(item.path, tempfile.path());
+        assert_eq!(item.offset, 0);
+        assert_eq!(item.len, u64::try_from(b"hello\n".len()).unwrap());
         assert_eq!(item.sha256, [
             // Pre-computed by the `sha256sum` tool.
             0x58, 0x91, 0xb5, 0xb5, 0x22, 0xd5, 0xdf, 0x08,
@@ -154,6 +156,8 @@ mod tests {
 
         let item = session.reply::<Item>(0);
         assert_eq!(item.path, tempfile.path());
+        assert_eq!(item.offset, u64::try_from(b"<ignore me>".len()).unwrap());
+        assert_eq!(item.len, u64::try_from(b"hello\n".len()).unwrap());
         assert_eq!(item.sha256, [
             // Pre-computed by the `sha256sum` tool.
             0x58, 0x91, 0xb5, 0xb5, 0x22, 0xd5, 0xdf, 0x08,
@@ -185,6 +189,8 @@ mod tests {
 
         let item = session.reply::<Item>(0);
         assert_eq!(item.path, tempfile.path());
+        assert_eq!(item.offset, 0);
+        assert_eq!(item.len, u64::try_from(b"hello\n".len()).unwrap());
         assert_eq!(item.sha256, [
             // Pre-computed by the `sha256sum` tool.
             0x58, 0x91, 0xb5, 0xb5, 0x22, 0xd5, 0xdf, 0x08,
