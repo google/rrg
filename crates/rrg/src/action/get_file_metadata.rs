@@ -144,6 +144,8 @@ where
             None
         };
 
+        let file_type = metadata.file_type();
+
         session.reply(Item {
             path: path.clone(),
             path_canon,
@@ -154,7 +156,7 @@ where
             digest: digest(&path, &args),
         })?;
 
-        if args.max_depth > 0 {
+        if file_type.is_dir() && args.max_depth > 0 {
             let entries = match crate::fs::walk_dir(&path) {
                 Ok(entries) => entries,
                 Err(error) => {
