@@ -212,10 +212,6 @@ mod linux {
     }
 
     impl MemoryReader for ReadableProcessMemory {
-        /// Reads a slice `\[offset..(offset+length)\]` of the opened process' memory
-        /// and returns it as a [`Vec<u8>`]. `offset` is considered as an absolute offset
-        /// in the process' address space. If the slice falls outside the memory's address space,
-        /// the returned buffer will be truncated.
         fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
             self.mem_file.seek(SeekFrom::Start(offset))?;
             let mut buf = Vec::new();
@@ -267,12 +263,12 @@ mod linux {
     }
 
     #[cfg(test)]
-    mod test {
+    mod tests {
         use super::*;
 
         #[test]
         fn region_iter_detects_mmap() {
-            // `mmap` a file and check that the mapping is detected among those returned by
+            // `mmap` a file and check that the mappinsg is detected among those returned by
             // `MappedRegionIter`.
             use std::io::Write as _;
             use std::os::unix::fs::MetadataExt;
@@ -339,7 +335,7 @@ mod windows {
 
     impl ProcessHandle {
         fn open(pid: u32) -> std::io::Result<Self> {
-            // Open a handle to the process with all access rights
+            // SAFETY: the returned handle will be closed by the `drop` impl.
             let handle: HANDLE = unsafe { OpenProcess(PROCESS_ALL_ACCESS, 0, pid) };
             if handle.is_null() {
                 Err(std::io::Error::last_os_error())
@@ -351,6 +347,8 @@ mod windows {
 
     impl Drop for ProcessHandle {
         fn drop(&mut self) {
+            // SAFETY: since this struct has no `Clone` or `Copy` impl,
+            // this handle will not be used again after the struct is dropped.
             unsafe { CloseHandle(self.0) };
         }
     }
@@ -390,16 +388,12 @@ mod windows {
             mem_info.AllocationProtect
         };
 
-        let execute = flags & EXECUTE_FLAGS != 0;
-        let write = flags & WRITE_FLAGS != 0;
-        // The only flag which disables write access is PAGE_NOACCESS
-        let read = flags & PAGE_NOACCESS == 0;
-        let private = mem_info.Type == MEM_PRIVATE;
         Permissions {
-            read,
-            write,
-            execute,
-            private,
+            // The only flag which disables read access is PAGE_NOACCESS
+            read: flags & PAGE_NOACCESS == 0,
+            write: flags & WRITE_FLAGS != 0,
+            execute: flags & EXECUTE_FLAGS != 0,
+            private: mem_info.Type == MEM_PRIVATE,
             shared: false,
         }
     }
@@ -412,6 +406,8 @@ mod windows {
         use std::os::windows::ffi::OsStringExt;
 
         let mut buf = [0u16; (MAX_PATH + 1) as usize];
+        // SAFETY: `GetMappedFileNameW` will only write up to `nSize` (last argument)
+        // characters in `buf` (null-terminator included). Therefore there can be no buffer overflow.
         let len = unsafe { GetMappedFileNameW(process.0, addr, buf.as_mut_ptr(), buf.len() as u32) }
             as usize;
         // A return value of 0 indicates an error, and nSize indicates that the path was
@@ -429,14 +425,17 @@ mod windows {
                 let mem_info: MEMORY_BASIC_INFORMATION = {
                     let mut mem: std::mem::MaybeUninit<MEMORY_BASIC_INFORMATION> =
                         MaybeUninit::zeroed();
-                    if unsafe {
+                    // SAFETY: `VirtualQueryEx` will only write up to `dwLength` (last argument)
+                    // bytes in `mem`.
+                    let status = unsafe {
                         VirtualQueryEx(
                             self.process.0,
                             self.cur_addr,
                             mem.as_mut_ptr(),
                             std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
-                        ) == 0
-                    } {
+                        )
+                    };
+                    if status == 0 {
                         let err = std::io::Error::last_os_error();
                         // InvalidInput is returned when the given address
                         // falls beyond the last page accessible by the process,
@@ -446,6 +445,8 @@ mod windows {
                         }
                         break Some(Err(err));
                     }
+                    // SAFETY: We just checked that the call to `VirtualQueryEx`
+                    // has succeeded, so we can safely assume that `mem` was initialized.
                     unsafe { mem.assume_init() }
                 };
 
@@ -484,14 +485,12 @@ mod windows {
     }
 
     impl MemoryReader for ReadableProcessMemory {
-        /// Reads a slice `\[offset..(offset+length)\]` of the opened process' memory
-        /// and returns it as a [`Vec<u8>`]. `offset` is considered as an absolute offset
-        /// in the process' address space. If the slice falls outside the memory's address space,
-        /// the returned buffer will be truncated.
         fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
             let mut buf = vec![0; length as usize];
             let mut bytes_read = 0;
-            if unsafe {
+            // SAFETY: `ReadProcessMemory` will write at most `nSize` (second to last argument) bytes
+            // in `buf`, so the bounded length prevents a buffer overflow.
+            let status = unsafe {
                 ReadProcessMemory(
                     self.process.0,
                     std::ptr::without_provenance_mut(offset as usize),
@@ -499,8 +498,8 @@ mod windows {
                     buf.len(),
                     &mut bytes_read,
                 )
-            } == 0
-            {
+            };
+            if status == 0 {
                 return Err(std::io::Error::last_os_error());
             }
             buf.truncate(bytes_read);
@@ -509,7 +508,7 @@ mod windows {
     }
 
     #[cfg(test)]
-    mod test {
+    mod tests {
         use super::*;
 
         #[test]
@@ -529,7 +528,8 @@ mod windows {
             let meta = file.metadata().unwrap();
             let length = meta.len() as usize;
 
-            // Create a file mapping object for the file
+            // SAFETY: the returned mapping will be dropped
+            // by `OwnedHandle`'s `drop` impl.
             let mapping = unsafe {
                 CreateFileMappingW(
                     file.as_raw_handle(),
@@ -542,9 +542,11 @@ mod windows {
             };
 
             if mapping.is_null() {
-                panic!("Could not create file mapping");
+                panic!("could not create file mapping");
             }
 
+            // SAFETY: we just cheched that the mapping was created succesfully.
+            // The raw handle was also not copied to another variable in the meantime
             let mapping = unsafe { OwnedHandle::from_raw_handle(mapping) };
 
             /// RAII wrapper around a `mmap`ed pointer that will `munmap` on drop.
@@ -554,6 +556,7 @@ mod windows {
 
             impl Drop for MappedView {
                 fn drop(&mut self) {
+                    // SAFETY: we only need `unsafe` to call the FFI function here.
                     unsafe {
                         UnmapViewOfFile(self.addr);
                     }
@@ -563,6 +566,8 @@ mod windows {
             // Map the view and test the results.
 
             let view = unsafe {
+                // SAFETY: the returned mapping will be unmapped by `MappedView`'s `drop`
+                // impl. We check right away if the returned handle is valid.
                 let addr = MapViewOfFile(
                     mapping.as_raw_handle(), // handle to mapping object
                     FILE_MAP_ALL_ACCESS,     // read/write
@@ -575,9 +580,9 @@ mod windows {
             };
 
             let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(std::process::id())
-                .expect("Could not read memory regions of current process")
+                .expect("could not read memory regions of current process")
                 .collect::<Result<_, _>>()
-                .expect("Reading maps");
+                .expect("reading maps");
 
             assert!(regions.into_iter().any(|r| {
                 r.address_start == view.addr.Value as u64
@@ -959,7 +964,7 @@ where
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     struct FakeProcessMemory {
@@ -989,9 +994,9 @@ mod test {
     fn can_read_this_process_memory() {
         let pid = std::process::id();
         let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(pid)
-            .expect("Could not read memory regions of current process")
+            .expect("could not read memory regions of current process")
             .collect::<Result<_, _>>()
-            .expect("Reading maps");
+            .expect("reading maps");
 
         let mut memory = ReadableProcessMemory::open(pid).expect("Could not open process memory");
         assert! {
