@@ -88,6 +88,7 @@ where
                 continue
             }
         };
+        let file_type = metadata.file_type();
 
         #[cfg(target_family = "unix")]
         let ext_attrs = match ospect::fs::ext_attrs(path) {
@@ -112,7 +113,7 @@ where
             }
         };
 
-        let symlink = if metadata.is_symlink() {
+        let symlink = if file_type.is_symlink() {
             match std::fs::read_link(path) {
                 Ok(symlink) => Some(symlink),
                 Err(error) => {
@@ -143,8 +144,6 @@ where
         } else {
             None
         };
-
-        let file_type = metadata.file_type();
 
         session.reply(Item {
             path: path.clone(),
