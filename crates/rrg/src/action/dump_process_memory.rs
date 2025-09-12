@@ -268,7 +268,7 @@ mod linux {
 
         #[test]
         fn region_iter_detects_mmap() {
-            // `mmap` a file and check that the mappinsg is detected among those returned by
+            // `mmap` a file and check that the mapping is detected among those returned by
             // `MappedRegionIter`.
             use std::io::Write as _;
             use std::os::unix::fs::MetadataExt;
@@ -308,9 +308,9 @@ mod linux {
             };
 
             let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(std::process::id())
-                .expect("Could not read memory regions of current process")
+                .expect("could not read memory regions of current process")
                 .collect::<Result<_, _>>()
-                .expect("Reading maps");
+                .expect("reading maps");
 
             drop(mapped_ptr);
 
@@ -984,7 +984,7 @@ mod tests {
     fn iterate_this_process_regions() {
         let pid = std::process::id();
         let iterator = MappedRegionIter::from_pid(pid)
-            .expect("Could not read memory regions of current process");
+            .expect("could not read memory regions of current process");
         let result = iterator.collect::<Result<Vec<MappedRegion>, _>>().unwrap();
         assert!(!result.is_empty());
     }
@@ -998,7 +998,7 @@ mod tests {
             .collect::<Result<_, _>>()
             .expect("reading maps");
 
-        let mut memory = ReadableProcessMemory::open(pid).expect("Could not open process memory");
+        let mut memory = ReadableProcessMemory::open(pid).expect("could not open process memory");
         assert! {
             regions.iter().any(|region| memory.read_chunk(
                 region.start_address(),
