@@ -408,6 +408,12 @@ mod windows {
         let mut buf = [0u16; (MAX_PATH + 1) as usize];
         // SAFETY: `GetMappedFileNameW` will only write up to `nSize` (last argument)
         // characters in `buf` (null-terminator included). Therefore there can be no buffer overflow.
+        //
+        // The function [verifies][1] whether the given `addr` is within the
+        // process address space and thus we do not need to add aditional safety
+        // constraints on the parameter itself.
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmappedfilenamew#parameters
         let len = unsafe { GetMappedFileNameW(process.0, addr, buf.as_mut_ptr(), buf.len() as u32) }
             as usize;
         // A return value of 0 indicates an error, and nSize indicates that the path was
