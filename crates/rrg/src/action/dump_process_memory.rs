@@ -3,8 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 use std::collections::VecDeque;
-use std::fs::File;
-use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::PathBuf;
 
 /// A memory mapping in a running process' virtual address space.
@@ -18,6 +16,7 @@ pub struct MappedRegion {
     /// Permissions associated with this mapping.
     pub permissions: Permissions,
     /// If this mapping is backed by a file, this field will contain said file's inode.
+    /// Only valid on Linux.
     pub inode: Option<u64>,
     /// If this mapping is backed by a file, this field will contain the path to said file.
     /// It can also contain a pseudo-path that indicates the type of mapping, otherwise.
@@ -53,38 +52,26 @@ impl MappedRegion {
     }
 }
 
-/// Allows to read the contents of a running process' memory.
-pub struct ReadableProcessMemory {
-    mem_file: File,
-}
-
-impl ReadableProcessMemory {
-    pub fn from_file(mem_file: File) -> Self {
-        Self { mem_file }
-    }
-
+// Represents a handle to read another process' memory.
+pub trait MemoryReader {
     /// Reads a slice `\[offset..(offset+length)\]` of the opened process' memory
     /// and returns it as a [`Vec<u8>`]. `offset` is considered as an absolute offset
     /// in the process' address space. If the slice falls outside the memory's address space,
     /// the returned buffer will be truncated.
-    pub fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
-        self.mem_file.seek(SeekFrom::Start(offset))?;
-        let mut buf = Vec::new();
-        let mem_file = self.mem_file.by_ref();
-        // Limit amount of bytes that can be read
-        let mut mem_file_limited = mem_file.take(length);
-        mem_file_limited.read_to_end(&mut buf)?;
-        Ok(buf)
-    }
+    fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>>;
 }
 
 #[cfg(target_os = "linux")]
 pub use linux::*;
 
+#[cfg(target_os = "windows")]
+pub use windows::*;
+
 #[cfg(target_os = "linux")]
 mod linux {
     use super::*;
-    use std::io::BufRead;
+    use std::fs::File;
+    use std::io::{BufRead, Read as _, Seek as _, SeekFrom};
 
     /// An error that occurred during parsing of a process' memory mappings file.
     #[derive(Debug)]
@@ -207,11 +194,32 @@ mod linux {
         }
     }
 
+    /// Allows to read the contents of a running process' memory.
+    pub struct ReadableProcessMemory {
+        mem_file: File,
+    }
+
     impl ReadableProcessMemory {
         /// Opens the contents of process `pid`'s memory for reading.
         pub fn open(pid: u32) -> std::io::Result<Self> {
             let mem_file = File::open(format!("/proc/{pid}/mem"))?;
             Ok(Self::from_file(mem_file))
+        }
+
+        pub fn from_file(mem_file: File) -> Self {
+            Self { mem_file }
+        }
+    }
+
+    impl MemoryReader for ReadableProcessMemory {
+        fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
+            self.mem_file.seek(SeekFrom::Start(offset))?;
+            let mut buf = Vec::new();
+            let mem_file = self.mem_file.by_ref();
+            // Limit amount of bytes that can be read
+            let mut mem_file_limited = mem_file.take(length);
+            mem_file_limited.read_to_end(&mut buf)?;
+            Ok(buf)
         }
     }
 
@@ -256,34 +264,7 @@ mod linux {
 
     #[cfg(test)]
     mod tests {
-
         use super::*;
-
-        #[test]
-        fn iterate_this_process_regions() {
-            let pid = std::process::id();
-            let iterator = MappedRegionIter::from_pid(pid)
-                .expect("Could not read memory regions of current process");
-            assert!(iterator.collect::<Result<Vec<MappedRegion>, _>>().is_ok());
-        }
-
-        #[test]
-        fn can_read_this_process_memory() {
-            let pid = std::process::id();
-            let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(pid)
-                .expect("Could not read memory regions of current process")
-                .collect::<Result<_, _>>()
-                .expect("Reading maps");
-
-            let mut memory =
-                ReadableProcessMemory::open(pid).expect("Could not open process memory");
-            assert! {
-                regions.iter().any(|region| memory.read_chunk(
-                    region.start_address(),
-                    region.size(),
-                ).is_ok())
-            }
-        }
 
         #[test]
         fn region_iter_detects_mmap() {
@@ -327,15 +308,290 @@ mod linux {
             };
 
             let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(std::process::id())
-                .expect("Could not read memory regions of current process")
+                .expect("could not read memory regions of current process")
                 .collect::<Result<_, _>>()
-                .expect("Reading maps");
+                .expect("reading maps");
 
             drop(mapped_ptr);
 
             assert!(regions.into_iter().any(|r| r.inode == Some(meta.ino())
                 && r.permissions.private
                 && r.permissions.read));
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use super::*;
+    use core::ffi::c_void;
+    use std::mem::MaybeUninit;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
+    use windows_sys::Win32::System::Memory::{MEM_FREE, MEMORY_BASIC_INFORMATION, VirtualQueryEx};
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
+
+    struct ProcessHandle(HANDLE);
+
+    impl ProcessHandle {
+        fn open(pid: u32) -> std::io::Result<Self> {
+            // SAFETY: the returned handle will be closed by the `drop` impl.
+            let handle: HANDLE = unsafe { OpenProcess(PROCESS_ALL_ACCESS, 0, pid) };
+            if handle.is_null() {
+                Err(std::io::Error::last_os_error())
+            } else {
+                Ok(Self(handle))
+            }
+        }
+    }
+
+    impl Drop for ProcessHandle {
+        fn drop(&mut self) {
+            // SAFETY: since this struct has no `Clone` or `Copy` impl,
+            // this handle will not be used again after the struct is dropped.
+            unsafe { CloseHandle(self.0) };
+        }
+    }
+
+    pub struct MappedRegionIter {
+        process: ProcessHandle,
+        cur_addr: *mut c_void,
+    }
+
+    impl MappedRegionIter {
+        /// Creates a new [`MappedRegionIterator`] of the process with id `pid`.
+        pub fn from_pid(pid: u32) -> std::io::Result<Self> {
+            let process = ProcessHandle::open(pid)?;
+            Ok(Self {
+                process,
+                cur_addr: std::ptr::null_mut(),
+            })
+        }
+    }
+
+    fn parse_permissions(mem_info: &MEMORY_BASIC_INFORMATION) -> Permissions {
+        use windows_sys::Win32::System::Memory::*;
+
+        // Info obtained from https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants
+        // and https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-memory_basic_information
+
+        const EXECUTE_FLAGS: u32 =
+            PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+        const WRITE_FLAGS: u32 =
+            PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY | PAGE_READWRITE | PAGE_WRITECOPY;
+
+        // Use the protection information of the actual committed memory if available,
+        // otherwise the flags with which the memory mapping was created.
+        let flags = if mem_info.State == MEM_COMMIT {
+            mem_info.Protect
+        } else {
+            mem_info.AllocationProtect
+        };
+
+        Permissions {
+            // The only flag which disables read access is PAGE_NOACCESS
+            read: flags & PAGE_NOACCESS == 0,
+            write: flags & WRITE_FLAGS != 0,
+            execute: flags & EXECUTE_FLAGS != 0,
+            private: mem_info.Type == MEM_PRIVATE,
+            shared: false,
+        }
+    }
+
+    fn get_mapped_filename(addr: *const c_void, process: &ProcessHandle) -> Option<PathBuf> {
+        use windows_sys::Win32::Foundation::MAX_PATH;
+        use windows_sys::Win32::System::ProcessStatus::GetMappedFileNameW;
+
+        use std::ffi::OsString;
+        use std::os::windows::ffi::OsStringExt;
+
+        let mut buf = [0u16; (MAX_PATH + 1) as usize];
+        // SAFETY: `GetMappedFileNameW` will only write up to `nSize` (last argument)
+        // characters in `buf` (null-terminator included). Therefore there can be no buffer overflow.
+        let len = unsafe { GetMappedFileNameW(process.0, addr, buf.as_mut_ptr(), buf.len() as u32) }
+            as usize;
+        // A return value of 0 indicates an error, and nSize indicates that the path was
+        // truncated. We treat both cases as errors and just return None.
+        if len == 0 || len == buf.len() {
+            return None;
+        }
+        Some(PathBuf::from(OsString::from_wide(&buf[..len])))
+    }
+
+    impl Iterator for MappedRegionIter {
+        type Item = std::io::Result<MappedRegion>;
+        fn next(&mut self) -> Option<Self::Item> {
+            loop {
+                let mem_info: MEMORY_BASIC_INFORMATION = {
+                    let mut mem: std::mem::MaybeUninit<MEMORY_BASIC_INFORMATION> =
+                        MaybeUninit::zeroed();
+                    // SAFETY: `VirtualQueryEx` will only write up to `dwLength` (last argument)
+                    // bytes in `mem`.
+                    let status = unsafe {
+                        VirtualQueryEx(
+                            self.process.0,
+                            self.cur_addr,
+                            mem.as_mut_ptr(),
+                            std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                        )
+                    };
+                    if status == 0 {
+                        let err = std::io::Error::last_os_error();
+                        // InvalidInput is returned when the given address
+                        // falls beyond the last page accessible by the process,
+                        // so we know we are done iterating when we receive that.
+                        if err.kind() == std::io::ErrorKind::InvalidInput {
+                            return None;
+                        }
+                        break Some(Err(err));
+                    }
+                    // SAFETY: We just checked that the call to `VirtualQueryEx`
+                    // has succeeded, so we can safely assume that `mem` was initialized.
+                    unsafe { mem.assume_init() }
+                };
+
+                let address_start = mem_info.BaseAddress;
+                let address_end = address_start.wrapping_byte_add(mem_info.RegionSize);
+                self.cur_addr = address_end;
+
+                if mem_info.State == MEM_FREE {
+                    // Skip over chunks of free memory
+                    continue;
+                }
+
+                break Some(Ok(MappedRegion {
+                    address_start: address_start as u64,
+                    size: mem_info.RegionSize as u64,
+                    permissions: parse_permissions(&mem_info),
+                    inode: None,
+                    path: get_mapped_filename(address_start, &self.process),
+                }));
+            }
+        }
+    }
+
+    /// Allows to read the contents of a running process' memory.
+    pub struct ReadableProcessMemory {
+        process: ProcessHandle,
+    }
+
+    impl ReadableProcessMemory {
+        /// Opens the contents of process `pid`'s memory for reading.
+        pub fn open(pid: u32) -> std::io::Result<Self> {
+            Ok(Self {
+                process: ProcessHandle::open(pid)?,
+            })
+        }
+    }
+
+    impl MemoryReader for ReadableProcessMemory {
+        fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
+            let mut buf = vec![0; length as usize];
+            let mut bytes_read = 0;
+            // SAFETY: `ReadProcessMemory` will write at most `nSize` (second to last argument) bytes
+            // in `buf`, so the bounded length prevents a buffer overflow.
+            let status = unsafe {
+                ReadProcessMemory(
+                    self.process.0,
+                    std::ptr::without_provenance_mut(offset as usize),
+                    buf.as_mut_ptr().cast(),
+                    buf.len(),
+                    &mut bytes_read,
+                )
+            };
+            if status == 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            buf.truncate(bytes_read);
+            Ok(buf)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn region_iter_detects_mmap() {
+            // `mmap` a file and check that the mapping is detected among those returned by
+            // `MappedRegionIter`.
+            use std::io::Write as _;
+            use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+            use windows_sys::Win32::System::Memory::{
+                CreateFileMappingW, FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile,
+                PAGE_READWRITE, UnmapViewOfFile,
+            };
+
+            let mut file = tempfile::tempfile().unwrap();
+            writeln!(file, "hello there").unwrap();
+
+            let meta = file.metadata().unwrap();
+            let length = meta.len() as usize;
+
+            // SAFETY: the returned mapping will be dropped
+            // by `OwnedHandle`'s `drop` impl.
+            let mapping = unsafe {
+                CreateFileMappingW(
+                    file.as_raw_handle(),
+                    std::ptr::null(), // default security
+                    PAGE_READWRITE,   // read/write permission
+                    0,                // size of mapping object, high
+                    length as u32,    // size of mapping object, low
+                    std::ptr::null(),
+                )
+            };
+
+            if mapping.is_null() {
+                panic!("could not create file mapping");
+            }
+
+            // SAFETY: we just cheched that the mapping was created succesfully.
+            // The raw handle was also not copied to another variable in the meantime
+            let mapping = unsafe { OwnedHandle::from_raw_handle(mapping) };
+
+            /// RAII wrapper around a `mmap`ed pointer that will `munmap` on drop.
+            struct MappedView {
+                addr: MEMORY_MAPPED_VIEW_ADDRESS,
+            }
+
+            impl Drop for MappedView {
+                fn drop(&mut self) {
+                    // SAFETY: we only need `unsafe` to call the FFI function here.
+                    unsafe {
+                        UnmapViewOfFile(self.addr);
+                    }
+                }
+            }
+
+            // Map the view and test the results.
+
+            let view = unsafe {
+                // SAFETY: the returned mapping will be unmapped by `MappedView`'s `drop`
+                // impl. We check right away if the returned handle is valid.
+                let addr = MapViewOfFile(
+                    mapping.as_raw_handle(), // handle to mapping object
+                    FILE_MAP_ALL_ACCESS,     // read/write
+                    0,                       // high-order 32 bits of file offset
+                    0,                       // low-order 32 bits of file offset
+                    length,
+                );
+                assert!(!addr.Value.is_null());
+                MappedView { addr }
+            };
+
+            let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(std::process::id())
+                .expect("could not read memory regions of current process")
+                .collect::<Result<_, _>>()
+                .expect("reading maps");
+
+            assert!(regions.into_iter().any(|r| {
+                r.address_start == view.addr.Value as u64
+                    && r.permissions.read
+                    && r.permissions.write
+                    && r.path.is_some()
+            }));
+
+            drop(view);
         }
     }
 }
@@ -352,10 +608,11 @@ pub struct Permissions {
     /// Whether this mapping was created as `shared`.
     /// Writes to a shared mapping (usually backed by a file)
     /// can be observed by other processes which map the same file.
+    /// Currently only supported on Linux.
     shared: bool,
     /// Whether this mapping was created as 'private'.
     /// Writes to a private mapping (usually backed by a file)
-    /// are private to a proess and cannot be observed by other processes which map the same file.
+    /// are private to a process and cannot be observed by other processes which map the same file.
     private: bool,
 }
 
@@ -448,7 +705,7 @@ impl Args {
         if self.skip_executable_regions && region.permissions.execute {
             return false;
         }
-        if self.skip_mapped_files && region.inode.is_some() {
+        if self.skip_mapped_files && region.inode.is_some() || region.path.is_some() {
             return false;
         }
         if self.skip_readonly_regions
@@ -578,15 +835,16 @@ pub fn sort_by_priority(
 /// Reads the contents of all of process `pid`'s memory mappings
 /// and sends them to the session.
 /// `regions` and `memory` are passed as arguments for testability.
-pub fn dump_regions<S>(
+pub fn dump_regions<S, Mem>(
     session: &mut S,
     regions: impl Iterator<Item = MappedRegion>,
-    memory: &mut ReadableProcessMemory,
+    memory: &mut Mem,
     pid: u32,
     total_size_left: &mut u64,
 ) -> crate::session::Result<()>
 where
     S: crate::session::Session,
+    Mem: MemoryReader,
 {
     use sha2::Digest as _;
 
@@ -633,7 +891,7 @@ where
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub fn handle<S>(_session: &mut S, _args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
@@ -644,7 +902,7 @@ where
     )))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
@@ -706,9 +964,48 @@ where
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
-    use std::io::Write;
+
+    struct FakeProcessMemory {
+        contents: Vec<u8>,
+    }
+
+    impl MemoryReader for FakeProcessMemory {
+        fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
+            let start = offset as usize;
+            let end = (offset + length) as usize;
+            Ok(self.contents[start..end].to_owned())
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[test]
+    fn iterate_this_process_regions() {
+        let pid = std::process::id();
+        let iterator = MappedRegionIter::from_pid(pid)
+            .expect("could not read memory regions of current process");
+        let result = iterator.collect::<Result<Vec<MappedRegion>, _>>().unwrap();
+        assert!(!result.is_empty());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[test]
+    fn can_read_this_process_memory() {
+        let pid = std::process::id();
+        let regions: Vec<MappedRegion> = MappedRegionIter::from_pid(pid)
+            .expect("could not read memory regions of current process")
+            .collect::<Result<_, _>>()
+            .expect("reading maps");
+
+        let mut memory = ReadableProcessMemory::open(pid).expect("could not open process memory");
+        assert! {
+            regions.iter().any(|region| memory.read_chunk(
+                region.start_address(),
+                region.size(),
+            ).is_ok())
+        }
+    }
 
     #[test]
     fn offset_priority() {
@@ -781,8 +1078,6 @@ mod test {
 
     #[test]
     fn dumps_regions() {
-        let tempdir = tempfile::tempdir().unwrap();
-
         let regions = vec![
             MappedRegion::from_bounds(0, 1000),
             MappedRegion::from_bounds(1000, 3000),
@@ -790,16 +1085,12 @@ mod test {
         ];
 
         // Write fake memory contents and check that they're read correctly
-        let file_path = tempdir.path().join("memfile.txt");
-        let mut file = File::create_new(file_path).expect("could not create memfile");
-        file.write_all(vec![1; 1000].as_slice())
-            .expect("could not write to memfile");
-        file.write_all(vec![2; 2000].as_slice())
-            .expect("could not write to memfile");
-        file.write_all(vec![3; 500].as_slice())
-            .expect("could not write to memfile");
+        let mut fake_mem = Vec::new();
+        fake_mem.extend(std::iter::repeat_n(1, 1000));
+        fake_mem.extend(std::iter::repeat_n(2, 2000));
+        fake_mem.extend(std::iter::repeat_n(3, 500));
 
-        let mut memory = ReadableProcessMemory::from_file(file);
+        let mut memory = FakeProcessMemory { contents: fake_mem };
 
         let mut session = crate::session::FakeSession::new();
         let mut limit = u64::MAX;
@@ -823,24 +1114,19 @@ mod test {
 
     #[test]
     fn size_limit() {
-        let tempdir = tempfile::tempdir().unwrap();
-
         let regions = vec![
             MappedRegion::from_bounds(0, 1000),
             MappedRegion::from_bounds(1000, 3000),
             MappedRegion::from_bounds(3000, 3500),
         ];
 
-        let file_path = tempdir.path().join("memfile.txt");
-        let mut file = File::create_new(file_path).expect("could not create memfile");
-        file.write_all(vec![1; 1000].as_slice())
-            .expect("could not write to memfile");
-        file.write_all(vec![2; 2000].as_slice())
-            .expect("could not write to memfile");
-        file.write_all(vec![3; 500].as_slice())
-            .expect("could not write to memfile");
+        // Write fake memory contents and check that they're read correctly
+        let mut fake_mem = Vec::new();
+        fake_mem.extend(std::iter::repeat_n(1, 1000));
+        fake_mem.extend(std::iter::repeat_n(2, 2000));
+        fake_mem.extend(std::iter::repeat_n(3, 500));
 
-        let mut memory = ReadableProcessMemory::from_file(file);
+        let mut memory = FakeProcessMemory { contents: fake_mem };
 
         let mut session = crate::session::FakeSession::new();
         // Should dump first region fully, second partially
@@ -871,7 +1157,7 @@ mod test {
         assert_eq!(second_region.region.end_address(), 3000);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]
     fn handle_dumps_current_process_regions() {
         let mut session = crate::session::FakeSession::new();
@@ -890,7 +1176,7 @@ mod test {
         assert!(session.replies::<Item>().any(Result::is_ok));
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]
     fn filters_regions() {
         let mut session = crate::session::FakeSession::new();
