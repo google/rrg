@@ -438,7 +438,7 @@ mod windows {
                             self.process.0,
                             self.cur_addr,
                             mem.as_mut_ptr(),
-                            std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                            std::mem::size_of_val(&mem),
                         )
                     };
                     if status == 0 {
