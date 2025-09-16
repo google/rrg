@@ -145,6 +145,8 @@ where
             None
         };
 
+        let digest_ = digest(&path, &metadata, &args);
+
         session.reply(Item {
             path: path.clone(),
             path_canon,
@@ -152,7 +154,7 @@ where
             #[cfg(target_family = "unix")]
             ext_attrs,
             symlink,
-            digest: digest(&path, &args),
+            digest: digest_,
         })?;
 
         if file_type.is_dir() && args.max_depth > 0 {
@@ -244,7 +246,7 @@ where
                     None
                 };
 
-                let digest = digest(&entry.path, &args);
+                let digest_ = digest(&entry.path, &entry.metadata, &args);
 
                 log::debug!("sending metadata for '{}'", entry.path.display());
 
@@ -255,7 +257,7 @@ where
                     #[cfg(target_family = "unix")]
                     ext_attrs,
                     symlink,
-                    digest,
+                    digest: digest_,
                 })?;
             }
         }
@@ -279,9 +281,13 @@ struct Digest {
 }
 
 /// Computes the digest record of the file contents using requested algorithms.
-fn digest(path: &Path, args: &Args) -> Digest {
+fn digest(path: &Path, metadata: &std::fs::Metadata, args: &Args) -> Digest {
     if !(args.md5 || args.sha1 || args.sha256) {
         // If no digests were requested, we do not need to read the file.
+        return Digest::default();
+    }
+    if !metadata.is_file() {
+        log::info!("non-regular file '{}', skipping digest", path.display());
         return Digest::default();
     }
 
@@ -1101,6 +1107,43 @@ mod tests {
             0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
             0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
         ]));
+    }
+
+    // `/dev/random` is available only on Unixes.
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_special() {
+        let args = Args {
+            paths: vec!["/dev/urandom".into()],
+            max_depth: 0,
+            md5: true,
+            sha1: true,
+            sha256: true,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, Path::new("/dev/urandom"));
+
+        // This is a special file, none of the above should correspond to it.
+        assert!(!item.metadata.is_file());
+        assert!(!item.metadata.is_dir());
+        assert!(!item.metadata.is_symlink());
+
+        // We do not want to calculate digest for special files, even though it
+        // was requested.
+        #[cfg(feature = "action-get_file_metadata-md5")]
+        assert_eq!(item.digest.md5, None);
+        #[cfg(feature = "action-get_file_metadata-sha1")]
+        assert_eq!(item.digest.sha1, None);
+        #[cfg(feature = "action-get_file_metadata-sha256")]
+        assert_eq!(item.digest.sha256, None);
     }
 
     #[test]
