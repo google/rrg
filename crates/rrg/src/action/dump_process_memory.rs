@@ -568,6 +568,10 @@ mod windows {
             impl Drop for MappedView {
                 fn drop(&mut self) {
                     // SAFETY: we only need `unsafe` to call the FFI function here.
+                    //
+                    // The pointer is invalidated but it is not leaked outside
+                    // of this type, so it is no longer accessible after the
+                    // value is destroyed.
                     unsafe {
                         UnmapViewOfFile(self.addr);
                     }
