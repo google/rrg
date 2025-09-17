@@ -536,7 +536,7 @@ mod windows {
 
             let len_hi = u32::try_from(meta.len() >> u32::BITS)
                 .expect("invalid length high bits");
-            let len_lo = u32::try_from(meta.len() & u64::from(u32::MAX))
+            let len_lo = u32::try_from(meta.len() & u64::from(!0u32))
                 .expect("invalid length low bits");
 
             // SAFETY: the returned mapping will be dropped
