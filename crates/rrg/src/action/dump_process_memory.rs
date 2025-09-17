@@ -438,7 +438,7 @@ mod windows {
                             self.process.0,
                             self.cur_addr,
                             mem.as_mut_ptr(),
-                            std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                            std::mem::size_of_val(&mem),
                         )
                     };
                     if status == 0 {
@@ -534,6 +534,11 @@ mod windows {
             let meta = file.metadata().unwrap();
             let length = meta.len() as usize;
 
+            let len_hi = u32::try_from(meta.len() >> u32::BITS)
+                .expect("invalid length high bits");
+            let len_lo = u32::try_from(meta.len() & u64::from(!0u32))
+                .expect("invalid length low bits");
+
             // SAFETY: the returned mapping will be dropped
             // by `OwnedHandle`'s `drop` impl.
             let mapping = unsafe {
@@ -541,8 +546,8 @@ mod windows {
                     file.as_raw_handle(),
                     std::ptr::null(), // default security
                     PAGE_READWRITE,   // read/write permission
-                    0,                // size of mapping object, high
-                    length as u32,    // size of mapping object, low
+                    len_hi, // size of mapping object, high
+                    len_lo, // size of mapping object, low
                     std::ptr::null(),
                 )
             };
@@ -563,6 +568,10 @@ mod windows {
             impl Drop for MappedView {
                 fn drop(&mut self) {
                     // SAFETY: we only need `unsafe` to call the FFI function here.
+                    //
+                    // The pointer is invalidated but it is not leaked outside
+                    // of this type, so it is no longer accessible after the
+                    // value is destroyed.
                     unsafe {
                         UnmapViewOfFile(self.addr);
                     }
