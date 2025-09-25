@@ -69,6 +69,9 @@ pub mod execute_signed_command;
 #[cfg(feature = "action-dump_process_memory")]
 pub mod dump_process_memory;
 
+#[cfg(feature = "action-yara_scan_memory")]
+pub mod yara_scan_memory;
+
 use log::info;
 
 /// Dispatches the given `request` to an appropriate action handler.

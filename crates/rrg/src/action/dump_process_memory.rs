@@ -61,6 +61,18 @@ pub trait MemoryReader {
     fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>>;
 }
 
+pub struct FakeProcessMemory {
+    pub contents: Vec<u8>,
+}
+
+impl MemoryReader for FakeProcessMemory {
+    fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
+        let start = offset as usize;
+        let end = (offset + length) as usize;
+        Ok(self.contents[start..end].to_owned())
+    }
+}
+
 #[cfg(target_os = "linux")]
 pub use linux::*;
 
@@ -615,20 +627,20 @@ mod windows {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Permissions {
     /// Whether the contents of this mapping can be read from.
-    read: bool,
+    pub read: bool,
     /// Whether the contents of this mapping can be written to.
-    write: bool,
+    pub write: bool,
     /// Whether the contents of this mapping can be executed.
-    execute: bool,
+    pub execute: bool,
     /// Whether this mapping was created as `shared`.
     /// Writes to a shared mapping (usually backed by a file)
     /// can be observed by other processes which map the same file.
     /// Currently only supported on Linux.
-    shared: bool,
+    pub shared: bool,
     /// Whether this mapping was created as 'private'.
     /// Writes to a private mapping (usually backed by a file)
     /// are private to a process and cannot be observed by other processes which map the same file.
-    private: bool,
+    pub private: bool,
 }
 
 /// Converts a [`Permissions`] struct to its corresponding protobuf version.
@@ -981,18 +993,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    struct FakeProcessMemory {
-        contents: Vec<u8>,
-    }
-
-    impl MemoryReader for FakeProcessMemory {
-        fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
-            let start = offset as usize;
-            let end = (offset + length) as usize;
-            Ok(self.contents[start..end].to_owned())
-        }
-    }
 
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]
