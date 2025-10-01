@@ -22,6 +22,8 @@ pub struct Args {
     path_pruning_regex: Regex,
     /// Whether to collect canonical path to the file.
     path_canon: bool,
+    /// Regex to restrict the results only to those with matching contents.
+    contents_regex: Regex,
 }
 
 /// Result of the `get_file_metadata` action.
@@ -324,6 +326,9 @@ impl crate::request::Args for Args {
         let path_pruning_regex = Regex::new(proto.path_pruning_regex())
             .map_err(|error| ParseArgsError::invalid_field("path_pruning_regex", error))?;
 
+        let contents_regex = Regex::new(proto.contents_regex())
+            .map_err(|error| ParseArgsError::invalid_field("contents_regex", error))?;
+
         Ok(Args {
             paths,
             path_canon: proto.path_canonical(),
@@ -332,6 +337,7 @@ impl crate::request::Args for Args {
             sha1: proto.sha1(),
             sha256: proto.sha256(),
             path_pruning_regex,
+            contents_regex,
         })
     }
 }
@@ -395,6 +401,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -413,6 +420,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -436,6 +444,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -468,6 +477,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -506,6 +516,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -544,6 +555,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -577,6 +589,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -618,6 +631,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -664,6 +678,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -722,6 +737,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -785,6 +801,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -827,6 +844,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -862,6 +880,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -907,6 +926,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -942,6 +962,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -987,6 +1008,7 @@ mod tests {
             sha256: true,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1024,6 +1046,7 @@ mod tests {
             sha256: true,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1067,6 +1090,7 @@ mod tests {
             sha256: true,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1124,6 +1148,7 @@ mod tests {
                 sep = regex::escape(std::path::MAIN_SEPARATOR_STR),
             }).unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1178,6 +1203,7 @@ mod tests {
                 sep = regex::escape(std::path::MAIN_SEPARATOR_STR),
             }).unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1230,6 +1256,7 @@ mod tests {
                 tempdir = regex::escape(tempdir.to_str().unwrap()),
             }).unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1272,6 +1299,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1322,6 +1350,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1373,6 +1402,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1410,6 +1440,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: true,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1443,6 +1474,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: true,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
