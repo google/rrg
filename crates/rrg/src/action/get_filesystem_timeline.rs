@@ -40,8 +40,21 @@ where
     // when we process batches.
     let entry_count = std::cell::Cell::new(0);
 
+    // `walk_dir` does not include entry for the root directory, which is useful
+    // in the the timeline output. Thus, we grab it explicitly and chain it with
+    // the rest of the entries.
+    let root_metadata = std::fs::metadata(&args.root)
+        .map_err(crate::session::Error::action)?;
+
     let entries = crate::fs::walk_dir(&args.root)
-        .map_err(crate::session::Error::action)?
+        .map_err(crate::session::Error::action)?;
+
+    let entries = std::iter::once(Ok(crate::fs::Entry {
+        path: args.root,
+        metadata: root_metadata,
+    })).chain(entries);
+
+    let entries = entries
         .filter_map(|entry| match entry {
             Ok(entry) => Some(entry),
             Err(error) => {
@@ -188,7 +201,8 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let entries = entries(&session);
-        assert_eq!(entries.len(), 0);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(path(&entries[0]), Some(tempdir_path));
     }
 
     #[test]
@@ -208,10 +222,11 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.path().to_owned());
 
-        assert_eq!(entries.len(), 3);
-        assert_eq!(path(&entries[0]), Some(tempdir.path().join("a")));
-        assert_eq!(path(&entries[1]), Some(tempdir.path().join("b")));
-        assert_eq!(path(&entries[2]), Some(tempdir.path().join("c")));
+        assert_eq!(entries.len(), 4);
+        assert_eq!(path(&entries[0]), Some(tempdir.path().to_path_buf()));
+        assert_eq!(path(&entries[1]), Some(tempdir.path().join("a")));
+        assert_eq!(path(&entries[2]), Some(tempdir.path().join("b")));
+        assert_eq!(path(&entries[3]), Some(tempdir.path().join("c")));
     }
 
     #[test]
@@ -231,9 +246,10 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.path().to_owned());
 
-        assert_eq!(entries.len(), 2);
-        assert_eq!(path(&entries[0]), Some(tempdir_path.join("a")));
-        assert_eq!(path(&entries[1]), Some(tempdir_path.join("a").join("b")));
+        assert_eq!(entries.len(), 3);
+        assert_eq!(path(&entries[0]), Some(tempdir_path.to_path_buf()));
+        assert_eq!(path(&entries[1]), Some(tempdir_path.join("a")));
+        assert_eq!(path(&entries[2]), Some(tempdir_path.join("a").join("b")));
     }
 
     // Symlinking is supported only on Unix-like systems.
@@ -259,9 +275,10 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.path().to_owned());
 
-        assert_eq!(entries.len(), 2);
-        assert_eq!(path(&entries[0]), Some(dir_path));
-        assert_eq!(path(&entries[1]), Some(symlink_path));
+        assert_eq!(entries.len(), 3);
+        assert_eq!(path(&entries[0]), Some(root_path));
+        assert_eq!(path(&entries[1]), Some(dir_path));
+        assert_eq!(path(&entries[2]), Some(symlink_path));
     }
 
     #[test]
@@ -285,13 +302,14 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.path().to_owned());
 
-        assert_eq!(entries.len(), 2);
+        assert_eq!(entries.len(), 3);
+        assert_eq!(path(&entries[0]), Some(root_path));
 
         // macOS mangles Unicode-specific characters in filenames.
         #[cfg(not(target_os = "macos"))]
         {
-            assert_eq!(path(&entries[0]), Some(file_path_1));
-            assert_eq!(path(&entries[1]), Some(file_path_2));
+            assert_eq!(path(&entries[1]), Some(file_path_1));
+            assert_eq!(path(&entries[2]), Some(file_path_2));
         }
     }
 
@@ -310,22 +328,23 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.path().to_owned());
 
-        assert_eq!(entries.len(), 1);
-        assert_eq!(path(&entries[0]), Some(tempdir.path().join("foo")));
-        assert_eq!(entries[0].size(), 9);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(path(&entries[0]), Some(tempdir.path().to_path_buf()));
+        assert_eq!(path(&entries[1]), Some(tempdir.path().join("foo")));
+        assert_eq!(entries[1].size(), 9);
 
         // Information about the file mode, user and group identifiers is
         // available only on UNIX systems.
         #[cfg(target_family = "unix")]
         {
-            let mode = entries[0].unix_mode() as libc::mode_t;
+            let mode = entries[1].unix_mode() as libc::mode_t;
             assert_eq!(mode & libc::S_IFMT, libc::S_IFREG);
 
             let uid = unsafe { libc::getuid() };
-            assert_eq!(entries[0].unix_uid(), uid.into());
+            assert_eq!(entries[1].unix_uid(), uid.into());
 
             let gid = unsafe { libc::getgid() };
-            assert_eq!(entries[0].unix_gid(), gid.into());
+            assert_eq!(entries[1].unix_gid(), gid.into());
         }
     }
 
@@ -350,13 +369,14 @@ mod tests {
         let mut entries = entries(&session);
         entries.sort_by_key(|entry| entry.path().to_owned());
 
-        assert_eq!(entries.len(), 2);
-        assert_eq!(path(&entries[0]), Some(file_path));
-        assert_eq!(path(&entries[1]), Some(hardlink_path));
+        assert_eq!(entries.len(), 3);
+        assert_eq!(path(&entries[0]), Some(root_path));
+        assert_eq!(path(&entries[1]), Some(file_path));
+        assert_eq!(path(&entries[2]), Some(hardlink_path));
 
         // Information about inode is not available on Windows.
         #[cfg(not(target_os = "windows"))]
-        assert_eq!(entries[0].unix_ino(), entries[1].unix_ino());
+        assert_eq!(entries[1].unix_ino(), entries[2].unix_ino());
     }
 
     #[test]
@@ -394,10 +414,11 @@ mod tests {
         assert!(handle(&mut session, request).is_ok());
 
         let entries = entries(&session);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(path(&entries[0]), Some(temp_path));
+        assert_eq!(entries.len(), 2);
+        assert_eq!(path(&entries[0]), Some(temp_dir.path().to_path_buf()));
+        assert_eq!(path(&entries[1]), Some(temp_path));
 
-        let attributes = entries[0].windows_attributes() as u32;
+        let attributes = entries[1].windows_attributes() as u32;
         assert_eq!(attributes & FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_HIDDEN);
     }
 
