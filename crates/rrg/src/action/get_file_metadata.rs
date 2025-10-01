@@ -140,6 +140,74 @@ where
                 }
             };
 
+            if !args.contents_regex.as_str().is_empty() {
+                // Non-files obviously cannot match the contents conditions. We
+                // skip thme explicitly to avoid excesive errors when attempting
+                // to open them.
+                if !entry.metadata.is_file() {
+                    continue
+                }
+
+                let mut buf = Vec::<u8>::with_capacity(1 * 1024 * 1024);
+
+                log::debug! {
+                    "matching contents of '{}' to '{}' (using {}-bytes buffer)",
+                    entry.path.display(),
+                    args.contents_regex,
+                    buf.capacity(),
+                };
+
+                let mut file = match std::fs::File::open(&entry.path) {
+                    Ok(file) => file,
+                    Err(error) => {
+                        log::error! {
+                            "failed to open '{}' for reading: {error}",
+                            entry.path.display(),
+                        };
+
+                        continue
+                    }
+                };
+
+                let is_match = loop {
+                    use std::io::Read as _;
+
+                    // We always read as much as to fill the buffer. We drain
+                    // the first half of it at the end of the loop, so there
+                    // should always be some.
+                    assert!(buf.capacity() - buf.len() > 0);
+
+                    let mut file_chunk = file
+                        .take((buf.capacity() - buf.len()) as u64);
+
+                    match file_chunk.read_to_end(&mut buf) {
+                        Ok(0) => break false,
+                        Ok(_) => (),
+                        Err(error) => {
+                            log::error! {
+                                "failed to read contents of '{}': {error}",
+                                entry.path.display(),
+                            };
+
+                            break false
+                        }
+                    }
+                    file = file_chunk.into_inner();
+
+                    if args.contents_regex.is_match(&buf) {
+                        break true
+                    }
+
+                    // We don't drain the entire buffer but just the first half
+                    // not to omit matches at the chunk boundary.
+                    buf.drain(0..(buf.len() / 2));
+                };
+
+                if !is_match {
+                    continue
+                }
+            }
+
             #[cfg(target_family = "unix")]
             let ext_attrs = match ospect::fs::ext_attrs(&entry.path) {
                 Ok(ext_attrs) => ext_attrs.filter_map(|ext_attr| match ext_attr {
