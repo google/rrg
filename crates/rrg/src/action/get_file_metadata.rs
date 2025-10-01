@@ -1343,6 +1343,234 @@ mod tests {
     }
 
     #[test]
+    fn handle_contents_regex_match_at_start() {
+        use std::io::Write as _;
+
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        tempfile.write_all(b"foobar").unwrap();
+        tempfile.flush().unwrap();
+
+        let args = Args {
+            paths: vec![tempfile.path().to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("foo").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+    }
+
+    #[test]
+    fn handle_contents_regex_match_at_end() {
+        use std::io::Write as _;
+
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        tempfile.write_all(b"foobar").unwrap();
+        tempfile.flush().unwrap();
+
+        let args = Args {
+            paths: vec![tempfile.path().to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("bar").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+    }
+
+    #[test]
+    fn handle_contents_regex_no_match() {
+        use std::io::Write as _;
+
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        tempfile.write_all(b"foobar").unwrap();
+        tempfile.flush().unwrap();
+
+        let args = Args {
+            paths: vec![tempfile.path().to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("quux").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[test]
+    fn handle_contents_regex_multiple_chunks_match() {
+        use std::io::{Read as _, Write as _};
+
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        std::io::copy(&mut std::io::repeat(0x0).take(13371337), &mut tempfile).unwrap();
+        tempfile.write_all(b"foobar").unwrap();
+        tempfile.flush().unwrap();
+
+        let args = Args {
+            paths: vec![tempfile.path().to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("foo").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+    }
+
+    #[test]
+    fn handle_contents_regex_multiple_chunks_no_match() {
+        use std::io::{Read as _, Write as _};
+
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        std::io::copy(&mut std::io::repeat(0x0).take(13371337), &mut tempfile).unwrap();
+        tempfile.write_all(b"foobar").unwrap();
+        tempfile.flush().unwrap();
+
+        let args = Args {
+            paths: vec![tempfile.path().to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("quux").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn handle_contents_regex_special() {
+        let args = Args {
+            paths: vec![PathBuf::from("/dev/zero")],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("\\x00").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        // Even though `/dev/zero` should match a pattern of null-byte, we do
+        // not want to process special files and thus it should not be reported.
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[test]
+    fn handle_contents_regex_many() {
+        use std::io::Write as _;
+
+        let mut tempfile_foo = tempfile::NamedTempFile::new()
+            .unwrap();
+        let mut tempfile_bar = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        tempfile_foo.write_all(b"foo").unwrap();
+        tempfile_foo.flush().unwrap();
+
+        tempfile_bar.write_all(b"bar").unwrap();
+        tempfile_bar.flush().unwrap();
+
+        let args = Args {
+            paths: vec![
+                tempfile_foo.path().to_path_buf(),
+                tempfile_bar.path().to_path_buf(),
+            ],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("foo").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.reply::<Item>(0).path, tempfile_foo.path());
+    }
+
+    #[test]
+    fn handle_contents_regex_children() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::write(tempdir.join("foo"), b"foo").unwrap();
+        std::fs::write(tempdir.join("bar"), b"bar").unwrap();
+        std::fs::write(tempdir.join("baz"), b"baz").unwrap();
+
+        let args = Args {
+            paths: vec![tempdir.to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("ba[rz]").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let paths = session.replies::<Item>()
+            .map(|item| &item.path)
+            .collect::<Vec::<_>>();
+
+        assert!(!paths.contains(&&tempdir.join("foo")));
+        assert!(paths.contains(&&tempdir.join("bar")));
+        assert!(paths.contains(&&tempdir.join("baz")));
+    }
+
+    #[test]
     fn handle_many_regular_files() {
         let tempdir = tempfile::tempdir()
             .unwrap();
