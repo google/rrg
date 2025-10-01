@@ -95,38 +95,39 @@ where
             path: path.clone(),
             metadata,
         };
-        let entries = std::iter::once(Ok(entry)).chain({
-            if file_type.is_dir() && args.max_depth > 0 {
-                match crate::fs::walk_dir(&path) {
-                    Ok(entries) => {
-                        log::debug! {
-                            "walking children of '{}' (max depth: {}, pruning regex: '{}')",
-                            path.display(),
-                            args.max_depth,
-                            args.path_pruning_regex,
-                        };
-
-                        let entries = entries
-                            .with_max_depth(args.max_depth)
-                            .prune(|entry| {
-                                let path_bytes = entry.path.as_os_str().as_encoded_bytes();
-                                args.path_pruning_regex.is_match(&path_bytes)
-                            });
-
-                        Some(entries)
-                    }
-                    Err(error) => {
-                        log::error! {
-                            "failed to start recursive walk for '{}': {error}",
-                            path.display(),
-                        };
-                        None
-                    }
-                }
-            } else {
-                None
+        let entries = std::iter::once(Ok(entry)).chain(|| -> _ {
+            if !file_type.is_dir() || args.max_depth == 0 {
+                return None
             }
-        }.into_iter().flatten());
+
+            let entries = match crate::fs::walk_dir(&path) {
+                Ok(entries) => entries,
+                Err(error) => {
+                    log::error! {
+                        "failed to start recursive walk for '{}': {error}",
+                        path.display(),
+                    };
+
+                    return None
+                }
+            };
+
+            log::debug! {
+                "walking children of '{}' (max depth: {}, pruning regex: '{}')",
+                path.display(),
+                args.max_depth,
+                args.path_pruning_regex,
+            };
+
+            let entries = entries
+                .with_max_depth(args.max_depth)
+                .prune(|entry| {
+                    let path_bytes = entry.path.as_os_str().as_encoded_bytes();
+                    args.path_pruning_regex.is_match(&path_bytes)
+                });
+
+            Some(entries)
+        }().into_iter().flatten());
 
         for entry in entries {
             let entry = match entry {
