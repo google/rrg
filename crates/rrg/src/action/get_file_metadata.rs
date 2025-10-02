@@ -88,76 +88,18 @@ where
                 continue
             }
         };
+
         let file_type = metadata.file_type();
 
-        #[cfg(target_family = "unix")]
-        let ext_attrs = match ospect::fs::ext_attrs(path) {
-            Ok(ext_attrs) => ext_attrs.filter_map(|ext_attr| match ext_attr {
-                Ok(ext_attr) => Some(ext_attr),
-                Err(error) => {
-                    log::error! {
-                        "failed to read an extended attribute for '{}': {error}",
-                        path.display(),
-                    };
-
-                    None
-                }
-            }).collect(),
-            Err(error) => {
-                log::error! {
-                    "failed to list extended attributes for '{}': {error}",
-                    path.display(),
-                };
-
-                Vec::default()
-            }
-        };
-
-        let symlink = if file_type.is_symlink() {
-            match std::fs::read_link(path) {
-                Ok(symlink) => Some(symlink),
-                Err(error) => {
-                    log::error! {
-                        "failed to read symlink target for '{}': {error}",
-                        path.display(),
-                    };
-
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        let path_canon = if args.path_canon {
-            match path.canonicalize() {
-                Ok(path_canon) => Some(path_canon),
-                Err(error) => {
-                    log::error! {
-                        "failed to canonicalize path '{}': {error}",
-                        path.display(),
-                    };
-
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        let digest_ = digest(&path, &metadata, &args);
-
-        session.reply(Item {
+        let entry = crate::fs::Entry {
             path: path.clone(),
-            path_canon,
             metadata,
-            #[cfg(target_family = "unix")]
-            ext_attrs,
-            symlink,
-            digest: digest_,
-        })?;
+        };
+        let entries = std::iter::once(Ok(entry)).chain(|| -> _ {
+            if !file_type.is_dir() || args.max_depth == 0 {
+                return None
+            }
 
-        if file_type.is_dir() && args.max_depth > 0 {
             let entries = match crate::fs::walk_dir(&path) {
                 Ok(entries) => entries,
                 Err(error) => {
@@ -165,7 +107,8 @@ where
                         "failed to start recursive walk for '{}': {error}",
                         path.display(),
                     };
-                    continue
+
+                    return None
                 }
             };
 
@@ -176,90 +119,93 @@ where
                 args.path_pruning_regex,
             };
 
-            for entry in entries
+            let entries = entries
                 .with_max_depth(args.max_depth)
                 .prune(|entry| {
                     let path_bytes = entry.path.as_os_str().as_encoded_bytes();
                     args.path_pruning_regex.is_match(&path_bytes)
-                })
-            {
-                let entry = match entry {
-                    Ok(entry) => entry,
-                    Err(error) => {
-                        log::error!("failed to read directory entry: {error}");
-                        continue
-                    }
-                };
+                });
 
-                #[cfg(target_family = "unix")]
-                let ext_attrs = match ospect::fs::ext_attrs(&entry.path) {
-                    Ok(ext_attrs) => ext_attrs.filter_map(|ext_attr| match ext_attr {
-                        Ok(ext_attr) => Some(ext_attr),
-                        Err(error) => {
-                            log::error! {
-                                "failed to read an extended attribute for '{}': {error}",
-                                entry.path.display()
-                            };
+            Some(entries)
+        }().into_iter().flatten());
 
-                            None
-                        }
-                    }).collect(),
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) => {
+                    log::error!("failed to read directory entry: {error}");
+                    continue
+                }
+            };
+
+            #[cfg(target_family = "unix")]
+            let ext_attrs = match ospect::fs::ext_attrs(&entry.path) {
+                Ok(ext_attrs) => ext_attrs.filter_map(|ext_attr| match ext_attr {
+                    Ok(ext_attr) => Some(ext_attr),
                     Err(error) => {
                         log::error! {
-                            "failed to list extended attributes for '{}': {error}",
+                            "failed to read an extended attribute for '{}': {error}",
                             entry.path.display()
                         };
 
-                        Vec::default()
+                        None
                     }
-                };
+                }).collect(),
+                Err(error) => {
+                    log::error! {
+                        "failed to list extended attributes for '{}': {error}",
+                        entry.path.display()
+                    };
 
-                let symlink = if entry.metadata.is_symlink() {
-                    match std::fs::read_link(&entry.path) {
-                        Ok(symlink) => Some(symlink),
-                        Err(error) => {
-                            log::error! {
-                                "failed to read symlink target for '{}': {error}",
-                                entry.path.display()
-                            };
+                    Vec::default()
+                }
+            };
 
-                            None
-                        }
+            let symlink = if entry.metadata.is_symlink() {
+                match std::fs::read_link(&entry.path) {
+                    Ok(symlink) => Some(symlink),
+                    Err(error) => {
+                        log::error! {
+                            "failed to read symlink target for '{}': {error}",
+                            entry.path.display()
+                        };
+
+                        None
                     }
-                } else {
-                    None
-                };
+                }
+            } else {
+                None
+            };
 
-                let path_canon = if args.path_canon {
-                    match entry.path.canonicalize() {
-                        Ok(path_canon) => Some(path_canon),
-                        Err(error) => {
-                            log::error! {
-                                "failed to canonicalize path '{}': {error}",
-                                entry.path.display(),
-                            };
+            let path_canon = if args.path_canon {
+                match entry.path.canonicalize() {
+                    Ok(path_canon) => Some(path_canon),
+                    Err(error) => {
+                        log::error! {
+                            "failed to canonicalize path '{}': {error}",
+                            entry.path.display(),
+                        };
 
-                            None
-                        }
+                        None
                     }
-                } else {
-                    None
-                };
+                }
+            } else {
+                None
+            };
 
-                let digest_ = digest(&entry.path, &entry.metadata, &args);
+            let digest_ = digest(&entry.path, &entry.metadata, &args);
 
-                log::debug!("sending metadata for '{}'", entry.path.display());
+            log::debug!("sending metadata for '{}'", entry.path.display());
 
-                session.reply(Item {
-                    path: entry.path,
-                    path_canon,
-                    metadata: entry.metadata,
-                    #[cfg(target_family = "unix")]
-                    ext_attrs,
-                    symlink,
-                    digest: digest_,
-                })?;
-            }
+            session.reply(Item {
+                path: entry.path,
+                path_canon,
+                metadata: entry.metadata,
+                #[cfg(target_family = "unix")]
+                ext_attrs,
+                symlink,
+                digest: digest_,
+            })?;
         }
     }
 
