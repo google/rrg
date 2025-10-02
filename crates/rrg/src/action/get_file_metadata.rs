@@ -142,8 +142,8 @@ where
 
             if !args.contents_regex.as_str().is_empty() {
                 // Non-files obviously cannot match the contents conditions. We
-                // skip thme explicitly to avoid excesive errors when attempting
-                // to open them.
+                // skip them explicitly to avoid excessive errors when attempt-
+                // ing to open them.
                 if !entry.metadata.is_file() {
                     continue
                 }
