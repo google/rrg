@@ -60,6 +60,17 @@ message Args {
   // resolve multiple symlinks along the way and thus should not be enabled for
   // cases where long filesystem traversals are expected.
   bool path_canonical = 7;
+
+  // Regex to restrict the results only to those with matching contents.
+  //
+  // Note that evaluating this condition involves opening the file and reading
+  // its contents (entirely in the worst case of not matching the regex). Thus,
+  // this can be an expensive operation.
+  //
+  // File contents are split into overlapping chunks and matching is done per
+  // chunk. This means that the expected matching substring cannot exceed the
+  // size of the chunk.
+  string contents_regex = 8;
 }
 
 message Result {

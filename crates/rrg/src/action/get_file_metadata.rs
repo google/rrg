@@ -22,6 +22,8 @@ pub struct Args {
     path_pruning_regex: Regex,
     /// Whether to collect canonical path to the file.
     path_canon: bool,
+    /// Regex to restrict the results only to those with matching contents.
+    contents_regex: Regex,
 }
 
 /// Result of the `get_file_metadata` action.
@@ -137,6 +139,74 @@ where
                     continue
                 }
             };
+
+            if !args.contents_regex.as_str().is_empty() {
+                // Non-files obviously cannot match the contents conditions. We
+                // skip them explicitly to avoid excessive errors when attempt-
+                // ing to open them.
+                if !entry.metadata.is_file() {
+                    continue
+                }
+
+                let mut buf = Vec::<u8>::with_capacity(1 * 1024 * 1024);
+
+                log::debug! {
+                    "matching contents of '{}' to '{}' (using {}-bytes buffer)",
+                    entry.path.display(),
+                    args.contents_regex,
+                    buf.capacity(),
+                };
+
+                let mut file = match std::fs::File::open(&entry.path) {
+                    Ok(file) => file,
+                    Err(error) => {
+                        log::error! {
+                            "failed to open '{}' for reading: {error}",
+                            entry.path.display(),
+                        };
+
+                        continue
+                    }
+                };
+
+                let is_match = loop {
+                    use std::io::Read as _;
+
+                    // We always read as much as to fill the buffer. We drain
+                    // the first half of it at the end of the loop, so there
+                    // should always be some.
+                    assert!(buf.capacity() - buf.len() > 0);
+
+                    let mut file_chunk = file
+                        .take((buf.capacity() - buf.len()) as u64);
+
+                    match file_chunk.read_to_end(&mut buf) {
+                        Ok(0) => break false,
+                        Ok(_) => (),
+                        Err(error) => {
+                            log::error! {
+                                "failed to read contents of '{}': {error}",
+                                entry.path.display(),
+                            };
+
+                            break false
+                        }
+                    }
+                    file = file_chunk.into_inner();
+
+                    if args.contents_regex.is_match(&buf) {
+                        break true
+                    }
+
+                    // We don't drain the entire buffer but just the first half
+                    // not to omit matches at the chunk boundary.
+                    buf.drain(0..(buf.len() / 2));
+                };
+
+                if !is_match {
+                    continue
+                }
+            }
 
             #[cfg(target_family = "unix")]
             let ext_attrs = match ospect::fs::ext_attrs(&entry.path) {
@@ -324,6 +394,9 @@ impl crate::request::Args for Args {
         let path_pruning_regex = Regex::new(proto.path_pruning_regex())
             .map_err(|error| ParseArgsError::invalid_field("path_pruning_regex", error))?;
 
+        let contents_regex = Regex::new(proto.contents_regex())
+            .map_err(|error| ParseArgsError::invalid_field("contents_regex", error))?;
+
         Ok(Args {
             paths,
             path_canon: proto.path_canonical(),
@@ -332,6 +405,7 @@ impl crate::request::Args for Args {
             sha1: proto.sha1(),
             sha256: proto.sha256(),
             path_pruning_regex,
+            contents_regex,
         })
     }
 }
@@ -395,6 +469,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -413,6 +488,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -436,6 +512,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -468,6 +545,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -506,6 +584,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -544,6 +623,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -577,6 +657,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -618,6 +699,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -664,6 +746,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -722,6 +805,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -785,6 +869,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -827,6 +912,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -862,6 +948,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -907,6 +994,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -942,6 +1030,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -987,6 +1076,7 @@ mod tests {
             sha256: true,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1024,6 +1114,7 @@ mod tests {
             sha256: true,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1067,6 +1158,7 @@ mod tests {
             sha256: true,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1124,6 +1216,7 @@ mod tests {
                 sep = regex::escape(std::path::MAIN_SEPARATOR_STR),
             }).unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1178,6 +1271,7 @@ mod tests {
                 sep = regex::escape(std::path::MAIN_SEPARATOR_STR),
             }).unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1230,6 +1324,7 @@ mod tests {
                 tempdir = regex::escape(tempdir.to_str().unwrap()),
             }).unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1245,6 +1340,234 @@ mod tests {
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB"))));
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/A"))));
         assert!(paths.contains(&&tempdir.join(OsStr::from_bytes(b"\xFF\xAA\xBB/B"))));
+    }
+
+    #[test]
+    fn handle_contents_regex_match_at_start() {
+        use std::io::Write as _;
+
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        tempfile.write_all(b"foobar").unwrap();
+        tempfile.flush().unwrap();
+
+        let args = Args {
+            paths: vec![tempfile.path().to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("foo").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+    }
+
+    #[test]
+    fn handle_contents_regex_match_at_end() {
+        use std::io::Write as _;
+
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        tempfile.write_all(b"foobar").unwrap();
+        tempfile.flush().unwrap();
+
+        let args = Args {
+            paths: vec![tempfile.path().to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("bar").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+    }
+
+    #[test]
+    fn handle_contents_regex_no_match() {
+        use std::io::Write as _;
+
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        tempfile.write_all(b"foobar").unwrap();
+        tempfile.flush().unwrap();
+
+        let args = Args {
+            paths: vec![tempfile.path().to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("quux").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[test]
+    fn handle_contents_regex_multiple_chunks_match() {
+        use std::io::{Read as _, Write as _};
+
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        std::io::copy(&mut std::io::repeat(0x0).take(13371337), &mut tempfile).unwrap();
+        tempfile.write_all(b"foobar").unwrap();
+        tempfile.flush().unwrap();
+
+        let args = Args {
+            paths: vec![tempfile.path().to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("foo").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+    }
+
+    #[test]
+    fn handle_contents_regex_multiple_chunks_no_match() {
+        use std::io::{Read as _, Write as _};
+
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        std::io::copy(&mut std::io::repeat(0x0).take(13371337), &mut tempfile).unwrap();
+        tempfile.write_all(b"foobar").unwrap();
+        tempfile.flush().unwrap();
+
+        let args = Args {
+            paths: vec![tempfile.path().to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("quux").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn handle_contents_regex_special() {
+        let args = Args {
+            paths: vec![PathBuf::from("/dev/zero")],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("\\x00").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        // Even though `/dev/zero` should match a pattern of null-byte, we do
+        // not want to process special files and thus it should not be reported.
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[test]
+    fn handle_contents_regex_many() {
+        use std::io::Write as _;
+
+        let mut tempfile_foo = tempfile::NamedTempFile::new()
+            .unwrap();
+        let mut tempfile_bar = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        tempfile_foo.write_all(b"foo").unwrap();
+        tempfile_foo.flush().unwrap();
+
+        tempfile_bar.write_all(b"bar").unwrap();
+        tempfile_bar.flush().unwrap();
+
+        let args = Args {
+            paths: vec![
+                tempfile_foo.path().to_path_buf(),
+                tempfile_bar.path().to_path_buf(),
+            ],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("foo").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.reply::<Item>(0).path, tempfile_foo.path());
+    }
+
+    #[test]
+    fn handle_contents_regex_children() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::write(tempdir.join("foo"), b"foo").unwrap();
+        std::fs::write(tempdir.join("bar"), b"bar").unwrap();
+        std::fs::write(tempdir.join("baz"), b"baz").unwrap();
+
+        let args = Args {
+            paths: vec![tempdir.to_path_buf()],
+            max_depth: u32::MAX,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("ba[rz]").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let paths = session.replies::<Item>()
+            .map(|item| &item.path)
+            .collect::<Vec::<_>>();
+
+        assert!(!paths.contains(&&tempdir.join("foo")));
+        assert!(paths.contains(&&tempdir.join("bar")));
+        assert!(paths.contains(&&tempdir.join("baz")));
     }
 
     #[test]
@@ -1272,6 +1595,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1322,6 +1646,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1373,6 +1698,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1410,6 +1736,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: true,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -1443,6 +1770,7 @@ mod tests {
             sha256: false,
             path_pruning_regex: Regex::new("").unwrap(),
             path_canon: true,
+            contents_regex: Regex::new("").unwrap(),
         };
 
         let mut session = crate::session::FakeSession::new();
