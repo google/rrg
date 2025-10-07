@@ -6,9 +6,11 @@
 use crate::action::dump_process_memory::{
     MappedRegion, MappedRegionIter, MemoryReader, ReadableProcessMemory,
 };
+use std::error::Error;
 use std::time::Duration;
 
-use yara_x::{Compiler, Scanner};
+use yara_x::Compiler;
+use yara_x::blocks::Scanner;
 
 /// Arguments of the `yara_scan_memory` action.
 #[derive(Default)]
@@ -66,8 +68,10 @@ impl Args {
     }
 }
 
-// Unfortunately need to recreate the yara rule class hierarchy as they take references and we want
-// to own our strings
+// Unfortunately need to recreate some of the yara rule struct hierarchy
+// as they depend on the lifetime of the Compiler struct,
+// whereas rrg action items need to be 'static.
+#[derive(Debug)]
 struct Rule {
     identifier: String,
     patterns: Vec<Pattern>,
@@ -86,6 +90,7 @@ impl From<yara_x::Rule<'_, '_>> for Rule {
     }
 }
 
+#[derive(Debug)]
 struct Pattern {
     identifier: String,
     matches: Vec<Match>,
@@ -100,12 +105,13 @@ impl From<yara_x::Pattern<'_, '_>> for Pattern {
     }
 }
 
+#[derive(Debug)]
 struct Match {
     range: std::ops::Range<usize>,
     data: Vec<u8>,
 }
 
-impl From<yara_x::Match<'_>> for Match {
+impl From<yara_x::Match<'_, '_>> for Match {
     fn from(value: yara_x::Match) -> Self {
         Self {
             range: value.range(),
@@ -114,32 +120,39 @@ impl From<yara_x::Match<'_>> for Match {
     }
 }
 
+#[derive(Debug)]
+struct ErrorItem {
+    pid: u32,
+    inner: RegionScanError,
+}
+
+#[derive(Debug)]
+enum RegionScanError {
+    /// Failed to open the process' memory for reading.
+    OpenProcessMemory(std::io::Error),
+    /// There was an error while reading the contents of memory
+    MemoryRead(std::io::Error),
+    /// There was an error (e.g. a timeout) when scanning memory
+    Scan(yara_x::ScanError),
+}
+
 struct OkItem {
     pid: u32,
     matches: Vec<Rule>,
 }
 
-enum ErrorKind {
-    /// Failed to open the process' memory for reading.
-    OpenMemory,
-    /// Failed to read a single memory region.
-    ReadRegionMemory(MappedRegion),
-}
-
-/// Represents an error returned by the `dump_process_memory` action.
-struct DumpError {
-    /// The PID whose memory dumping encountered an error.
-    pid: u32,
-    /// IO Error that caused this error.
-    cause: std::io::Error,
-    /// Type of error that was encountered.
-    kind: ErrorKind,
-}
-
-enum ErrorItem {
-    Dump(DumpError),
-    Compiler(yara_x::errors::CompileError),
-    Scan(yara_x::errors::ScanError),
+fn scan_region<M: MemoryReader>(
+    region: &MappedRegion,
+    scanner: &mut Scanner,
+    memory: &mut M,
+) -> Result<(), RegionScanError> {
+    let buf = memory
+        .read_chunk(region.start_address(), region.size())
+        .map_err(RegionScanError::MemoryRead)?;
+    scanner
+        .scan(region.start_address() as usize, &buf)
+        .map_err(RegionScanError::Scan)?;
+    Ok(())
 }
 
 /// Result of the `dump_process_memory` action.
@@ -164,26 +177,6 @@ where
     )))
 }
 
-#[derive(Debug)]
-enum RegionScanError {
-    /// There was an error while reading the contents of memory
-    MemoryRead(std::io::Error),
-    /// There was an error (e.g. a timeout) when scanning memory
-    Scan(yara_x::errors::ScanError),
-}
-
-fn scan_region<M: MemoryReader>(
-    region: &MappedRegion,
-    scanner: &mut Scanner,
-    memory: &mut M,
-) -> Result<Vec<Rule>, RegionScanError> {
-    let buf = memory
-        .read_chunk(region.start_address(), region.size())
-        .map_err(RegionScanError::MemoryRead)?;
-    let results = scanner.scan(&buf).map_err(RegionScanError::Scan)?;
-    Ok(results.matching_rules().map(Rule::from).collect())
-}
-
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
 where
@@ -191,10 +184,9 @@ where
 {
     let rules = {
         let mut compiler = Compiler::new();
-        if let Err(err) = compiler.add_source(args.signature.as_str()) {
-            session.reply(Err(ErrorItem::Compiler(err)))?;
-            return Ok(());
-        }
+        compiler
+            .add_source(args.signature.as_str())
+            .map_err(crate::session::Error::action)?;
         compiler.build()
     };
     let mut scanner = Scanner::new(&rules);
@@ -206,22 +198,20 @@ where
         let regions = match MappedRegionIter::from_pid(pid) {
             Ok(regions) => regions,
             Err(cause) => {
-                session.reply(Err(ErrorItem::Dump(DumpError {
+                session.reply(Err(ErrorItem {
                     pid,
-                    cause,
-                    kind: ErrorKind::OpenMemory,
-                })))?;
+                    inner: RegionScanError::OpenProcessMemory(cause),
+                }))?;
                 continue;
             }
         };
         let mut memory = match ReadableProcessMemory::open(pid) {
             Ok(memory) => memory,
             Err(cause) => {
-                session.reply(Err(ErrorItem::Dump(DumpError {
+                session.reply(Err(ErrorItem {
                     pid,
-                    cause,
-                    kind: ErrorKind::OpenMemory,
-                })))?;
+                    inner: RegionScanError::OpenProcessMemory(cause),
+                }))?;
                 continue;
             }
         };
@@ -232,10 +222,24 @@ where
             .map(|reg| reg.map_err(crate::session::Error::action))
             .collect::<Result<_, _>>()?;
 
+        let mut scanner = Scanner::new(&rules);
+        scanner.set_timeout(args.scan_timeout);
         for region in regions.into_iter().filter(|reg| args.should_dump(reg)) {
-            match scan_region(&region, &mut scanner, &mut memory) {
-                Ok(_) => todo!(),
-                Err(_) => todo!(),
+            if let Err(inner) = scan_region(&region, &mut scanner, &mut memory) {
+                session.reply(Err(ErrorItem { pid, inner }))?;
+            }
+        }
+
+        match scanner.finish() {
+            Ok(results) => {
+                let matches = results.matching_rules().map(Rule::from).collect();
+                session.reply(Ok(OkItem { pid, matches }))?;
+            }
+            Err(error) => {
+                session.reply(Err(ErrorItem {
+                    pid,
+                    inner: RegionScanError::Scan(error),
+                }))?;
             }
         }
     }
@@ -268,23 +272,40 @@ mod tests {
 
     #[test]
     fn test_rule_scanning() {
-        let mut memory = FakeProcessMemory {
-            contents: b"text here".to_vec(),
-        };
-        let region = MappedRegion::from_bounds(0, memory.contents.len() as u64);
+        let contents = b"text hereUNRELATEDtext here".to_vec();
+        let unrelated_idx = b"text here".len();
+        let second_text_idx = unrelated_idx + b"UNRELATED".len();
+        let regions = [
+            MappedRegion::from_bounds(0, unrelated_idx as u64),
+            MappedRegion::from_bounds(unrelated_idx as u64, second_text_idx as u64),
+            MappedRegion::from_bounds(second_text_idx as u64, contents.len() as u64),
+        ];
 
         let rules = compile_source(EXAMPLE_RULE_SRC);
         let mut scanner = Scanner::new(&rules);
 
-        let rules = scan_region(&region, &mut scanner, &mut memory).expect("failed to scan region");
-        assert_eq!(rules.len(), 1);
-        let rule = &rules[0];
+        let mut memory = FakeProcessMemory { contents };
+        for region in regions {
+            scan_region(&region, &mut scanner, &mut memory).expect("failed to scan region");
+        }
+        let results = scanner.finish().expect("failed to finish scan");
+        dbg!(&results);
+
+        let matching: Vec<Rule> = results.matching_rules().map(Rule::from).collect();
+        dbg!(&matching);
+        assert_eq!(matching.len(), 1);
+        let rule = &matching[0];
         assert_eq!(rule.identifier, "ExampleRule");
         assert_eq!(rule.patterns.len(), 1);
         let pat = &rule.patterns[0];
         assert_eq!(pat.identifier, "$text");
-        assert_eq!(pat.matches.len(), 1);
+        assert_eq!(pat.matches.len(), 2);
         assert_eq!(pat.matches[0].data, b"text here");
-        assert_eq!(pat.matches[0].range, (0..memory.contents.len()));
+        assert_eq!(pat.matches[0].range, (0..unrelated_idx));
+        assert_eq!(pat.matches[1].data, b"text here");
+        assert_eq!(
+            pat.matches[1].range,
+            (second_text_idx..memory.contents.len())
+        );
     }
 }
