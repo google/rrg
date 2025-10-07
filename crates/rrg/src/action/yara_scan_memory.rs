@@ -6,7 +6,6 @@
 use crate::action::dump_process_memory::{
     MappedRegion, MappedRegionIter, MemoryReader, ReadableProcessMemory,
 };
-use std::error::Error;
 use std::time::Duration;
 
 use yara_x::Compiler;
@@ -33,7 +32,7 @@ pub struct Args {
     skip_readonly_regions: bool,
 
     chunk_size: u64,
-    chunk_overlap_size: u64,
+    chunk_overlap: u64,
 }
 
 use crate::request::ParseArgsError;
@@ -54,7 +53,7 @@ impl Args {
         if self.skip_executable_regions && region.permissions.execute {
             return false;
         }
-        if self.skip_mapped_files && region.inode.is_some() || region.path.is_some() {
+        if self.skip_mapped_files && (region.inode.is_some() || region.path.is_some()) {
             return false;
         }
         if self.skip_readonly_regions
@@ -121,37 +120,47 @@ impl From<yara_x::Match<'_, '_>> for Match {
 }
 
 #[derive(Debug)]
+enum RegionScanError {
+    /// Failed to open the process' memory for reading.
+    OpenProcessMemory(std::io::Error),
+    /// There was an error while reading the contents of memory
+    MemoryRead(std::io::Error, MappedRegion),
+    /// There was an error (e.g. a timeout) when scanning memory
+    Scan(yara_x::ScanError),
+}
+
+#[derive(Debug)]
 struct ErrorItem {
     pid: u32,
     inner: RegionScanError,
 }
 
 #[derive(Debug)]
-enum RegionScanError {
-    /// Failed to open the process' memory for reading.
-    OpenProcessMemory(std::io::Error),
-    /// There was an error while reading the contents of memory
-    MemoryRead(std::io::Error),
-    /// There was an error (e.g. a timeout) when scanning memory
-    Scan(yara_x::ScanError),
-}
-
 struct OkItem {
     pid: u32,
-    matches: Vec<Rule>,
+    matching_rules: Vec<Rule>,
 }
 
 fn scan_region<M: MemoryReader>(
     region: &MappedRegion,
     scanner: &mut Scanner,
     memory: &mut M,
+    chunk_size: u64,
+    chunk_overlap: u64,
 ) -> Result<(), RegionScanError> {
-    let buf = memory
-        .read_chunk(region.start_address(), region.size())
-        .map_err(RegionScanError::MemoryRead)?;
-    scanner
-        .scan(region.start_address() as usize, &buf)
-        .map_err(RegionScanError::Scan)?;
+    let mut offset = region.start_address();
+    while offset < region.end_address() {
+        let remaining = region.end_address() - offset;
+        let length = remaining.min(chunk_size + chunk_overlap);
+        let buf = memory
+            .read_chunk(offset, length)
+            .map_err(|err| RegionScanError::MemoryRead(err, region.clone()))?;
+        scanner
+            .scan(offset as usize, &buf)
+            .map_err(RegionScanError::Scan)?;
+
+        offset += chunk_size;
+    }
     Ok(())
 }
 
@@ -224,16 +233,30 @@ where
 
         let mut scanner = Scanner::new(&rules);
         scanner.set_timeout(args.scan_timeout);
-        for region in regions.into_iter().filter(|reg| args.should_dump(reg)) {
-            if let Err(inner) = scan_region(&region, &mut scanner, &mut memory) {
+        for region in regions
+            .into_iter()
+            .filter(|reg| dbg!(args.should_dump(dbg!(reg))))
+        {
+            if let Err(inner) = scan_region(
+                &region,
+                &mut scanner,
+                &mut memory,
+                args.chunk_size,
+                args.chunk_overlap,
+            ) {
                 session.reply(Err(ErrorItem { pid, inner }))?;
             }
         }
 
         match scanner.finish() {
             Ok(results) => {
-                let matches = results.matching_rules().map(Rule::from).collect();
-                session.reply(Ok(OkItem { pid, matches }))?;
+                let matches = results.matching_rules().map(Rule::from).collect::<Vec<_>>();
+                if !matches.is_empty() {
+                    session.reply(Ok(OkItem {
+                        pid,
+                        matching_rules: matches,
+                    }))?;
+                }
             }
             Err(error) => {
                 session.reply(Err(ErrorItem {
@@ -271,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rule_scanning() {
+    fn scans_regions() {
         let contents = b"text hereUNRELATEDtext here".to_vec();
         let unrelated_idx = b"text here".len();
         let second_text_idx = unrelated_idx + b"UNRELATED".len();
@@ -286,13 +309,12 @@ mod tests {
 
         let mut memory = FakeProcessMemory { contents };
         for region in regions {
-            scan_region(&region, &mut scanner, &mut memory).expect("failed to scan region");
+            scan_region(&region, &mut scanner, &mut memory, 1000, 1000)
+                .expect("failed to scan region");
         }
         let results = scanner.finish().expect("failed to finish scan");
-        dbg!(&results);
 
         let matching: Vec<Rule> = results.matching_rules().map(Rule::from).collect();
-        dbg!(&matching);
         assert_eq!(matching.len(), 1);
         let rule = &matching[0];
         assert_eq!(rule.identifier, "ExampleRule");
@@ -307,5 +329,91 @@ mod tests {
             pat.matches[1].range,
             (second_text_idx..memory.contents.len())
         );
+    }
+
+    #[test]
+    fn catches_matches_at_chunk_boundaries() {
+        let rules = compile_source(
+            r#"
+            rule TestRule {
+                strings:
+                    $text = "wololo"
+                condition:
+                    $text
+            }"#,
+        );
+
+        let mut contents = vec![0u8; 1024];
+        const CHUNK_SIZE: usize = 512;
+        const CHUNK_OVERLAP: usize = 128;
+        // Insert a match at chunk boundaries to ensure they're caught by the overlap
+        contents[(CHUNK_SIZE - 3)..(CHUNK_SIZE + 3)].copy_from_slice(b"wololo");
+        // Also insert a match at the very end
+        contents.extend_from_slice(b"wololo");
+
+        let mut scanner = Scanner::new(&rules);
+        let region = MappedRegion::from_bounds(0, contents.len() as u64);
+        let mut memory = FakeProcessMemory { contents };
+        scan_region(
+            &region,
+            &mut scanner,
+            &mut memory,
+            CHUNK_SIZE as u64,
+            CHUNK_OVERLAP as u64,
+        )
+        .expect("failed to scan region");
+        let results = scanner.finish().expect("failed to finish scan");
+
+        let rule = results.matching_rules().next().expect("rule did not match");
+        let pattern = rule.patterns().next().expect("pattern did not match");
+        assert_eq!(pattern.identifier(), "$text");
+        assert_eq!(pattern.matches().count(), 2);
+    }
+
+    #[test]
+    fn scan_this_process_memory() {
+        // Hold onto some memory.
+        // The resulting rule should match in the program
+        // text and/or in the heap contents.
+        let mem = b"mypreciousssss".to_vec();
+
+        let mut session = crate::session::FakeSession::new();
+        let args = Args {
+            pids: vec![std::process::id()],
+            signature: r#"
+            rule ExampleRule {
+                strings:
+                    $regex = /mypreciouss*/
+                condition:
+                    $regex
+            }
+            "#
+            .to_string(),
+            // Set limit to keep unit test time reasonable
+            scan_timeout: Duration::from_secs(5),
+            chunk_size: 100 * 1024 * 1024,
+            chunk_overlap: 50 * 1024 * 1024,
+            ..Default::default()
+        };
+
+        handle(&mut session, args).unwrap();
+
+        assert!(
+            session
+                .replies::<Item>()
+                .filter_map(|reply| reply.as_ref().ok())
+                .any(|item| {
+                    let mut matches = item
+                        .matching_rules
+                        .iter()
+                        .flat_map(|rule| rule.patterns.iter())
+                        .flat_map(|pat| pat.matches.iter());
+                    let found = matches.next().unwrap();
+                    found.data == mem
+                })
+        );
+
+        // Drop explicitly so mem is not optimized away for being unused.
+        drop(mem);
     }
 }

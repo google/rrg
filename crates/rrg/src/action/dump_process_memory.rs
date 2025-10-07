@@ -732,7 +732,7 @@ impl Args {
         if self.skip_executable_regions && region.permissions.execute {
             return false;
         }
-        if self.skip_mapped_files && region.inode.is_some() || region.path.is_some() {
+        if self.skip_mapped_files && (region.inode.is_some() || region.path.is_some()) {
             return false;
         }
         if self.skip_readonly_regions
