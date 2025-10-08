@@ -963,4 +963,29 @@ mod tests {
 
         assert!(matches!(current, ValueData::U32(_)));
     }
+
+    #[test]
+    fn filetime_to_system_time_epoch_win() {
+        let epoch_win = windows_sys::Win32::Foundation::FILETIME {
+            dwLowDateTime: 0,
+            dwHighDateTime: 0,
+        };
+
+        // Windows epoch is before the UNIX one, so this should saturate.
+        assert_eq! {
+            filetime_to_system_time(epoch_win),
+            std::time::SystemTime::UNIX_EPOCH,
+        };
+    }
+
+    #[test]
+    fn filetime_to_system_max() {
+        let max = windows_sys::Win32::Foundation::FILETIME {
+            dwLowDateTime: u32::MAX,
+            dwHighDateTime: u32::MAX,
+        };
+
+        // We just want to verify that this does not panic.
+        let _ = filetime_to_system_time(max);
+    }
 }
