@@ -645,36 +645,6 @@ unsafe fn query_raw_key_info(
         return Err(std::io::Error::from_raw_os_error(code as i32));
     }
 
-    // SAFETY: We verified that the call above succeeded, the value is now ini-
-    // tialized.
-    let last_write_time = unsafe {
-        last_write_time.assume_init()
-    };
-    // So, we have the last write time in 100-nanosecond intervals since Windows
-    // epoch, i.e. January 1, 1601 [1]. A difference between that and the UNIX
-    // epoch is 11,644,473,600 seconds [2, 3].
-    //
-    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-filetime
-    // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/converting-a-time-t-value-to-a-file-time
-    // [3]: https://devblogs.microsoft.com/oldnewthing/20220602-00/?p=106706
-    let last_write_time_win_epoch_nanos100 = {
-        let hi = u64::from(last_write_time.dwHighDateTime);
-        let lo = u64::from(last_write_time.dwLowDateTime);
-        (hi << u32::BITS) | lo
-    };
-    let last_write_time_win_epoch_secs = {
-        last_write_time_win_epoch_nanos100 / (1_000_000_000 / 100)
-    };
-    let last_write_time_win_epoch_nanos = {
-        last_write_time_win_epoch_nanos100 % (1_000_000_000 / 100) * 100
-    };
-    let last_write_time_win_epoch_since = {
-        std::time::Duration::from_secs(last_write_time_win_epoch_secs) +
-        std::time::Duration::from_nanos(last_write_time_win_epoch_nanos)
-    };
-    let last_write_time_unix_epoch_since = last_write_time_win_epoch_since
-        .saturating_sub(std::time::Duration::from_secs(11_644_473_600));
-
     Ok(KeyInfo {
         key,
         // SAFETY: We verified that the call above succeeded, the value is now
@@ -692,16 +662,11 @@ unsafe fn query_raw_key_info(
         max_value_data_len: unsafe {
             max_value_data_len.assume_init()
         },
-        modified: {
-            std::time::SystemTime::UNIX_EPOCH
-                .checked_add(last_write_time_unix_epoch_since)
-                // This should never panic: we know that we had a valid Windows
-                // time value (64-bit) and then did a bunch of conversions that
-                // to put that into the Rust `SystemTime` object that can repre-
-                // sent any valid system time (and in fact internally uses the
-                // very same object we started with).
-                .expect("invalid last write time")
-        },
+        // SAFETY: We verified that the call above succeeded, the value is now
+        // initialized.
+        modified: filetime_to_system_time(unsafe {
+            last_write_time.assume_init()
+        }),
     })
 }
 
@@ -790,6 +755,48 @@ unsafe fn query_raw_key_value_data(
 
     ValueData::from_raw_data(data_type, &data_buf)
         .map_err(std::io::Error::from)
+}
+
+/// Converts the given Windows `FILETIME` object to Rust's [`SystemTime`].
+///
+/// [`SystemTime`]: std::time::SystemTime
+fn filetime_to_system_time(
+    filetime: windows_sys::Win32::Foundation::FILETIME,
+) -> std::time::SystemTime {
+    let epoch_win_nanos100 = {
+        let hi = u64::from(filetime.dwHighDateTime);
+        let lo = u64::from(filetime.dwLowDateTime);
+        (hi << u32::BITS) | lo
+    };
+    // So, we have the last write time in 100-nanosecond intervals since Windows
+    // epoch, i.e. January 1, 1601 [1]. A difference between that and the UNIX
+    // epoch is 11,644,473,600 seconds [2, 3].
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-filetime
+    // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/converting-a-time-t-value-to-a-file-time
+    // [3]: https://devblogs.microsoft.com/oldnewthing/20220602-00/?p=106706
+    let epoch_win_secs = {
+        epoch_win_nanos100 / (1_000_000_000 / 100)
+    };
+    let epoch_win_nanos = {
+        epoch_win_nanos100 % (1_000_000_000 / 100) * 100
+    };
+    let epoch_win_since = {
+        std::time::Duration::from_secs(epoch_win_secs) +
+        std::time::Duration::from_nanos(epoch_win_nanos)
+    };
+    let epoch_unix_since = epoch_win_since
+        // Windows epoch is before the UNIX one, so it is possible to underflow
+        // here. We just saturate to 0 in that case.
+        .saturating_sub(std::time::Duration::from_secs(11_644_473_600));
+
+    std::time::SystemTime::UNIX_EPOCH.checked_add(epoch_unix_since)
+        // This should never panic: we know that we had a valid Windows time
+        // value (64-bit) and then did a bunch of conversions that to put that
+        // into the Rust `SystemTime` object that can represent any valid system
+        // time (and in fact internally uses the very same object we started
+        // with).
+        .expect("invalid last write time")
 }
 
 #[cfg(test)]
