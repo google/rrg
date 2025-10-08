@@ -790,13 +790,17 @@ fn filetime_to_system_time(
         // here. We just saturate to 0 in that case.
         .saturating_sub(std::time::Duration::from_secs(11_644_473_600));
 
-    std::time::SystemTime::UNIX_EPOCH.checked_add(epoch_unix_since)
-        // This should never panic: we know that we had a valid Windows time
-        // value (64-bit) and then did a bunch of conversions that to put that
-        // into the Rust `SystemTime` object that can represent any valid system
-        // time (and in fact internally uses the very same object we started
-        // with).
-        .expect("invalid last write time")
+    std::time::SystemTime::UNIX_EPOCH
+        // TODO(rust-lang/rust#71224): Ideally, we should do something like
+        // `.saturating_add` but there is no such implemented for `SystemTime`
+        // at the moment, so we just return the UNIX epoch instead.
+        //
+        // Generally this should not overflow as we started with a valid 64-bit
+        // value and then did a bunch of conversions to reach `SystemTime` that
+        // internally uses what we started with. But in practice if we pass max
+        // `FILETIME` object this does overflow so we need to back ourselves up.
+        .checked_add(epoch_unix_since)
+        .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
 }
 
 #[cfg(test)]
