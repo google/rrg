@@ -153,6 +153,8 @@ pub struct KeyInfo {
     max_value_name_len: u32,
     // Maximum length of the value data (in bytes).
     max_value_data_len: u32,
+    // Last modification time of this key.
+    modified: std::time::SystemTime,
 }
 
 impl KeyInfo {
@@ -188,6 +190,11 @@ impl KeyInfo {
             name_buf: Vec::with_capacity(self.max_value_name_len as usize + 1),
             data_buf: Vec::with_capacity(self.max_value_data_len as usize),
         }
+    }
+
+    /// Returns the last modification time of this key.
+    pub fn modified(&self) -> std::time::SystemTime {
+        self.modified
     }
 }
 
@@ -612,6 +619,8 @@ unsafe fn query_raw_key_info(
     let mut max_value_name_len = std::mem::MaybeUninit::uninit();
     let mut max_value_data_len = std::mem::MaybeUninit::uninit();
 
+    let mut last_write_time = std::mem::MaybeUninit::uninit();
+
     // SAFETY: This is just an FFI call as described in the docs [1].
     //
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryinfokeyw
@@ -628,13 +637,43 @@ unsafe fn query_raw_key_info(
             max_value_name_len.as_mut_ptr(),
             max_value_data_len.as_mut_ptr(),
             std::ptr::null_mut(),
-            std::ptr::null_mut(),
+            last_write_time.as_mut_ptr(),
         )
     };
 
     if code != windows_sys::Win32::Foundation::ERROR_SUCCESS {
         return Err(std::io::Error::from_raw_os_error(code as i32));
     }
+
+    // SAFETY: We verified that the call above succeeded, the value is now ini-
+    // tialized.
+    let last_write_time = unsafe {
+        last_write_time.assume_init()
+    };
+    // So, we have the last write time in 100-nanosecond intervals since Windows
+    // epoch, i.e. January 1, 1601 [1]. A difference between that and the UNIX
+    // epoch is 11,644,473,600 seconds [2, 3].
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-filetime
+    // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/converting-a-time-t-value-to-a-file-time
+    // [3]: https://devblogs.microsoft.com/oldnewthing/20220602-00/?p=106706
+    let last_write_time_win_epoch_nanos100 = {
+        let hi = u64::from(last_write_time.dwHighDateTime);
+        let lo = u64::from(last_write_time.dwLowDateTime);
+        (hi << u32::BITS) | lo
+    };
+    let last_write_time_win_epoch_secs = {
+        last_write_time_win_epoch_nanos100 / (1_000_000_000 / 100)
+    };
+    let last_write_time_win_epoch_nanos = {
+        last_write_time_win_epoch_nanos100 % (1_000_000_000 / 100) * 100
+    };
+    let last_write_time_win_epoch_since = {
+        std::time::Duration::from_secs(last_write_time_win_epoch_secs) +
+        std::time::Duration::from_nanos(last_write_time_win_epoch_nanos)
+    };
+    let last_write_time_unix_epoch_since = last_write_time_win_epoch_since
+        .saturating_sub(std::time::Duration::from_secs(11_644_473_600));
 
     Ok(KeyInfo {
         key,
@@ -652,6 +691,16 @@ unsafe fn query_raw_key_info(
         // initialized.
         max_value_data_len: unsafe {
             max_value_data_len.assume_init()
+        },
+        modified: {
+            std::time::SystemTime::UNIX_EPOCH
+                .checked_add(last_write_time_unix_epoch_since)
+                // This should never panic: we know that we had a valid Windows
+                // time value (64-bit) and then did a bunch of conversions that
+                // to put that into the Rust `SystemTime` object that can repre-
+                // sent any valid system time (and in fact internally uses the
+                // very same object we started with).
+                .expect("invalid last write time")
         },
     })
 }
