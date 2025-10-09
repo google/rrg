@@ -20,17 +20,19 @@ pub struct Args {
     /// YARA signature source to scan for.
     signature: String,
 
+    /// Maximum time spent scanning for each process in `pids`.
     scan_timeout: Duration,
 
-    // Set this flag to avoid dumping mapped files.
+    /// Set this flag to avoid dumping mapped files.
     skip_mapped_files: bool,
-    // Set this flag to avoid dumping shared memory regions.
+    /// Set this flag to avoid dumping shared memory regions.
     skip_shared_regions: bool,
-    // Set this flag to avoid dumping executable memory regions.
+    /// Set this flag to avoid dumping executable memory regions.
     skip_executable_regions: bool,
-    // Set this flag to avoid dumping readonly memory regions.
+    /// Set this flag to avoid dumping readonly memory regions.
     skip_readonly_regions: bool,
 
+    /// Maximum chunk size in which
     chunk_size: u64,
     chunk_overlap: u64,
 }
@@ -76,46 +78,51 @@ struct Rule {
     patterns: Vec<Pattern>,
 }
 
-impl From<yara_x::Rule<'_, '_>> for Rule {
-    fn from(value: yara_x::Rule) -> Self {
-        Self {
-            identifier: value.identifier().to_owned(),
-            patterns: value
-                .patterns()
-                .map(Pattern::from)
-                .filter(|pattern| !pattern.matches.is_empty())
-                .collect(),
-        }
-    }
-}
-
 #[derive(Debug)]
 struct Pattern {
     identifier: String,
     matches: Vec<Match>,
 }
 
-impl From<yara_x::Pattern<'_, '_>> for Pattern {
-    fn from(value: yara_x::Pattern) -> Self {
-        Self {
-            identifier: value.identifier().to_owned(),
-            matches: value.matches().map(Match::from).collect(),
-        }
-    }
-}
-
 #[derive(Debug)]
 struct Match {
+    /// Address range in the process' address space at which the match was found.
     range: std::ops::Range<usize>,
-    data: Vec<u8>,
+    /// Sha256 digest of the matching bytes that were sent to the blob sink.
+    blob_sha256: [u8; 32],
 }
 
-impl From<yara_x::Match<'_, '_>> for Match {
-    fn from(value: yara_x::Match) -> Self {
-        Self {
-            range: value.range(),
-            data: value.data().to_owned(),
-        }
+impl Rule {
+    fn blobify<S: crate::session::Session>(
+        rule: yara_x::Rule<'_, '_>,
+        session: &mut S,
+    ) -> crate::session::Result<Self> {
+        use sha2::Digest as _;
+        let patterns = rule
+            .patterns()
+            .map(|pattern| {
+                let matches = pattern
+                    .matches()
+                    .map(|mat| {
+                        let blob_sha256 = sha2::Sha256::digest(mat.data()).into();
+                        let blob = crate::blob::Blob::from(mat.data().to_vec());
+                        session.send(crate::Sink::Blob, blob)?;
+                        Ok(Match {
+                            range: mat.range(),
+                            blob_sha256,
+                        })
+                    })
+                    .collect::<crate::session::Result<_>>()?;
+                Ok(Pattern {
+                    identifier: pattern.identifier().to_owned(),
+                    matches,
+                })
+            })
+            .collect::<crate::session::Result<_>>()?;
+        Ok(Self {
+            identifier: rule.identifier().to_owned(),
+            patterns,
+        })
     }
 }
 
@@ -141,6 +148,17 @@ struct OkItem {
     matching_rules: Vec<Rule>,
 }
 
+/// Result of the `dump_process_memory` action.
+type Item = Result<OkItem, ErrorItem>;
+
+impl crate::response::Item for Item {
+    type Proto = rrg_proto::dump_process_memory::Result;
+
+    fn into_proto(self) -> Self::Proto {
+        todo!()
+    }
+}
+
 fn scan_region<M: MemoryReader>(
     region: &MappedRegion,
     scanner: &mut Scanner,
@@ -164,28 +182,6 @@ fn scan_region<M: MemoryReader>(
     Ok(())
 }
 
-/// Result of the `dump_process_memory` action.
-type Item = Result<OkItem, ErrorItem>;
-
-impl crate::response::Item for Item {
-    type Proto = rrg_proto::dump_process_memory::Result;
-
-    fn into_proto(self) -> Self::Proto {
-        todo!()
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
-pub fn handle<S>(_session: &mut S, _args: Args) -> crate::session::Result<()>
-where
-    S: crate::session::Session,
-{
-    use std::io::{Error, ErrorKind};
-    Err(crate::session::Error::action(Error::from(
-        ErrorKind::Unsupported,
-    )))
-}
-
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
 where
@@ -198,8 +194,6 @@ where
             .map_err(crate::session::Error::action)?;
         compiler.build()
     };
-    let mut scanner = Scanner::new(&rules);
-    scanner.set_timeout(args.scan_timeout);
 
     // Circumvent borrow checker complaint about partial moves with `take`
     let pids = std::mem::take(&mut args.pids);
@@ -250,11 +244,14 @@ where
 
         match scanner.finish() {
             Ok(results) => {
-                let matches = results.matching_rules().map(Rule::from).collect::<Vec<_>>();
-                if !matches.is_empty() {
+                let matching_rules = results
+                    .matching_rules()
+                    .map(|rule| Rule::blobify(rule, session))
+                    .collect::<crate::session::Result<Vec<_>>>()?;
+                if !matching_rules.is_empty() {
                     session.reply(Ok(OkItem {
                         pid,
-                        matching_rules: matches,
+                        matching_rules,
                     }))?;
                 }
             }
@@ -267,6 +264,17 @@ where
         }
     }
     Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+pub fn handle<S>(_session: &mut S, _args: Args) -> crate::session::Result<()>
+where
+    S: crate::session::Session,
+{
+    use std::io::{Error, ErrorKind};
+    Err(crate::session::Error::action(Error::from(
+        ErrorKind::Unsupported,
+    )))
 }
 
 #[cfg(test)]
@@ -314,21 +322,19 @@ mod tests {
         }
         let results = scanner.finish().expect("failed to finish scan");
 
-        let matching: Vec<Rule> = results.matching_rules().map(Rule::from).collect();
-        assert_eq!(matching.len(), 1);
-        let rule = &matching[0];
-        assert_eq!(rule.identifier, "ExampleRule");
-        assert_eq!(rule.patterns.len(), 1);
-        let pat = &rule.patterns[0];
-        assert_eq!(pat.identifier, "$text");
-        assert_eq!(pat.matches.len(), 2);
-        assert_eq!(pat.matches[0].data, b"text here");
-        assert_eq!(pat.matches[0].range, (0..unrelated_idx));
-        assert_eq!(pat.matches[1].data, b"text here");
-        assert_eq!(
-            pat.matches[1].range,
-            (second_text_idx..memory.contents.len())
-        );
+        let rule = results.matching_rules().next().expect("no matching rule");
+        assert_eq!(rule.identifier(), "ExampleRule");
+        let pattern = rule
+            .patterns()
+            .next()
+            .expect("no patterns in matching rule");
+        assert_eq!(pattern.identifier(), "$text");
+        let matches = pattern.matches().collect::<Vec<_>>();
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].data(), b"text here");
+        assert_eq!(matches[0].range(), (0..unrelated_idx));
+        assert_eq!(matches[1].data(), b"text here");
+        assert_eq!(matches[1].range(), (second_text_idx..memory.contents.len()));
     }
 
     #[test]
@@ -398,22 +404,43 @@ mod tests {
 
         handle(&mut session, args).unwrap();
 
+        // Check that the string was found and sent to blob sink
         assert!(
             session
-                .replies::<Item>()
-                .filter_map(|reply| reply.as_ref().ok())
-                .any(|item| {
-                    let mut matches = item
-                        .matching_rules
-                        .iter()
-                        .flat_map(|rule| rule.patterns.iter())
-                        .flat_map(|pat| pat.matches.iter());
-                    let found = matches.next().unwrap();
-                    found.data == mem
-                })
+                .parcels::<crate::blob::Blob>(crate::Sink::Blob)
+                .any(|parcel| parcel.as_bytes() == mem)
         );
 
         // Drop explicitly so mem is not optimized away for being unused.
         drop(mem);
+    }
+
+    #[test]
+    fn applies_timeout() {
+        let mut session = crate::session::FakeSession::new();
+        let args = Args {
+            pids: vec![std::process::id()],
+            signature: r#"
+            rule slow {
+                condition: 
+                    for any i in (0..1000000000) : (
+                         uint8(i) == 0xCC
+                    )
+            }"#
+            .to_string(),
+            scan_timeout: Duration::from_millis(500),
+            chunk_size: 100 * 1024 * 1024,
+            chunk_overlap: 50 * 1024 * 1024,
+            ..Default::default()
+        };
+
+        handle(&mut session, args).unwrap();
+
+        assert!(
+            session
+                .replies::<Item>()
+                .filter_map(|item| item.as_ref().err())
+                .any(|err| matches!(err.inner, RegionScanError::Scan(yara_x::ScanError::Timeout)))
+        );
     }
 }
