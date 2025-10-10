@@ -170,6 +170,10 @@ where
         DumpProcessMemory => {
             handle(session, request, self::dump_process_memory::handle)
         }
+        #[cfg(feature = "action-yara_scan_memory")]
+        YaraScanProcessMemory => {
+            handle(session, request, self::yara_scan_memory::handle)
+        }
         // We allow `unreachable_patterns` because otherwise we get a warning if
         // we compile with all the actions enabled.
         #[allow(unreachable_patterns)]

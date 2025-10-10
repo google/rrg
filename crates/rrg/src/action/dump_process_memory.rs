@@ -145,7 +145,6 @@ mod linux {
     impl MappedRegion {
         /// Parses a single mapping from a line in a process' mappings file.
         fn parse(line: &str) -> Result<Self, ParseRegionError> {
-            dbg!(line);
             let mut parts = line.split_ascii_whitespace();
             let address = parts
                 .next()
@@ -197,13 +196,13 @@ mod linux {
             let inode = if inode != 0 { Some(inode) } else { None };
 
             let path = parts.next().map(PathBuf::from);
-            dbg!(Ok(MappedRegion {
+            Ok(MappedRegion {
                 address_start,
                 size,
                 permissions,
                 inode,
                 path,
-            }))
+            })
         }
     }
 

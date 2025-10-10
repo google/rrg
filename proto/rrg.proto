@@ -56,6 +56,8 @@ enum Action {
   DUMP_PROCESS_MEMORY = 20;
   // Get the snapshot of the entire filesystem.
   GET_FILESYSTEM_TIMELINE_TSK = 21;
+  // Scan the contents of a specified process' memory for matching patterns using Yara-x.
+  YARA_SCAN_PROCESS_MEMORY = 22;
 
   // TODO: Define more actions that should be supported.
 
