@@ -23,6 +23,8 @@ struct Item {
     key: std::ffi::OsString,
     /// Listed subkey relative to `root` and `key`.
     subkey: std::ffi::OsString,
+    /// Last modification time of the listed subkey.
+    modified: std::time::SystemTime,
 }
 
 /// Handles invocations of the `list_winreg_keys` action.
@@ -33,11 +35,15 @@ where
 {
     let key = args.root.open(&args.key)
         .map_err(crate::session::Error::action)?;
+    let key_info = key.info()
+        .map_err(crate::session::Error::action)?;
 
     /// Single "stack frame" of the recursive key listing procedure.
     struct PendingKey {
         /// Handle to the key specified in the `key_rel_name`.
         key: winreg::OpenKey,
+        /// Information about the key specified in the `key_rel_name`.
+        key_info: winreg::KeyInfo,
         /// Name of the `key` relative to the key from which we started.
         key_rel_name: std::ffi::OsString,
         /// Current depth of the recursive walk.
@@ -50,6 +56,7 @@ where
     let mut pending_keys = Vec::new();
     pending_keys.push(PendingKey {
         key,
+        key_info,
         key_rel_name: std::ffi::OsString::new(),
         depth: 0,
     });
@@ -57,22 +64,12 @@ where
     loop {
         let PendingKey {
             key,
+            key_info,
             key_rel_name,
             depth,
         } = match pending_keys.pop() {
             Some(pending_key) => pending_key,
             None => break,
-        };
-
-        let key_info = match key.info() {
-            Ok(key_info) => key_info,
-            Err(error) => {
-                log::error! {
-                    "failed to obtain information for key {:?}: {}",
-                    winreg::path::join(&args.key, &key_rel_name), error,
-                };
-                continue
-            }
         };
 
         for subkey_name in key_info.subkeys() {
@@ -88,30 +85,43 @@ where
             };
             let subkey_rel_name = winreg::path::join(&key_rel_name, &subkey_name);
 
-            if depth + 1 < args.max_depth {
-                match key.open(&subkey_name) {
-                    Ok(subkey) => {
-                        pending_keys.push(PendingKey {
-                            key: subkey,
-                            key_rel_name: subkey_rel_name.clone(),
-                            depth: depth + 1,
-                        });
-                    }
-                    Err(error) => {
-                        log::error! {
-                            "failed to open subkey '{:?}': {}",
-                            winreg::path::join(&key_rel_name, &subkey_name), error,
-                        };
-                    }
+            let subkey = match key.open(&subkey_name) {
+                Ok(subkey) => subkey,
+                Err(error) => {
+                    log::error! {
+                        "failed to open subkey '{:?}': {error}",
+                        winreg::path::join(&key_rel_name, &subkey_name),
+                    };
+                    continue
                 }
-            }
+            };
+            let subkey_info = match subkey.info() {
+                Ok(subkey_info) => subkey_info,
+                Err(error) => {
+                    log::error! {
+                        "failed to obtain information for subkey {:?}: {error}",
+                        winreg::path::join(&key_rel_name, &subkey_name),
+                    };
+                    continue
+                }
+            };
 
             session.reply(Item {
                 root: args.root,
                 // TODO(@panhania): Add support for case-correcting the key.
                 key: args.key.clone(),
-                subkey: subkey_rel_name,
+                subkey: subkey_rel_name.clone(),
+                modified: subkey_info.modified(),
             })?;
+
+            if depth + 1 < args.max_depth {
+                pending_keys.push(PendingKey {
+                    key: subkey,
+                    key_info: subkey_info,
+                    key_rel_name: subkey_rel_name,
+                    depth: depth + 1,
+                });
+            }
         }
     }
 
@@ -159,6 +169,7 @@ impl crate::response::Item for Item {
         proto.set_root(self.root.into());
         proto.set_key(self.key.to_string_lossy().into_owned());
         proto.set_subkey(self.subkey.to_string_lossy().into_owned());
+        proto.set_modification_time(self.modified.into());
 
         proto
     }
