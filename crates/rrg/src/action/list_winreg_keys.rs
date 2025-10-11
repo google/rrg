@@ -90,7 +90,7 @@ where
                 Err(error) => {
                     log::error! {
                         "failed to open subkey '{:?}': {error}",
-                        winreg::path::join(&key_rel_name, &subkey_name),
+                        subkey_rel_name,
                     };
                     continue
                 }
@@ -100,7 +100,7 @@ where
                 Err(error) => {
                     log::error! {
                         "failed to obtain information for subkey {:?}: {error}",
-                        winreg::path::join(&key_rel_name, &subkey_name),
+                        subkey_rel_name,
                     };
                     continue
                 }
@@ -111,7 +111,7 @@ where
                 Err(error) => {
                     log::error! {
                         "failed to obtain modification time for subkey {:?}: {error}",
-                        winreg::path::join(&key_rel_name, &subkey_name),
+                        subkey_rel_name,
                     };
                     None
                 }
