@@ -24,7 +24,7 @@ struct Item {
     /// Listed subkey relative to `root` and `key`.
     subkey: std::ffi::OsString,
     /// Last modification time of the listed subkey.
-    modified: std::time::SystemTime,
+    modified: Option<std::time::SystemTime>,
 }
 
 /// Handles invocations of the `list_winreg_keys` action.
@@ -106,12 +106,23 @@ where
                 }
             };
 
+            let modified = match subkey_info.modified() {
+                Ok(modified) => Some(modified),
+                Err(error) => {
+                    log::error! {
+                        "failed to obtain modification time for subkey {:?}: {error}",
+                        winreg::path::join(&key_rel_name, &subkey_name),
+                    };
+                    None
+                }
+            };
+
             session.reply(Item {
                 root: args.root,
                 // TODO(@panhania): Add support for case-correcting the key.
                 key: args.key.clone(),
                 subkey: subkey_rel_name.clone(),
-                modified: subkey_info.modified(),
+                modified,
             })?;
 
             if depth + 1 < args.max_depth {
@@ -169,7 +180,10 @@ impl crate::response::Item for Item {
         proto.set_root(self.root.into());
         proto.set_key(self.key.to_string_lossy().into_owned());
         proto.set_subkey(self.subkey.to_string_lossy().into_owned());
-        proto.set_modification_time(self.modified.into());
+
+        if let Some(modified) = self.modified {
+            proto.set_modification_time(modified.into());
+        }
 
         proto
     }

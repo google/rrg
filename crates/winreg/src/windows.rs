@@ -154,7 +154,7 @@ pub struct KeyInfo {
     // Maximum length of the value data (in bytes).
     max_value_data_len: u32,
     // Last modification time of this key.
-    modified: std::time::SystemTime,
+    modified: Result<std::time::SystemTime, UnsupportedFiletimeError>,
 }
 
 impl KeyInfo {
@@ -193,8 +193,8 @@ impl KeyInfo {
     }
 
     /// Returns the last modification time of this key.
-    pub fn modified(&self) -> std::time::SystemTime {
-        self.modified
+    pub fn modified(&self) -> std::io::Result<std::time::SystemTime> {
+        self.modified.map_err(|error| std::io::Error::from(error))
     }
 }
 
@@ -762,7 +762,7 @@ unsafe fn query_raw_key_value_data(
 /// [`SystemTime`]: std::time::SystemTime
 fn filetime_to_system_time(
     filetime: windows_sys::Win32::Foundation::FILETIME,
-) -> std::time::SystemTime {
+) -> Result<std::time::SystemTime, UnsupportedFiletimeError> {
     let epoch_win_nanos100 = {
         let hi = u64::from(filetime.dwHighDateTime);
         let lo = u64::from(filetime.dwLowDateTime);
@@ -787,20 +787,50 @@ fn filetime_to_system_time(
     };
     let epoch_unix_since = epoch_win_since
         // Windows epoch is before the UNIX one, so it is possible to underflow
-        // here. We just saturate to 0 in that case.
-        .saturating_sub(std::time::Duration::from_secs(11_644_473_600));
+        // here.
+        .checked_sub(std::time::Duration::from_secs(11_644_473_600))
+        .ok_or(UnsupportedFiletimeError::Underflow(epoch_win_nanos100))?;
 
     std::time::SystemTime::UNIX_EPOCH
-        // TODO(rust-lang/rust#71224): Ideally, we should do something like
-        // `.saturating_add` but there is no such implemented for `SystemTime`
-        // at the moment, so we just return the UNIX epoch instead.
-        //
         // Generally this should not overflow as we started with a valid 64-bit
         // value and then did a bunch of conversions to reach `SystemTime` that
         // internally uses what we started with. But in practice if we pass max
         // `FILETIME` object this does overflow so we need to back ourselves up.
         .checked_add(epoch_unix_since)
-        .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        .ok_or(UnsupportedFiletimeError::Overflow(epoch_win_nanos100))
+}
+
+#[derive(Clone, Copy, Debug)]
+enum UnsupportedFiletimeError {
+    Underflow(u64),
+    Overflow(u64),
+}
+
+impl std::fmt::Display for UnsupportedFiletimeError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "filetime value ")?;
+        match *self {
+            UnsupportedFiletimeError::Underflow(value) => {
+                write!(fmt, "underflow: {value}")?
+            }
+            UnsupportedFiletimeError::Overflow(value) => {
+                write!(fmt, "overflow: {value}")?
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl std::error::Error for UnsupportedFiletimeError {
+}
+
+impl From<UnsupportedFiletimeError> for std::io::Error {
+
+    fn from(error: UnsupportedFiletimeError) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::Unsupported, error)
+    }
 }
 
 #[cfg(test)]
@@ -971,11 +1001,9 @@ mod tests {
             dwHighDateTime: 0,
         };
 
-        // Windows epoch is before the UNIX one, so this should saturate.
-        assert_eq! {
-            filetime_to_system_time(epoch_win),
-            std::time::SystemTime::UNIX_EPOCH,
-        };
+        // Windows epoch is before the UNIX one.
+        let error = filetime_to_system_time(epoch_win).unwrap_err();
+        assert!(matches!(error, UnsupportedFiletimeError::Underflow(_)));
     }
 
     #[test]
