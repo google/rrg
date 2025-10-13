@@ -153,6 +153,8 @@ pub struct KeyInfo {
     max_value_name_len: u32,
     // Maximum length of the value data (in bytes).
     max_value_data_len: u32,
+    // Last modification time of this key.
+    modified: Result<std::time::SystemTime, UnsupportedFiletimeError>,
 }
 
 impl KeyInfo {
@@ -188,6 +190,11 @@ impl KeyInfo {
             name_buf: Vec::with_capacity(self.max_value_name_len as usize + 1),
             data_buf: Vec::with_capacity(self.max_value_data_len as usize),
         }
+    }
+
+    /// Returns the last modification time of this key.
+    pub fn modified(&self) -> std::io::Result<std::time::SystemTime> {
+        self.modified.map_err(|error| std::io::Error::from(error))
     }
 }
 
@@ -612,6 +619,8 @@ unsafe fn query_raw_key_info(
     let mut max_value_name_len = std::mem::MaybeUninit::uninit();
     let mut max_value_data_len = std::mem::MaybeUninit::uninit();
 
+    let mut last_write_time = std::mem::MaybeUninit::uninit();
+
     // SAFETY: This is just an FFI call as described in the docs [1].
     //
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryinfokeyw
@@ -628,7 +637,7 @@ unsafe fn query_raw_key_info(
             max_value_name_len.as_mut_ptr(),
             max_value_data_len.as_mut_ptr(),
             std::ptr::null_mut(),
-            std::ptr::null_mut(),
+            last_write_time.as_mut_ptr(),
         )
     };
 
@@ -653,6 +662,11 @@ unsafe fn query_raw_key_info(
         max_value_data_len: unsafe {
             max_value_data_len.assume_init()
         },
+        // SAFETY: We verified that the call above succeeded, the value is now
+        // initialized.
+        modified: filetime_to_system_time(unsafe {
+            last_write_time.assume_init()
+        }),
     })
 }
 
@@ -741,6 +755,82 @@ unsafe fn query_raw_key_value_data(
 
     ValueData::from_raw_data(data_type, &data_buf)
         .map_err(std::io::Error::from)
+}
+
+/// Converts the given Windows `FILETIME` object to Rust's [`SystemTime`].
+///
+/// [`SystemTime`]: std::time::SystemTime
+fn filetime_to_system_time(
+    filetime: windows_sys::Win32::Foundation::FILETIME,
+) -> Result<std::time::SystemTime, UnsupportedFiletimeError> {
+    let epoch_win_nanos100 = {
+        let hi = u64::from(filetime.dwHighDateTime);
+        let lo = u64::from(filetime.dwLowDateTime);
+        (hi << u32::BITS) | lo
+    };
+    // So, we have the last write time in 100-nanosecond intervals since Windows
+    // epoch, i.e. January 1, 1601 [1]. A difference between that and the UNIX
+    // epoch is 11,644,473,600 seconds [2, 3].
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-filetime
+    // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/converting-a-time-t-value-to-a-file-time
+    // [3]: https://devblogs.microsoft.com/oldnewthing/20220602-00/?p=106706
+    let epoch_win_secs = {
+        epoch_win_nanos100 / (1_000_000_000 / 100)
+    };
+    let epoch_win_nanos = {
+        epoch_win_nanos100 % (1_000_000_000 / 100) * 100
+    };
+    let epoch_win_since = {
+        std::time::Duration::from_secs(epoch_win_secs) +
+        std::time::Duration::from_nanos(epoch_win_nanos)
+    };
+    let epoch_unix_since = epoch_win_since
+        // Windows epoch is before the UNIX one, so it is possible to underflow
+        // here.
+        .checked_sub(std::time::Duration::from_secs(11_644_473_600))
+        .ok_or(UnsupportedFiletimeError::Underflow(epoch_win_nanos100))?;
+
+    std::time::SystemTime::UNIX_EPOCH
+        // Generally this should not overflow as we started with a valid 64-bit
+        // value and then did a bunch of conversions to reach `SystemTime` that
+        // internally uses what we started with. But in practice if we pass max
+        // `FILETIME` object this does overflow so we need to back ourselves up.
+        .checked_add(epoch_unix_since)
+        .ok_or(UnsupportedFiletimeError::Overflow(epoch_win_nanos100))
+}
+
+#[derive(Clone, Copy, Debug)]
+enum UnsupportedFiletimeError {
+    Underflow(u64),
+    Overflow(u64),
+}
+
+impl std::fmt::Display for UnsupportedFiletimeError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "filetime value ")?;
+        match *self {
+            UnsupportedFiletimeError::Underflow(value) => {
+                write!(fmt, "underflow: {value}")?
+            }
+            UnsupportedFiletimeError::Overflow(value) => {
+                write!(fmt, "overflow: {value}")?
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl std::error::Error for UnsupportedFiletimeError {
+}
+
+impl From<UnsupportedFiletimeError> for std::io::Error {
+
+    fn from(error: UnsupportedFiletimeError) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::Unsupported, error)
+    }
 }
 
 #[cfg(test)]
@@ -902,5 +992,28 @@ mod tests {
             .value_data(OsStr::new("Current")).unwrap();
 
         assert!(matches!(current, ValueData::U32(_)));
+    }
+
+    #[test]
+    fn filetime_to_system_time_epoch_win() {
+        let epoch_win = windows_sys::Win32::Foundation::FILETIME {
+            dwLowDateTime: 0,
+            dwHighDateTime: 0,
+        };
+
+        // Windows epoch is before the UNIX one.
+        let error = filetime_to_system_time(epoch_win).unwrap_err();
+        assert!(matches!(error, UnsupportedFiletimeError::Underflow(_)));
+    }
+
+    #[test]
+    fn filetime_to_system_max() {
+        let max = windows_sys::Win32::Foundation::FILETIME {
+            dwLowDateTime: u32::MAX,
+            dwHighDateTime: u32::MAX,
+        };
+
+        // We just want to verify that this does not panic.
+        let _ = filetime_to_system_time(max);
     }
 }

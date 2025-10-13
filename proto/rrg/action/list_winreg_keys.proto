@@ -7,6 +7,7 @@ syntax = "proto3";
 package rrg.action.list_winreg_keys;
 
 import "rrg/winreg.proto";
+import "google/protobuf/timestamp.proto";
 
 message Args {
     // Root predefined key of the key to list subkeys of.
@@ -31,4 +32,7 @@ message Result {
 
     // Listed subkey relative to `root` and `key`.
     string subkey = 3;
+
+    // Last modification time of the listed subkey.
+    google.protobuf.Timestamp modification_time = 4;
 }
