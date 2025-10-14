@@ -14,14 +14,14 @@ use yara_x::blocks::Scanner;
 /// Arguments of the `yara_scan_memory` action.
 #[derive(Default)]
 pub struct Args {
-    /// PIDs of the processs whose memory we are interested in.
+    /// PIDs of the processes whose memory we are interested in.
     pids: Vec<u32>,
 
     /// YARA signature source to use for scanning.
     signature: String,
 
     /// Maximum time spent scanning a single process.
-    scan_timeout: Duration,
+    scan_timeout: Option<Duration>,
 
     /// Set this flag to avoid scanning mapped files.
     skip_mapped_files: bool,
@@ -35,8 +35,8 @@ pub struct Args {
     /// Length of the chunks used to read large memory regions, in bytes.
     chunk_size: u64,
     /// Overlap across chunks, in bytes. A larger overlap decreases
-    /// the chance of missing a string that would otherwise match,
-    /// but is located across chunk boundaries.
+    /// the chance of missing a string located across chunk boundaries
+    /// that would otherwise match.
     chunk_overlap: u64,
 }
 
@@ -48,8 +48,10 @@ impl crate::request::Args for Args {
         const DEFAULT_CHUNK_SIZE: u64 = 50 * 1024 * 1024; // 50MB
         const DEFAULT_CHUNK_OVERLAP: u64 = 10 * 1024 * 1024; // 10MB
 
-        let scan_timeout = std::time::Duration::try_from(proto.take_scan_timeout())
-            .map_err(|error| ParseArgsError::invalid_field("scan timeout", error))?;
+        let mut scan_timeout: Option<Duration> = None;
+        if proto.has_scan_timeout() {
+            scan_timeout = Some(proto.take_scan_timeout().into())
+        }
 
         Ok(Self {
             pids: proto.pids,
@@ -88,9 +90,12 @@ impl Args {
     }
 }
 
-// Unfortunately need to recreate some of the yara rule struct hierarchy
+// Unfortunately need to recreate some of the Yara structs in our code
 // as they depend on the lifetime of the Compiler struct,
 // whereas rrg action items need to be 'static.
+// Additionally, we want to send matching data to the blob store, instead of sending it back
+// inline in responses.
+
 #[derive(Debug)]
 struct Rule {
     identifier: String,
@@ -112,6 +117,8 @@ struct Match {
 }
 
 impl Rule {
+    /// Converts a [yara_x::Rule] to a [Rule], sending any matching data to the blob store
+    /// and storing the blob's Sha256 hash in the corresponding [Match].
     fn blobify<S: crate::session::Session>(
         rule: yara_x::Rule<'_, '_>,
         session: &mut S,
@@ -178,55 +185,53 @@ impl From<Rule> for rrg_proto::yara_scan_memory::Rule {
 }
 
 #[derive(Debug)]
-enum RegionScanError {
+enum Error {
     /// Failed to open the process' memory for reading.
     OpenProcessMemory(std::io::Error),
-    /// There was an error while reading the contents of memory
-    MemoryRead(std::io::Error, MappedRegion),
     /// There was an error (e.g. a timeout) when scanning memory
     Scan(yara_x::ScanError),
 }
 
-impl std::fmt::Display for RegionScanError {
+impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "failed to scan process memory: ")?;
         match self {
-            RegionScanError::OpenProcessMemory(error) => {
-                write!(f, "could not open process memory for reading: {}", error)
+            Error::OpenProcessMemory(error) => {
+                write!(f, "failed to open process memory for reading: {}", error)
             }
-            RegionScanError::MemoryRead(error, _) => {
-                write!(f, "could not read memory region: {}", error)
-            }
-            RegionScanError::Scan(error) => {
+            Error::Scan(error) => {
                 write!(f, "error during scanning: {}", error)
             }
         }
     }
 }
 
-impl std::error::Error for RegionScanError {
+impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            RegionScanError::OpenProcessMemory(error) => Some(error),
-            RegionScanError::MemoryRead(error, _) => Some(error),
-            RegionScanError::Scan(scan_error) => Some(scan_error),
+            Error::OpenProcessMemory(error) => Some(error),
+            Error::Scan(scan_error) => Some(scan_error),
         }
     }
 }
 
 #[derive(Debug)]
 struct ErrorItem {
+    /// PID of the process that we encountered an error scanning.
     pid: u32,
-    inner: RegionScanError,
+    /// Actual error that occurred when scanning `pid`.
+    error: Error,
 }
 
 #[derive(Debug)]
 struct OkItem {
+    /// PID of the process this item belongs to.
     pid: u32,
+    /// YARA rules that matched when scanning this process' memory.
     matching_rules: Vec<Rule>,
 }
 
-/// Result of the `yara_scan_memory` action.
+/// Result of the `yara_scan_memory` action for one single process.
 type Item = Result<OkItem, ErrorItem>;
 
 impl crate::response::Item for Item {
@@ -235,9 +240,9 @@ impl crate::response::Item for Item {
     fn into_proto(self) -> Self::Proto {
         let mut proto = Self::Proto::new();
         match self {
-            Err(ErrorItem { pid, inner }) => {
+            Err(ErrorItem { pid, error }) => {
                 proto.set_pid(pid);
-                proto.set_error(inner.to_string());
+                proto.set_error(error.to_string());
             }
             Ok(OkItem {
                 pid,
@@ -251,24 +256,26 @@ impl crate::response::Item for Item {
     }
 }
 
+/// Reads and scans a single region of memory, breaking it up into chunks of `chunk_size` with an overlap of
+/// `chunk_overlap`. Only returns an error if scanning failed; read errors are ignored.
 fn scan_region<M: MemoryReader>(
     region: &MappedRegion,
     scanner: &mut Scanner,
     memory: &mut M,
     chunk_size: u64,
     chunk_overlap: u64,
-) -> Result<(), RegionScanError> {
+) -> Result<(), Error> {
     let mut offset = region.start_address();
     while offset < region.end_address() {
         let remaining = region.end_address() - offset;
         let length = remaining.min(chunk_size + chunk_overlap);
-        let buf = memory
-            .read_chunk(offset, length)
-            .map_err(|err| RegionScanError::MemoryRead(err, region.clone()))?;
-        scanner
-            .scan(offset as usize, &buf)
-            .map_err(RegionScanError::Scan)?;
-
+        // Any process will most likely have at least one region
+        // that cannot be read succesfully, so there's no point
+        // in reporting an error to the user if that happens,
+        // just ignore it and continue.
+        if let Ok(buf) = memory.read_chunk(offset, length) {
+            scanner.scan(offset as usize, &buf).map_err(Error::Scan)?;
+        }
         offset += chunk_size;
     }
     Ok(())
@@ -295,7 +302,7 @@ where
             Err(cause) => {
                 session.reply(Err(ErrorItem {
                     pid,
-                    inner: RegionScanError::OpenProcessMemory(cause),
+                    error: Error::OpenProcessMemory(cause),
                 }))?;
                 continue;
             }
@@ -305,7 +312,7 @@ where
             Err(cause) => {
                 session.reply(Err(ErrorItem {
                     pid,
-                    inner: RegionScanError::OpenProcessMemory(cause),
+                    error: Error::OpenProcessMemory(cause),
                 }))?;
                 continue;
             }
@@ -318,19 +325,25 @@ where
             .collect::<Result<_, _>>()?;
 
         let mut scanner = Scanner::new(&rules);
-        if !args.scan_timeout.is_zero() {
-            scanner.set_timeout(args.scan_timeout);
+        if let Some(timeout) = args.scan_timeout {
+            scanner.set_timeout(timeout);
         }
-        for region in regions.into_iter().filter(|reg| args.should_dump(reg)) {
-            if let Err(inner) = scan_region(
-                &region,
-                &mut scanner,
-                &mut memory,
-                args.chunk_size,
-                args.chunk_overlap,
-            ) {
-                session.reply(Err(ErrorItem { pid, inner }))?;
-            }
+
+        if let Err(error) = regions
+            .into_iter()
+            .filter(|reg| args.should_dump(reg))
+            .try_for_each(|region| {
+                scan_region(
+                    &region,
+                    &mut scanner,
+                    &mut memory,
+                    args.chunk_size,
+                    args.chunk_overlap,
+                )
+            })
+        {
+            session.reply(Err(ErrorItem { pid, error }))?;
+            continue;
         }
 
         match scanner.finish() {
@@ -347,7 +360,7 @@ where
             Err(error) => {
                 session.reply(Err(ErrorItem {
                     pid,
-                    inner: RegionScanError::Scan(error),
+                    error: Error::Scan(error),
                 }))?;
             }
         }
@@ -485,7 +498,7 @@ mod tests {
             "#
             .to_string(),
             // Set limit to keep unit test time reasonable
-            scan_timeout: Duration::from_secs(5),
+            scan_timeout: Some(Duration::from_secs(5)),
             chunk_size: 100 * 1024 * 1024,
             chunk_overlap: 50 * 1024 * 1024,
             ..Default::default()
@@ -507,19 +520,24 @@ mod tests {
     #[test]
     fn applies_timeout() {
         let mut session = crate::session::FakeSession::new();
+
+        // Hold a malicious string in memory that slows down scanning
+        let mut malicious_string = vec![b'a'; 10000];
+        malicious_string.push(b'z');
+
         let args = Args {
             pids: vec![std::process::id()],
             signature: r#"
             rule slow {
-                condition: 
-                    for any i in (0..1000000000) : (
-                         uint8(i) == 0xCC
-                    )
+                strings: 
+                    $regex = /(a+)+z/
+                condition:
+                    $regex
             }"#
             .to_string(),
-            scan_timeout: Duration::from_millis(500),
-            chunk_size: 100 * 1024 * 1024,
-            chunk_overlap: 50 * 1024 * 1024,
+            scan_timeout: Some(Duration::from_millis(500)),
+            chunk_size: 10000,
+            chunk_overlap: 500,
             ..Default::default()
         };
 
@@ -529,7 +547,7 @@ mod tests {
             session
                 .replies::<Item>()
                 .filter_map(|item| item.as_ref().err())
-                .any(|err| matches!(err.inner, RegionScanError::Scan(yara_x::ScanError::Timeout)))
+                .any(|err| matches!(err.error, Error::Scan(yara_x::ScanError::Timeout)))
         );
     }
 }
