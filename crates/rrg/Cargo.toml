@@ -174,7 +174,6 @@ features = [
 ]
 
 [dependencies.yara-x]
-git = "https://github.com/VirusTotal/yara-x.git"
-rev = "5293c5a"
+version = "1.8.1"
 optional = true
 default-features = false

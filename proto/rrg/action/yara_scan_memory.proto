@@ -63,7 +63,7 @@ message Result {
   // PID of the process this result refers to.
   uint32 pid = 1;
 
-  // Yara rules which matched when scanning this process.
+  // Yara rules which matched when scanning this process, if any.
   // Only set if `error` is unset.
   repeated Rule matching_rules = 2;
   
