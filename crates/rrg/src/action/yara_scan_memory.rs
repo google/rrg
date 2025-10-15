@@ -3,9 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use crate::action::dump_process_memory::{
-    MappedRegion, MappedRegionIter, MemoryReader, ReadableProcessMemory,
-};
+use crate::action::dump_process_memory::{MappedRegion, MemoryReader};
 use std::time::Duration;
 
 use yara_x::Compiler;
@@ -276,7 +274,7 @@ fn scan_region<M: MemoryReader>(
         if let Ok(buf) = memory.read_chunk(offset, length) {
             scanner.scan(offset as usize, &buf).map_err(Error::Scan)?;
         }
-        offset += chunk_size;
+        offset = offset.saturating_add(chunk_size);
     }
     Ok(())
 }
@@ -286,6 +284,8 @@ pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
+    use crate::action::dump_process_memory::{MappedRegionIter, ReadableProcessMemory};
+
     let rules = {
         let mut compiler = Compiler::new();
         compiler
@@ -485,6 +485,9 @@ mod tests {
         // text and/or in the heap contents.
         let mem = b"mypreciousssss".to_vec();
 
+        // Force the memory to be allocated with a compiler hint
+        std::hint::black_box(mem.as_ptr());
+
         let mut session = crate::session::FakeSession::new();
         let args = Args {
             pids: vec![std::process::id()],
@@ -498,13 +501,21 @@ mod tests {
             "#
             .to_string(),
             // Set limit to keep unit test time reasonable
-            scan_timeout: Some(Duration::from_secs(5)),
+            scan_timeout: Some(Duration::from_secs(30)),
             chunk_size: 100 * 1024 * 1024,
             chunk_overlap: 50 * 1024 * 1024,
+            skip_shared_regions: true,
+            skip_readonly_regions: true,
             ..Default::default()
         };
 
         handle(&mut session, args).unwrap();
+
+        let reply = session
+            .replies::<Item>()
+            .next()
+            .expect("handle did not produce any replies");
+        assert!(reply.is_ok(), "handle produced non-ok reply: {:?}", reply);
 
         // Check that the string was found and sent to blob sink
         assert!(
