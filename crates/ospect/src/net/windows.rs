@@ -108,7 +108,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
             friendly_name_len += 1;
         }
         // SAFETY: Above we iterated the length until we found a null byte, so
-        // we can safely constructor a slice.
+        // we can safely construct a slice.
         let friendly_name_wide = unsafe {
             std::slice::from_raw_parts(addr.FriendlyName, friendly_name_len)
         };
