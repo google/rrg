@@ -63,6 +63,9 @@ pub struct Interface {
     ip_addrs: Vec<std::net::IpAddr>,
     /// The MAC address associated with this interface.
     mac_addr: Option<MacAddr>,
+    /// A friendly name of this interface as reported by the system.
+    #[cfg(target_os = "windows")]
+    friendly_name: std::ffi::OsString,
 }
 
 impl Interface {
@@ -96,6 +99,12 @@ impl Interface {
     /// Returns the MAC address associated with this interface (if any).
     pub fn mac_addr(&self) -> Option<&MacAddr> {
         self.mac_addr.as_ref()
+    }
+
+    /// Returns the friendly name of this interface as reported by the system.
+    #[cfg(target_os = "windows")]
+    pub fn friendly_name(&self) -> &std::ffi::OsStr {
+        self.friendly_name.as_os_str()
     }
 }
 

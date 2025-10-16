@@ -98,6 +98,22 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
 
         let name = std::ffi::OsString::from_wide(name_wide.as_slice());
 
+        let mut friendly_name_len = 0;
+        // SAFETY: Similarly to `AdapterName`, the documentation does not expli-
+        // citly say that `FriendlyName` is null-terminated but this is clear
+        // from Microsoft examples that use the `%wS` formatting directive.
+        //
+        // Thus, we iterate the length until we hit the null byte.
+        while unsafe { *addr.FriendlyName.add(friendly_name_len) } != 0 {
+            friendly_name_len += 1;
+        }
+        // SAFETY: Above we iterated the length until we found a null byte, so
+        // we can safely construct a slice.
+        let friendly_name_wide = unsafe {
+            std::slice::from_raw_parts(addr.FriendlyName, friendly_name_len)
+        };
+        let friendly_name = std::ffi::OsString::from_wide(friendly_name_wide);
+
         let mac_addr = if addr.PhysicalAddressLength != 6 {
             // MAC addresses should have 6 bytes, otherwise this is something
             // unexpected.
@@ -121,6 +137,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
             name: name,
             ip_addrs: Vec::new(),
             mac_addr: mac_addr,
+            friendly_name,
         });
 
         let mut sock_addr_iter = addr.FirstUnicastAddress;
