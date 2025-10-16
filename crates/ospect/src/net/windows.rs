@@ -123,7 +123,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
             mac_addr: mac_addr,
         });
 
-        let mut sock_addr_iter = addr.FirstAnycastAddress;
+        let mut sock_addr_iter = addr.FirstUnicastAddress;
         // SAFETY: We simply iterate on a linked list built by the system [1].
         // The list is terminated with a null node for which we check below to
         // end the iteration.
@@ -282,12 +282,16 @@ const DEFAULT_BUF_SIZE: usize = 15_000;
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
-    // TODO: Create more meaningful tests.
     #[test]
-    fn interfaces_something_exists() {
-        let mut ifaces = super::interfaces().unwrap();
+    fn interfaces_loopback_exists() {
+        let mut ifaces = interfaces().unwrap();
 
-        assert!(ifaces.next().is_some());
+        assert! {
+            ifaces.any(|iface| {
+                iface.ip_addrs().any(std::net::IpAddr::is_loopback)
+            })
+        };
     }
 }
