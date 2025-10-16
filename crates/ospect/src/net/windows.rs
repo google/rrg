@@ -99,16 +99,12 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
         let name = std::ffi::OsString::from_wide(name_wide.as_slice());
 
         let mut friendly_name_len = 0;
-        loop {
-            // SAFETY: Similarly to `AdapterName`, the documentation does not
-            // explicitly say that `FriendlyName` is null-terminated but this
-            // is clear from Microsoft examples that use the `%wS` formatting
-            // directive.
-            //
-            // Thus, we iterate the length until we hit the null byte.
-            if unsafe { *addr.FriendlyName.add(friendly_name_len) } == 0 {
-                break
-            }
+        // SAFETY: Similarly to `AdapterName`, the documentation does not expli-
+        // citly say that `FriendlyName` is null-terminated but this is clear
+        // from Microsoft examples that use the `%wS` formatting directive.
+        //
+        // Thus, we iterate the length until we hit the null byte.
+        while unsafe { *addr.FriendlyName.add(friendly_name_len) } != 0 {
             friendly_name_len += 1;
         }
         // SAFETY: Above we iterated the length until we found a null byte, so
