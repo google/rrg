@@ -355,6 +355,14 @@ impl From<ospect::net::Interface> for net::Interface {
             .collect::<Vec<_>>();
         proto.set_ip_addresses(ip_addrs.into());
 
+        #[cfg(target_family = "windows")]
+        {
+            let friendly_name = iface.friendly_name()
+                .to_string_lossy()
+                .into_owned();
+            proto.set_windows_friendly_name(friendly_name);
+        }
+
         proto
     }
 }
