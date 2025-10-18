@@ -161,7 +161,7 @@ mod test {
 
     #[test]
     fn decode_hex_emtpy() {
-        assert_eq!(decode_hex("").unwrap(), vec![]);
+        assert_eq!(decode_hex("").unwrap(), Vec::<u8>::new());
     }
 
     quickcheck! {

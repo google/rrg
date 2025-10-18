@@ -471,7 +471,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let total_entry_count = session.replies::<Item>().map(|item| item.entry_count).sum();
+        let total_entry_count: usize = session.replies::<Item>().map(|item| item.entry_count).sum();
 
         assert_eq!(entries.len(), total_entry_count);
 

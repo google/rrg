@@ -341,10 +341,10 @@ mod tests {
             assert_eq!(mode & libc::S_IFMT, libc::S_IFREG);
 
             let uid = unsafe { libc::getuid() };
-            assert_eq!(entries[1].unix_uid(), uid.into());
+            assert_eq!(entries[1].unix_uid(), i64::from(uid));
 
             let gid = unsafe { libc::getgid() };
-            assert_eq!(entries[1].unix_gid(), gid.into());
+            assert_eq!(entries[1].unix_gid(), i64::from(gid));
         }
     }
 
@@ -437,7 +437,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let total_entry_count = session.replies::<Item>()
+        let total_entry_count: usize = session.replies::<Item>()
             .map(|item| item.entry_count)
             .sum();
 
