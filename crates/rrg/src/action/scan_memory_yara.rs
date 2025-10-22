@@ -9,9 +9,9 @@ use std::time::Duration;
 use yara_x::Compiler;
 use yara_x::blocks::Scanner;
 
-use rrg_proto::yara_scan_memory as proto;
+use rrg_proto::scan_memory_yara as proto;
 
-/// Arguments of the `yara_scan_memory` action.
+/// Arguments of the `scan_memory_yara` action.
 #[derive(Default)]
 pub struct Args {
     /// PIDs of the processes whose memory we are interested in.
@@ -226,11 +226,11 @@ struct OkItem {
     matching_rules: Vec<Rule>,
 }
 
-/// Result of the `yara_scan_memory` action for one single process.
+/// Result of the `scan_memory_yara` action for one single process.
 type Item = Result<OkItem, ErrorItem>;
 
 impl crate::response::Item for Item {
-    type Proto = rrg_proto::yara_scan_memory::Result;
+    type Proto = proto::Result;
 
     fn into_proto(self) -> Self::Proto {
         let mut proto = Self::Proto::new();

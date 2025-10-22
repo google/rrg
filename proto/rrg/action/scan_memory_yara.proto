@@ -6,7 +6,7 @@ syntax = "proto3";
 
 import "google/protobuf/duration.proto";
 
-package rrg.action.yara_scan_memory;
+package rrg.action.scan_memory_yara;
 
 message Args {
   // PIDs of the processes whose memory we are interested in.
