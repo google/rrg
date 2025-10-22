@@ -61,18 +61,6 @@ pub trait MemoryReader {
     fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>>;
 }
 
-pub struct FakeProcessMemory {
-    pub contents: Vec<u8>,
-}
-
-impl MemoryReader for FakeProcessMemory {
-    fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
-        let start = offset as usize;
-        let end = (offset + length) as usize;
-        Ok(self.contents[start..end].to_owned())
-    }
-}
-
 #[cfg(target_os = "linux")]
 pub use linux::*;
 
@@ -991,8 +979,20 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
+
+    pub struct FakeProcessMemory {
+        pub contents: Vec<u8>,
+    }
+
+    impl MemoryReader for FakeProcessMemory {
+        fn read_chunk(&mut self, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
+            let start = offset as usize;
+            let end = (offset + length) as usize;
+            Ok(self.contents[start..end].to_owned())
+        }
+    }
 
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]

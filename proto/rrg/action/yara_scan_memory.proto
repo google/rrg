@@ -16,7 +16,7 @@ message Args {
   string signature = 2;
 
   // Maximum time spent scanning a single process.
-  google.protobuf.Duration scan_timeout = 3;
+  google.protobuf.Duration timeout = 3;
 
   // Set this flag to avoid scanning mapped files.
   bool skip_mapped_files = 4;

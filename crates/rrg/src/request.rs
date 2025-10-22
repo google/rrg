@@ -55,7 +55,7 @@ pub enum Action {
     ExecuteSignedCommand,
     /// Dump the contents of a specified process' memory.
     DumpProcessMemory,
-    /// Scan the contents of a specified process' memory for matching patterns using Yara-x.
+    /// Scan the contents of a specified process' memory for matching patterns using YARA.
     YaraScanProcessMemory,
 }
 

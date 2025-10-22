@@ -9,6 +9,8 @@ use std::time::Duration;
 use yara_x::Compiler;
 use yara_x::blocks::Scanner;
 
+use rrg_proto::yara_scan_memory as proto;
+
 /// Arguments of the `yara_scan_memory` action.
 #[derive(Default)]
 pub struct Args {
@@ -19,7 +21,7 @@ pub struct Args {
     signature: String,
 
     /// Maximum time spent scanning a single process.
-    scan_timeout: Option<Duration>,
+    timeout: Option<Duration>,
 
     /// Set this flag to avoid scanning mapped files.
     skip_mapped_files: bool,
@@ -40,21 +42,21 @@ pub struct Args {
 
 use crate::request::ParseArgsError;
 impl crate::request::Args for Args {
-    type Proto = rrg_proto::yara_scan_memory::Args;
+    type Proto = proto::Args;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Self, ParseArgsError> {
-        const DEFAULT_CHUNK_SIZE: u64 = 50 * 1024 * 1024; // 50MB
-        const DEFAULT_CHUNK_OVERLAP: u64 = 10 * 1024 * 1024; // 10MB
+        const DEFAULT_CHUNK_SIZE: u64 = 50 * 1024 * 1024; // 50 MiB
+        const DEFAULT_CHUNK_OVERLAP: u64 = 10 * 1024 * 1024; // 10 MiB
 
-        let mut scan_timeout: Option<Duration> = None;
-        if proto.has_scan_timeout() {
-            scan_timeout = Some(proto.take_scan_timeout().into())
+        let mut timeout: Option<Duration> = None;
+        if proto.has_timeout() {
+            timeout = Some(proto.take_timeout().into())
         }
 
         Ok(Self {
             pids: proto.pids,
             signature: proto.signature,
-            scan_timeout,
+            timeout,
             skip_mapped_files: proto.skip_mapped_files,
             skip_shared_regions: proto.skip_shared_regions,
             skip_executable_regions: proto.skip_executable_regions,
@@ -88,11 +90,11 @@ impl Args {
     }
 }
 
-// Unfortunately need to recreate some of the Yara structs in our code
-// as they depend on the lifetime of the Compiler struct,
-// whereas rrg action items need to be 'static.
-// Additionally, we want to send matching data to the blob store, instead of sending it back
-// inline in responses.
+// Unfortunately need to recreate some of the YARA structs in our code
+// as they depend on the lifetime of the Compiler struct, whereas RRG
+// action items need to be 'static. Additionally, we want to send
+// matching data to the blob store, instead of sending it back inline
+// in responses.
 
 #[derive(Debug)]
 struct Rule {
@@ -110,14 +112,14 @@ struct Pattern {
 struct Match {
     /// Address range in the process' address space at which the match was found.
     range: std::ops::Range<usize>,
-    /// Sha256 digest of the matching bytes that were sent to the blob sink.
+    /// SHA-256 digest of the matching bytes that were sent to the blob sink.
     blob_sha256: [u8; 32],
 }
 
 impl Rule {
     /// Converts a [yara_x::Rule] to a [Rule], sending any matching data to the blob store
-    /// and storing the blob's Sha256 hash in the corresponding [Match].
-    fn blobify<S: crate::session::Session>(
+    /// and storing the blob's SHA-256 hash in the corresponding [Match].
+    fn from_yara_rule<S: crate::session::Session>(
         rule: yara_x::Rule<'_, '_>,
         session: &mut S,
     ) -> crate::session::Result<Self> {
@@ -150,34 +152,29 @@ impl Rule {
     }
 }
 
-impl From<Rule> for rrg_proto::yara_scan_memory::Rule {
+impl From<Rule> for proto::Rule {
     fn from(rule: Rule) -> Self {
-        use rrg_proto::yara_scan_memory as proto;
-
         let mut ret = Self::new();
         ret.set_identifier(rule.identifier);
-        ret.set_patterns(
-            rule.patterns
-                .into_iter()
-                .map(|pattern| {
-                    let mut ret = proto::Pattern::new();
-                    ret.set_identifier(pattern.identifier);
-                    ret.set_matches(
-                        pattern
-                            .matches
-                            .into_iter()
-                            .map(|mat| {
-                                let mut ret = proto::Match::new();
-                                ret.set_offset(mat.range.start as u64);
-                                ret.set_data_sha256(mat.blob_sha256.to_vec());
-                                ret
-                            })
-                            .collect(),
-                    );
-                    ret
-                })
-                .collect(),
-        );
+        ret.set_patterns(rule.patterns.into_iter().map(From::from).collect());
+        ret
+    }
+}
+
+impl From<Pattern> for proto::Pattern {
+    fn from(value: Pattern) -> Self {
+        let mut ret = proto::Pattern::new();
+        ret.set_identifier(value.identifier);
+        ret.set_matches(value.matches.into_iter().map(From::from).collect());
+        ret
+    }
+}
+
+impl From<Match> for proto::Match {
+    fn from(value: Match) -> Self {
+        let mut ret = proto::Match::new();
+        ret.set_offset(value.range.start as u64);
+        ret.set_data_sha256(value.blob_sha256.to_vec());
         ret
     }
 }
@@ -325,7 +322,7 @@ where
             .collect::<Result<_, _>>()?;
 
         let mut scanner = Scanner::new(&rules);
-        if let Some(timeout) = args.scan_timeout {
+        if let Some(timeout) = args.timeout {
             scanner.set_timeout(timeout);
         }
 
@@ -350,7 +347,7 @@ where
             Ok(results) => {
                 let matching_rules = results
                     .matching_rules()
-                    .map(|rule| Rule::blobify(rule, session))
+                    .map(|rule| Rule::from_yara_rule(rule, session))
                     .collect::<crate::session::Result<Vec<_>>>()?;
                 session.reply(Ok(OkItem {
                     pid,
@@ -379,23 +376,13 @@ where
     )))
 }
 
-#[cfg(all(test, any(target_os = "linux", target_os = "windows")))]
+#[cfg(test)]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 mod tests {
     use super::*;
-    use crate::action::dump_process_memory::FakeProcessMemory;
+    use crate::action::dump_process_memory::tests::FakeProcessMemory;
 
-    const EXAMPLE_RULE_SRC: &str = r#"
-    rule ExampleRule {
-        strings:
-            $text = "text here"
-            $hex = { E2 34 A1 C8 23 FB }
-            $regex = /some regular expression: \w+/
-        condition:
-            $text or $hex or $regex
-    }
-    "#;
-
-    fn compile_source(src: &str) -> yara_x::Rules {
+    fn compile(src: &str) -> yara_x::Rules {
         let mut compiler = Compiler::new();
         compiler
             .add_source(src)
@@ -414,7 +401,17 @@ mod tests {
             MappedRegion::from_bounds(second_text_idx as u64, contents.len() as u64),
         ];
 
-        let rules = compile_source(EXAMPLE_RULE_SRC);
+        let rules = compile(
+            r#"
+            rule ExampleRule {
+                strings:
+                    $text = "text here"
+                    $hex = { E2 34 A1 C8 23 FB }
+                    $regex = /some regular expression: \w+/
+                condition:
+                    $text or $hex or $regex
+            }"#,
+        );
         let mut scanner = Scanner::new(&rules);
 
         let mut memory = FakeProcessMemory { contents };
@@ -441,7 +438,7 @@ mod tests {
 
     #[test]
     fn catches_matches_at_chunk_boundaries() {
-        let rules = compile_source(
+        let rules = compile(
             r#"
             rule TestRule {
                 strings:
@@ -501,11 +498,9 @@ mod tests {
             "#
             .to_string(),
             // Set limit to keep unit test time reasonable
-            scan_timeout: Some(Duration::from_secs(30)),
+            timeout: Some(Duration::from_secs(30)),
             chunk_size: 100 * 1024 * 1024,
             chunk_overlap: 50 * 1024 * 1024,
-            skip_shared_regions: true,
-            skip_readonly_regions: true,
             ..Default::default()
         };
 
@@ -514,8 +509,10 @@ mod tests {
         let reply = session
             .replies::<Item>()
             .next()
-            .expect("handle did not produce any replies");
-        assert!(reply.is_ok(), "handle produced non-ok reply: {:?}", reply);
+            .expect("handle did not produce any replies")
+            .as_ref()
+            .expect("handle produced non-ok reply");
+        assert!(!reply.matching_rules.is_empty(), "scan rule did not match");
 
         // Check that the string was found and sent to blob sink
         assert!(
@@ -546,7 +543,7 @@ mod tests {
                     $regex
             }"#
             .to_string(),
-            scan_timeout: Some(Duration::from_millis(500)),
+            timeout: Some(Duration::from_millis(500)),
             chunk_size: 10000,
             chunk_overlap: 500,
             ..Default::default()
