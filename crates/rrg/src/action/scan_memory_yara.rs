@@ -116,39 +116,12 @@ struct Match {
     blob_sha256: [u8; 32],
 }
 
-impl Rule {
-    /// Converts a [yara_x::Rule] to a [Rule], sending any matching data to the blob store
-    /// and storing the blob's SHA-256 hash in the corresponding [Match].
-    fn from_yara_rule<S: crate::session::Session>(
-        rule: yara_x::Rule<'_, '_>,
-        session: &mut S,
-    ) -> crate::session::Result<Self> {
-        use sha2::Digest as _;
-        let patterns = rule
-            .patterns()
-            .map(|pattern| {
-                let matches = pattern
-                    .matches()
-                    .map(|mat| {
-                        let blob_sha256 = sha2::Sha256::digest(mat.data()).into();
-                        let blob = crate::blob::Blob::from(mat.data().to_vec());
-                        session.send(crate::Sink::Blob, blob)?;
-                        Ok(Match {
-                            range: mat.range(),
-                            blob_sha256,
-                        })
-                    })
-                    .collect::<crate::session::Result<_>>()?;
-                Ok(Pattern {
-                    identifier: pattern.identifier().to_owned(),
-                    matches,
-                })
-            })
-            .collect::<crate::session::Result<_>>()?;
-        Ok(Self {
-            identifier: rule.identifier().to_owned(),
-            patterns,
-        })
+impl From<yara_x::Rule<'_, '_>> for Rule {
+    fn from(rule: yara_x::Rule<'_, '_>) -> Self {
+        Self {
+            identifier: rule.identifier().to_string(),
+            patterns: rule.patterns().map(Into::into).collect(),
+        }
     }
 }
 
@@ -161,12 +134,32 @@ impl From<Rule> for proto::Rule {
     }
 }
 
+impl From<yara_x::Pattern<'_, '_>> for Pattern {
+    fn from(pattern: yara_x::Pattern<'_, '_>) -> Self {
+        Self {
+            identifier: pattern.identifier().to_string(),
+            matches: pattern.matches().map(Into::into).collect(),
+        }
+    }
+}
+
 impl From<Pattern> for proto::Pattern {
     fn from(value: Pattern) -> Self {
         let mut ret = proto::Pattern::new();
         ret.set_identifier(value.identifier);
         ret.set_matches(value.matches.into_iter().map(From::from).collect());
         ret
+    }
+}
+
+impl From<yara_x::Match<'_, '_>> for Match {
+    fn from(r#match: yara_x::Match<'_, '_>) -> Self {
+        use sha2::Digest as _;
+        let blob_sha256 = sha2::Sha256::digest(r#match.data()).into();
+        Match {
+            range: r#match.range(),
+            blob_sha256,
+        }
     }
 }
 
@@ -345,13 +338,19 @@ where
 
         match scanner.finish() {
             Ok(results) => {
-                let matching_rules = results
+                for r#match in results
                     .matching_rules()
-                    .map(|rule| Rule::from_yara_rule(rule, session))
-                    .collect::<crate::session::Result<Vec<_>>>()?;
+                    .flat_map(|rule| rule.patterns())
+                    .flat_map(|pattern| pattern.matches())
+                {
+                    session.send(
+                        crate::Sink::Blob,
+                        crate::blob::Blob::from(r#match.data().to_vec()),
+                    )?;
+                }
                 session.reply(Ok(OkItem {
                     pid,
-                    matching_rules,
+                    matching_rules: results.matching_rules().map(Into::into).collect(),
                 }))?;
             }
             Err(error) => {
