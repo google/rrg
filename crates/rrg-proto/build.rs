@@ -32,6 +32,7 @@ const PROTOS: &'static [&'static str] = &[
     "../../proto/rrg/action/list_winreg_values.proto",
     "../../proto/rrg/action/query_wmi.proto",
     "../../proto/rrg/action/dump_process_memory.proto",
+    "../../proto/rrg/action/scan_memory_yara.proto",
 ];
 
 fn main() {

@@ -69,6 +69,9 @@ pub mod execute_signed_command;
 #[cfg(feature = "action-dump_process_memory")]
 pub mod dump_process_memory;
 
+#[cfg(feature = "action-scan_memory_yara")]
+pub mod scan_memory_yara;
+
 use log::info;
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -166,6 +169,10 @@ where
         #[cfg(feature = "action-dump_process_memory")]
         DumpProcessMemory => {
             handle(session, request, self::dump_process_memory::handle)
+        }
+        #[cfg(feature = "action-scan_memory_yara")]
+        ScanProcessMemoryYara => {
+            handle(session, request, self::scan_memory_yara::handle)
         }
         // We allow `unreachable_patterns` because otherwise we get a warning if
         // we compile with all the actions enabled.

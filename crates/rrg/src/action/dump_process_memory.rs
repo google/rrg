@@ -615,20 +615,20 @@ mod windows {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Permissions {
     /// Whether the contents of this mapping can be read from.
-    read: bool,
+    pub read: bool,
     /// Whether the contents of this mapping can be written to.
-    write: bool,
+    pub write: bool,
     /// Whether the contents of this mapping can be executed.
-    execute: bool,
+    pub execute: bool,
     /// Whether this mapping was created as `shared`.
     /// Writes to a shared mapping (usually backed by a file)
     /// can be observed by other processes which map the same file.
     /// Currently only supported on Linux.
-    shared: bool,
+    pub shared: bool,
     /// Whether this mapping was created as 'private'.
     /// Writes to a private mapping (usually backed by a file)
     /// are private to a process and cannot be observed by other processes which map the same file.
-    private: bool,
+    pub private: bool,
 }
 
 /// Converts a [`Permissions`] struct to its corresponding protobuf version.
@@ -720,7 +720,7 @@ impl Args {
         if self.skip_executable_regions && region.permissions.execute {
             return false;
         }
-        if self.skip_mapped_files && region.inode.is_some() || region.path.is_some() {
+        if self.skip_mapped_files && (region.inode.is_some() || region.path.is_some()) {
             return false;
         }
         if self.skip_readonly_regions
@@ -979,11 +979,11 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
-    struct FakeProcessMemory {
-        contents: Vec<u8>,
+    pub struct FakeProcessMemory {
+        pub contents: Vec<u8>,
     }
 
     impl MemoryReader for FakeProcessMemory {

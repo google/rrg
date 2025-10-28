@@ -27,6 +27,7 @@ default = [
     "action-query_wmi",
     "action-execute_signed_command",
     "action-dump_process_memory",
+    "action-scan_memory_yara",
 ]
 
 action-get_system_metadata = []
@@ -56,6 +57,7 @@ action-execute_signed_command = []
 # deleted.
 action-execute_signed_command-preverified = ["action-execute_signed_command"]
 action-dump_process_memory = ["dep:windows-sys"]
+action-scan_memory_yara = ["action-dump_process_memory", "dep:yara-x"]
 
 test-setfattr = []
 test-chattr = []
@@ -100,7 +102,7 @@ features = [
 version = "3.7.2"
 
 [dependencies.regex]
-version = "1.11.0"
+version = "1.11.3"
 
 [dependencies.lazy_static]
 version = "1.5.0"
@@ -170,3 +172,8 @@ version = "2.1.1"
 features = [
     "rand_core",
 ]
+
+[dependencies.yara-x]
+version = "1.8.1"
+optional = true
+default-features = false
