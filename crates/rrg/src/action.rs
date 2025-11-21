@@ -21,6 +21,9 @@ pub mod get_system_metadata;
 #[cfg(feature = "action-get_file_metadata")]
 pub mod get_file_metadata;
 
+#[cfg(feature = "action-get_file_metadata_kmx")]
+pub mod get_file_metadata_kmx;
+
 #[cfg(feature = "action-get_file_contents")]
 pub mod get_file_contents;
 
@@ -108,6 +111,10 @@ where
         #[cfg(feature = "action-get_file_metadata")]
         GetFileMetadata => {
             handle(session, request, self::get_file_metadata::handle)
+        }
+        #[cfg(feature = "action-get_file_metadata_kmx")]
+        GetFileMetadataKmx => {
+            handle(session, request, self::get_file_metadata_kmx::handle)
         }
         #[cfg(feature = "action-get_file_contents")]
         GetFileContents => {
