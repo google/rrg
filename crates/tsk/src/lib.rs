@@ -175,7 +175,7 @@ impl<'image> Filesystem<'image> {
     }
 
     /// Opens a directory given its path.
-    pub fn open_dir(&self, path: &Path) -> Result<Directory> {
+    pub fn open_dir<'fs>(&'fs self, path: &Path) -> Result<Directory<'fs>> {
         let tsk_path = TskPath::from_path(path);
         // SAFETY: passing checked non-null pointers into TSK's C API.
         let result = unsafe { tsk_fs_dir_open(self.inner.as_ptr(), tsk_path.as_ptr()) };
@@ -183,14 +183,14 @@ impl<'image> Filesystem<'image> {
     }
 
     /// Opens a file given its metadata address.
-    pub fn open_dir_meta(&self, meta: u64) -> Result<Directory> {
+    pub fn open_dir_meta<'fs>(&'fs self, meta: u64) -> Result<Directory<'fs>> {
         // SAFETY: passing checked non-null pointers into TSK's C API.
         let result = unsafe { tsk_fs_dir_open_meta(self.inner.as_ptr(), meta) };
         handle_result(result).map(Directory::new)
     }
 
     /// Opens a file given its path.
-    pub fn open_file(&self, path: &Path) -> Result<File> {
+    pub fn open_file<'fs>(&'fs self, path: &Path) -> Result<File<'fs>> {
         let tsk_path = TskPath::from_path(path);
         let result =
             // SAFETY: passing checked non-null pointers into TSK's C API.
@@ -289,7 +289,7 @@ impl<'a> Directory<'a> {
         self.as_raw().addr
     }
     /// Returns the file structure for the directory.
-    pub fn file(&mut self) -> File {
+    pub fn file(&mut self) -> File<'a> {
         NonNull::new(self.as_raw().fs_file)
             .map(File::new)
             .expect("TSK_FS_DIR file is null")
@@ -345,7 +345,7 @@ pub struct File<'a> {
     _marker: PhantomData<&'a tsk_sys::TSK_FS_FILE>,
 }
 
-impl File<'_> {
+impl<'fs> File<'fs> {
     fn new(inner: NonNull<tsk_sys::TSK_FS_FILE>) -> Self {
         Self {
             inner,
@@ -369,7 +369,7 @@ impl File<'_> {
 
     /// Returns the metadata of the file, or None if the file was opened with an
     /// invalid metadata address.
-    pub fn meta(&self) -> Option<Metadata> {
+    pub fn meta(&self) -> Option<Metadata<'fs>> {
         NonNull::new(self.as_raw().meta).map(|inner| Metadata {
             inner,
             _marker: PhantomData,
