@@ -27,7 +27,6 @@ default = [
     "action-query_wmi",
     "action-execute_signed_command",
     "action-dump_process_memory",
-    "action-scan_memory_yara",
 ]
 
 action-get_system_metadata = []
