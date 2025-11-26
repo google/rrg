@@ -42,6 +42,125 @@ impl crate::response::Item for Item {
 #[cfg(test)]
 mod tests {
 
+    struct LoopDevNtfsMount<'dev> {
+        loop_dev: &'dev mut LoopDev,
+        path: std::path::PathBuf,
+        is_unmounted: bool,
+    }
+
+    impl<'dev> LoopDevNtfsMount<'dev> {
+
+        fn new(loop_dev: &'dev mut LoopDev) -> std::io::Result<LoopDevNtfsMount<'dev>> {
+            use regex::Regex;
+
+            let output = std::process::Command::new("udisksctl")
+                .arg("mount")
+                .arg("--filesystem-type").arg("ntfs")
+                .arg("--block-device").arg(&loop_dev.path)
+                .arg("--no-user-interaction")
+                .output()?;
+            if !output.status.success() {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, format! {
+                    "failed to run `udisksctl mount` (stdout: {:?}, stderr: {:?})",
+                    String::from_utf8_lossy(&output.stdout).as_ref(),
+                    String::from_utf8_lossy(&output.stderr).as_ref(),
+                }))
+            }
+            let output_stdout = String::from_utf8_lossy(&output.stdout);
+
+            match Regex::new("Mounted .* at (?P<mount>.*)")
+                .unwrap()
+                .captures(&output_stdout)
+            {
+                Some(captures) => Ok(LoopDevNtfsMount {
+                    path: std::path::PathBuf::from(&captures["mount"]),
+                    is_unmounted: false,
+                    loop_dev,
+                }),
+                None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format! {
+                    "unexpected `udisksctl loop-setup` output: {:?}",
+                    output_stdout,
+                })),
+            }
+        }
+
+        fn unmount(mut self) -> std::io::Result<()> {
+            assert!(!self.is_unmounted);
+            // See similar comment in `LoopDev::close` method on why we set it
+            // even before unmounting succeeded.
+            self.is_unmounted = true;
+
+            let output = std::process::Command::new("udisksctl")
+                .arg("unmount")
+                .arg("--block-device").arg(&self.loop_dev.path)
+                .arg("--no-user-interaction")
+                .output()?;
+            if !output.status.success() {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, format! {
+                    "failed to run `udisksctl unmount` (stdout: {:?}, stderr: {:?})",
+                    String::from_utf8_lossy(&output.stdout).as_ref(),
+                    String::from_utf8_lossy(&output.stderr).as_ref(),
+                }))
+            }
+
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn loop_dev_ntfs_mount_new_and_unmount() {
+        use std::io::Write as _;
+
+        let mut file = tempfile::NamedTempFile::new()
+            .unwrap();
+        // We initialize the file to have 2 MiB. Minimum size of NTFS image is
+        // 1 MiB, so we use 2 MiB just to be on the safe side.
+        file.write_all(&vec![0; 2 * 1024 * 1024])
+            .unwrap();
+        file.flush()
+            .unwrap();
+        std::process::Command::new("mkfs.ntfs")
+            .arg("--force")
+            .arg(file.path())
+            .output()
+            .unwrap();
+
+        let mut loop_dev = LoopDev::new(&file)
+            .unwrap();
+
+        let loop_dev_ntfs_mount = LoopDevNtfsMount::new(&mut loop_dev)
+            .unwrap();
+
+        loop_dev_ntfs_mount.unmount()
+            .unwrap();
+    }
+
+    #[test]
+    fn loop_dev_ntfs_mount_new_and_drop() {
+        use std::io::Write as _;
+
+        let mut file = tempfile::NamedTempFile::new()
+            .unwrap();
+        // We initialize the file to have 2 MiB. Minimum size of NTFS image is
+        // 1 MiB, so we use 2 MiB just to be on the safe side.
+        file.write_all(&vec![0; 2 * 1024 * 1024])
+            .unwrap();
+        file.flush()
+            .unwrap();
+        std::process::Command::new("mkfs.ntfs")
+            .arg("--force")
+            .arg(file.path())
+            .output()
+            .unwrap();
+
+        let mut loop_dev = LoopDev::new(&file)
+            .unwrap();
+
+        let loop_dev_ntfs_mount = LoopDevNtfsMount::new(&mut loop_dev)
+            .unwrap();
+
+        drop(loop_dev_ntfs_mount);
+    }
 
     struct LoopDev {
         path: std::path::PathBuf,
