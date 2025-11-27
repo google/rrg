@@ -42,6 +42,107 @@ impl crate::response::Item for Item {
 #[cfg(test)]
 mod tests {
 
+    fn ntfs_temp_file<F>(init: F) -> std::io::Result<tempfile::NamedTempFile>
+    where
+        F: FnOnce(&std::path::Path) -> std::io::Result<()>,
+    {
+        use std::io::Write as _;
+
+        let mut file = tempfile::NamedTempFile::new()?;
+        // We initialize the file to have 2 MiB. Minimum size of NTFS image is
+        // 1 MiB, so we use 2 MiB just to be on the safe side.
+        file.write_all(&vec![0; 2 * 1024 * 1024])?;
+        file.flush()?;
+
+        let output = std::process::Command::new("mkfs.ntfs")
+            .arg("--force")
+            .arg(file.path())
+            .output()?;
+        if !output.status.success() {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, format! {
+                "failed to run `mkfs.ntfs` (stdout: {:?}, stderr: {:?})",
+                String::from_utf8_lossy(&output.stdout).as_ref(),
+                String::from_utf8_lossy(&output.stderr).as_ref(),
+            }))
+        }
+
+        let mut loop_dev = LoopDev::new(&file)?;
+        let loop_dev_ntfs_mount = LoopDevNtfsMount::new(&mut loop_dev)?;
+
+        init(&loop_dev_ntfs_mount.path)?;
+
+        loop_dev_ntfs_mount.unmount()?;
+        loop_dev.close()?;
+
+        Ok(file)
+    }
+
+    #[test]
+    fn ntfs_temp_file_empty() {
+        let file = ntfs_temp_file(|_| Ok(()))
+            .unwrap();
+
+        let data_stream: keramics_core::DataStreamReference = {
+            std::sync::Arc::new(std::sync::RwLock::new(NamedTempFileWrapper(file)))
+        };
+
+        let mut ntfs = keramics_formats::ntfs::NtfsFileSystem::new();
+        ntfs.read_data_stream(&data_stream)
+            .unwrap();
+
+        assert!(ntfs.get_root_directory().is_ok());
+    }
+
+    #[test]
+    fn ntfs_temp_file_files() {
+        let file = ntfs_temp_file(|path| {
+            std::fs::write(path.join("foo"), b"Lorem ipsum.")
+                .unwrap();
+            std::fs::write(path.join("bar"), b"Dolor sit amet.")
+                .unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let data_stream: keramics_core::DataStreamReference = {
+            std::sync::Arc::new(std::sync::RwLock::new(NamedTempFileWrapper(file)))
+        };
+
+        let mut ntfs = keramics_formats::ntfs::NtfsFileSystem::new();
+        ntfs.read_data_stream(&data_stream)
+            .unwrap();
+
+        let mut entry_root = ntfs.get_root_directory()
+            .unwrap();
+
+        let entry_foo = entry_root.get_sub_file_entry_by_name(&keramics_types::Ucs2String::from("foo"))
+            .unwrap().unwrap();
+        assert_eq!(entry_foo.get_size(), b"Lorem ipsum.".len() as u64);
+
+        let entry_bar = entry_root.get_sub_file_entry_by_name(&keramics_types::Ucs2String::from("bar"))
+            .unwrap().unwrap();
+        assert_eq!(entry_bar.get_size(), b"Dolor sit amet.".len() as u64);
+    }
+
+    // TODO: Keramics defines its own `DataStream` type rather than using
+    // standard interfaces. Thus, we wrap `NamedTempFile` to provide our own
+    // implementation of it.
+    struct NamedTempFileWrapper(tempfile::NamedTempFile);
+    impl keramics_core::DataStream for NamedTempFileWrapper {
+
+        fn get_size(&mut self) -> Result<u64, keramics_core::ErrorTrace> {
+            self.0.as_file_mut().get_size()
+        }
+
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize, keramics_core::ErrorTrace> {
+            self.0.as_file_mut().read(buf)
+        }
+
+        fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64, keramics_core::ErrorTrace> {
+            self.0.as_file_mut().seek(pos)
+        }
+    }
+
     struct LoopDevNtfsMount<'dev> {
         loop_dev: &'dev mut LoopDev,
         path: std::path::PathBuf,
