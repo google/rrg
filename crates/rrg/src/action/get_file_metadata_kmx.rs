@@ -518,4 +518,134 @@ mod tests {
 
         drop(loop_dev);
     }
+
+    struct GuestMount {
+        mountpoint: std::path::PathBuf,
+        is_mounted: bool,
+    }
+
+    impl GuestMount {
+
+        fn new<PI, PM>(image: PI, mountpoint: PM) -> std::io::Result<GuestMount>
+        where
+            PI: AsRef<std::path::Path>,
+            PM: AsRef<std::path::Path>,
+        {
+            let output = std::process::Command::new("guestmount")
+                .arg("--add").arg(image.as_ref().as_os_str())
+                .arg("--mount").arg("/dev/sda:/::ntfs")
+                .arg(mountpoint.as_ref().as_os_str())
+                .output()?;
+            if !output.status.success() {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, format! {
+                    "failed to run `guestmount` (stdout: {:?}, stderr: {:?})",
+                    String::from_utf8_lossy(&output.stdout).as_ref(),
+                    String::from_utf8_lossy(&output.stderr).as_ref(),
+                }))
+            }
+
+            Ok(GuestMount {
+                mountpoint: mountpoint.as_ref().to_path_buf(),
+                is_mounted: true,
+            })
+        }
+
+        fn unmount(mut self) -> std::io::Result<()> {
+            assert!(self.is_mounted);
+            // We set this bit even before the file is actually closed (which
+            // may fail and not actually close the device!). This is because in
+            // case closing fails, we don't want to allow closing again. we need
+            // this behaviour especially because of the `drop` method that is
+            // bound to run eventually, attempting to close again any unclosed
+            // device.
+            self.is_mounted = false;
+
+            let output = std::process::Command::new("guestunmount")
+                .arg(self.mountpoint.as_os_str())
+                .output()?;
+            if !output.status.success() {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, format! {
+                    "failed to run `guestunmount` (stdout: {:?}, stderr: {:?})",
+                    String::from_utf8_lossy(&output.stdout).as_ref(),
+                    String::from_utf8_lossy(&output.stderr).as_ref(),
+                }))
+            }
+
+            Ok(())
+        }
+    }
+
+    impl Drop for GuestMount {
+
+        fn drop(&mut self) {
+            if self.is_mounted {
+                // `unmount` takes an owned value, so we replace `self` with a
+                // dummy closed device (it being unmounted is important to avoid
+                // infinite recursion) and then call explicit close on obtained
+                // owned value.
+                let unmounted = GuestMount {
+                    mountpoint: std::path::PathBuf::new(),
+                    is_mounted: false,
+                };
+
+                std::mem::replace(self, unmounted).unmount()
+                    .expect("failed to unmount");
+            }
+        }
+    }
+
+    #[test]
+    fn guest_mount_new_and_unmount() {
+        use std::io::Write as _;
+
+        let mut image = tempfile::NamedTempFile::new()
+            .unwrap();
+        // We initialize the file to have 2 MiB. Minimum size of NTFS image is
+        // 1 MiB, so we use 2 MiB just to be on the safe side.
+        image.write_all(&vec![0; 2 * 1024 * 1024])
+            .unwrap();
+        image.flush()
+            .unwrap();
+        std::process::Command::new("mkfs.ntfs")
+            .arg("--force")
+            .arg(image.path())
+            .output()
+            .unwrap();
+
+        let mountpoint = tempfile::tempdir()
+            .unwrap();
+
+        let mount = GuestMount::new(&image, &mountpoint)
+            .unwrap();
+
+        mount.unmount()
+            .unwrap();
+    }
+
+    #[test]
+    fn guest_mount_new_and_drop() {
+        use std::io::Write as _;
+
+        let mut image = tempfile::NamedTempFile::new()
+            .unwrap();
+        // We initialize the file to have 2 MiB. Minimum size of NTFS image is
+        // 1 MiB, so we use 2 MiB just to be on the safe side.
+        image.write_all(&vec![0; 2 * 1024 * 1024])
+            .unwrap();
+        image.flush()
+            .unwrap();
+        std::process::Command::new("mkfs.ntfs")
+            .arg("--force")
+            .arg(image.path())
+            .output()
+            .unwrap();
+
+        let mountpoint = tempfile::tempdir()
+            .unwrap();
+
+        let mount = GuestMount::new(&image, &mountpoint)
+            .unwrap();
+
+        drop(mount)
+    }
 }
