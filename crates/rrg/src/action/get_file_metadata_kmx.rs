@@ -5,12 +5,14 @@
 
 /// Arguments of the `get_file_metadata_kmx` action.
 pub struct Args {
-    // TODO.
+    volume_path: Option<std::path::PathBuf>,
+    path: keramics_formats::ntfs::NtfsPath,
 }
 
 /// Result of the `get_file_metadata_kmx` action.
 pub struct Item {
-    // TODO.
+    path: keramics_formats::ntfs::NtfsPath,
+    len: u64,
 }
 
 /// Handles invocations of the `get_file_metadata_kmx` action.
@@ -18,15 +20,74 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    todo!()
+    // TODO: Add support for inferring the volume from path.
+    let Some(volume_path) = args.volume_path else {
+        return Err(crate::session::Error::action(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "volume path must be provided",
+        )));
+    };
+
+    log::debug!("opening NTFS volume at '{}'", volume_path.display());
+
+    let volume = std::fs::File::open(&volume_path)
+        .map_err(|error| crate::session::Error::action(error))?;
+    let volume_data_stream: keramics_core::DataStreamReference = {
+        std::sync::Arc::new(std::sync::RwLock::new(volume))
+    };
+
+    log::debug!("parsing NTFS volume at '{}'", volume_path.display());
+
+    let mut ntfs = keramics_formats::ntfs::NtfsFileSystem::new();
+    ntfs.read_data_stream(&volume_data_stream)
+        .map_err(|error| crate::session::Error::action(error))?;
+
+    log::debug!("collecting metadata for '{:?}'", args.path);
+
+    let file_entry = match ntfs.get_file_entry_by_path(&args.path) {
+        Ok(Some(file_entry)) => file_entry,
+        Ok(None) => {
+            log::error! {
+                "no metadata for '{:?}'",
+                args.path,
+            };
+            return Ok(())
+        }
+        Err(error) => {
+            log::error! {
+                "failed to collect metadata for '{:?}': {error}",
+                args.path,
+            };
+            return Ok(())
+        }
+    };
+
+    log::debug!("sending metadata for '{:?}'", args.path);
+
+    session.reply(Item {
+        path: args.path,
+        len: file_entry.get_size(),
+    })?;
+
+    Ok(())
 }
 
 impl crate::request::Args for Args {
 
     type Proto = rrg_proto::get_file_metadata_kmx::Args;
 
-    fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
-        todo!()
+    fn from_proto(proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
+        use crate::request::ParseArgsError;
+
+        // TODO: Do not go through UTF-8 conversion.
+        let path = str::from_utf8(proto.path().raw_bytes())
+            .map_err(|error| ParseArgsError::invalid_field("path", error))?;
+        let path = keramics_formats::ntfs::NtfsPath::from(path);
+
+        Ok(Args {
+            volume_path: None,
+            path,
+        })
     }
 }
 
@@ -35,12 +96,87 @@ impl crate::response::Item for Item {
     type Proto = rrg_proto::get_file_metadata_kmx::Result;
 
     fn into_proto(self) -> Self::Proto {
-        todo!()
+        // TODO: Use lossless conversion (preferably in Keramics directly).
+        let path = std::path::PathBuf::from_iter(
+            self.path.components.iter()
+                .map(|comp| String::from_utf16_lossy(&comp.elements))
+        );
+
+        let mut proto = rrg_proto::get_file_metadata_kmx::Result::new();
+        proto.set_path(path.into());
+        proto.mut_metadata().set_size(self.len);
+
+        proto
     }
 }
 
 #[cfg(test)]
 mod tests {
+
+    use super::*;
+
+    #[test]
+    fn handle_non_existent() {
+        let ntfs_file = ntfs_temp_file(|_| Ok(()))
+            .unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\idonotexist"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 0);
+    }
+
+    #[test]
+    fn handle_regular_file() {
+        let ntfs_file = ntfs_temp_file(|ntfs_path| {
+            std::fs::write(ntfs_path.join("foo"), b"Lorem ipsum.")?;
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\foo"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\foo"));
+        assert_eq!(item.len, b"Lorem ipsum.".len() as u64);
+        // TODO: Add assertions about the file type.
+    }
+
+    #[test]
+    fn handle_dir() {
+        let ntfs_file = ntfs_temp_file(|ntfs_path| {
+            std::fs::create_dir(ntfs_path.join("foo"))?;
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\foo"),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\foo"));
+        // TODO: Add assertions about the file type.
+    }
 
     fn ntfs_temp_file<F>(init: F) -> std::io::Result<tempfile::NamedTempFile>
     where
