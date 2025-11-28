@@ -41,4 +41,4 @@ jobs:
         run: cargo build --features 'action-get_filesystem_timeline_tsk'
       # TODO: Add a step that runs tests with all action features disabled.
       - name: 'Run RRG tests'
-        run: cargo test --features 'test-chattr test-setfattr test-fuse test-wtmp action-get_filesystem_timeline_tsk'
+        run: cargo test --features 'test-chattr test-setfattr test-fuse test-wtmp test-udisksctl action-get_filesystem_timeline_tsk'
