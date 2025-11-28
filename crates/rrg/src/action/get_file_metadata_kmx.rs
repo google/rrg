@@ -205,13 +205,11 @@ mod tests {
             }))
         }
 
-        let mut loop_dev = LoopDev::new(&file)?;
-        let loop_dev_ntfs_mount = LoopDevNtfsMount::new(&mut loop_dev)?;
+        let mountpoint = tempfile::tempdir()?;
 
-        init(&loop_dev_ntfs_mount.path)?;
-
-        loop_dev_ntfs_mount.unmount()?;
-        loop_dev.close()?;
+        let mount = GuestMount::new(file.path(), mountpoint.path())?;
+        init(mountpoint.path())?;
+        mount.unmount()?;
 
         Ok(file)
     }
