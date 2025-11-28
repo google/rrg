@@ -63,6 +63,7 @@ action-scan_memory_yara = ["action-dump_process_memory", "dep:yara-x"]
 test-setfattr = []
 test-chattr = []
 test-fuse = ["dep:fuse"]
+test-udisksctl = []
 test-wtmp = []
 
 [dependencies.ospect]

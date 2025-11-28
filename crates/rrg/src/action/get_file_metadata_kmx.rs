@@ -115,6 +115,7 @@ mod tests {
 
     use super::*;
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-udisksctl")), ignore)]
     #[test]
     fn handle_non_existent() {
         let ntfs_file = ntfs_temp_file(|_| Ok(()))
@@ -131,6 +132,7 @@ mod tests {
         assert_eq!(session.reply_count(), 0);
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-udisksctl")), ignore)]
     #[test]
     fn handle_regular_file() {
         let ntfs_file = ntfs_temp_file(|ntfs_path| {
@@ -155,6 +157,7 @@ mod tests {
         // TODO: Add assertions about the file type.
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-udisksctl")), ignore)]
     #[test]
     fn handle_dir() {
         let ntfs_file = ntfs_temp_file(|ntfs_path| {
@@ -213,6 +216,7 @@ mod tests {
         Ok(file)
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-udisksctl")), ignore)]
     #[test]
     fn ntfs_temp_file_empty() {
         let file = ntfs_temp_file(|_| Ok(()))
@@ -229,6 +233,7 @@ mod tests {
         assert!(ntfs.get_root_directory().is_ok());
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-udisksctl")), ignore)]
     #[test]
     fn ntfs_temp_file_files() {
         let file = ntfs_temp_file(|path| {
@@ -344,6 +349,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-udisksctl")), ignore)]
     #[test]
     fn loop_dev_ntfs_mount_new_and_unmount() {
         use std::io::Write as _;
@@ -372,6 +378,7 @@ mod tests {
             .unwrap();
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-udisksctl")), ignore)]
     #[test]
     fn loop_dev_ntfs_mount_new_and_drop() {
         use std::io::Write as _;
@@ -487,6 +494,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-udisksctl")), ignore)]
     #[test]
     fn loop_dev_new_and_close() {
         let file = tempfile::NamedTempFile::new()
@@ -499,6 +507,7 @@ mod tests {
             .unwrap();
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-udisksctl")), ignore)]
     #[test]
     fn loop_dev_new_and_drop() {
         let file = tempfile::NamedTempFile::new()
