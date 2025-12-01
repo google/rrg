@@ -65,7 +65,6 @@ test-setfattr = []
 test-chattr = []
 test-fuse = ["dep:fuse"]
 test-libguestfs = []
-test-udisksctl = []
 test-wtmp = []
 
 [dependencies.ospect]
