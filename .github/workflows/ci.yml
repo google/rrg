@@ -23,6 +23,12 @@ jobs:
         run: |
           sudo apt update
           sudo apt install attr e2fsprogs libfuse-dev libguestfs-tools
+          # The following is needed for `guestmount` (from `libguestfs-tools`)
+          # to work on Ubuntu [1, 2].
+          #
+          # [1]: https://bugs.launchpad.net/ubuntu/+source/linux/+bug/759725
+          # [2]: https://askubuntu.com/questions/1046828/how-to-run-libguestfs-tools-tools-such-as-virt-make-fs-without-sudo
+          sudo chmod +r /boot/vmlinuz*
       - name: 'Install macOS dependencies'
         if: ${{ runner.os == 'macOS' }}
         run: brew install autoconf automake libtool
