@@ -20,7 +20,9 @@ jobs:
     steps:
       - name: 'Install Linux dependencies'
         if: ${{ runner.os == 'Linux' }}
-        run: sudo apt install attr e2fsprogs libfuse-dev
+        run: |
+          sudo apt update
+          sudo apt install attr e2fsprogs libfuse-dev
       - name: 'Install macOS dependencies'
         if: ${{ runner.os == 'macOS' }}
         run: brew install autoconf automake libtool
