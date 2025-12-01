@@ -22,7 +22,7 @@ jobs:
         if: ${{ runner.os == 'Linux' }}
         run: |
           sudo apt update
-          sudo apt install attr e2fsprogs libfuse-dev
+          sudo apt install attr e2fsprogs libfuse-dev libguestfs-tools
       - name: 'Install macOS dependencies'
         if: ${{ runner.os == 'macOS' }}
         run: brew install autoconf automake libtool
