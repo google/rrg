@@ -58,6 +58,8 @@ enum Action {
   GET_FILESYSTEM_TIMELINE_TSK = 21;
   // Scan the contents of a specified process' memory for matching patterns using YARA.
   SCAN_PROCESS_MEMORY_YARA = 22;
+  // Get contents of the specified file using Keramics.
+  GET_FILE_CONTENTS_KMX = 23;
 
   // TODO: Define more actions that should be supported.
 
