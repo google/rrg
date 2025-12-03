@@ -22,7 +22,13 @@ jobs:
         if: ${{ runner.os == 'Linux' }}
         run: |
           sudo apt update
-          sudo apt install attr e2fsprogs libfuse-dev
+          sudo apt install attr e2fsprogs libfuse-dev libguestfs-tools
+          # The following is needed for `guestmount` (from `libguestfs-tools`)
+          # to work on Ubuntu [1, 2].
+          #
+          # [1]: https://bugs.launchpad.net/ubuntu/+source/linux/+bug/759725
+          # [2]: https://askubuntu.com/questions/1046828/how-to-run-libguestfs-tools-tools-such-as-virt-make-fs-without-sudo
+          sudo chmod +r /boot/vmlinuz*
       - name: 'Install macOS dependencies'
         if: ${{ runner.os == 'macOS' }}
         run: brew install autoconf automake libtool
@@ -41,4 +47,4 @@ jobs:
         run: cargo build --features 'action-get_file_contents_kmx action-get_filesystem_timeline_tsk'
       # TODO: Add a step that runs tests with all action features disabled.
       - name: 'Run RRG tests'
-        run: cargo test --features 'test-chattr test-setfattr test-fuse test-wtmp action-get_file_contents_kmx action-get_filesystem_timeline_tsk'
+        run: cargo test --features 'test-chattr test-setfattr test-fuse test-wtmp test-libguestfs action-get_file_contents_kmx action-get_filesystem_timeline_tsk'
