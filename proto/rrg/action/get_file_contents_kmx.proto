@@ -9,8 +9,8 @@ package rrg.action.get_file_contents_kmx;
 import "rrg/fs.proto";
 
 message Args {
-  // Absolute path to the file to get the contents of.
-  rrg.fs.Path path = 1;
+  // Absolute paths to the files to get the contents of.
+  repeated rrg.fs.Path paths = 1;
 
   // Byte offset from which the content should be retrieved.
   //
