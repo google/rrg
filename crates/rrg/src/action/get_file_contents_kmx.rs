@@ -367,23 +367,19 @@ mod tests {
         assert_eq!(item.len, 1337);
     }
 
-    fn ntfs_temp_file<F>(
-        init: F,
+    fn ntfs_temp_file(
+        init: impl FnOnce(&std::path::Path) -> std::io::Result<()>,
     ) -> std::io::Result<tempfile::NamedTempFile>
-    where
-        F: FnOnce(&std::path::Path) -> std::io::Result<()>,
     {
         // We use the default of 2 MiB as the minimum size supported by NTFS is
         // 1 MiB, so we double that just to be on the safe side.
         ntfs_temp_file_with_size(2 * 1024 * 1024, init)
     }
 
-    fn ntfs_temp_file_with_size<F>(
+    fn ntfs_temp_file_with_size(
         size: usize,
-        init: F,
+        init: impl FnOnce(&std::path::Path) -> std::io::Result<()>,
     ) -> std::io::Result<tempfile::NamedTempFile>
-    where
-        F: FnOnce(&std::path::Path) -> std::io::Result<()>,
     {
         use std::io::Write as _;
 
