@@ -18,8 +18,12 @@ pub struct Args {
     len: usize,
 }
 
-/// Result of the `get_file_contents_kmx` action.
-pub struct Item {
+/// Result of the `get_file_contents` action.
+type Item = Result<OkItem, ErrorItem>;
+
+/// Result of the `get_file_contents` action in case of success.
+#[derive(Debug)]
+pub struct OkItem {
     /// Path to the file this result corresponds to.
     path: keramics_formats::ntfs::NtfsPath,
     /// Byte offset of the file part sent to the blob sink.
@@ -28,6 +32,15 @@ pub struct Item {
     len: usize,
     /// SHA-256 digest of the file part sent to the blob sink.
     blob_sha256: [u8; 32],
+}
+
+/// Result of the `get_file_contents` action in case of an error.
+#[derive(Debug)]
+struct ErrorItem {
+    /// Path to the file that cause the issue.
+    path: keramics_formats::ntfs::NtfsPath,
+    /// Error that occurred when working with the file.
+    error: FileError,
 }
 
 /// Handles invocations of the `get_file_contents_kmx` action.
@@ -61,31 +74,71 @@ where
         log::debug!("finding entry for '{:?}'", path);
 
         let file_entry = match ntfs.get_file_entry_by_path(&path) {
-            Ok(Some(file_entry)) => file_entry,
-            Ok(None) => {
-                // TODO(@panhania): Consult with @jbmetz what `None` actually means
-                // in this case.
-                let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no entry");
-                return Err(crate::session::Error::action(error))
+            Ok(Some(file_entry)) => Ok(file_entry),
+            // TODO(@panhania): Consult with @jbmetz what `None` actually means
+            // in this case.
+            Ok(None) => Err(FileError {
+                kind: FileErrorKind::Open,
+                cause: std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "no entry",
+                ),
+            }),
+            Err(error) => Err(FileError {
+                kind: FileErrorKind::Open,
+                cause: std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    error,
+                ),
+            }),
+        };
+        let file_entry = match file_entry {
+            Ok(file_entry) => file_entry,
+            Err(error) => {
+                session.reply(Err(ErrorItem {
+                    path,
+                    error,
+                }))?;
+                continue
             }
-            Err(error) => return Err(crate::session::Error::action(error)),
         };
 
         log::debug!("collecting contents of '{:?}'", path);
 
         let file_data_stream = match file_entry.get_data_stream() {
-            Ok(Some(file_data_stream)) => file_data_stream,
-            Ok(None) => {
-                // TODO(@panhania): Consult with @jbmetz what `None` actually means
-                // in this case.
-                let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no content");
-                return Err(crate::session::Error::action(error))
+            Ok(Some(file_data_stream)) => Ok(file_data_stream),
+            // TODO(@panhania): Consult with @jbmetz what `None` actually means
+            // in this case.
+            Ok(None) => Err(FileError {
+                kind: FileErrorKind::Open,
+                cause: std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "no content",
+                ),
+            }),
+            Err(error) => Err(FileError {
+                kind: FileErrorKind::Open,
+                cause: std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    error,
+                ),
+            }),
+        };
+        let file_data_stream = match file_data_stream {
+            Ok(file_data_stream) => file_data_stream,
+            Err(error) => {
+                session.reply(Err(ErrorItem {
+                    path: path.clone(),
+                    error,
+                }))?;
+                continue
             }
-            Err(error) => return Err(crate::session::Error::action(error)),
         };
 
         let mut file_data_stream = match file_data_stream.write() {
             Ok(file_data_stream) => file_data_stream,
+            // In case of the lock poison we fail the whole action because this
+            // should not really happen and something must have gone really bad.
             Err(_) => {
                 let error = std::io::Error::from(std::io::ErrorKind::Other);
                 return Err(crate::session::Error::action(error))
@@ -95,8 +148,22 @@ where
         let mut offset = args.offset;
         let mut len_left = args.len;
 
-        file_data_stream.seek(std::io::SeekFrom::Start(offset))
-            .map_err(crate::session::Error::action)?;
+        match file_data_stream.seek(std::io::SeekFrom::Start(offset)) {
+            Ok(_) => (),
+            Err(error) => {
+                session.reply(Err(ErrorItem {
+                    path: path.clone(),
+                    error: FileError {
+                        kind: FileErrorKind::Seek,
+                        cause: std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            error,
+                        ),
+                    },
+                }))?;
+                continue
+            }
+        }
 
         loop {
             use sha2::Digest as _;
@@ -106,7 +173,19 @@ where
             let len_read = match file_data_stream.read(&mut buf[..]) {
                 Ok(0) => break,
                 Ok(len_read) => len_read,
-                Err(error) => return Err(crate::session::Error::action(error)),
+                Err(error) => {
+                    session.reply(Err(ErrorItem {
+                        path: path.clone(),
+                        error: FileError {
+                            kind: FileErrorKind::Read,
+                            cause: std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                error,
+                            ),
+                        },
+                    }))?;
+                    continue
+                }
             };
             buf.truncate(len_read);
 
@@ -114,12 +193,12 @@ where
             let blob_sha256 = sha2::Sha256::digest(blob.as_bytes()).into();
 
             session.send(crate::Sink::Blob, blob)?;
-            session.reply(Item {
+            session.reply(Ok(OkItem {
                 path: path.clone(),
                 offset,
                 len: len_read,
                 blob_sha256,
-            })?;
+            }))?;
 
             offset += len_read as u64;
             len_left -= len_read;
@@ -168,19 +247,70 @@ impl crate::response::Item for Item {
     type Proto = rrg_proto::get_file_contents_kmx::Result;
 
     fn into_proto(self) -> rrg_proto::get_file_contents_kmx::Result {
-        // TODO: Use lossless conversion (preferably in Keramics directly).
-        let path = std::path::PathBuf::from_iter(
-            self.path.components.iter()
-                .map(|comp| String::from_utf16_lossy(&comp.elements))
-        );
-
         let mut proto = rrg_proto::get_file_contents_kmx::Result::new();
-        proto.set_path(path.into());
-        proto.set_offset(self.offset);
-        proto.set_length(self.len as u64);
-        proto.set_blob_sha256(self.blob_sha256.into());
+
+        match self {
+            Ok(item) => {
+                // TODO: Use lossless conversion (preferably in Keramics directly).
+                let path = std::path::PathBuf::from_iter(
+                    item.path.components.iter()
+                        .map(|comp| String::from_utf16_lossy(&comp.elements))
+                );
+
+                proto.set_path(path.into());
+                proto.set_offset(item.offset);
+                proto.set_length(item.len as u64);
+                proto.set_blob_sha256(item.blob_sha256.into());
+            }
+            Err(item) => {
+                // TODO: Use lossless conversion (preferably in Keramics directly).
+                let path = std::path::PathBuf::from_iter(
+                    item.path.components.iter()
+                        .map(|comp| String::from_utf16_lossy(&comp.elements))
+                );
+
+                proto.set_path(path.into());
+                proto.set_error(item.error.to_string());
+            }
+        }
 
         proto
+    }
+}
+
+/// Error which can occur when processing the file.
+#[derive(Debug)]
+struct FileError {
+    kind: FileErrorKind,
+    cause: std::io::Error,
+}
+
+impl std::fmt::Display for FileError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}: {}", self.kind, self.cause)
+    }
+}
+
+/// List of possible types of errors that can occur when processing the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum FileErrorKind {
+    /// Failed to open the file.
+    Open,
+    /// Failed to seek the file to the given offset.
+    Seek,
+    /// Failed to read contents of the file.
+    Read,
+}
+
+impl std::fmt::Display for FileErrorKind {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileErrorKind::Open => write!(fmt, "open failed"),
+            FileErrorKind::Seek => write!(fmt, "seek to offset failed"),
+            FileErrorKind::Read => write!(fmt, "read contents failed"),
+        }
     }
 }
 
@@ -258,7 +388,8 @@ mod tests {
 
         assert_eq!(session.reply_count(), 1);
 
-        let item = session.reply::<Item>(0);
+        let item = session.reply::<Item>(0)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 0);
         assert_eq!(item.len, b"0123456789".len());
 
@@ -293,7 +424,8 @@ mod tests {
 
         assert_eq!(session.reply_count(), 1);
 
-        let item = session.reply::<Item>(0);
+        let item = session.reply::<Item>(0)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 5);
         assert_eq!(item.len, 5);
 
@@ -328,7 +460,8 @@ mod tests {
 
         assert_eq!(session.reply_count(), 1);
 
-        let item = session.reply::<Item>(0);
+        let item = session.reply::<Item>(0)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 0);
         assert_eq!(item.len, 5);
 
@@ -363,11 +496,13 @@ mod tests {
 
         assert_eq!(session.reply_count(), 2);
 
-        let item = session.reply::<Item>(0);
+        let item = session.reply::<Item>(0)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 0xb33f);
         assert_eq!(item.len, MAX_BLOB_LEN);
 
-        let item = session.reply::<Item>(1);
+        let item = session.reply::<Item>(1)
+            .as_ref().unwrap();
         assert_eq!(item.offset, 0xb33f + MAX_BLOB_LEN as u64);
         assert_eq!(item.len, 1337);
     }
@@ -402,6 +537,7 @@ mod tests {
 
         let items_by_path = session
             .replies::<Item>()
+            .map(|item| item.as_ref().unwrap())
             .map(|item| (item.path.clone(), item))
             .collect::<std::collections::HashMap::<_, _>>();
 
@@ -429,6 +565,72 @@ mod tests {
         assert_eq!(item_baz.offset, 0);
         assert_eq!(item_baz.len, 3);
         assert_eq!(blobs_by_sha256[&item_baz.blob_sha256].as_bytes(), b"678");
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_many_files_with_non_existing() {
+        let ntfs_file = ntfs_temp_file(|path| {
+            std::fs::write(path.join("foo"), b"012")?;
+            std::fs::write(path.join("bar"), b"345")?;
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            paths: vec![
+                keramics_formats::ntfs::NtfsPath::from("\\foo"),
+                keramics_formats::ntfs::NtfsPath::from("\\idonotexist"),
+                keramics_formats::ntfs::NtfsPath::from("\\bar"),
+            ],
+            offset: 0,
+            len: usize::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 3);
+
+        let items_by_path = session
+            .replies::<Item>()
+            .map(|item| {
+                let path = match item {
+                    Ok(item) => &item.path,
+                    Err(item) => &item.path,
+                };
+
+                (path.clone(), item)
+            })
+            .collect::<std::collections::HashMap::<_, _>>();
+
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 2);
+
+        let blobs_by_sha256 = session
+            .parcels::<crate::blob::Blob>(crate::Sink::Blob)
+            .map(|blob| {
+                use sha2::Digest as _;
+                (sha2::Sha256::digest(blob.as_bytes()).into(), blob)
+            })
+            .collect::<std::collections::HashMap::<[u8; 32], _>>();
+
+        let item_foo = items_by_path[&"\\foo".into()]
+            .as_ref().unwrap();
+        assert_eq!(item_foo.offset, 0);
+        assert_eq!(item_foo.len, 3);
+        assert_eq!(blobs_by_sha256[&item_foo.blob_sha256].as_bytes(), b"012");
+
+        let item_bar = items_by_path[&"\\bar".into()]
+            .as_ref().unwrap();
+        assert_eq!(item_bar.offset, 0);
+        assert_eq!(item_bar.len, 3);
+        assert_eq!(blobs_by_sha256[&item_bar.blob_sha256].as_bytes(), b"345");
+
+        let item_error = items_by_path[&"\\idonotexist".into()]
+            .as_ref().unwrap_err();
+        assert_eq!(item_error.error.kind, FileErrorKind::Open);
     }
 
 
