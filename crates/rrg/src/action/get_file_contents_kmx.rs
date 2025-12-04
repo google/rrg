@@ -78,14 +78,14 @@ where
             // TODO(@panhania): Consult with @jbmetz what `None` actually means
             // in this case.
             Ok(None) => Err(FileError {
-                kind: FileErrorKind::Open,
+                kind: FileErrorKind::OpenEntry,
                 cause: std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     "no entry",
                 ),
             }),
             Err(error) => Err(FileError {
-                kind: FileErrorKind::Open,
+                kind: FileErrorKind::OpenEntry,
                 cause: std::io::Error::new(
                     std::io::ErrorKind::Other,
                     error,
@@ -110,14 +110,14 @@ where
             // TODO(@panhania): Consult with @jbmetz what `None` actually means
             // in this case.
             Ok(None) => Err(FileError {
-                kind: FileErrorKind::Open,
+                kind: FileErrorKind::OpenDataStream,
                 cause: std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "no content",
                 ),
             }),
             Err(error) => Err(FileError {
-                kind: FileErrorKind::Open,
+                kind: FileErrorKind::OpenDataStream,
                 cause: std::io::Error::new(
                     std::io::ErrorKind::Other,
                     error,
@@ -295,8 +295,10 @@ impl std::fmt::Display for FileError {
 /// List of possible types of errors that can occur when processing the file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum FileErrorKind {
-    /// Failed to open the file.
-    Open,
+    /// Failed to open the file entry.
+    OpenEntry,
+    /// Failed to open the file data stream.
+    OpenDataStream,
     /// Failed to seek the file to the given offset.
     Seek,
     /// Failed to read contents of the file.
@@ -307,7 +309,8 @@ impl std::fmt::Display for FileErrorKind {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileErrorKind::Open => write!(fmt, "open failed"),
+            FileErrorKind::OpenEntry => write!(fmt, "open entry failed"),
+            FileErrorKind::OpenDataStream => write!(fmt, "open data stream failed"),
             FileErrorKind::Seek => write!(fmt, "seek to offset failed"),
             FileErrorKind::Read => write!(fmt, "read contents failed"),
         }
@@ -630,7 +633,7 @@ mod tests {
 
         let item_error = items_by_path[&"\\idonotexist".into()]
             .as_ref().unwrap_err();
-        assert_eq!(item_error.error.kind, FileErrorKind::Open);
+        assert_eq!(item_error.error.kind, FileErrorKind::OpenEntry);
     }
 
 
