@@ -333,19 +333,62 @@ mod tests {
         assert_eq!(blob.as_bytes(), b"01234");
     }
 
-    // TODO: Add tests for big files. Currently we create a 2 MiB NTFS partition
-    // which does not allow us to create bigger.
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_big_file_from_offset_to_len() {
+        let ntfs_file = ntfs_temp_file_with_size(20 * 1024 * 1024, |path| {
+            use std::io::{Read as _};
 
-    fn ntfs_temp_file<F>(init: F) -> std::io::Result<tempfile::NamedTempFile>
+            let mut file = std::fs::File::create_new(path.join("file"))?;
+            std::io::copy(&mut std::io::repeat(0xf0).take(13371337), &mut file)?;
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\file"),
+            offset: 0xb33f,
+            len: MAX_BLOB_LEN + 1337,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 2);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.offset, 0xb33f);
+        assert_eq!(item.len, MAX_BLOB_LEN);
+
+        let item = session.reply::<Item>(1);
+        assert_eq!(item.offset, 0xb33f + MAX_BLOB_LEN as u64);
+        assert_eq!(item.len, 1337);
+    }
+
+    fn ntfs_temp_file<F>(
+        init: F,
+    ) -> std::io::Result<tempfile::NamedTempFile>
+    where
+        F: FnOnce(&std::path::Path) -> std::io::Result<()>,
+    {
+        // We use the default of 2 MiB as the minimum size supported by NTFS is
+        // 1 MiB, so we double that just to be on the safe side.
+        ntfs_temp_file_with_size(2 * 1024 * 1024, init)
+    }
+
+    fn ntfs_temp_file_with_size<F>(
+        size: usize,
+        init: F,
+    ) -> std::io::Result<tempfile::NamedTempFile>
     where
         F: FnOnce(&std::path::Path) -> std::io::Result<()>,
     {
         use std::io::Write as _;
 
         let mut file = tempfile::NamedTempFile::new()?;
-        // We initialize the file to have 2 MiB. Minimum size of NTFS image is
-        // 1 MiB, so we use 2 MiB just to be on the safe side.
-        file.write_all(&vec![0; 2 * 1024 * 1024])?;
+        file.write_all(&vec![0; size])?;
         file.flush()?;
 
         let output = std::process::Command::new("mkfs.ntfs")
