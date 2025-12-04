@@ -3,14 +3,31 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+/// Limit on the size of individual file part blob sent to the blob sink.
+const MAX_BLOB_LEN: usize = 1 * 1024 * 1024; // 1 MiB.
+
 /// Arguments of the `get_file_contents_kmx` action.
 pub struct Args {
-    // TODO.
+    /// Path to the NTFS filesystem volume to use for parsing.
+    volume_path: Option<std::path::PathBuf>,
+    /// Path to the file to get the contents of.
+    path: keramics_formats::ntfs::NtfsPath,
+    /// Offset from which to read the file contents.
+    offset: u64,
+    /// Number of bytes to read from the file.
+    len: usize,
 }
 
 /// Result of the `get_file_contents_kmx` action.
 pub struct Item {
-    // TODO.
+    /// Path to the file this result corresponds to.
+    path: keramics_formats::ntfs::NtfsPath,
+    /// Byte offset of the file part sent to the blob sink.
+    offset: u64,
+    /// Number of bytes of the file part sent to the blob sink.
+    len: usize,
+    /// SHA-256 digest of the file part sent to the blob sink.
+    blob_sha256: [u8; 32],
 }
 
 /// Handles invocations of the `get_file_contents_kmx` action.
@@ -18,15 +35,126 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    todo!()
+    // TODO: Add support for inferring the volume from path.
+    let Some(volume_path) = args.volume_path else {
+        return Err(crate::session::Error::action(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "volume path must be provided",
+        )));
+    };
+
+    log::debug!("opening NTFS volume at '{}'", volume_path.display());
+
+    let volume = std::fs::File::open(&volume_path)
+        .map_err(crate::session::Error::action)?;
+    let volume_data_stream: keramics_core::DataStreamReference = {
+        std::sync::Arc::new(std::sync::RwLock::new(volume))
+    };
+
+    log::debug!("parsing NTFS volume at '{}'", volume_path.display());
+
+    let mut ntfs = keramics_formats::ntfs::NtfsFileSystem::new();
+    ntfs.read_data_stream(&volume_data_stream)
+        .map_err(|error| crate::session::Error::action(error))?;
+
+    log::debug!("finding entry for '{:?}'", args.path);
+
+    let file_entry = match ntfs.get_file_entry_by_path(&args.path) {
+        Ok(Some(file_entry)) => file_entry,
+        Ok(None) => {
+            // TODO(@panhania): Consult with @jbmetz what `None` actually means
+            // in this case.
+            let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no entry");
+            return Err(crate::session::Error::action(error))
+        }
+        Err(error) => return Err(crate::session::Error::action(error)),
+    };
+
+    log::debug!("collecting contents of '{:?}'", args.path);
+
+    let file_data_stream = match file_entry.get_data_stream() {
+        Ok(Some(file_data_stream)) => file_data_stream,
+        Ok(None) => {
+            // TODO(@panhania): Consult with @jbmetz what `None` actually means
+            // in this case.
+            let error = std::io::Error::new(std::io::ErrorKind::NotFound, "no content");
+            return Err(crate::session::Error::action(error))
+        }
+        Err(error) => return Err(crate::session::Error::action(error)),
+    };
+
+    let mut file_data_stream = match file_data_stream.write() {
+        Ok(file_data_stream) => file_data_stream,
+        Err(_) => {
+            let error = std::io::Error::from(std::io::ErrorKind::Other);
+            return Err(crate::session::Error::action(error))
+        }
+    };
+
+    let mut offset = args.offset;
+    let mut len_left = args.len;
+
+    file_data_stream.seek(std::io::SeekFrom::Start(offset))
+        .map_err(crate::session::Error::action)?;
+
+    loop {
+        use sha2::Digest as _;
+
+        let mut buf = vec![0; std::cmp::min(len_left, MAX_BLOB_LEN)];
+
+        let len_read = match file_data_stream.read(&mut buf[..]) {
+            Ok(0) => break,
+            Ok(len_read) => len_read,
+            Err(error) => return Err(crate::session::Error::action(error)),
+        };
+        buf.truncate(len_read);
+
+        let blob = crate::blob::Blob::from(buf);
+        let blob_sha256 = sha2::Sha256::digest(blob.as_bytes()).into();
+
+        session.send(crate::Sink::Blob, blob)?;
+        session.reply(Item {
+            path: args.path.clone(),
+            offset,
+            len: len_read,
+            blob_sha256,
+        })?;
+
+        offset += len_read as u64;
+        len_left -= len_read;
+    }
+
+    Ok(())
 }
 
 impl crate::request::Args for Args {
 
     type Proto = rrg_proto::get_file_contents_kmx::Args;
 
-    fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
-        todo!()
+    fn from_proto(proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
+        use crate::request::ParseArgsError;
+
+        // TODO: Do not go through UTF-8 conversion.
+        let path = str::from_utf8(proto.path().raw_bytes())
+            .map_err(|error| ParseArgsError::invalid_field("path", error))?;
+        let path = keramics_formats::ntfs::NtfsPath::from(path);
+
+        let len = match proto.length() {
+            0 => usize::MAX,
+            len if len > MAX_BLOB_LEN as u64 => {
+                return Err(ParseArgsError::invalid_field("length", LenError {
+                    len,
+                }));
+            },
+            len => len as usize,
+        };
+
+        Ok(Args {
+            volume_path: None,
+            path,
+            offset: proto.offset(),
+            len,
+        })
     }
 }
 
@@ -34,13 +162,179 @@ impl crate::response::Item for Item {
 
     type Proto = rrg_proto::get_file_contents_kmx::Result;
 
-    fn into_proto(self) -> Self::Proto {
-        todo!()
+    fn into_proto(self) -> rrg_proto::get_file_contents_kmx::Result {
+        // TODO: Use lossless conversion (preferably in Keramics directly).
+        let path = std::path::PathBuf::from_iter(
+            self.path.components.iter()
+                .map(|comp| String::from_utf16_lossy(&comp.elements))
+        );
+
+        let mut proto = rrg_proto::get_file_contents_kmx::Result::new();
+        proto.set_path(path.into());
+        proto.set_offset(self.offset);
+        proto.set_length(self.len as u64);
+        proto.set_blob_sha256(self.blob_sha256.into());
+
+        proto
     }
+}
+
+/// An error indicating that the action was invoked with invalid length.
+#[derive(Debug)]
+struct LenError {
+    len: u64,
+}
+
+impl std::fmt::Display for LenError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write! {
+            fmt,
+            "provided length ({}) is bigger than allowed ({})",
+            self.len, MAX_BLOB_LEN
+        }
+    }
+}
+
+impl std::error::Error for LenError {
 }
 
 #[cfg(test)]
 mod tests {
+
+    use super::*;
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_empty_file() {
+        let ntfs_file = ntfs_temp_file(|path| {
+            std::fs::File::create_new(path.join("empty"))?;
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\empty"),
+            offset: 0,
+            len: usize::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 0);
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 0);
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_small_file_all() {
+        let ntfs_file = ntfs_temp_file(|path| {
+            use std::io::Write as _;
+
+            let mut file = std::fs::File::create_new(path.join("file"))?;
+            file.write_all(b"0123456789")?;
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\file"),
+            offset: 0,
+            len: usize::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.offset, 0);
+        assert_eq!(item.len, b"0123456789".len());
+
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 1);
+
+        let blob = session.parcel::<crate::blob::Blob>(crate::Sink::Blob, 0);
+        assert_eq!(blob.as_bytes(), b"0123456789");
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_small_file_from_offset() {
+        let ntfs_file = ntfs_temp_file(|path| {
+            use std::io::Write as _;
+
+            let mut file = std::fs::File::create_new(path.join("file"))?;
+            file.write_all(b"0123456789")?;
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\file"),
+            offset: 5,
+            len: usize::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.offset, 5);
+        assert_eq!(item.len, 5);
+
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 1);
+
+        let blob = session.parcel::<crate::blob::Blob>(crate::Sink::Blob, 0);
+        assert_eq!(blob.as_bytes(), b"56789");
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_small_file_to_len() {
+        let ntfs_file = ntfs_temp_file(|path| {
+            use std::io::Write as _;
+
+            let mut file = std::fs::File::create_new(path.join("file"))?;
+            file.write_all(b"0123456789")?;
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\file"),
+            offset: 0,
+            len: 5,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.offset, 0);
+        assert_eq!(item.len, 5);
+
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 1);
+
+        let blob = session.parcel::<crate::blob::Blob>(crate::Sink::Blob, 0);
+        assert_eq!(blob.as_bytes(), b"01234");
+    }
+
+    // TODO: Add tests for big files. Currently we create a 2 MiB NTFS partition
+    // which does not allow us to create bigger.
 
     fn ntfs_temp_file<F>(init: F) -> std::io::Result<tempfile::NamedTempFile>
     where
