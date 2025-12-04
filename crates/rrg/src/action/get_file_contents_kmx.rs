@@ -344,6 +344,61 @@ mod tests {
 
     #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
     #[test]
+    fn handle_non_existing_file() {
+        let ntfs_file = ntfs_temp_file(|_| Ok(()))
+            .unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            paths: vec![keramics_formats::ntfs::NtfsPath::from("\\idonotexist")],
+            offset: 0,
+            len: usize::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 0);
+
+        let error_item = session.reply::<Item>(0)
+            .as_ref().unwrap_err();
+        assert_eq!(error_item.path, "\\idonotexist".into());
+        assert_eq!(error_item.error.kind, FileErrorKind::OpenEntry);
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_non_regular_file() {
+        let ntfs_file = ntfs_temp_file(|path| {
+            std::fs::create_dir(path.join("dir"))?;
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: Some(ntfs_file.path().to_path_buf()),
+            paths: vec![keramics_formats::ntfs::NtfsPath::from("\\dir")],
+            offset: 0,
+            len: usize::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 0);
+
+        let error_item = session.reply::<Item>(0)
+            .as_ref().unwrap_err();
+        assert_eq!(error_item.path, "\\dir".into());
+        assert_eq!(error_item.error.kind, FileErrorKind::OpenDataStream);
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
     fn handle_empty_file() {
         let ntfs_file = ntfs_temp_file(|path| {
             std::fs::File::create_new(path.join("empty"))?;
@@ -635,7 +690,6 @@ mod tests {
             .as_ref().unwrap_err();
         assert_eq!(item_error.error.kind, FileErrorKind::OpenEntry);
     }
-
 
     fn ntfs_temp_file(
         init: impl FnOnce(&std::path::Path) -> std::io::Result<()>,
