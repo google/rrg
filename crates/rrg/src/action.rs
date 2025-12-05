@@ -24,6 +24,9 @@ pub mod get_file_metadata;
 #[cfg(feature = "action-get_file_contents")]
 pub mod get_file_contents;
 
+#[cfg(feature = "action-get_file_contents_kmx")]
+pub mod get_file_contents_kmx;
+
 #[cfg(feature = "action-get_file_sha256")]
 pub mod get_file_sha256;
 
@@ -108,6 +111,10 @@ where
         }
         #[cfg(feature = "action-get_file_contents")]
         GetFileContents => {
+            handle(session, request, self::get_file_contents::handle)
+        }
+        #[cfg(feature = "action-get_file_contents_kmx")]
+        GetFileContentsKmx => {
             handle(session, request, self::get_file_contents::handle)
         }
         #[cfg(feature = "action-get_file_sha256")]

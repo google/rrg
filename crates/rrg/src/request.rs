@@ -19,6 +19,8 @@ pub enum Action {
     GetFileMetadata,
     /// Get contents of the specified file.
     GetFileContents,
+    /// Get contents of the specified file using Keramics.
+    GetFileContentsKmx,
     /// Get SHA-256 hash of the specified file.
     GetFileSha256,
     /// Grep the specified file for a pattern.
@@ -66,6 +68,7 @@ impl std::fmt::Display for Action {
             Action::GetSystemMetadata => write!(fmt, "get_system_metadata"),
             Action::GetFileMetadata => write!(fmt, "get_file_metadata"),
             Action::GetFileContents => write!(fmt, "get_file_contents"),
+            Action::GetFileContentsKmx => write!(fmt, "get_file_contents_kmx"),
             Action::GetFileSha256 => write!(fmt, "get_file_sha256"),
             Action::GrepFileContents => write!(fmt, "grep_file_contents"),
             Action::ListDirectory => write!(fmt, "list_directory"),
@@ -120,6 +123,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             GET_SYSTEM_METADATA => Ok(Action::GetSystemMetadata),
             GET_FILE_METADATA => Ok(Action::GetFileMetadata),
             GET_FILE_CONTENTS => Ok(Action::GetFileContents),
+            GET_FILE_CONTENTS_KMX => Ok(Action::GetFileContentsKmx),
             GET_FILE_SHA256 => Ok(Action::GetFileSha256),
             GREP_FILE_CONTENTS => Ok(Action::GrepFileContents),
             LIST_DIRECTORY => Ok(Action::ListDirectory),
