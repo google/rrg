@@ -48,12 +48,47 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    // TODO: Add support for inferring the raw deivce path from file paths.
-    let Some(raw_device_path) = args.raw_device_path else {
-        return Err(crate::session::Error::action(std::io::Error::new(
+    let raw_device_path = match args.raw_device_path {
+        Some(raw_device_path) => raw_device_path,
+        #[cfg(target_os = "windows")]
+        None => {
+            log::debug!("raw device path not provided, inferring from file paths");
+            let mut raw_device_path = None;
+
+            for path in &args.paths {
+                // TODO: Use lossless conversion (preferably in Keramics directly).
+                let path = std::path::PathBuf::from_iter(
+                    path.components.iter()
+                        .map(|comp| String::from_utf16_lossy(&comp.elements))
+                );
+
+                let raw_device_path_curr = ospect::fs::windows::raw_device_path(&path)
+                    .map_err(crate::session::Error::action)?;
+
+                if let Some(raw_device_path) = &raw_device_path {
+                    if raw_device_path != &raw_device_path_curr {
+                        return Err(crate::session::Error::action(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "files on distinct raw devices",
+                        )));
+                    }
+                } else {
+                    raw_device_path = Some(raw_device_path_curr);
+                }
+            }
+
+            match raw_device_path {
+                Some(raw_device_path) => raw_device_path,
+                // It will be `None` only if there were no paths specified in
+                // which case we just return without doing anything.
+                None => return Ok(()),
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        None => return Err(crate::session::Error::action(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "raw device path must be provided",
-        )));
+            "NTFS raw device path inference not on Windows",
+        ))),
     };
 
     log::debug!("opening NTFS raw device at '{}'", raw_device_path.display());
