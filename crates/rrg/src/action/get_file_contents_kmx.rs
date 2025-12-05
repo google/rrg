@@ -215,6 +215,16 @@ impl crate::request::Args for Args {
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
 
+        let raw_device_path = if proto.raw_device_path().raw_bytes().is_empty() {
+            None
+        } else {
+            let raw_device_path = proto.take_raw_device_path()
+                .try_into()
+                .map_err(|error| ParseArgsError::invalid_field("raw device path", error))?;
+
+            Some(raw_device_path)
+        };
+
         let paths = proto.take_paths().into_iter().map(|path| {
             // TODO: Do not go through UTF-8 conversion.
             let path = str::from_utf8(path.raw_bytes())
@@ -234,7 +244,7 @@ impl crate::request::Args for Args {
         };
 
         Ok(Args {
-            raw_device_path: None,
+            raw_device_path,
             paths,
             offset: proto.offset(),
             len,
