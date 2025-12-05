@@ -6,7 +6,7 @@
 //! Windows-specific filesystem inspection functionalities.
 
 use std::ffi::{OsStr, OsString};
-use std::os::windows::ffi::OsStringExt as _;
+use std::os::windows::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 
 use super::*;
@@ -382,4 +382,115 @@ fn volume_fs_type(name_buf: &VolumeNameBuf) -> std::io::Result<VolumeFsTypeBuf> 
     }
 
     Ok(fs_type_buf)
+}
+
+/// Returns path to the raw device that holds the given path.
+pub fn raw_device_path<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
+    _raw_device_path(path.as_ref())
+}
+
+fn _raw_device_path(path: &Path) -> std::io::Result<PathBuf> {
+    let path_wide = path.as_os_str().encode_wide()
+        .collect::<Vec<u16>>();
+    // SAFETY: We call `GetFullPathNameW` [1] but with empty buffer only to get
+    // a length of the buffer needed to hold the volume path. This is the reco-
+    // mmended approach [2] as giving insufficently big buffer we might end up
+    // with an incomplete result. This works because volume path should not be
+    // longer than the full path.
+    //
+    // We verify the result of the call below.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfullpathnamew
+    // [2]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumepathnamew#remarks
+    let status = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetFullPathNameW(
+            path_wide.as_ptr(),
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    if status == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // We verified that the call succeeded. That means, the result contains a
+    // length of the buffer needed to hold the full path (including the termi-
+    // nating null).
+    let path_full_wide_len = status as usize;
+
+    let mut volume_path_wide = vec![0u16; path_full_wide_len as usize];
+    // SAFETY: We allocated the buffer that should be sufficiently large (in the
+    // worst case the call will fail). The rest is just `GetVolumePathNameW` [1]
+    // call as described in the documentation.
+    //
+    // We verify the result of the call below.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumepathnamew
+    let status = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetVolumePathNameW(
+            path_wide.as_ptr(),
+            volume_path_wide.as_mut_ptr(),
+            volume_path_wide.len() as u32,
+        )
+    };
+    if status == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    // `50` is the value recommended by the official documentation [1] to accom-
+    // modate for the largest possible GUID.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumenameforvolumemountpointw#parameters
+    let mut volume_name_wide = [0u16; 50];
+    // SAFETY: We have the buffer sufficient to hold the largest possible volume
+    // name and we call `GetVolumeNameForVolumeMountPointW` [1] as documented.
+    //
+    // We verify the result of the call below.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumenameforvolumemountpointw
+    let status = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetVolumeNameForVolumeMountPointW(
+            volume_path_wide.as_ptr(),
+            volume_name_wide.as_mut_ptr(),
+            volume_name_wide.len() as u32,
+        )
+    };
+    if status == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    let volume_name_len = volume_name_wide.iter().position(|char| *char == 0)
+        .ok_or_else(|| std::io::ErrorKind::InvalidData)?;
+    // Just a sanity check—volume name should not be empty.
+    if volume_name_len == 0 {
+        return Err(std::io::ErrorKind::InvalidData.into());
+    }
+    // Another sanity check—volume name returned by the function should end with
+    // a backslash which we strip in the final result.
+    //
+    // The indexing here cannot panic as we verified that `volume_name_len` is
+    // not 0 and within the bounds of the buffer because of how it was obtained.
+    if volume_name_wide[volume_name_len - 1] != u32::from('\\') as u16 {
+        return Err(std::io::ErrorKind::InvalidData.into());
+    }
+
+    Ok(PathBuf::from(OsString::from_wide(&volume_name_wide[..volume_name_len - 1])))
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn raw_device_path_exists() {
+        // We create a temporary file just to know there must be a device that
+        // stores it.
+        let tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        // We assert that the returned path really exists but we can't do much
+        // further as working with raw devices requires root priviledges.
+        assert!(std::fs::exists(raw_device_path(&tempfile).unwrap()).unwrap());
+    }
 }
