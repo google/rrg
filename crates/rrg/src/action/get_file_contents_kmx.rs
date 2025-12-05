@@ -8,8 +8,8 @@ const MAX_BLOB_LEN: usize = 1 * 1024 * 1024; // 1 MiB.
 
 /// Arguments of the `get_file_contents_kmx` action.
 pub struct Args {
-    /// Path to the NTFS filesystem volume to use for parsing.
-    volume_path: Option<std::path::PathBuf>,
+    /// Path to the raw device with NTFS filesystem to use for parsing.
+    raw_device_path: Option<std::path::PathBuf>,
     /// Paths to the files to get the contents of.
     paths: Vec<keramics_formats::ntfs::NtfsPath>,
     /// Offset from which to read the file contents.
@@ -48,26 +48,26 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    // TODO: Add support for inferring the volume from path.
-    let Some(volume_path) = args.volume_path else {
+    // TODO: Add support for inferring the raw deivce path from file paths.
+    let Some(raw_device_path) = args.raw_device_path else {
         return Err(crate::session::Error::action(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "volume path must be provided",
+            "raw device path must be provided",
         )));
     };
 
-    log::debug!("opening NTFS volume at '{}'", volume_path.display());
+    log::debug!("opening NTFS raw device at '{}'", raw_device_path.display());
 
-    let volume = std::fs::File::open(&volume_path)
+    let raw_device = std::fs::File::open(&raw_device_path)
         .map_err(crate::session::Error::action)?;
-    let volume_data_stream: keramics_core::DataStreamReference = {
-        std::sync::Arc::new(std::sync::RwLock::new(volume))
+    let raw_device_data_stream: keramics_core::DataStreamReference = {
+        std::sync::Arc::new(std::sync::RwLock::new(raw_device))
     };
 
-    log::debug!("parsing NTFS volume at '{}'", volume_path.display());
+    log::debug!("parsing NTFS raw device at '{}'", raw_device_path.display());
 
     let mut ntfs = keramics_formats::ntfs::NtfsFileSystem::new();
-    ntfs.read_data_stream(&volume_data_stream)
+    ntfs.read_data_stream(&raw_device_data_stream)
         .map_err(|error| crate::session::Error::action(error))?;
 
     for path in args.paths {
@@ -234,7 +234,7 @@ impl crate::request::Args for Args {
         };
 
         Ok(Args {
-            volume_path: None,
+            raw_device_path: None,
             paths,
             offset: proto.offset(),
             len,
@@ -349,7 +349,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            raw_device_path: Some(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\idonotexist")],
             offset: 0,
             len: usize::MAX,
@@ -378,7 +378,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            raw_device_path: Some(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\dir")],
             offset: 0,
             len: usize::MAX,
@@ -407,7 +407,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            raw_device_path: Some(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\empty")],
             offset: 0,
             len: usize::MAX,
@@ -434,7 +434,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            raw_device_path: Some(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
             offset: 0,
             len: usize::MAX,
@@ -470,7 +470,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            raw_device_path: Some(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
             offset: 5,
             len: usize::MAX,
@@ -506,7 +506,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            raw_device_path: Some(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
             offset: 0,
             len: 5,
@@ -542,7 +542,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            raw_device_path: Some(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
             offset: 0xb33f,
             len: MAX_BLOB_LEN + 1337,
@@ -577,7 +577,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            raw_device_path: Some(ntfs_file.path().to_path_buf()),
             paths: vec![
                 keramics_formats::ntfs::NtfsPath::from("\\foo"),
                 keramics_formats::ntfs::NtfsPath::from("\\bar"),
@@ -636,7 +636,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            raw_device_path: Some(ntfs_file.path().to_path_buf()),
             paths: vec![
                 keramics_formats::ntfs::NtfsPath::from("\\foo"),
                 keramics_formats::ntfs::NtfsPath::from("\\idonotexist"),
