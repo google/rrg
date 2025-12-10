@@ -6,10 +6,17 @@
 /// Limit on the size of individual file part blob sent to the blob sink.
 const MAX_BLOB_LEN: usize = 1 * 1024 * 1024; // 1 MiB.
 
+enum VolumePath {
+    // Absolute path to the raw volume file (e.g. `\\?\Volume{...}`.
+    Direct(std::path::PathBuf),
+    // Absolute path to the mount point of a raw volume file (e.g. `C:\`).
+    Mount(std::path::PathBuf),
+}
+
 /// Arguments of the `get_file_contents_kmx` action.
 pub struct Args {
-    /// Path to the NTFS filesystem volume to use for parsing.
-    volume_path: Option<std::path::PathBuf>,
+    /// Path to the volume with NTFS filesystem to use for parsing.
+    volume_path: VolumePath,
     /// Paths to the files to get the contents of.
     paths: Vec<keramics_formats::ntfs::NtfsPath>,
     /// Offset from which to read the file contents.
@@ -48,12 +55,20 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    // TODO: Add support for inferring the volume from path.
-    let Some(volume_path) = args.volume_path else {
-        return Err(crate::session::Error::action(std::io::Error::new(
+    let volume_path = match args.volume_path {
+        VolumePath::Direct(path) => path,
+        #[cfg(target_os = "windows")]
+        VolumePath::Mount(path) => {
+            log::debug!("inferring direct volume path from mount: {}", path.display());
+
+            ospect::fs::windows::raw_device_path(&path)
+                .map_err(crate::session::Error::action)?
+        }
+        #[cfg(not(target_os = "windows"))]
+        VolumePath::Mount(_path) => return Err(crate::session::Error::action(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "volume path must be provided",
-        )));
+            "volume path inference not on Windows",
+        ))),
     };
 
     log::debug!("opening NTFS volume at '{}'", volume_path.display());
@@ -215,6 +230,20 @@ impl crate::request::Args for Args {
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
 
+        let volume_path = if !proto.volume_mount_path().raw_bytes().is_empty() {
+            let volume_mount_path = proto.take_volume_mount_path()
+                .try_into()
+                .map_err(|error| ParseArgsError::invalid_field("volume mount path", error))?;
+
+            VolumePath::Mount(volume_mount_path)
+        } else {
+            let volume_path = proto.take_volume_path()
+                .try_into()
+                .map_err(|error| ParseArgsError::invalid_field("volume path", error))?;
+
+            VolumePath::Direct(volume_path)
+        };
+
         let paths = proto.take_paths().into_iter().map(|path| {
             // TODO: Do not go through UTF-8 conversion.
             let path = str::from_utf8(path.raw_bytes())
@@ -234,7 +263,7 @@ impl crate::request::Args for Args {
         };
 
         Ok(Args {
-            volume_path: None,
+            volume_path,
             paths,
             offset: proto.offset(),
             len,
@@ -349,7 +378,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\idonotexist")],
             offset: 0,
             len: usize::MAX,
@@ -378,7 +407,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\dir")],
             offset: 0,
             len: usize::MAX,
@@ -407,7 +436,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\empty")],
             offset: 0,
             len: usize::MAX,
@@ -434,7 +463,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
             offset: 0,
             len: usize::MAX,
@@ -470,7 +499,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
             offset: 5,
             len: usize::MAX,
@@ -506,7 +535,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
             offset: 0,
             len: 5,
@@ -542,7 +571,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
             offset: 0xb33f,
             len: MAX_BLOB_LEN + 1337,
@@ -577,7 +606,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![
                 keramics_formats::ntfs::NtfsPath::from("\\foo"),
                 keramics_formats::ntfs::NtfsPath::from("\\bar"),
@@ -636,7 +665,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![
                 keramics_formats::ntfs::NtfsPath::from("\\foo"),
                 keramics_formats::ntfs::NtfsPath::from("\\idonotexist"),

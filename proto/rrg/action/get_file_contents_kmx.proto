@@ -9,7 +9,22 @@ package rrg.action.get_file_contents_kmx;
 import "rrg/fs.proto";
 
 message Args {
-  // Absolute paths to the files to get the contents of.
+  oneof volume {
+    // Absolute path to the raw volume holding the files to get the contents of.
+    //
+    // For example, `\\?\Volume{f000f000-baa5-f000-baa5-f00ba5f00ba5}`.
+    rrg.fs.Path volume_path = 4;
+
+    // Absolute path to the point (e.g. a drive letter) where a volume holding
+    // the files to get the contents of is mounted.
+    //
+    // For example, `C:\`.
+    //
+    // This is supported only on Windows.
+    rrg.fs.Path volume_mount_path = 5;
+  }
+
+  // Paths (relative to the volume root) to the files to get the contents of.
   repeated rrg.fs.Path paths = 1;
 
   // Byte offset from which the content should be retrieved.
