@@ -13,6 +13,7 @@ pub mod log;
 pub mod session;
 
 mod blob;
+mod filestore;
 mod filter;
 mod request;
 mod response;
