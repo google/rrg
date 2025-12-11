@@ -25,18 +25,6 @@ struct OneshotSession {
 }
 
 impl OneshotSession {
-    /// Constructs a new fake session with test default agent arguments.
-    pub fn new() -> Self {
-        Self::with_args(rrg::args::Args {
-            heartbeat_rate: std::time::Duration::from_secs(0),
-            ping_rate: std::time::Duration::from_secs(0),
-            command_verification_key: None,
-            verbosity: log::LevelFilter::Debug,
-            log_to_stdout: false,
-            log_to_file: None,
-        })
-    }
-
     /// Constructs a new fake session with the given agent arguments.
     pub fn with_args(args: rrg::args::Args) -> Self {
         Self { args }
@@ -74,12 +62,15 @@ impl rrg::session::Session for OneshotSession {
 }
 
 fn main() {
+    let args = rrg::args::from_env_args();
+    rrg::log::init(&args);
+
     // rust-protobuf does not support Any in text or JSON formats, so we're
     // stuck taking in encoded protobufs.
     // See https://github.com/stepancheg/rust-protobuf/issues/628
     let request_proto = rrg_proto::rrg::Request::parse_from_reader(&mut std::io::stdin())
         .expect("Failed to parse request protobuf");
     let request = rrg::Request::try_from(request_proto).expect("Failed to parse request");
-    let mut session = OneshotSession::new();
+    let mut session = OneshotSession::with_args(args);
     rrg::action::dispatch(&mut session, request).unwrap();
 }
