@@ -8,6 +8,7 @@ pub struct Part {
     offset: u64,
     content: Vec<u8>,
     file_len: u64,
+    file_sha256: [u8; 32],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -138,6 +139,25 @@ impl Filestore {
             std::io::copy(&mut part, &mut file)?;
         }
 
+        use std::io::Seek as _;
+        file.seek(std::io::SeekFrom::Start(0))?;
+
+        use sha2::Digest as _;
+        let mut sha256 = sha2::Sha256::new();
+        std::io::copy(&mut file, &mut sha256)?;
+        let sha256 = <[u8; 32]>::from(sha256.finalize());
+
+        if sha256 != part.file_sha256 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format! {
+                    "computed digest ({:?}) doesn't match the expected one ({:?})",
+                    sha256,
+                    part.file_sha256,
+                },
+            ));
+        }
+
         Ok(Status::Complete)
     }
 
@@ -181,6 +201,7 @@ mod tests {
                 offset: 0,
                 content: b"FOOBARBAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -208,6 +229,7 @@ mod tests {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::PendingEof,
         };
@@ -216,6 +238,7 @@ mod tests {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::PendingEof,
         };
@@ -224,6 +247,7 @@ mod tests {
                 offset: b"FOOBAR".len() as u64,
                 content: b"BAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -251,6 +275,7 @@ mod tests {
                 offset: b"FOOBAR".len() as u64,
                 content: b"BAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::PendingPart {
                 offset: 0,
@@ -262,6 +287,7 @@ mod tests {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::PendingPart {
                 offset: 0,
@@ -273,6 +299,7 @@ mod tests {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -308,6 +335,7 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAR".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
+                file_sha256: sha256(b"FOOBAR"),
             }).unwrap(),
             Status::Complete,
         };
@@ -316,6 +344,7 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAZ".to_vec(),
                 file_len: b"FOOBAZ".len() as u64,
+                file_sha256: sha256(b"FOOBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -324,6 +353,7 @@ mod tests {
                 offset: 0,
                 content: b"QUUX".to_vec(),
                 file_len: b"QUUX".len() as u64,
+                file_sha256: sha256(b"QUUX"),
             }).unwrap(),
             Status::Complete,
         };
@@ -339,5 +369,14 @@ mod tests {
         let quux_contents = std::fs::read(filestore.path(&quux_id).unwrap())
             .unwrap();
         assert_eq!(quux_contents, b"QUUX");
+    }
+
+    fn sha256(content: &[u8]) -> [u8; 32] {
+        use sha2::Digest as _;
+
+        let mut sha256 = sha2::Sha256::new();
+        sha256.update(content);
+        sha256.finalize()
+            .into()
     }
 }
