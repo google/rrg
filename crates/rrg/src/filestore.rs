@@ -26,10 +26,17 @@ pub struct Id {
     file_id: String,
 }
 
+impl std::fmt::Display for Id {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:X}/{}", self.flow_id, self.file_id)
+    }
+}
+
 impl Filestore {
 
     pub fn init(path: &Path) -> std::io::Result<Filestore> {
-        log::info!("using '{}' as filestore directory", path.display());
+        log::info!("initializing filestore in '{}'", path.display());
         std::fs::create_dir_all(path)?;
 
         Ok(Filestore {
@@ -38,6 +45,8 @@ impl Filestore {
     }
 
     pub fn store(&self, id: &Id, part: Part) -> std::io::Result<Status> {
+        log::info!("storing part at {} for '{}'", part.offset, id);
+
         let parts_root_path = {
             self.path.join("parts").join(id.flow_id.to_string()).join(&id.file_id)
         };
@@ -49,11 +58,15 @@ impl Filestore {
         std::fs::write(part_path, &part.content)?;
 
         if part.offset + part.content.len() as u64 == part.file_len {
+            log::info!("creating EOF marker for '{}'", id);
+
             let eof_path = {
                 parts_root_path.join((part.offset + part.content.len() as u64).to_string())
             };
             std::fs::write(eof_path, b"")?;
         }
+
+        log::info!("checking stored parts for '{}'", id);
 
         struct PartMetadata {
             offset: u64,
@@ -123,6 +136,8 @@ impl Filestore {
             }
         }
 
+        log::info!("merging parts of '{}'", id);
+
         std::fs::create_dir_all(&self.path.join("files").join(id.flow_id.to_string()))?;
 
         let file_path = {
@@ -138,6 +153,8 @@ impl Filestore {
 
             std::io::copy(&mut part, &mut file)?;
         }
+
+        log::info!("verifying SHA-256 of '{}' content", id);
 
         use std::io::Seek as _;
         file.seek(std::io::SeekFrom::Start(0))?;
