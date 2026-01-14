@@ -37,7 +37,22 @@ impl Filestore {
 
     pub fn init(path: &Path) -> std::io::Result<Filestore> {
         log::info!("initializing filestore in '{}'", path.display());
-        std::fs::create_dir_all(path)?;
+
+        let mut dir_builder = std::fs::DirBuilder::new();
+        dir_builder.recursive(true);
+
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::fs::DirBuilderExt as _;
+            dir_builder.mode(0o700);
+        }
+
+        // TODO: Restrict folder access on Windows.
+        //
+        // This seems quite involved process that involves wrangling with the
+        // Windows API.
+
+        dir_builder.create(path)?;
 
         // During initialization, we clean empty file and part directories. That
         // can happen after a file or parts were deleted (be it by explicit de-
