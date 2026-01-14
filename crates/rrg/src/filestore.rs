@@ -39,6 +39,10 @@ impl Filestore {
         log::info!("initializing filestore in '{}'", path.display());
         std::fs::create_dir_all(path)?;
 
+        // TODO: Delete empty flow directories on startup.
+        //
+        // This can happen after a file or parts have been deleted.
+
         Ok(Filestore {
             path: path.to_path_buf(),
         })
@@ -168,6 +172,12 @@ impl Filestore {
         }
 
         Ok(Status::Complete)
+    }
+
+    pub fn delete(&self, id: &Id) -> std::io::Result<()> {
+        std::fs::remove_file(self.file_path(id))?;
+
+        Ok(())
     }
 
     pub fn path(&self, id: &Id) -> std::io::Result<PathBuf> {
@@ -442,6 +452,49 @@ mod tests {
             file_sha256: sha256(b"BAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn delete_single_file() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path())
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        filestore.store(&foo_id, Part {
+            offset: 0,
+            content: b"FOOBAR".to_vec(),
+            file_len: b"FOOBAR".len() as u64,
+            file_sha256: sha256(b"FOOBAR"),
+        }).unwrap();
+
+        assert!(filestore.delete(&foo_id).is_ok());
+
+        let error = filestore.path(&foo_id).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn delete_non_existent() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path())
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        let error = filestore.delete(&foo_id).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
     }
 
     fn sha256(content: &[u8]) -> [u8; 32] {
