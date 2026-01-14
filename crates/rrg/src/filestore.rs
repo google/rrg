@@ -388,6 +388,57 @@ mod tests {
         assert_eq!(quux_contents, b"QUUX");
     }
 
+    #[test]
+    fn store_overlapping_parts() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path())
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        filestore.store(&foo_id, Part {
+            offset: 0,
+            content: b"FOO".to_vec(),
+            file_len: b"FOOBAR".len() as u64,
+            file_sha256: sha256(b"FOOBAR"),
+        }).unwrap();
+
+        let error = filestore.store(&foo_id, Part {
+            offset: 2,
+            content: b"OBAR".to_vec(),
+            file_len: b"FOOBAR".len() as u64,
+            file_sha256: sha256(b"FOOBAR"),
+        }).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn store_invalid_sha256() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path())
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        let error = filestore.store(&foo_id, Part {
+            offset: 0,
+            content: b"FOO".to_vec(),
+            file_len: b"FOO".len() as u64,
+            file_sha256: sha256(b"BAR"),
+        }).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
     fn sha256(content: &[u8]) -> [u8; 32] {
         use sha2::Digest as _;
 
