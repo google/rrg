@@ -47,23 +47,18 @@ impl Filestore {
     pub fn store(&self, id: &Id, part: Part) -> std::io::Result<Status> {
         log::info!("storing part at {} for '{}'", part.offset, id);
 
-        let parts_root_path = {
-            self.path.join("parts").join(id.flow_id.to_string()).join(&id.file_id)
-        };
-        std::fs::create_dir_all(&parts_root_path)?;
-
-        let part_path = {
-            parts_root_path.join(part.offset.to_string())
-        };
-        std::fs::write(part_path, &part.content)?;
+        let part_path = self.part_path(id, part.offset);
+        let part_path_dir = part_path.parent()
+            // This should never happen as part path by construction should not
+            // be empty and is always placed in some folder.
+            .expect("no part path parent");
+        std::fs::create_dir_all(part_path_dir)?;
+        std::fs::write(&part_path, &part.content)?;
 
         if part.offset + part.content.len() as u64 == part.file_len {
             log::info!("creating EOF marker for '{}'", id);
 
-            let eof_path = {
-                parts_root_path.join((part.offset + part.content.len() as u64).to_string())
-            };
-            std::fs::write(eof_path, b"")?;
+            std::fs::write(self.part_path(id, part.file_len), b"")?;
         }
 
         log::info!("checking stored parts for '{}'", id);
@@ -74,7 +69,7 @@ impl Filestore {
         }
         let mut parts = Vec::<PartMetadata>::new();
 
-        for part_entry in std::fs::read_dir(&parts_root_path)? {
+        for part_entry in std::fs::read_dir(part_path_dir)? {
             let part_entry = part_entry?;
 
             let offset = part_entry.file_name()
@@ -138,19 +133,16 @@ impl Filestore {
 
         log::info!("merging parts of '{}'", id);
 
-        std::fs::create_dir_all(&self.path.join("files").join(id.flow_id.to_string()))?;
+        let file_path = self.file_path(id);
+        let file_path_dir = file_path.parent()
+            // This should never happen as file path by construction should not
+            // be empty and is always placed in some folder.
+            .expect("no file path parent");
+        std::fs::create_dir_all(file_path_dir)?;
 
-        let file_path = {
-            self.path.join("files").join(id.flow_id.to_string()).join(&id.file_id)
-        };
         let mut file = std::fs::File::create_new(&file_path)?;
-
         for part in parts.iter() {
-            let part_path = {
-                self.path.join("parts").join(id.flow_id.to_string()).join(&id.file_id).join(part.offset.to_string())
-            };
-            let mut part = std::fs::File::open(&part_path)?;
-
+            let mut part = std::fs::File::open(&self.part_path(id, part.offset))?;
             std::io::copy(&mut part, &mut file)?;
         }
 
@@ -179,9 +171,7 @@ impl Filestore {
     }
 
     pub fn path(&self, id: &Id) -> std::io::Result<PathBuf> {
-        let file_path = {
-            self.path.join("files").join(id.flow_id.to_string()).join(&id.file_id)
-        };
+        let file_path = self.file_path(id);
 
         let file_metadata = file_path.metadata()?;
         if !file_metadata.is_file() {
@@ -192,6 +182,21 @@ impl Filestore {
         }
 
         Ok(file_path)
+    }
+
+    fn file_path(&self, id: &Id) -> PathBuf {
+        self.path
+            .join("files")
+            .join(id.flow_id.to_string())
+            .join(&id.file_id)
+    }
+
+    fn part_path(&self, id: &Id, offset: u64) -> PathBuf {
+        self.path
+            .join("parts")
+            .join(id.flow_id.to_string())
+            .join(&id.file_id)
+            .join(offset.to_string())
     }
 }
 
