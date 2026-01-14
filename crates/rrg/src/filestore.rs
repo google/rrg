@@ -150,6 +150,9 @@ impl Filestore {
             std::io::copy(&mut part, &mut file)?;
         }
 
+        log::info!("deleting merged parts of '{}'", id);
+        std::fs::remove_dir_all(part_path_dir)?;
+
         log::info!("verifying SHA-256 of '{}' content", id);
 
         use std::io::Seek as _;
