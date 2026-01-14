@@ -39,9 +39,51 @@ impl Filestore {
         log::info!("initializing filestore in '{}'", path.display());
         std::fs::create_dir_all(path)?;
 
-        // TODO: Delete empty flow directories on startup.
+        // During initialization, we clean empty file and part directories. That
+        // can happen after a file or parts were deleted (be it by explicit de-
+        // letion or by them reaching their TTL).
         //
-        // This can happen after a file or parts have been deleted.
+        // It is not strictly necessary but we don't want to pollute the system
+        // without a reason.
+        use std::io::ErrorKind;
+        match std::fs::read_dir(path.join("files")) {
+            Ok(files_entries) => {
+                for entry in files_entries {
+                    let entry = entry?;
+
+                    match std::fs::remove_dir(entry.path()) {
+                        Ok(()) => (),
+                        // This is fine, we actually expect most directories to
+                        // be not empty.
+                        Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
+                        Err(error) => return Err(error),
+                    }
+                }
+            }
+            // This is fine, `files` folder might not exist if the filestore was
+            // never used to store a file.
+            Err(error) if error.kind() == ErrorKind::NotFound => (),
+            Err(error) => return Err(error),
+        }
+        match std::fs::read_dir(path.join("parts")) {
+            Ok(parts_entries) => {
+                for entry in parts_entries {
+                    let entry = entry?;
+
+                    match std::fs::remove_dir(entry.path()) {
+                        Ok(()) => (),
+                        // This is fine, we actually expect most directories to
+                        // be not empty.
+                        Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
+                        Err(error) => return Err(error),
+                    }
+                }
+            }
+            // This is fine, `parts` folder might not exist if the filestore was
+            // never used to store a part.
+            Err(error) if error.kind() == ErrorKind::NotFound => (),
+            Err(error) => return Err(error),
+        }
 
         Ok(Filestore {
             path: path.to_path_buf(),
@@ -217,6 +259,39 @@ impl Filestore {
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn init_cleanup_empty() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path())
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        filestore.store(&foo_id, Part {
+            offset: 0,
+            content: b"FOOBAR".to_vec(),
+            file_len: b"FOOBAR".len() as u64,
+            file_sha256: sha256(b"FOOBAR"),
+        }).unwrap();
+        filestore.delete(&foo_id).unwrap();
+
+        let filestore = Filestore::init(tempdir.path())
+            .unwrap();
+
+        let files_entries = std::fs::read_dir(tempdir.path().join("files"))
+            .unwrap();
+        assert_eq!(files_entries.count(), 0);
+
+        let parts_entries = std::fs::read_dir(tempdir.path().join("parts"))
+            .unwrap();
+        assert_eq!(parts_entries.count(), 0);
+    }
 
     #[test]
     fn single_file_single_part() {
