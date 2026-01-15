@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::{Duration};
 
 pub struct Filestore {
     path: PathBuf,
@@ -35,7 +36,7 @@ impl std::fmt::Display for Id {
 
 impl Filestore {
 
-    pub fn init(path: &Path) -> std::io::Result<Filestore> {
+    pub fn init(path: &Path, ttl: Duration) -> std::io::Result<Filestore> {
         log::info!("initializing filestore in '{}'", path.display());
 
         let mut dir_builder = std::fs::DirBuilder::new();
@@ -58,14 +59,11 @@ impl Filestore {
                 path.display(),
             }))?;
 
-        // During initialization, we clean empty file and part directories. That
-        // can happen after a file or parts were deleted (be it by explicit de-
-        // letion or by them reaching their TTL).
-        //
-        // It is not strictly necessary but we don't want to pollute the system
-        // without a reason.
+        log::info!("searching for outdated filestore files");
+
         use std::io::ErrorKind;
         match std::fs::read_dir(path.join("files")) {
+            // TODO: The nomenclature here is confusing.
             Ok(files_entries) => {
                 for entry in files_entries {
                     let entry = entry
@@ -73,15 +71,72 @@ impl Filestore {
                             "could not read filestore files folder entry at '{}': {error}",
                             path.join("files").display(),
                         }))?;
+                    let entry_path = entry.path();
 
-                    match std::fs::remove_dir(entry.path()) {
+                    let flow_files_entries = std::fs::read_dir(&entry_path)
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not read filestore files folder at '{}': {error}",
+                            entry_path.display(),
+                        }))?;
+
+                    for flow_entry in flow_files_entries {
+                        let flow_entry = flow_entry
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not read filestore flow files entry at '{}': {error}",
+                                entry_path.display(),
+                            }))?;
+                        let flow_entry_metadata = flow_entry.metadata()
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not read metadata for flow file at '{}': {error}",
+                                flow_entry.path().display(),
+                            }))?;
+
+                        let flow_entry_since_created = flow_entry_metadata
+                            .created()
+                            // Most modern systems should have creation time
+                            // available but as a cheap fallback we use modifi-
+                            // cation time as a good approximation.
+                            .or(flow_entry_metadata.modified())
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not obtain creation time for flow file at '{}': {error}",
+                                flow_entry.path().display(),
+                            }))?
+                            .elapsed()
+                            // Error is returned in case the current system time
+                            // is earlier than the file creation time (which can
+                            // happen as fiddling with the clock is possible).
+                            //
+                            // For our purposes (validating TTL) it is fine to
+                            // clamp to 0 in such cases.
+                            .unwrap_or(Duration::ZERO);
+
+                        if ttl < flow_entry_since_created {
+                            log::info! {
+                                "deleting outdated filestore file '{}'",
+                                flow_entry.path().display(),
+                            };
+                            std::fs::remove_file(flow_entry.path())
+                                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                    "could not remove outdated file at '{}': {error}",
+                                    flow_entry.path().display(),
+                                }))?;
+                        }
+                    }
+
+                    // We also clean empty file and part directories. That can
+                    // happen after a file or parts were deleted (be it by an
+                    // explicit deletion or by them reaching their TTL).
+                    //
+                    // It is not strictly necessary but we don't want to pollute
+                    // the filesystem without a reason.
+                    match std::fs::remove_dir(&entry_path) {
                         Ok(()) => (),
                         // This is fine, we actually expect most directories to
                         // be not empty.
                         Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
                         Err(error) => return Err(std::io::Error::new(error.kind(), format! {
                             "could not remove empty files folder at '{}': {error}",
-                            entry.path().display(),
+                            entry_path.display(),
                         })),
                     }
                 }
@@ -102,6 +157,8 @@ impl Filestore {
                             "could not read filestore parts folder entry at '{}': {error}",
                             path.join("parts").display(),
                         }))?;
+
+                    // TODO: Add support for removing outdated parts.
 
                     match std::fs::remove_dir(entry.path()) {
                         Ok(()) => (),
@@ -399,7 +456,7 @@ mod tests {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        Filestore::init(&tempdir.path().join("i_did_not_exist_before"))
+        Filestore::init(&tempdir.path().join("i_did_not_exist_before"), Duration::MAX)
             .unwrap();
     }
 
@@ -408,9 +465,9 @@ mod tests {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        Filestore::init(tempdir.path())
+        Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
-        Filestore::init(tempdir.path())
+        Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
     }
 
@@ -419,7 +476,7 @@ mod tests {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        let filestore = Filestore::init(tempdir.path())
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let foo_id = Id {
@@ -435,7 +492,7 @@ mod tests {
         }).unwrap();
         filestore.delete(&foo_id).unwrap();
 
-        let filestore = Filestore::init(tempdir.path())
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let files_entries = std::fs::read_dir(tempdir.path().join("files"))
@@ -448,11 +505,47 @@ mod tests {
     }
 
     #[test]
+    fn init_cleanup_outdated_files() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        filestore.store(&foo_id, Part {
+            offset: 0,
+            content: b"FOOBAR".to_vec(),
+            file_len: b"FOOBAR".len() as u64,
+            file_sha256: sha256(b"FOOBAR"),
+        }).unwrap();
+
+        let files_entries = std::fs::read_dir(tempdir.path().join("files"))
+            .unwrap();
+        assert_eq!(files_entries.count(), 1);
+
+        // We initialize with a TTL of 0 which effectively means that all files
+        // are outdated.
+        Filestore::init(tempdir.path(), Duration::ZERO)
+            .unwrap();
+
+        let files_entries = std::fs::read_dir(tempdir.path().join("files"))
+            .unwrap();
+        assert_eq!(files_entries.count(), 0);
+    }
+
+    // TODO: Add a test for an empty file.
+
+    #[test]
     fn store_single_file_single_part() {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        let filestore = Filestore::init(tempdir.path())
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let foo_id = Id {
@@ -480,7 +573,7 @@ mod tests {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        let filestore = Filestore::init(tempdir.path())
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let foo_id = Id {
@@ -526,7 +619,7 @@ mod tests {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        let filestore = Filestore::init(tempdir.path())
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let foo_id = Id {
@@ -578,7 +671,7 @@ mod tests {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        let filestore = Filestore::init(tempdir.path())
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let foobar_id = Id {
@@ -640,7 +733,7 @@ mod tests {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        let filestore = Filestore::init(tempdir.path())
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let foo_id = Id {
@@ -669,7 +762,7 @@ mod tests {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        let filestore = Filestore::init(tempdir.path())
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let foo_id = Id {
@@ -691,7 +784,7 @@ mod tests {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        let filestore = Filestore::init(tempdir.path())
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let foo_id = Id {
@@ -717,7 +810,7 @@ mod tests {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
-        let filestore = Filestore::init(tempdir.path())
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let foo_id = Id {
