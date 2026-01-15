@@ -63,39 +63,36 @@ impl Filestore {
 
         use std::io::ErrorKind;
         match std::fs::read_dir(path.join("files")) {
-            // TODO: The nomenclature here is confusing.
             Ok(files_entries) => {
-                for entry in files_entries {
-                    let entry = entry
+                for flow_dir_entry in files_entries {
+                    let flow_dir_entry = flow_dir_entry
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not read filestore files folder entry at '{}': {error}",
+                            "could not read flow files folder entry for '{}' folder: {error}",
                             path.join("files").display(),
                         }))?;
-                    let entry_path = entry.path();
+                    let flow_dir_path = flow_dir_entry.path();
 
-                    let flow_files_entries = std::fs::read_dir(&entry_path)
+                    let flow_dir_entries = std::fs::read_dir(&flow_dir_path)
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not read filestore files folder at '{}': {error}",
-                            entry_path.display(),
+                            "could not list flow files folder at '{}': {error}",
+                            flow_dir_path.display(),
                         }))?;
 
-                    for flow_entry in flow_files_entries {
-                        let flow_entry = flow_entry
+                    for flow_file_entry in flow_dir_entries {
+                        let flow_file_entry = flow_file_entry
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not read filestore flow files entry at '{}': {error}",
-                                entry_path.display(),
+                                "could not read flow file entry for '{}' folder: {error}",
+                                flow_dir_path.display(),
                             }))?;
+                        let flow_file_path = flow_file_entry.path();
 
-                        if crate::fs::remove_file_if_old(flow_entry.path(), ttl)
+                        if crate::fs::remove_file_if_old(&flow_file_path, ttl)
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
                                 "could not clean up file at '{}': {error}",
-                                flow_entry.path().display(),
+                                flow_file_path.display(),
                             }))?
                         {
-                            log::info! {
-                                "deleted outdated filestore file '{}'",
-                                flow_entry.path().display(),
-                            };
+                            log::info!("deleted outdated file '{}'", flow_file_path.display());
                         }
                     }
 
@@ -105,14 +102,14 @@ impl Filestore {
                     //
                     // It is not strictly necessary but we don't want to pollute
                     // the filesystem without a reason.
-                    match std::fs::remove_dir(&entry_path) {
+                    match std::fs::remove_dir(&flow_dir_path) {
                         Ok(()) => (),
                         // This is fine, we actually expect most directories to
                         // be not empty.
                         Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
                         Err(error) => return Err(std::io::Error::new(error.kind(), format! {
                             "could not remove empty files folder at '{}': {error}",
-                            entry_path.display(),
+                            flow_dir_path.display(),
                         })),
                     }
                 }
@@ -127,23 +124,24 @@ impl Filestore {
         }
         match std::fs::read_dir(path.join("parts")) {
             Ok(parts_entries) => {
-                for entry in parts_entries {
-                    let entry = entry
+                for flow_dir_entry in parts_entries {
+                    let flow_dir_entry = flow_dir_entry
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not read filestore parts folder entry at '{}': {error}",
+                            "could not read flow parts folder entry for '{}' folder: {error}",
                             path.join("parts").display(),
                         }))?;
+                    let flow_dir_path = flow_dir_entry.path();
 
                     // TODO: Add support for removing outdated parts.
 
-                    match std::fs::remove_dir(entry.path()) {
+                    match std::fs::remove_dir(&flow_dir_path) {
                         Ok(()) => (),
                         // This is fine, we actually expect most directories to
                         // be not empty.
                         Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
                         Err(error) => return Err(std::io::Error::new(error.kind(), format! {
                             "could not remove empty parts folder at '{}': {error}",
-                            entry.path().display(),
+                            flow_dir_path.display(),
                         })),
                     }
                 }
