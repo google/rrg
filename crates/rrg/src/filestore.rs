@@ -85,41 +85,17 @@ impl Filestore {
                                 "could not read filestore flow files entry at '{}': {error}",
                                 entry_path.display(),
                             }))?;
-                        let flow_entry_metadata = flow_entry.metadata()
-                            .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not read metadata for flow file at '{}': {error}",
-                                flow_entry.path().display(),
-                            }))?;
 
-                        let flow_entry_since_created = flow_entry_metadata
-                            .created()
-                            // Most modern systems should have creation time
-                            // available but as a cheap fallback we use modifi-
-                            // cation time as a good approximation.
-                            .or(flow_entry_metadata.modified())
+                        if crate::fs::remove_file_if_old(flow_entry.path(), ttl)
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not obtain creation time for flow file at '{}': {error}",
+                                "could not clean up file at '{}': {error}",
                                 flow_entry.path().display(),
                             }))?
-                            .elapsed()
-                            // Error is returned in case the current system time
-                            // is earlier than the file creation time (which can
-                            // happen as fiddling with the clock is possible).
-                            //
-                            // For our purposes (validating TTL) it is fine to
-                            // clamp to 0 in such cases.
-                            .unwrap_or(Duration::ZERO);
-
-                        if ttl < flow_entry_since_created {
+                        {
                             log::info! {
-                                "deleting outdated filestore file '{}'",
+                                "deleted outdated filestore file '{}'",
                                 flow_entry.path().display(),
                             };
-                            std::fs::remove_file(flow_entry.path())
-                                .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                    "could not remove outdated file at '{}': {error}",
-                                    flow_entry.path().display(),
-                                }))?;
                         }
                     }
 
