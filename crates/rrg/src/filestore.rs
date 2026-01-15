@@ -212,8 +212,6 @@ impl Filestore {
             });
         }
 
-        parts.sort_by_key(|part| part.offset);
-
         // This can theoretically happen if for whatever reason a part that we
         // written in this call got deleted by the time we listed the folder
         // with parts.
@@ -223,6 +221,11 @@ impl Filestore {
                 "no parts",
             ));
         }
+
+        // There is no guarantee about the order in which the filesystem will
+        // yield part entries, so we need to sort them ourselves for checking
+        // completeness.
+        parts.sort_by_key(|part| part.offset);
 
         let part_first = parts.first()
             // This should never happen as we verified `parts` length above.
