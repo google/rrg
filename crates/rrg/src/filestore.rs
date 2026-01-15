@@ -214,23 +214,31 @@ impl Filestore {
 
         parts.sort_by_key(|part| part.offset);
 
-        if let Some(part_first) = parts.first() {
-            if part_first.offset != 0 {
-                return Ok(Status::PendingPart {
-                    offset: 0,
-                    len: part_first.offset,
-                })
-            }
-        }
-        if let Some(part_last) = parts.last() {
-            if part_last.len != 0 {
-                return Ok(Status::PendingEof);
-            }
-        } else {
+        // This can theoretically happen if for whatever reason a part that we
+        // written in this call got deleted by the time we listed the folder
+        // with parts.
+        if parts.is_empty() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "no parts",
             ));
+        }
+
+        let part_first = parts.first()
+            // This should never happen as we verified `parts` length above.
+            .expect("no parts");
+        if part_first.offset != 0 {
+            return Ok(Status::PendingPart {
+                offset: 0,
+                len: part_first.offset,
+            })
+        }
+
+        let part_last = parts.last()
+            // This should never happen as we verified `parts` length above.
+            .expect("no parts");
+        if part_last.len != 0 {
+            return Ok(Status::PendingEof);
         }
 
         for (part_curr, part_next) in parts.iter().zip(parts.iter().skip(1)) {
