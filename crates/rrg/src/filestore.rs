@@ -68,7 +68,11 @@ impl Filestore {
         match std::fs::read_dir(path.join("files")) {
             Ok(files_entries) => {
                 for entry in files_entries {
-                    let entry = entry?;
+                    let entry = entry
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not read filestore files folder entry at '{}': {error}",
+                            path.join("files").display(),
+                        }))?;
 
                     match std::fs::remove_dir(entry.path()) {
                         Ok(()) => (),
@@ -93,7 +97,11 @@ impl Filestore {
         match std::fs::read_dir(path.join("parts")) {
             Ok(parts_entries) => {
                 for entry in parts_entries {
-                    let entry = entry?;
+                    let entry = entry
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not read filestore parts folder entry at '{}': {error}",
+                            path.join("parts").display(),
+                        }))?;
 
                     match std::fs::remove_dir(entry.path()) {
                         Ok(()) => (),
