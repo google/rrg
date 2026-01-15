@@ -387,6 +387,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn init_non_existent() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        Filestore::init(&tempdir.path().join("i_did_not_exist_before"))
+            .unwrap();
+    }
+
+    #[test]
+    fn init_twice() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        Filestore::init(tempdir.path())
+            .unwrap();
+        Filestore::init(tempdir.path())
+            .unwrap();
+    }
+
+    #[test]
     fn init_cleanup_empty() {
         let tempdir = tempfile::tempdir()
             .unwrap();
