@@ -420,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn single_file_single_part() {
+    fn store_single_file_single_part() {
         let tempdir = tempfile::tempdir()
             .unwrap();
 
