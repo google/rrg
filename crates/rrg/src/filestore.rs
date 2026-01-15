@@ -52,7 +52,11 @@ impl Filestore {
         // This seems quite involved process that involves wrangling with the
         // Windows API.
 
-        dir_builder.create(path)?;
+        dir_builder.create(path)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not create root filestore folder at '{}': {error}",
+                path.display(),
+            }))?;
 
         // During initialization, we clean empty file and part directories. That
         // can happen after a file or parts were deleted (be it by explicit de-
@@ -71,14 +75,20 @@ impl Filestore {
                         // This is fine, we actually expect most directories to
                         // be not empty.
                         Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
-                        Err(error) => return Err(error),
+                        Err(error) => return Err(std::io::Error::new(error.kind(), format! {
+                            "could not remove empty files folder at '{}': {error}",
+                            entry.path().display(),
+                        })),
                     }
                 }
             }
             // This is fine, `files` folder might not exist if the filestore was
             // never used to store a file.
             Err(error) if error.kind() == ErrorKind::NotFound => (),
-            Err(error) => return Err(error),
+            Err(error) => return Err(std::io::Error::new(error.kind(), format! {
+                "could not read root filestore files folder at '{}': {error}",
+                path.join("files").display(),
+            })),
         }
         match std::fs::read_dir(path.join("parts")) {
             Ok(parts_entries) => {
@@ -90,14 +100,20 @@ impl Filestore {
                         // This is fine, we actually expect most directories to
                         // be not empty.
                         Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
-                        Err(error) => return Err(error),
+                        Err(error) => return Err(std::io::Error::new(error.kind(), format! {
+                            "could not remove empty parts folder at '{}': {error}",
+                            entry.path().display(),
+                        })),
                     }
                 }
             }
             // This is fine, `parts` folder might not exist if the filestore was
             // never used to store a part.
             Err(error) if error.kind() == ErrorKind::NotFound => (),
-            Err(error) => return Err(error),
+            Err(error) => return Err(std::io::Error::new(error.kind(), format! {
+                "could not read root filestore parts folder at '{}': {error}",
+                path.join("parts").display(),
+            })),
         }
 
         Ok(Filestore {
@@ -108,18 +124,49 @@ impl Filestore {
     pub fn store(&self, id: &Id, part: Part) -> std::io::Result<Status> {
         log::info!("storing part at {} for '{}'", part.offset, id);
 
+        // Note that in the code below we do not attempt to do any cleanup upon
+        // error (e.g. by cleaning the parts we failed to fully write or confirm
+        // its checksum).
+        //
+        // There are two reasons for that:
+        //
+        // 1. There are _a lot_ of places where things can go wrong. Adding some
+        //    file or directory deletion code would make the flow really hard to
+        //    follow. Moreover, such cleanups can fail themselves and then it is
+        //    not obvious what to do. Retry? Leave in inconsistent state?
+        //
+        // 2. Leaving the files around gives us and users better debugging op-
+        //    portunities to investigate what went wrong.
+        //
+        // Leaving such files is not the end of the world as the filestore has
+        // TTL for all the files and thus these will be eventually cleaned any-
+        // way. And given we don't really expect these errors to happen (unless
+        // something is _really_ wrong), this is more than fine.
+
         let part_path = self.part_path(id, part.offset);
         let part_path_dir = part_path.parent()
             // This should never happen as part path by construction should not
             // be empty and is always placed in some folder.
             .expect("no part path parent");
-        std::fs::create_dir_all(part_path_dir)?;
-        std::fs::write(&part_path, &part.content)?;
+        std::fs::create_dir_all(part_path_dir)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not create parts directory at '{}': {error}",
+                part_path_dir.display(),
+            }))?;
+        std::fs::write(&part_path, &part.content)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not write part to '{}': {error}",
+                part_path.display(),
+             }))?;
 
         if part.offset + part.content.len() as u64 == part.file_len {
             log::info!("creating EOF marker for '{}'", id);
 
-            std::fs::write(self.part_path(id, part.file_len), b"")?;
+            std::fs::write(self.part_path(id, part.file_len), b"")
+                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                    "could not write EOF marker to '{}': {error}",
+                    self.part_path(id, part.file_len).display(),
+                }))?;
         }
 
         log::info!("checking stored parts for '{}'", id);
@@ -130,22 +177,38 @@ impl Filestore {
         }
         let mut parts = Vec::<PartMetadata>::new();
 
-        for part_entry in std::fs::read_dir(part_path_dir)? {
+        for part_entry in std::fs::read_dir(part_path_dir)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not list parts folder at '{}': {error}",
+                part_path_dir.display(),
+            }))?
+        {
             let part_entry = part_entry?;
 
             let offset = part_entry.file_name()
                 .into_string().map_err(|string| std::io::Error::new(
                     std::io::ErrorKind::InvalidFilename,
-                    format!("not a valid string: {string:?}")
+                    format! {
+                        "malformed part filename string: {string:?}",
+                    },
                 ))?
                 .parse::<u64>().map_err(|error| std::io::Error::new(
                     std::io::ErrorKind::InvalidFilename,
-                    error,
+                    format! {
+                        "malformed part filename '{}' format: {error}",
+                        part_entry.file_name().display(),
+                    },
                 ))?;
+
+            let part_metadata = part_entry.metadata()
+                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                    "could not read part metadata at '{}': {error}",
+                    part_entry.path().display(),
+                }))?;
 
             parts.push(PartMetadata {
                 offset,
-                len: part_entry.metadata()?.len(),
+                len: part_metadata.len(),
             });
         }
 
@@ -199,22 +262,51 @@ impl Filestore {
             // This should never happen as file path by construction should not
             // be empty and is always placed in some folder.
             .expect("no file path parent");
-        std::fs::create_dir_all(file_path_dir)?;
+        std::fs::create_dir_all(file_path_dir)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not create files directory at '{}': {error}",
+                file_path_dir.display(),
+            }))?;
 
-        let mut file = std::fs::File::create_new(&file_path)?;
+        let mut file = std::fs::File::create_new(&file_path)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not create file at '{}': {error}",
+                file_path.display(),
+            }))?;
+
         for part in parts.iter() {
-            let mut part = std::fs::File::open(&self.part_path(id, part.offset))?;
-            std::io::copy(&mut part, &mut file)?;
+            let part_offset = part.offset;
+
+            let mut part = std::fs::File::open(&self.part_path(id, part_offset))
+                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                    "could not open part at '{}': {error}",
+                    self.part_path(id, part.offset).display(),
+                }))?;
+
+            std::io::copy(&mut part, &mut file)
+                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                    "could not copy part at '{}' to file at '{}': {error}",
+                    self.part_path(id, part_offset).display(),
+                    file_path.display(),
+                }))?;
         }
 
         log::info!("verifying SHA-256 of '{}' content", id);
 
         use std::io::Seek as _;
-        file.seek(std::io::SeekFrom::Start(0))?;
+        file.seek(std::io::SeekFrom::Start(0))
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not seek file at '{}' for SHA-256 verification: {error}",
+                file_path.display(),
+            }))?;
 
         use sha2::Digest as _;
         let mut sha256 = sha2::Sha256::new();
-        std::io::copy(&mut file, &mut sha256)?;
+        std::io::copy(&mut file, &mut sha256)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not read file at '{}' for SHA-256 verification: {error}",
+                file_path.display(),
+            }))?;
         let sha256 = <[u8; 32]>::from(sha256.finalize());
 
         if sha256 != part.file_sha256 {
@@ -229,13 +321,21 @@ impl Filestore {
         }
 
         log::info!("deleting merged parts of '{}'", id);
-        std::fs::remove_dir_all(part_path_dir)?;
+        std::fs::remove_dir_all(part_path_dir)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not delete merged parts at '{}': {error}",
+                part_path_dir.display(),
+            }))?;
 
         Ok(Status::Complete)
     }
 
     pub fn delete(&self, id: &Id) -> std::io::Result<()> {
-        std::fs::remove_file(self.file_path(id))?;
+        std::fs::remove_file(self.file_path(id))
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not delete file at '{}': {error}",
+                self.file_path(id).display(),
+            }))?;
 
         Ok(())
     }
