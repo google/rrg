@@ -326,13 +326,13 @@ fn parse_socket_addr_v6(string: &str) -> Result<std::net::SocketAddrV6, ParseSoc
     // Once `int_from_ascii` is stable we can refactor `parse_octets` to use
     // ASCII strings instead of slicing `str`.
     let octets_a_str = ip_addr_str.get(00..08)
-        .ok_or(ParseSocketAddrError::InvalidFormat)?;
+        .ok_or(ParseSocketAddrError::InvalidIp)?;
     let octets_b_str = ip_addr_str.get(08..16)
-        .ok_or(ParseSocketAddrError::InvalidFormat)?;
+        .ok_or(ParseSocketAddrError::InvalidIp)?;
     let octets_c_str = ip_addr_str.get(16..24)
-        .ok_or(ParseSocketAddrError::InvalidFormat)?;
+        .ok_or(ParseSocketAddrError::InvalidIp)?;
     let octets_d_str = ip_addr_str.get(24..32)
-        .ok_or(ParseSocketAddrError::InvalidFormat)?;
+        .ok_or(ParseSocketAddrError::InvalidIp)?;
 
     let octets_a = parse_octets(octets_a_str)?;
     let octets_b = parse_octets(octets_b_str)?;
@@ -710,7 +710,7 @@ mod tests {
         let error = parse_socket_addr_v6("0000000ą00000000000000000000000:0000")
             .unwrap_err();
 
-        assert_eq!(error, ParseSocketAddrError::InvalidFormat);
+        assert_eq!(error, ParseSocketAddrError::InvalidIp);
     }
 
     #[test]
