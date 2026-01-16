@@ -7,13 +7,13 @@
 
 pub mod action;
 pub mod args;
+pub mod filestore;
 pub mod fs;
 pub mod io;
 pub mod log;
 pub mod session;
 
 mod blob;
-mod filestore;
 mod filter;
 mod request;
 mod response;
