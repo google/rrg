@@ -279,9 +279,10 @@ where
 /// platforms where creation time cannot be determined).
 ///
 /// Returns `Ok(true)` if the file was old (and was deleted) or `Ok(false)` if
-/// the does not exceed the given TTL.
+/// the file does not exceed the given TTL.
 ///
-/// See also [`std::fs::remove_file`] for more details on file remove behaviour.
+/// See also [`std::fs::remove_file`] for more details on file removal behaviour
+/// and possible errors.
 pub fn remove_file_if_old<P>(path: P, ttl: Duration) -> std::io::Result<bool>
 where
     P: AsRef<Path>,
