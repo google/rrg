@@ -279,6 +279,18 @@ impl Filestore {
                     part_entry.path().display(),
                 }))?;
 
+            if offset.checked_add(part_metadata.len()).is_none() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format! {
+                        "offset {} too big for content of length {} for part at '{}'",
+                        offset,
+                        part_metadata.len(),
+                        part_entry.path().display(),
+                    },
+                ));
+            }
+
             parts.push(PartMetadata {
                 offset,
                 len: part_metadata.len(),
@@ -880,6 +892,28 @@ mod tests {
         let error = filestore.store(&foo_id, Part {
             offset: 2,
             content: b"OBAR".to_vec(),
+            file_len: b"FOOBAR".len() as u64,
+            file_sha256: sha256(b"FOOBAR"),
+        }).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn store_offset_overflow() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        let error = filestore.store(&foo_id, Part {
+            offset: 18_446_744_073_709_551_600,
+            content: vec![0xf0; 1337],
             file_len: b"FOOBAR".len() as u64,
             file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
