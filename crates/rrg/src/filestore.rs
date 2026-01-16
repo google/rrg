@@ -35,16 +35,40 @@ impl std::fmt::Display for Id {
 
 impl Filestore {
 
+    // Here is an overview example of the folder structure and the nomenclature
+    // the code below uses to refer to it.
+    //
+    // ```
+    // • root/         | "root dir"
+    // └── parts/      | "parts dir"      (pending)
+    // │ └── F1A1A1/   | "flow parts dir" (for flow `F1A1A1`)
+    // │ │ └── foo/    | "file parts dir" (for file `F1A1A1/foo`)
+    // │ │ │ └── 0     | "part"           (for file `F1A1A1/foo` at offset 0)
+    // │ │ │ └── 42    | "part"           (for file `F1A1A1/foo` at offset 42)
+    // │ │ └── bar/    | "file parts dir" (for file `F1A1A1/bar`)
+    // │ │   └── 0     | "part"           (for file `F1A1A1/bar` at offset 0)
+    // │ │   └── 314   | "part"           (for file `F1A1A1/bar` at offset 314)
+    // │ └── F2B2B2/   | "flow parts dir" (for flow `F2B2B2`)
+    // │   └── bar/    | "file parts dir" (for file `F2B2B2/bar`)
+    // │     └── 121   | "file parts dir" (for file `F2B2B2/bar` at offset 121)
+    // └── files/      | "files dir"      (complete)
+    //   └── F1A1A1/   | "flow files dir" (for flow `F1A1A1`)
+    //   │ └── quux    | "file"           (for file `F1A1A1/quux`)
+    //   │ └── norf    | "file"           (for file `F1A1A1/norf`)
+    //   └── F3C3C3/   | "flow files dir" (for flow `F3C3C3`)
+    //     └── thud    | "file"           (for file `F3C3C3/thud`)
+    // ```
+
     pub fn init(path: &Path, ttl: Duration) -> std::io::Result<Filestore> {
         log::info!("initializing filestore in '{}'", path.display());
 
-        let mut dir_builder = std::fs::DirBuilder::new();
-        dir_builder.recursive(true);
+        let mut root_dir_builder = std::fs::DirBuilder::new();
+        root_dir_builder.recursive(true);
 
         #[cfg(target_family = "unix")]
         {
             use std::os::unix::fs::DirBuilderExt as _;
-            dir_builder.mode(0o700);
+            root_dir_builder.mode(0o700);
         }
 
         // TODO: Restrict folder access on Windows.
@@ -52,45 +76,45 @@ impl Filestore {
         // This seems quite involved process that involves wrangling with the
         // Windows API.
 
-        dir_builder.create(path)
+        root_dir_builder.create(path)
             .map_err(|error| std::io::Error::new(error.kind(), format! {
-                "could not create root filestore folder at '{}': {error}",
+                "could not create root dir at '{}': {error}",
                 path.display(),
             }))?;
 
         log::info!("searching for outdated filestore files");
 
         match std::fs::read_dir(path.join("files")) {
-            Ok(files_entries) => {
-                for flow_dir_entry in files_entries {
-                    let flow_dir_entry = flow_dir_entry
+            Ok(flow_files_dir_entries) => {
+                for flow_file_dir_entry in flow_files_dir_entries {
+                    let flow_files_dir_entry = flow_file_dir_entry
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not read flow files folder entry for '{}' folder: {error}",
+                            "could not read flow files dir entry for '{}': {error}",
                             path.join("files").display(),
                         }))?;
-                    let flow_dir_path = flow_dir_entry.path();
+                    let flow_files_dir_path = flow_files_dir_entry.path();
 
-                    let flow_dir_entries = std::fs::read_dir(&flow_dir_path)
+                    let file_entries = std::fs::read_dir(&flow_files_dir_path)
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not list flow files folder at '{}': {error}",
-                            flow_dir_path.display(),
+                            "could not list flow files dir at '{}': {error}",
+                            flow_files_dir_path.display(),
                         }))?;
 
-                    for flow_file_entry in flow_dir_entries {
-                        let flow_file_entry = flow_file_entry
+                    for file_entry in file_entries {
+                        let file_entry = file_entry
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not read flow file entry for '{}' folder: {error}",
-                                flow_dir_path.display(),
+                                "could not read file entry for '{}': {error}",
+                                flow_files_dir_path.display(),
                             }))?;
-                        let flow_file_path = flow_file_entry.path();
+                        let file_path = file_entry.path();
 
-                        if crate::fs::remove_file_if_old(&flow_file_path, ttl)
+                        if crate::fs::remove_file_if_old(&file_path, ttl)
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
                                 "could not clean up file at '{}': {error}",
-                                flow_file_path.display(),
+                                file_path.display(),
                             }))?
                         {
-                            log::info!("deleted outdated file '{}'", flow_file_path.display());
+                            log::info!("deleted outdated file '{}'", file_path.display());
                         }
                     }
 
@@ -100,59 +124,59 @@ impl Filestore {
                     //
                     // It is not strictly necessary but we don't want to pollute
                     // the filesystem without a reason.
-                    if crate::fs::remove_dir_if_empty(&flow_dir_path)
+                    if crate::fs::remove_dir_if_empty(&flow_files_dir_path)
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not clean up files folder at '{}': {error}",
-                            flow_dir_path.display(),
+                            "could not clean up flow files dir at '{}': {error}",
+                            flow_files_dir_path.display(),
                         }))?
                     {
-                        log::info!("deleted empty files folder '{}'", flow_dir_path.display());
+                        log::info!("deleted empty flow files dir '{}'", flow_files_dir_path.display());
                     }
                 }
             }
-            // This is fine, `files` folder might not exist if the filestore was
+            // This is fine, files folder might not exist if the filestore was
             // never used to store a file.
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
             Err(error) => return Err(std::io::Error::new(error.kind(), format! {
-                "could not read root filestore files folder at '{}': {error}",
+                "could not read files dir at '{}': {error}",
                 path.join("files").display(),
             })),
         }
         match std::fs::read_dir(path.join("parts")) {
-            Ok(parts_entries) => {
-                for flow_dir_entry in parts_entries {
-                    let flow_dir_entry = flow_dir_entry
+            Ok(flow_parts_dir_entries) => {
+                for flow_parts_dir_entry in flow_parts_dir_entries {
+                    let flow_parts_dir_entry = flow_parts_dir_entry
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not read flow parts folder entry for '{}' folder: {error}",
+                            "could not read flow parts dir entry for '{}': {error}",
                             path.join("parts").display(),
                         }))?;
-                    let flow_dir_path = flow_dir_entry.path();
+                    let flow_parts_dir_path = flow_parts_dir_entry.path();
 
-                    let flow_dir_entries = std::fs::read_dir(&flow_dir_path)
+                    let file_parts_dir_entries = std::fs::read_dir(&flow_parts_dir_path)
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not list flow parts folder at '{}': {error}",
-                            flow_dir_path.display(),
+                            "could not list flow parts dir at '{}': {error}",
+                            flow_parts_dir_path.display(),
                         }))?;
 
-                    for flow_file_entry in flow_dir_entries {
-                        let flow_file_entry = flow_file_entry
+                    for file_parts_dir_entry in file_parts_dir_entries {
+                        let file_parts_dir_entry = file_parts_dir_entry
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not read flow file part entry for '{}' folder: {error}",
-                                flow_dir_path.display(),
+                                "could not read file parts dir entry for '{}': {error}",
+                                flow_parts_dir_path.display(),
                             }))?;
-                        let flow_file_path = flow_file_entry.path();
+                        let file_parts_dir_path = file_parts_dir_entry.path();
 
-                        let flow_file_dir_entries = std::fs::read_dir(&flow_file_path)
+                        let part_entries = std::fs::read_dir(&file_parts_dir_path)
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not list flow file parts folder at '{}': {error}",
-                                flow_file_path.display(),
+                                "could not list file parts dir at '{}': {error}",
+                                file_parts_dir_path.display(),
                             }))?;
 
-                        for part_entry in flow_file_dir_entries {
+                        for part_entry in part_entries {
                             let part_entry = part_entry
                                 .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                    "could not read part entry for '{}' folder: {error}",
-                                    flow_file_path.display(),
+                                    "could not read part entry for '{}': {error}",
+                                    file_parts_dir_path.display(),
                                 }))?;
                             let part_path = part_entry.path();
 
@@ -162,39 +186,39 @@ impl Filestore {
                                     part_path.display(),
                                 }))?
                             {
-                                log::info!("delete outdated part '{}'", part_path.display());
+                                log::info!("deleted outdated part '{}'", part_path.display());
                             }
                         }
 
-                        // See similar code for `files` folder cleanup above for
+                        // See similar code for files folder cleanup above for
                         // the rationale.
-                        if crate::fs::remove_dir_if_empty(&flow_file_path)
+                        if crate::fs::remove_dir_if_empty(&file_parts_dir_path)
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not clean up parts folder at '{}': {error}",
-                                flow_file_path.display(),
+                                "could not clean up file parts dir at '{}': {error}",
+                                file_parts_dir_path.display(),
                             }))?
                         {
-                            log::info!("deleted empty parts folder '{}'", flow_file_path.display());
+                            log::info!("deleted empty file parts dir '{}'", file_parts_dir_path.display());
                         }
                     }
 
-                    // See similar code for `files` folder cleanup above for the
+                    // See similar code for files folder cleanup above for the
                     // rationale.
-                    if crate::fs::remove_dir_if_empty(&flow_dir_path)
+                    if crate::fs::remove_dir_if_empty(&flow_parts_dir_path)
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not clean up parts folder at '{}': {error}",
-                            flow_dir_path.display(),
+                            "could not clean up flow parts dir at '{}': {error}",
+                            flow_parts_dir_path.display(),
                         }))?
                     {
-                        log::info!("deleted empty parts folder '{}'", flow_dir_path.display());
+                        log::info!("deleted empty flow parts dir '{}'", flow_parts_dir_path.display());
                     }
                 }
             }
-            // This is fine, `parts` folder might not exist if the filestore was
+            // This is fine, parts folder might not exist if the filestore was
             // never used to store a part.
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
             Err(error) => return Err(std::io::Error::new(error.kind(), format! {
-                "could not read root filestore parts folder at '{}': {error}",
+                "could not read parts dir at '{}': {error}",
                 path.join("parts").display(),
             })),
         }
@@ -227,14 +251,14 @@ impl Filestore {
         // something is _really_ wrong), this is more than fine.
 
         let part_path = self.part_path(id, part.offset);
-        let part_path_dir = part_path.parent()
+        let file_parts_dir_path = part_path.parent()
             // This should never happen as part path by construction should not
             // be empty and is always placed in some folder.
             .expect("no part path parent");
-        std::fs::create_dir_all(part_path_dir)
+        std::fs::create_dir_all(file_parts_dir_path)
             .map_err(|error| std::io::Error::new(error.kind(), format! {
-                "could not create parts directory at '{}': {error}",
-                part_path_dir.display(),
+                "could not create file parts dir at '{}': {error}",
+                file_parts_dir_path.display(),
             }))?;
         std::fs::write(&part_path, &part.content)
             .map_err(|error| std::io::Error::new(error.kind(), format! {
@@ -250,10 +274,10 @@ impl Filestore {
         }
         let mut parts = Vec::<PartMetadata>::new();
 
-        for part_entry in std::fs::read_dir(part_path_dir)
+        for part_entry in std::fs::read_dir(file_parts_dir_path)
             .map_err(|error| std::io::Error::new(error.kind(), format! {
-                "could not list parts folder at '{}': {error}",
-                part_path_dir.display(),
+                "could not list file parts dir at '{}': {error}",
+                file_parts_dir_path.display(),
             }))?
         {
             let part_entry = part_entry?;
@@ -367,14 +391,14 @@ impl Filestore {
         log::info!("merging parts of '{}'", id);
 
         let file_path = self.file_path(id);
-        let file_path_dir = file_path.parent()
+        let flow_files_dir_path = file_path.parent()
             // This should never happen as file path by construction should not
             // be empty and is always placed in some folder.
             .expect("no file path parent");
-        std::fs::create_dir_all(file_path_dir)
+        std::fs::create_dir_all(flow_files_dir_path)
             .map_err(|error| std::io::Error::new(error.kind(), format! {
-                "could not create files directory at '{}': {error}",
-                file_path_dir.display(),
+                "could not create flow files dir at '{}': {error}",
+                flow_files_dir_path.display(),
             }))?;
 
         let mut file = std::fs::File::create_new(&file_path)
@@ -430,10 +454,10 @@ impl Filestore {
         }
 
         log::info!("deleting merged parts of '{}'", id);
-        std::fs::remove_dir_all(part_path_dir)
+        std::fs::remove_dir_all(file_parts_dir_path)
             .map_err(|error| std::io::Error::new(error.kind(), format! {
                 "could not delete merged parts at '{}': {error}",
-                part_path_dir.display(),
+                file_parts_dir_path.display(),
             }))?;
 
         Ok(Status::Complete)
