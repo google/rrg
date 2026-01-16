@@ -325,6 +325,37 @@ fn _remove_file_if_old(path: &Path, ttl: Duration) -> std::io::Result<bool> {
     }
 }
 
+/// Removes a directory if it is empty and does nothing if it is not.
+///
+/// This is almost identical to the standard [`std::fs::remove_dir`] except that
+/// the call does not fail with an error in case the directory is not empty.
+///
+/// Returns `Ok(true)` if the folder was empty (and was deleted) or `Ok(false)`
+/// if it was not.
+///
+/// See also [`std::fs::remove_file`] for more details on directory removal
+/// behaviour and possible errors.
+pub fn remove_dir_if_empty<P>(path: P) -> std::io::Result<bool>
+where
+    P: AsRef<Path>,
+{
+    _remove_dir_if_empty(path.as_ref())
+}
+
+fn _remove_dir_if_empty(path: &Path) -> std::io::Result<bool> {
+    match std::fs::remove_dir(path) {
+        Ok(()) => {
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {
+            Ok(false)
+        }
+        Err(error) => {
+            Err(error)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -721,5 +752,35 @@ mod tests {
         let old = remove_file_if_old(tempfile.path(), Duration::ZERO)
             .unwrap();
         assert!(old);
+    }
+
+    #[test]
+    fn remove_dir_if_empty_non_existent() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir = tempdir.path();
+
+        let error = remove_dir_if_empty(tempdir.join("foo"))
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn remove_dir_if_empty_non_empty() {
+        let tempdir = tempfile::tempdir().unwrap();
+        std::fs::write(tempdir.path().join("foo"), b"")
+            .unwrap();
+
+        let empty = remove_dir_if_empty(tempdir.path())
+            .unwrap();
+        assert!(!empty);
+    }
+
+    #[test]
+    fn remove_dir_if_empty_empty() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let empty = remove_dir_if_empty(tempdir.path())
+            .unwrap();
+        assert!(empty);
     }
 }

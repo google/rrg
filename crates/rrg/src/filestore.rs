@@ -102,17 +102,13 @@ impl Filestore {
                     //
                     // It is not strictly necessary but we don't want to pollute
                     // the filesystem without a reason.
-                    match std::fs::remove_dir(&flow_dir_path) {
-                        Ok(()) => {
-                            log::info!("deleted empty file folder '{}'", flow_dir_path.display());
-                        }
-                        // This is fine, we actually expect most directories to
-                        // be not empty.
-                        Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
-                        Err(error) => return Err(std::io::Error::new(error.kind(), format! {
-                            "could not remove empty files folder at '{}': {error}",
+                    if crate::fs::remove_dir_if_empty(&flow_dir_path)
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not clean up files folder at '{}': {error}",
                             flow_dir_path.display(),
-                        })),
+                        }))?
+                    {
+                        log::info!("deleted empty files folder '{}'", flow_dir_path.display());
                     }
                 }
             }
@@ -172,31 +168,27 @@ impl Filestore {
                             }
                         }
 
-                        match std::fs::remove_dir(&flow_file_path) {
-                            Ok(()) => {
-                                log::info!("deleted empty parts folder '{}'", flow_file_path.display());
-                            }
-                            // This is fine, we actually expect most directories to
-                            // be not empty.
-                            Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
-                            Err(error) => return Err(std::io::Error::new(error.kind(), format! {
-                                "could not remove empty parts folder at '{}': {error}",
+                        // See similar code for `files` folder cleanup above for
+                        // the rationale.
+                        if crate::fs::remove_dir_if_empty(&flow_file_path)
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not clean up parts folder at '{}': {error}",
                                 flow_file_path.display(),
-                            })),
+                            }))?
+                        {
+                            log::info!("deleted empty parts folder '{}'", flow_file_path.display());
                         }
                     }
 
-                    match std::fs::remove_dir(&flow_dir_path) {
-                        Ok(()) => {
-                            log::info!("deleted empty parts folder '{}'", flow_dir_path.display());
-                        }
-                        // This is fine, we actually expect most directories to
-                        // be not empty.
-                        Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
-                        Err(error) => return Err(std::io::Error::new(error.kind(), format! {
-                            "could not remove empty parts folder at '{}': {error}",
+                    // See similar code for `files` folder cleanup above for the
+                    // rationale.
+                    if crate::fs::remove_dir_if_empty(&flow_dir_path)
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not clean up parts folder at '{}': {error}",
                             flow_dir_path.display(),
-                        })),
+                        }))?
+                    {
+                        log::info!("deleted empty parts folder '{}'", flow_dir_path.display());
                     }
                 }
             }
