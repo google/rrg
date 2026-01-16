@@ -581,8 +581,6 @@ mod tests {
         assert_eq!(parts_entries.count(), 0);
     }
 
-    // TODO: Add a test for an empty file.
-
     #[test]
     fn store_single_file_single_part() {
         let tempdir = tempfile::tempdir()
@@ -609,6 +607,34 @@ mod tests {
         let foo_contents = std::fs::read(filestore.path(&foo_id).unwrap())
             .unwrap();
         assert_eq!(foo_contents, b"FOOBARBAZ");
+    }
+
+    #[test]
+    fn store_single_file_single_part_empty() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        assert_eq! {
+            filestore.store(&foo_id, Part {
+                offset: 0,
+                content: b"".to_vec(),
+                file_len: 0,
+                file_sha256: sha256(b""),
+            }).unwrap(),
+            Status::Complete,
+        };
+
+        let foo_contents = std::fs::read(filestore.path(&foo_id).unwrap())
+            .unwrap();
+        assert_eq!(foo_contents, b"");
     }
 
     #[test]
@@ -707,6 +733,52 @@ mod tests {
         let foo_contents = std::fs::read(filestore.path(&foo_id).unwrap())
             .unwrap();
         assert_eq!(foo_contents, b"FOOBARBAZ");
+    }
+
+    #[test]
+    fn store_single_file_multiple_parts_empty() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        assert_eq! {
+            filestore.store(&foo_id, Part {
+                offset: 0,
+                content: b"FOO".to_vec(),
+                file_len: b"FOOBAR".len() as u64,
+                file_sha256: sha256(b"FOO"),
+            }).unwrap(),
+            Status::PendingEof,
+        };
+        assert_eq! {
+            filestore.store(&foo_id, Part {
+                offset: b"FOO".len() as u64,
+                content: b"".to_vec(),
+                file_len: b"FOOBAR".len() as u64,
+                file_sha256: sha256(b"FOOBAR"),
+            }).unwrap(),
+            Status::PendingEof,
+        };
+        assert_eq! {
+            filestore.store(&foo_id, Part {
+                offset: b"FOO".len() as u64,
+                content: b"BAR".to_vec(),
+                file_len: b"FOOBAR".len() as u64,
+                file_sha256: sha256(b"FOOBAR"),
+            }).unwrap(),
+            Status::Complete,
+        };
+
+        let foo_contents = std::fs::read(filestore.path(&foo_id).unwrap())
+            .unwrap();
+        assert_eq!(foo_contents, b"FOOBAR");
     }
 
     #[test]
