@@ -61,7 +61,6 @@ impl Filestore {
 
         log::info!("searching for outdated filestore files");
 
-        use std::io::ErrorKind;
         match std::fs::read_dir(path.join("files")) {
             Ok(files_entries) => {
                 for flow_dir_entry in files_entries {
@@ -114,7 +113,7 @@ impl Filestore {
             }
             // This is fine, `files` folder might not exist if the filestore was
             // never used to store a file.
-            Err(error) if error.kind() == ErrorKind::NotFound => (),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
             Err(error) => return Err(std::io::Error::new(error.kind(), format! {
                 "could not read root filestore files folder at '{}': {error}",
                 path.join("files").display(),
@@ -194,7 +193,7 @@ impl Filestore {
             }
             // This is fine, `parts` folder might not exist if the filestore was
             // never used to store a part.
-            Err(error) if error.kind() == ErrorKind::NotFound => (),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
             Err(error) => return Err(std::io::Error::new(error.kind(), format! {
                 "could not read root filestore parts folder at '{}': {error}",
                 path.join("parts").display(),
