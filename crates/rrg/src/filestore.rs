@@ -103,7 +103,9 @@ impl Filestore {
                     // It is not strictly necessary but we don't want to pollute
                     // the filesystem without a reason.
                     match std::fs::remove_dir(&flow_dir_path) {
-                        Ok(()) => (),
+                        Ok(()) => {
+                            log::info!("deleted empty file folder '{}'", flow_dir_path.display());
+                        }
                         // This is fine, we actually expect most directories to
                         // be not empty.
                         Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
@@ -171,7 +173,9 @@ impl Filestore {
                         }
 
                         match std::fs::remove_dir(&flow_file_path) {
-                            Ok(()) => (),
+                            Ok(()) => {
+                                log::info!("deleted empty parts folder '{}'", flow_file_path.display());
+                            }
                             // This is fine, we actually expect most directories to
                             // be not empty.
                             Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
@@ -183,7 +187,9 @@ impl Filestore {
                     }
 
                     match std::fs::remove_dir(&flow_dir_path) {
-                        Ok(()) => (),
+                        Ok(()) => {
+                            log::info!("deleted empty parts folder '{}'", flow_dir_path.display());
+                        }
                         // This is fine, we actually expect most directories to
                         // be not empty.
                         Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
