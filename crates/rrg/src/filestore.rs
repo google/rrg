@@ -15,7 +15,7 @@ pub struct Part {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Status {
     Complete,
-    PendingPart {
+    Pending {
         offset: u64,
         len: u64,
     },
@@ -304,7 +304,7 @@ impl Filestore {
             // This should never happen as we verified `parts` length above.
             .expect("no parts");
         if part_first.offset != 0 {
-            return Ok(Status::PendingPart {
+            return Ok(Status::Pending {
                 offset: 0,
                 len: part_first.offset,
             })
@@ -314,7 +314,7 @@ impl Filestore {
             // This should never happen as we verified `parts` length above.
             .expect("no parts");
         if part_last.offset + part_last.len != part.file_len {
-            return Ok(Status::PendingPart {
+            return Ok(Status::Pending {
                 offset: part_last.offset + part_last.len,
                 len: part.file_len - (part_last.offset + part_last.len),
             });
@@ -323,7 +323,7 @@ impl Filestore {
         for (part_curr, part_next) in parts.iter().zip(parts.iter().skip(1)) {
             match (part_curr.offset + part_curr.len).cmp(&part_next.offset) {
                 std::cmp::Ordering::Equal => (),
-                std::cmp::Ordering::Less => return Ok(Status::PendingPart {
+                std::cmp::Ordering::Less => return Ok(Status::Pending {
                         offset: part_curr.offset + part_curr.len,
                         len: part_curr.offset + part_curr.len - part_curr.offset,
                 }),
@@ -659,7 +659,7 @@ mod tests {
                 file_len: b"FOOBARBAZ".len() as u64,
                 file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
-            Status::PendingPart {
+            Status::Pending {
                 offset: b"FOO".len() as u64,
                 len: b"BARBAZ".len() as u64,
             },
@@ -671,7 +671,7 @@ mod tests {
                 file_len: b"FOOBARBAZ".len() as u64,
                 file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
-            Status::PendingPart {
+            Status::Pending {
                 offset: b"FOOBAR".len() as u64,
                 len: b"BAZ".len() as u64,
             },
@@ -711,7 +711,7 @@ mod tests {
                 file_len: b"FOOBARBAZ".len() as u64,
                 file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
-            Status::PendingPart {
+            Status::Pending {
                 offset: 0,
                 len: b"FOOBAR".len() as u64,
             },
@@ -723,7 +723,7 @@ mod tests {
                 file_len: b"FOOBARBAZ".len() as u64,
                 file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
-            Status::PendingPart {
+            Status::Pending {
                 offset: 0,
                 len: b"FOO".len() as u64,
             },
@@ -763,7 +763,7 @@ mod tests {
                 file_len: b"FOOBAR".len() as u64,
                 file_sha256: sha256(b"FOO"),
             }).unwrap(),
-            Status::PendingPart {
+            Status::Pending {
                 offset: b"FOO".len() as u64,
                 len: b"BAR".len() as u64,
             },
@@ -775,7 +775,7 @@ mod tests {
                 file_len: b"FOOBAR".len() as u64,
                 file_sha256: sha256(b"FOOBAR"),
             }).unwrap(),
-            Status::PendingPart {
+            Status::Pending {
                 offset: b"FOO".len() as u64,
                 len: b"BAR".len() as u64,
             },
