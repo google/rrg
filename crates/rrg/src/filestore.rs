@@ -243,16 +243,6 @@ impl Filestore {
                 part_path.display(),
              }))?;
 
-        if part.offset + part.content.len() as u64 == part.file_len {
-            log::info!("creating EOF marker for '{}'", id);
-
-            std::fs::write(self.part_path(id, part.file_len), b"")
-                .map_err(|error| std::io::Error::new(error.kind(), format! {
-                    "could not write EOF marker to '{}': {error}",
-                    self.part_path(id, part.file_len).display(),
-                }))?;
-        }
-
         log::info!("checking stored parts for '{}'", id);
 
         struct PartMetadata {
@@ -324,7 +314,7 @@ impl Filestore {
         let part_last = parts.last()
             // This should never happen as we verified `parts` length above.
             .expect("no parts");
-        if part_last.len != 0 {
+        if part_last.offset + part_last.len != part.file_len {
             return Ok(Status::PendingEof);
         }
 
