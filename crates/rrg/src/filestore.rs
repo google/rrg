@@ -94,13 +94,12 @@ impl Filestore {
                         }))?;
                     let flow_files_dir_path = flow_files_dir_entry.path();
 
-                    let file_entries = std::fs::read_dir(&flow_files_dir_path)
+                    for file_entry in std::fs::read_dir(&flow_files_dir_path)
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
                             "could not list flow files dir at '{}': {error}",
                             flow_files_dir_path.display(),
-                        }))?;
-
-                    for file_entry in file_entries {
+                        }))?
+                    {
                         let file_entry = file_entry
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
                                 "could not read file entry for '{}': {error}",
@@ -152,13 +151,12 @@ impl Filestore {
                         }))?;
                     let flow_parts_dir_path = flow_parts_dir_entry.path();
 
-                    let file_parts_dir_entries = std::fs::read_dir(&flow_parts_dir_path)
+                    for file_parts_dir_entry in std::fs::read_dir(&flow_parts_dir_path)
                         .map_err(|error| std::io::Error::new(error.kind(), format! {
                             "could not list flow parts dir at '{}': {error}",
                             flow_parts_dir_path.display(),
-                        }))?;
-
-                    for file_parts_dir_entry in file_parts_dir_entries {
+                        }))?
+                    {
                         let file_parts_dir_entry = file_parts_dir_entry
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
                                 "could not read file parts dir entry for '{}': {error}",
@@ -166,13 +164,12 @@ impl Filestore {
                             }))?;
                         let file_parts_dir_path = file_parts_dir_entry.path();
 
-                        let part_entries = std::fs::read_dir(&file_parts_dir_path)
+                        for part_entry in std::fs::read_dir(&file_parts_dir_path)
                             .map_err(|error| std::io::Error::new(error.kind(), format! {
                                 "could not list file parts dir at '{}': {error}",
                                 file_parts_dir_path.display(),
-                            }))?;
-
-                        for part_entry in part_entries {
+                            }))?
+                        {
                             let part_entry = part_entry
                                 .map_err(|error| std::io::Error::new(error.kind(), format! {
                                     "could not read part entry for '{}': {error}",
