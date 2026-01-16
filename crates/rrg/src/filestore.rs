@@ -310,16 +310,6 @@ impl Filestore {
             })
         }
 
-        let part_last = parts.last()
-            // This should never happen as we verified `parts` length above.
-            .expect("no parts");
-        if part_last.offset + part_last.len != part.file_len {
-            return Ok(Status::Pending {
-                offset: part_last.offset + part_last.len,
-                len: part.file_len - (part_last.offset + part_last.len),
-            });
-        }
-
         for (part_curr, part_next) in parts.iter().zip(parts.iter().skip(1)) {
             match (part_curr.offset + part_curr.len).cmp(&part_next.offset) {
                 std::cmp::Ordering::Equal => (),
@@ -340,6 +330,16 @@ impl Filestore {
                     ))
                 }
             }
+        }
+
+        let part_last = parts.last()
+            // This should never happen as we verified `parts` length above.
+            .expect("no parts");
+        if part_last.offset + part_last.len != part.file_len {
+            return Ok(Status::Pending {
+                offset: part_last.offset + part_last.len,
+                len: part.file_len - (part_last.offset + part_last.len),
+            });
         }
 
         log::info!("merging parts of '{}'", id);
