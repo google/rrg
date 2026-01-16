@@ -15,7 +15,6 @@ pub struct Part {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Status {
     Complete,
-    PendingEof,
     PendingPart {
         offset: u64,
         len: u64,
@@ -315,7 +314,10 @@ impl Filestore {
             // This should never happen as we verified `parts` length above.
             .expect("no parts");
         if part_last.offset + part_last.len != part.file_len {
-            return Ok(Status::PendingEof);
+            return Ok(Status::PendingPart {
+                offset: part_last.offset + part_last.len,
+                len: part.file_len - (part_last.offset + part_last.len),
+            });
         }
 
         for (part_curr, part_next) in parts.iter().zip(parts.iter().skip(1)) {
@@ -657,7 +659,10 @@ mod tests {
                 file_len: b"FOOBARBAZ".len() as u64,
                 file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
-            Status::PendingEof,
+            Status::PendingPart {
+                offset: b"FOO".len() as u64,
+                len: b"BARBAZ".len() as u64,
+            },
         };
         assert_eq! {
             filestore.store(&foo_id, Part {
@@ -666,7 +671,10 @@ mod tests {
                 file_len: b"FOOBARBAZ".len() as u64,
                 file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
-            Status::PendingEof,
+            Status::PendingPart {
+                offset: b"FOOBAR".len() as u64,
+                len: b"BAZ".len() as u64,
+            },
         };
         assert_eq! {
             filestore.store(&foo_id, Part {
@@ -755,7 +763,10 @@ mod tests {
                 file_len: b"FOOBAR".len() as u64,
                 file_sha256: sha256(b"FOO"),
             }).unwrap(),
-            Status::PendingEof,
+            Status::PendingPart {
+                offset: b"FOO".len() as u64,
+                len: b"BAR".len() as u64,
+            },
         };
         assert_eq! {
             filestore.store(&foo_id, Part {
@@ -764,7 +775,10 @@ mod tests {
                 file_len: b"FOOBAR".len() as u64,
                 file_sha256: sha256(b"FOOBAR"),
             }).unwrap(),
-            Status::PendingEof,
+            Status::PendingPart {
+                offset: b"FOO".len() as u64,
+                len: b"BAR".len() as u64,
+            },
         };
         assert_eq! {
             filestore.store(&foo_id, Part {
