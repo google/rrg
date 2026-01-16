@@ -132,7 +132,55 @@ impl Filestore {
                         }))?;
                     let flow_dir_path = flow_dir_entry.path();
 
-                    // TODO: Add support for removing outdated parts.
+                    let flow_dir_entries = std::fs::read_dir(&flow_dir_path)
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not list flow parts folder at '{}': {error}",
+                            flow_dir_path.display(),
+                        }))?;
+
+                    for flow_file_entry in flow_dir_entries {
+                        let flow_file_entry = flow_file_entry
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not read flow file part entry for '{}' folder: {error}",
+                                flow_dir_path.display(),
+                            }))?;
+                        let flow_file_path = flow_file_entry.path();
+
+                        let flow_file_dir_entries = std::fs::read_dir(&flow_file_path)
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not list flow file parts folder at '{}': {error}",
+                                flow_file_path.display(),
+                            }))?;
+
+                        for part_entry in flow_file_dir_entries {
+                            let part_entry = part_entry
+                                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                    "could not read part entry for '{}' folder: {error}",
+                                    flow_file_path.display(),
+                                }))?;
+                            let part_path = part_entry.path();
+
+                            if crate::fs::remove_file_if_old(&part_path, ttl)
+                                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                    "could not clean up part at '{}': {error}",
+                                    part_path.display(),
+                                }))?
+                            {
+                                log::info!("delete outdated part '{}'", part_path.display());
+                            }
+                        }
+
+                        match std::fs::remove_dir(&flow_file_path) {
+                            Ok(()) => (),
+                            // This is fine, we actually expect most directories to
+                            // be not empty.
+                            Err(error) if error.kind() == ErrorKind::DirectoryNotEmpty => (),
+                            Err(error) => return Err(std::io::Error::new(error.kind(), format! {
+                                "could not remove empty parts folder at '{}': {error}",
+                                flow_file_path.display(),
+                            })),
+                        }
+                    }
 
                     match std::fs::remove_dir(&flow_dir_path) {
                         Ok(()) => (),
@@ -510,6 +558,40 @@ mod tests {
         let files_entries = std::fs::read_dir(tempdir.path().join("files"))
             .unwrap();
         assert_eq!(files_entries.count(), 0);
+    }
+
+    #[test]
+    fn init_cleanup_outdated_parts() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        filestore.store(&foo_id, Part {
+            offset: 0,
+            content: b"FOO".to_vec(),
+            file_len: b"FOOBAR".len() as u64,
+            file_sha256: sha256(b"FOOBAR"),
+        }).unwrap();
+
+        let parts_entries = std::fs::read_dir(tempdir.path().join("parts"))
+            .unwrap();
+        assert_eq!(parts_entries.count(), 1);
+
+        // We initialize with a TTL of 0 which effectively means that all parts
+        // are outdated.
+        Filestore::init(tempdir.path(), Duration::ZERO)
+            .unwrap();
+
+        let parts_entries = std::fs::read_dir(tempdir.path().join("parts"))
+            .unwrap();
+        assert_eq!(parts_entries.count(), 0);
     }
 
     // TODO: Add a test for an empty file.
