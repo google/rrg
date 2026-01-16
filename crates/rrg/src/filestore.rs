@@ -546,7 +546,7 @@ mod tests {
         }).unwrap();
         filestore.delete(&foo_id).unwrap();
 
-        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+        Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
 
         let files_entries = std::fs::read_dir(tempdir.path().join("files"))
