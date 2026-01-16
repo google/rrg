@@ -347,11 +347,21 @@ impl Filestore {
         let part_last = parts.last()
             // This should never happen as we verified `parts` length above.
             .expect("no parts");
-        if part_last.offset + part_last.len != part.file_len {
-            return Ok(Status::Pending {
+        match (part_last.offset + part_last.len).cmp(&part.file_len) {
+            std::cmp::Ordering::Equal => (),
+            std::cmp::Ordering::Less => return Ok(Status::Pending {
                 offset: part_last.offset + part_last.len,
                 len: part.file_len - (part_last.offset + part_last.len),
-            });
+            }),
+            std::cmp::Ordering::Greater => return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format! {
+                    "part [{}; {}) exceedes file length ({})",
+                    part_last.offset,
+                    part_last.offset + part_last.len,
+                    part.file_len,
+                },
+            )),
         }
 
         log::info!("merging parts of '{}'", id);
@@ -916,6 +926,28 @@ mod tests {
             content: vec![0xf0; 1337],
             file_len: b"FOOBAR".len() as u64,
             file_sha256: sha256(b"FOOBAR"),
+        }).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn store_file_len_underflow() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        let error = filestore.store(&foo_id, Part {
+            offset: 0,
+            content: b"FOOBAR".to_vec(),
+            file_len: b"FOO".len() as u64,
+            file_sha256: sha256(b"FOO"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
