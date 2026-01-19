@@ -1,6 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration};
 
+pub fn init<P>(path: P, ttl: Duration) -> std::io::Result<Filestore>
+where
+    P: AsRef<Path>,
+{
+    Filestore::init(path.as_ref(), ttl)
+}
+
 pub struct Filestore {
     path: PathBuf,
 }
