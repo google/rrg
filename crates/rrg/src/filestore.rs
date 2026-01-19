@@ -17,12 +17,6 @@ where
     Filestore::init(path.as_ref(), ttl)
 }
 
-/// Handle to a disk-backed filestore.
-pub struct Filestore {
-    /// Root folder at which the filestore is initialized.
-    path: PathBuf,
-}
-
 /// Part of the file to be stored in the filestore.
 ///
 /// This is used to initialize a larger file out of smaller parts. See the
@@ -86,6 +80,12 @@ impl std::fmt::Display for Id {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:X}/{}", self.flow_id, self.file_id)
     }
+}
+
+/// Handle to a disk-backed filestore.
+pub struct Filestore {
+    /// Root folder at which the filestore is initialized.
+    path: PathBuf,
 }
 
 impl Filestore {
