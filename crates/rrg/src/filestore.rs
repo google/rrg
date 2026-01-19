@@ -125,7 +125,7 @@ impl Filestore {
     /// not complete. In such cases there is no guarantee about the state of the
     /// the filestore on disk.
     pub fn init(path: &Path, ttl: Duration) -> std::io::Result<Filestore> {
-        log::info!("initializing filestore in '{}'", path.display());
+        log::info!("setting up filestore dir in '{}'", path.display());
 
         let mut root_dir_builder = std::fs::DirBuilder::new();
         root_dir_builder.recursive(true);
