@@ -32,9 +32,9 @@ pub struct Filestore {
 /// be deleted.
 pub struct Part {
     /// Offset within the file of the content this part consits of.
-    offset: u64,
+    pub offset: u64,
     /// Actual content of the file that this part consists of.
-    content: Vec<u8>,
+    pub content: Vec<u8>,
     /// Total size of the file (in bytes).
     ///
     /// This is used to determined whether we received all the parts of the
@@ -42,7 +42,7 @@ pub struct Part {
     ///
     /// All parts belonging to the same file are expected to use the same total
     /// length value. In case of discrepancies, arbitrary value will be used.
-    file_len: u64,
+    pub file_len: u64,
     /// SHA-256 digest of the content of the whole file.
     ///
     /// This is used to verify the integrity of the transferred file once all
@@ -50,7 +50,7 @@ pub struct Part {
     ///
     /// All parts belonging to the same file are expected to have the same
     /// digest. In case of discrepancies, arbitrary value will be used.
-    file_sha256: [u8; 32],
+    pub file_sha256: [u8; 32],
 }
 
 /// Status of a filestore file.
@@ -74,11 +74,11 @@ pub enum Status {
 /// Identifier of a filestore file.
 pub struct Id {
     /// Identifier of the flow which owns the file.
-    flow_id: u64,
+    pub flow_id: u64,
     /// Name of the file.
     ///
     /// This name must be unique within the flow that owns the file.
-    file_id: String,
+    pub file_id: String,
 }
 
 impl std::fmt::Display for Id {
