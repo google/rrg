@@ -321,10 +321,23 @@ fn parse_socket_addr_v6(string: &str) -> Result<std::net::SocketAddrV6, ParseSoc
         return Err(ParseSocketAddrError::InvalidIp.into());
     }
 
-    let octets_a = parse_octets(&ip_addr_str[00..08])?;
-    let octets_b = parse_octets(&ip_addr_str[08..16])?;
-    let octets_c = parse_octets(&ip_addr_str[16..24])?;
-    let octets_d = parse_octets(&ip_addr_str[24..32])?;
+    // TODO: https://github.com/rust-lang/rust/issues/134821)
+    //
+    // Once `int_from_ascii` is stable we can refactor `parse_octets` to use
+    // ASCII strings instead of slicing `str`.
+    let octets_a_str = ip_addr_str.get(00..08)
+        .ok_or(ParseSocketAddrError::InvalidIp)?;
+    let octets_b_str = ip_addr_str.get(08..16)
+        .ok_or(ParseSocketAddrError::InvalidIp)?;
+    let octets_c_str = ip_addr_str.get(16..24)
+        .ok_or(ParseSocketAddrError::InvalidIp)?;
+    let octets_d_str = ip_addr_str.get(24..32)
+        .ok_or(ParseSocketAddrError::InvalidIp)?;
+
+    let octets_a = parse_octets(octets_a_str)?;
+    let octets_b = parse_octets(octets_b_str)?;
+    let octets_c = parse_octets(octets_c_str)?;
+    let octets_d = parse_octets(octets_d_str)?;
 
     let ip_addr = std::net::Ipv6Addr::from([
         octets_a[0], octets_a[1], octets_a[2], octets_a[3],
@@ -685,6 +698,16 @@ mod tests {
     #[test]
     fn parse_socket_addr_v6_invalid_ip() {
         let error = parse_socket_addr_v6("foobar:0000")
+            .unwrap_err();
+
+        assert_eq!(error, ParseSocketAddrError::InvalidIp);
+    }
+
+    #[test]
+    fn parse_socket_addr_v6_invalid_format_unicode() {
+        // We use `ą` (2 bytes in UTF-8) at the octet boundary. Parser should
+        // yield an error but not panic.
+        let error = parse_socket_addr_v6("0000000ą00000000000000000000000:0000")
             .unwrap_err();
 
         assert_eq!(error, ParseSocketAddrError::InvalidIp);
