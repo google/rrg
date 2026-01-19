@@ -1,6 +1,15 @@
+//! Implementation of the on-disk filestore.
+//!
+//! Filestore is an abstraction over the platform's filesystem that allows for
+//! cross-process multi-part file storage, access and automatic cleanup.
+
 use std::path::{Path, PathBuf};
 use std::time::{Duration};
 
+/// Initializes the filestore at the specified path with the given file TTL.
+///
+/// See [`Filestore::init`] for more details as this function is just a shortcut
+/// for it.
 pub fn init<P>(path: P, ttl: Duration) -> std::io::Result<Filestore>
 where
     P: AsRef<Path>,
@@ -8,28 +17,67 @@ where
     Filestore::init(path.as_ref(), ttl)
 }
 
+/// Handle to a disk-backed filestore.
 pub struct Filestore {
+    /// Root folder at which the filestore is initialized.
     path: PathBuf,
 }
 
+/// Part of the file to be stored in the filestore.
+///
+/// This is used to initialize a larger file out of smaller parts. See the
+/// [`Filestore::store`] method for details.
+///
+/// Parts must form a file within the filestore TTL limit, otherwise they will
+/// be deleted.
 pub struct Part {
+    /// Offset within the file of the content this part consits of.
     offset: u64,
+    /// Actual content of the file that this part consists of.
     content: Vec<u8>,
+    /// Total size of the file (in bytes).
+    ///
+    /// This is used to determined whether we received all the parts of the
+    /// file.
+    ///
+    /// All parts belonging to the same file are expected to use the same total
+    /// length value. In case of discrepancies, arbitrary value will be used.
     file_len: u64,
+    /// SHA-256 digest of the content of the whole file.
+    ///
+    /// This is used to verify the integrity of the transferred file once all
+    /// parts are ready.
+    ///
+    /// All parts belonging to the same file are expected to have the same
+    /// digest. In case of discrepancies, arbitrary value will be used.
     file_sha256: [u8; 32],
 }
 
+/// Status of a filestore file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Status {
+    /// All the parts were delivered, the file is ready to be used.
+    ///
+    /// One can use [`Filestore::path`] to retrieve the filesystem path to the
+    /// completed file.
     Complete,
+    /// More parts are needed to complete the transfer.
+    ///
+    /// The `offset` and `len` values are given for arbitrary part of the file
+    /// that is still missing.
     Pending {
         offset: u64,
         len: u64,
     },
 }
 
+/// Identifier of a filestore file.
 pub struct Id {
+    /// Identifier of the flow which owns the file.
     flow_id: u64,
+    /// Name of the file.
+    ///
+    /// This name must be unique within the flow that owns the file.
     file_id: String,
 }
 
@@ -66,6 +114,16 @@ impl Filestore {
     //     └── thud    | "file"           (for file `F3C3C3/thud`)
     // ```
 
+    /// Initializes the filestore at the specified path with the given file TTL.
+    ///
+    /// This function will cleanup any outdated files, file parts and no longer
+    /// needed folders within the filestore.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if any underlying disk operation can-
+    /// not complete. In such cases there is no guarantee about the state of the
+    /// the filestore on disk.
     pub fn init(path: &Path, ttl: Duration) -> std::io::Result<Filestore> {
         log::info!("initializing filestore in '{}'", path.display());
 
@@ -232,6 +290,20 @@ impl Filestore {
         })
     }
 
+    /// Stores a part of the specified file in the filestore.
+    ///
+    /// Returns [`Status::Complete`] if the part completed the file from that
+    /// were already stored and the file is now ready to be used (one can use
+    /// [`Filestore::path`] method to get the path to the stored file).
+    ///
+    /// Returns [`Status::Pending`] if more parts need to be stored for the file
+    /// to be complete.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if any underlying disk operation
+    /// can't complete. In such cases there is no guarantee about the state of
+    /// the file on disk and it should not be used again.
     pub fn store(&self, id: &Id, part: Part) -> std::io::Result<Status> {
         log::info!("storing part at {} for '{}'", part.offset, id);
 
@@ -467,6 +539,16 @@ impl Filestore {
         Ok(Status::Complete)
     }
 
+    /// Deletes the specified file from the filestore.
+    ///
+    /// The file must be complete in order to be deleted (file parts cannot be
+    /// removed).
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if any underlying disk operation
+    /// can't complete. In such cases there is no guarantee about the state of
+    /// the file on disk and it should not be used again.
     pub fn delete(&self, id: &Id) -> std::io::Result<()> {
         std::fs::remove_file(self.file_path(id))
             .map_err(|error| std::io::Error::new(error.kind(), format! {
@@ -477,6 +559,16 @@ impl Filestore {
         Ok(())
     }
 
+    /// Returns an absolute filesystem path to the specified file.
+    ///
+    /// The file must be complete in order to be accessed (file parts cannot be
+    /// accessed in any way).
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if any underlying disk operation
+    /// can't complete. In such cases there is no guarantee about the state of
+    /// the file on disk and it should not be used again.
     pub fn path(&self, id: &Id) -> std::io::Result<PathBuf> {
         let file_path = self.file_path(id);
 
