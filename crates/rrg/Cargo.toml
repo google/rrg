@@ -27,6 +27,7 @@ default = [
     "action-query_wmi",
     "action-execute_signed_command",
     "action-dump_process_memory",
+    "action-store_filestore_part",
 ]
 
 action-get_system_metadata = []
@@ -59,6 +60,7 @@ action-execute_signed_command = []
 action-execute_signed_command-preverified = ["action-execute_signed_command"]
 action-dump_process_memory = ["dep:windows-sys"]
 action-scan_memory_yara = ["action-dump_process_memory", "dep:yara-x"]
+action-store_filestore_part = []
 
 test-setfattr = []
 test-chattr = []

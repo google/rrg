@@ -61,6 +61,8 @@ pub enum Action {
     DumpProcessMemory,
     /// Scan the contents of a specified process' memory for matching patterns using YARA.
     ScanProcessMemoryYara,
+    /// Store part of a file to the local filestore.
+    StoreFilestorePart,
 }
 
 impl std::fmt::Display for Action {
@@ -91,6 +93,7 @@ impl std::fmt::Display for Action {
             Action::ExecuteSignedCommand => write!(fmt, "execute_signed_command"),
             Action::DumpProcessMemory => write!(fmt, "dump_process_memory"),
             Action::ScanProcessMemoryYara => write!(fmt, "scan_memory_yara"),
+            Action::StoreFilestorePart => write!(fmt, "store_filestore_part"),
         }
     }
 }
@@ -147,6 +150,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             DUMP_PROCESS_MEMORY => Ok(Action::DumpProcessMemory),
             GET_FILESYSTEM_TIMELINE_TSK => Ok(Action::GetFilesystemTimelineTsk),
             SCAN_PROCESS_MEMORY_YARA => Ok(Action::ScanProcessMemoryYara),
+            STORE_FILESTORE_PART => Ok(Action::StoreFilestorePart),
             _ => {
                 let value = protobuf::Enum::value(&proto);
                 Err(UnknownAction { value })

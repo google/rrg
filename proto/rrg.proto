@@ -62,6 +62,8 @@ enum Action {
   GET_FILE_CONTENTS_KMX = 23;
   // Get metadata of the specified file using Keramics.
   GET_FILE_METADATA_KMX = 24;
+  // Store part of a file to the local filestore.
+  STORE_FILESTORE_PART = 25;
 
   // TODO: Define more actions that should be supported.
 
