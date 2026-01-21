@@ -53,6 +53,35 @@ fn main() {
         info!("pinging thread is disabled");
     }
 
+    let filestore = match &args.filestore_dir {
+        Some(filestore_dir) => {
+            info!("initializing filestore");
+
+            match rrg::filestore::init(filestore_dir, args.filestore_ttl) {
+                Ok(filestore) => {
+                    info!("initialized filestore");
+                    Some(filestore)
+                }
+                Err(error) => {
+                    // Even if we failed to initialize filestore, RRG can still
+                    // operate unless filestore actions are invoked, so we just
+                    // log the error and carry on.
+                    //
+                    // If a filestore action is invoked, the action will fail
+                    // and notify the parent flow about the issue.
+                    error!("failed to initialize filestore: {error}");
+                    None
+                }
+            }
+        }
+        None => {
+            info!("filestore disabled");
+            None
+        }
+    };
+    // TODO: Use filestore somehow.
+    drop(filestore);
+
     info!("listening for messages");
     loop {
         let request = rrg::Request::receive(args.heartbeat_rate);
