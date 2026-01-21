@@ -29,6 +29,8 @@ pub enum ErrorKind {
     NetworkBytesLimitExceeded,
     /// Action execution crossed the allowed real (wall) time limit.
     RealTimeLimitExceeded,
+    /// Filestore operation was requested but it is not available.
+    FilestoreUnavailable,
 }
 
 impl Error {
@@ -92,6 +94,12 @@ impl std::fmt::Display for Error {
             }
             RealTimeLimitExceeded => {
                 write!(fmt, "real time limit exceeded: {}", self.error)
+            }
+            FilestoreUnavailable => {
+                // `self.error` is an instance of `FilestoreUnavailableError`
+                // which contains meaningful message, we don't need to provide
+                // it ourselves here.
+                write!(fmt, "{}", self.error)
             }
         }
     }
@@ -158,6 +166,7 @@ impl From<ErrorKind> for rrg_proto::rrg::status::error::Type {
             FilterFailure => Self::FILTER_FAILURE,
             NetworkBytesLimitExceeded => Self::NETWORK_BYTES_SENT_LIMIT_EXCEEDED,
             RealTimeLimitExceeded => Self::REAL_TIME_LIMIT_EXCEEDED,
+            FilestoreUnavailable => Self::FILESTORE_UNAVAILABLE,
         }
     }
 }
@@ -241,6 +250,29 @@ impl From<RealTimeLimitExceededError> for Error {
     fn from(error: RealTimeLimitExceededError) -> Error {
         Error {
             kind: ErrorKind::RealTimeLimitExceeded,
+            error: Box::new(error),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FilestoreUnavailableError;
+
+impl std::fmt::Display for FilestoreUnavailableError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "filestore not available")
+    }
+}
+
+impl std::error::Error for FilestoreUnavailableError {
+}
+
+impl From<FilestoreUnavailableError> for Error {
+
+    fn from(error: FilestoreUnavailableError) -> Error {
+        Error {
+            kind: ErrorKind::FilestoreUnavailable,
             error: Box::new(error),
         }
     }

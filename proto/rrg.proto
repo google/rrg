@@ -163,6 +163,8 @@ message Status {
       INVALID_REAL_TIME_LIMIT = 9;
       // Filter specified in the request is invalid.
       INVALID_FILTER = 10;
+      // Filestore operation was requested but it is not available.
+      FILESTORE_UNAVAILABLE = 12;
     }
 
     // Type of the error.
