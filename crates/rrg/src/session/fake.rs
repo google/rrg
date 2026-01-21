@@ -14,6 +14,8 @@ use crate::Sink;
 pub struct FakeSession {
     args: crate::args::Args,
     filestore: Option<crate::filestore::Filestore>,
+    // We need to keep the temporary directory handle around or otherwise it
+    // will be deleted and the filestore object won't be valid anymore.
     filestore_tempdir: Option<tempfile::TempDir>,
     replies: Vec<Box<dyn Any>>,
     parcels: std::collections::HashMap<Sink, Vec<Box<dyn Any>>>,
