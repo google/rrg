@@ -13,6 +13,8 @@ use crate::Sink;
 /// that the action sends and lets the creator inspect them later.
 pub struct FakeSession {
     args: crate::args::Args,
+    filestore: Option<crate::filestore::Filestore>,
+    filestore_tempdir: Option<tempfile::TempDir>,
     replies: Vec<Box<dyn Any>>,
     parcels: std::collections::HashMap<Sink, Vec<Box<dyn Any>>>,
 }
@@ -37,9 +39,27 @@ impl FakeSession {
     pub fn with_args(args: crate::args::Args) -> FakeSession {
         FakeSession {
             args,
+            filestore: None,
+            filestore_tempdir: None,
             replies: Vec::new(),
             parcels: std::collections::HashMap::new(),
         }
+    }
+
+    /// Enables a filestore through a temporary folder in the fake session.
+    pub fn with_filestore(mut self) -> FakeSession {
+        let filestore_tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = crate::filestore::init(
+            &filestore_tempdir,
+            std::time::Duration::MAX,
+        ).unwrap();
+
+        self.filestore = Some(filestore);
+        self.filestore_tempdir = Some(filestore_tempdir);
+
+        self
     }
 
     /// Yields the number of replies that this session sent so far.
@@ -131,6 +151,11 @@ impl crate::session::Session for FakeSession {
         &self.args
     }
 
+    fn filestore(&self) -> crate::session::Result<&crate::filestore::Filestore> {
+        self.filestore.as_ref()
+            .ok_or(crate::session::FilestoreUnavailableError.into())
+    }
+
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>
     where
         I: crate::response::Item + 'static,
@@ -151,5 +176,28 @@ impl crate::session::Session for FakeSession {
     }
 
     fn heartbeat(&mut self) {
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn without_filestore() {
+        let session = FakeSession::new();
+
+        use crate::session::Session as _;
+        assert!(!session.filestore().is_ok());
+    }
+
+    #[test]
+    fn with_filestore() {
+        let session = FakeSession::new()
+            .with_filestore();
+
+        use crate::session::Session as _;
+        assert!(session.filestore().is_ok());
     }
 }

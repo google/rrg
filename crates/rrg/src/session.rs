@@ -24,7 +24,7 @@ mod fleetspeak;
 pub use crate::session::fake::FakeSession;
 pub use crate::session::fleetspeak::FleetspeakSession;
 
-pub use self::error::{Error};
+pub use self::error::{Error, FilestoreUnavailableError};
 
 /// A specialized `Result` type for sessions.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -34,6 +34,9 @@ pub trait Session {
 
     /// Provides the arguments passed to the agent.
     fn args(&self) -> &crate::args::Args;
+
+    /// Provides the filestore accessor (if available).
+    fn filestore(&self) -> Result<&crate::filestore::Filestore>;
 
     /// Sends a reply to the flow that call the action.
     fn reply<I>(&mut self, item: I) -> Result<()>
@@ -52,6 +55,8 @@ mod tests {
 
     use super::*;
     use crate::Sink;
+
+    // TODO(@panhania): These tests should be moved to the `fake` submodule.
 
     #[test]
     fn test_fake_reply_count() {

@@ -79,12 +79,10 @@ fn main() {
             None
         }
     };
-    // TODO: Use filestore somehow.
-    drop(filestore);
 
     info!("listening for messages");
     loop {
         let request = rrg::Request::receive(args.heartbeat_rate);
-        rrg::session::FleetspeakSession::dispatch(&args, request);
+        rrg::session::FleetspeakSession::dispatch(&args, filestore.as_ref(), request);
     }
 }

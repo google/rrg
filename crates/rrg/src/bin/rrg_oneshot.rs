@@ -36,6 +36,10 @@ impl rrg::session::Session for OneshotSession {
         &self.args
     }
 
+    fn filestore(&self) -> rrg::session::Result<&rrg::filestore::Filestore> {
+        Err(rrg::session::FilestoreUnavailableError.into())
+    }
+
     fn reply<I>(&mut self, item: I) -> rrg::session::Result<()>
     where
         I: rrg::Item + 'static,
