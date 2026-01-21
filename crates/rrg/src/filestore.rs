@@ -147,147 +147,22 @@ impl Filestore {
                 path.display(),
             }))?;
 
-        log::info!("searching for outdated filestore files");
-
-        match std::fs::read_dir(path.join("files")) {
-            Ok(flow_files_dir_entries) => {
-                for flow_file_dir_entry in flow_files_dir_entries {
-                    let flow_files_dir_entry = flow_file_dir_entry
-                        .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not read flow files dir entry for '{}': {error}",
-                            path.join("files").display(),
-                        }))?;
-                    let flow_files_dir_path = flow_files_dir_entry.path();
-
-                    for file_entry in std::fs::read_dir(&flow_files_dir_path)
-                        .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not list flow files dir at '{}': {error}",
-                            flow_files_dir_path.display(),
-                        }))?
-                    {
-                        let file_entry = file_entry
-                            .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not read file entry for '{}': {error}",
-                                flow_files_dir_path.display(),
-                            }))?;
-                        let file_path = file_entry.path();
-
-                        if crate::fs::remove_file_if_old(&file_path, ttl)
-                            .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not clean up file at '{}': {error}",
-                                file_path.display(),
-                            }))?
-                        {
-                            log::info!("deleted outdated file '{}'", file_path.display());
-                        }
-                    }
-
-                    // We also clean empty file and part directories. That can
-                    // happen after a file or parts were deleted (be it by an
-                    // explicit deletion or by them reaching their TTL).
-                    //
-                    // It is not strictly necessary but we don't want to pollute
-                    // the filesystem without a reason.
-                    if crate::fs::remove_dir_if_empty(&flow_files_dir_path)
-                        .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not clean up flow files dir at '{}': {error}",
-                            flow_files_dir_path.display(),
-                        }))?
-                    {
-                        log::info!("deleted empty flow files dir '{}'", flow_files_dir_path.display());
-                    }
-                }
-            }
-            // This is fine, files folder might not exist if the filestore was
-            // never used to store a file.
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
-            Err(error) => return Err(std::io::Error::new(error.kind(), format! {
-                "could not read files dir at '{}': {error}",
-                path.join("files").display(),
-            })),
-        }
-        match std::fs::read_dir(path.join("parts")) {
-            Ok(flow_parts_dir_entries) => {
-                for flow_parts_dir_entry in flow_parts_dir_entries {
-                    let flow_parts_dir_entry = flow_parts_dir_entry
-                        .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not read flow parts dir entry for '{}': {error}",
-                            path.join("parts").display(),
-                        }))?;
-                    let flow_parts_dir_path = flow_parts_dir_entry.path();
-
-                    for file_parts_dir_entry in std::fs::read_dir(&flow_parts_dir_path)
-                        .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not list flow parts dir at '{}': {error}",
-                            flow_parts_dir_path.display(),
-                        }))?
-                    {
-                        let file_parts_dir_entry = file_parts_dir_entry
-                            .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not read file parts dir entry for '{}': {error}",
-                                flow_parts_dir_path.display(),
-                            }))?;
-                        let file_parts_dir_path = file_parts_dir_entry.path();
-
-                        for part_entry in std::fs::read_dir(&file_parts_dir_path)
-                            .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not list file parts dir at '{}': {error}",
-                                file_parts_dir_path.display(),
-                            }))?
-                        {
-                            let part_entry = part_entry
-                                .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                    "could not read part entry for '{}': {error}",
-                                    file_parts_dir_path.display(),
-                                }))?;
-                            let part_path = part_entry.path();
-
-                            if crate::fs::remove_file_if_old(&part_path, ttl)
-                                .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                    "could not clean up part at '{}': {error}",
-                                    part_path.display(),
-                                }))?
-                            {
-                                log::info!("deleted outdated part '{}'", part_path.display());
-                            }
-                        }
-
-                        // See similar code for files folder cleanup above for
-                        // the rationale.
-                        if crate::fs::remove_dir_if_empty(&file_parts_dir_path)
-                            .map_err(|error| std::io::Error::new(error.kind(), format! {
-                                "could not clean up file parts dir at '{}': {error}",
-                                file_parts_dir_path.display(),
-                            }))?
-                        {
-                            log::info!("deleted empty file parts dir '{}'", file_parts_dir_path.display());
-                        }
-                    }
-
-                    // See similar code for files folder cleanup above for the
-                    // rationale.
-                    if crate::fs::remove_dir_if_empty(&flow_parts_dir_path)
-                        .map_err(|error| std::io::Error::new(error.kind(), format! {
-                            "could not clean up flow parts dir at '{}': {error}",
-                            flow_parts_dir_path.display(),
-                        }))?
-                    {
-                        log::info!("deleted empty flow parts dir '{}'", flow_parts_dir_path.display());
-                    }
-                }
-            }
-            // This is fine, parts folder might not exist if the filestore was
-            // never used to store a part.
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
-            Err(error) => return Err(std::io::Error::new(error.kind(), format! {
-                "could not read parts dir at '{}': {error}",
-                path.join("parts").display(),
-            })),
-        }
-
-        Ok(Filestore {
+        let filestore = Filestore {
             path: path.to_path_buf(),
-        })
+        };
+
+        log::info!("cleaning up outdated filestore files");
+
+        filestore.cleanup_files_dir(ttl)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not clean up files dir: {error}",
+            }))?;
+        filestore.cleanup_parts_dir(ttl)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not clean up parts dir: {error}",
+            }))?;
+
+        Ok(filestore)
     }
 
     /// Stores a part of the specified file in the filestore.
@@ -581,6 +456,151 @@ impl Filestore {
         }
 
         Ok(file_path)
+    }
+
+    fn cleanup_files_dir(&self, ttl: Duration) -> std::io::Result<()> {
+        match std::fs::read_dir(self.path.join("files")) {
+            Ok(flow_files_dir_entries) => {
+                for flow_file_dir_entry in flow_files_dir_entries {
+                    let flow_files_dir_entry = flow_file_dir_entry
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not read flow files dir entry for '{}': {error}",
+                            self.path.join("files").display(),
+                        }))?;
+                    let flow_files_dir_path = flow_files_dir_entry.path();
+
+                    for file_entry in std::fs::read_dir(&flow_files_dir_path)
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not list flow files dir at '{}': {error}",
+                            flow_files_dir_path.display(),
+                        }))?
+                    {
+                        let file_entry = file_entry
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not read file entry for '{}': {error}",
+                                flow_files_dir_path.display(),
+                            }))?;
+                        let file_path = file_entry.path();
+
+                        if crate::fs::remove_file_if_old(&file_path, ttl)
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not clean up file at '{}': {error}",
+                                file_path.display(),
+                            }))?
+                        {
+                            log::info!("deleted outdated file '{}'", file_path.display());
+                        }
+                    }
+
+                    // We also clean empty file and part directories. That can
+                    // happen after a file or parts were deleted (be it by an
+                    // explicit deletion or by them reaching their TTL).
+                    //
+                    // It is not strictly necessary but we don't want to pollute
+                    // the filesystem without a reason.
+                    if crate::fs::remove_dir_if_empty(&flow_files_dir_path)
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not clean up flow files dir at '{}': {error}",
+                            flow_files_dir_path.display(),
+                        }))?
+                    {
+                        log::info!("deleted empty flow files dir '{}'", flow_files_dir_path.display());
+                    }
+                }
+            }
+            // This is fine, files folder might not exist if the filestore was
+            // never used to store a file.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => return Err(std::io::Error::new(error.kind(), format! {
+                "could not read files dir at '{}': {error}",
+                self.path.join("files").display(),
+            })),
+        }
+
+        Ok(())
+    }
+
+    fn cleanup_parts_dir(&self, ttl: Duration) -> std::io::Result<()> {
+        match std::fs::read_dir(self.path.join("parts")) {
+            Ok(flow_parts_dir_entries) => {
+                for flow_parts_dir_entry in flow_parts_dir_entries {
+                    let flow_parts_dir_entry = flow_parts_dir_entry
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not read flow parts dir entry for '{}': {error}",
+                            self.path.join("parts").display(),
+                        }))?;
+                    let flow_parts_dir_path = flow_parts_dir_entry.path();
+
+                    for file_parts_dir_entry in std::fs::read_dir(&flow_parts_dir_path)
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not list flow parts dir at '{}': {error}",
+                            flow_parts_dir_path.display(),
+                        }))?
+                    {
+                        let file_parts_dir_entry = file_parts_dir_entry
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not read file parts dir entry for '{}': {error}",
+                                flow_parts_dir_path.display(),
+                            }))?;
+                        let file_parts_dir_path = file_parts_dir_entry.path();
+
+                        for part_entry in std::fs::read_dir(&file_parts_dir_path)
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not list file parts dir at '{}': {error}",
+                                file_parts_dir_path.display(),
+                            }))?
+                        {
+                            let part_entry = part_entry
+                                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                    "could not read part entry for '{}': {error}",
+                                    file_parts_dir_path.display(),
+                                }))?;
+                            let part_path = part_entry.path();
+
+                            if crate::fs::remove_file_if_old(&part_path, ttl)
+                                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                    "could not clean up part at '{}': {error}",
+                                    part_path.display(),
+                                }))?
+                            {
+                                log::info!("deleted outdated part '{}'", part_path.display());
+                            }
+                        }
+
+                        // See similar code for files folder cleanup above for
+                        // the rationale.
+                        if crate::fs::remove_dir_if_empty(&file_parts_dir_path)
+                            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                                "could not clean up file parts dir at '{}': {error}",
+                                file_parts_dir_path.display(),
+                            }))?
+                        {
+                            log::info!("deleted empty file parts dir '{}'", file_parts_dir_path.display());
+                        }
+                    }
+
+                    // See similar code for files folder cleanup above for the
+                    // rationale.
+                    if crate::fs::remove_dir_if_empty(&flow_parts_dir_path)
+                        .map_err(|error| std::io::Error::new(error.kind(), format! {
+                            "could not clean up flow parts dir at '{}': {error}",
+                            flow_parts_dir_path.display(),
+                        }))?
+                    {
+                        log::info!("deleted empty flow parts dir '{}'", flow_parts_dir_path.display());
+                    }
+                }
+            }
+            // This is fine, parts folder might not exist if the filestore was
+            // never used to store a part.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => return Err(std::io::Error::new(error.kind(), format! {
+                "could not read parts dir at '{}': {error}",
+                self.path.join("parts").display(),
+            })),
+        }
+
+        Ok(())
     }
 
     fn file_path(&self, id: &Id) -> PathBuf {
