@@ -11,6 +11,7 @@
 
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
+use std::time::{Duration};
 
 /// A path to a filesystem item and associated metadata.
 ///
@@ -268,6 +269,90 @@ where
             if self.inner.is_descendible(&entry) {
                 self.inner.pending_iters.pop();
             }
+        }
+    }
+}
+
+/// Removes a file from the filesystem if it is older than the given TTL.
+///
+/// File age is determined by using its creation time (or modification time on
+/// platforms where creation time cannot be determined).
+///
+/// Returns `Ok(true)` if the file was old (and was deleted) or `Ok(false)` if
+/// the file does not exceed the given TTL.
+///
+/// See also [`std::fs::remove_file`] for more details on file removal behaviour
+/// and possible errors.
+pub fn remove_file_if_old<P>(path: P, ttl: Duration) -> std::io::Result<bool>
+where
+    P: AsRef<Path>,
+{
+    _remove_file_if_old(path.as_ref(), ttl)
+}
+
+fn _remove_file_if_old(path: &Path, ttl: Duration) -> std::io::Result<bool> {
+    let metadata = path.metadata()
+        .map_err(|error| std::io::Error::new(error.kind(), format! {
+            "could not read file metadata: {error}",
+        }))?;
+
+    let age = metadata
+        .created()
+        // Most modern systems should have creation time available but this is
+        // not guaranteed and we use modification time as a fallback approxima-
+        // tion.
+        .or(metadata.modified())
+        .map_err(|error| std::io::Error::new(error.kind(), format! {
+            "could not obtain file creation time: {error}",
+        }))?
+        .elapsed()
+        // Error is returned in case the current system time is earlier than the
+        // file creation time (which can happen as it is possible to fiddle with
+        // the system clock).
+        //
+        // For our purposes (validating TTL) it is fine to clamp to 0 in such
+        // cases.
+        .unwrap_or(Duration::ZERO);
+
+    if age > ttl {
+        std::fs::remove_file(path)
+            .map_err(|error| std::io::Error::new(error.kind(), format! {
+                "could not remove old file: {error}",
+            }))?;
+
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+/// Removes a directory if it is empty and does nothing if it is not.
+///
+/// This is almost identical to the standard [`std::fs::remove_dir`] except that
+/// the call does not fail with an error in case the directory is not empty.
+///
+/// Returns `Ok(true)` if the folder was empty (and was deleted) or `Ok(false)`
+/// if it was not.
+///
+/// See also [`std::fs::remove_file`] for more details on directory removal
+/// behaviour and possible errors.
+pub fn remove_dir_if_empty<P>(path: P) -> std::io::Result<bool>
+where
+    P: AsRef<Path>,
+{
+    _remove_dir_if_empty(path.as_ref())
+}
+
+fn _remove_dir_if_empty(path: &Path) -> std::io::Result<bool> {
+    match std::fs::remove_dir(path) {
+        Ok(()) => {
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {
+            Ok(false)
+        }
+        Err(error) => {
+            Err(error)
         }
     }
 }
@@ -640,5 +725,63 @@ mod tests {
         assert_eq!(results[0].path, tempdir.join("abc"));
         assert_eq!(results[1].path, tempdir.join("abc").join("def"));
         assert_eq!(results[2].path, tempdir.join("abc").join("ghi"));
+    }
+
+    #[test]
+    fn remove_file_if_old_non_existent() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir = tempdir.path();
+
+        let error = remove_file_if_old(tempdir.join("foo"), Duration::MAX)
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn remove_file_if_old_fresh() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+
+        let old = remove_file_if_old(tempfile.path(), Duration::MAX)
+            .unwrap();
+        assert!(!old);
+    }
+
+    #[test]
+    fn remove_file_if_old_old() {
+        let tempfile = tempfile::NamedTempFile::new().unwrap();
+
+        let old = remove_file_if_old(tempfile.path(), Duration::ZERO)
+            .unwrap();
+        assert!(old);
+    }
+
+    #[test]
+    fn remove_dir_if_empty_non_existent() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let tempdir = tempdir.path();
+
+        let error = remove_dir_if_empty(tempdir.join("foo"))
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn remove_dir_if_empty_non_empty() {
+        let tempdir = tempfile::tempdir().unwrap();
+        std::fs::write(tempdir.path().join("foo"), b"")
+            .unwrap();
+
+        let empty = remove_dir_if_empty(tempdir.path())
+            .unwrap();
+        assert!(!empty);
+    }
+
+    #[test]
+    fn remove_dir_if_empty_empty() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let empty = remove_dir_if_empty(tempdir.path())
+            .unwrap();
+        assert!(empty);
     }
 }

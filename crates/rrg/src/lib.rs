@@ -7,6 +7,7 @@
 
 pub mod action;
 pub mod args;
+pub mod filestore;
 pub mod fs;
 pub mod io;
 pub mod log;
