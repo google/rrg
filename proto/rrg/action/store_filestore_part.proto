@@ -6,10 +6,48 @@ syntax = "proto3";
 
 package rrg.action.store_filestore_part;
 
+enum Status {
+  UNKNOWN = 0;
+  // More parts are needed to complete the transfer.
+  PENDING = 1;
+  // All the parts were delivered, the file is ready to be used.
+  COMPLETE = 2;
+}
+
 message Args {
-  // TODO.
+  // Name of the file to which the part belongs to.
+  //
+  // This name must be unique within the flow that created file.
+  string file_id = 1;
+
+  // SHA-256 digest of the content of the whole file.
+  //
+  // This is used to verify the integrity of the transferred file once all parts
+  // are ready.
+  //
+  // All parts belonging to the same file are expected to have the same digest.
+  // In case of discrepancies, arbitrary value will be used.
+  bytes file_sha256 = 2;
+
+  // Total size of the file.
+  //
+  // This is used to determine whether we received all the parts of the file.
+  //
+  // All parts belonging to the same file are expected to use the same total
+  // size value. In case of discrepancies, arbitrary value will be used.
+  uint64 file_size = 3;
+
+  // Offset within the file of the content transferred in this action call.
+  uint64 part_offset = 4;
+
+  // Actual content of the part of the file transferred in this action call.
+  bytes part_content = 5;
 }
 
 message Result {
-  // TODO.
+  // Name of the file to which the transferred part belongs to.
+  string file_id = 1;
+
+  // Status of the file transfer after receiving this part.
+  Status status = 2;
 }
