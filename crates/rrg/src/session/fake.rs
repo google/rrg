@@ -198,6 +198,28 @@ mod tests {
             .with_filestore();
 
         use crate::session::Session as _;
-        assert!(session.filestore().is_ok());
+        let filestore = session.filestore()
+            .unwrap();
+
+        let id = crate::filestore::Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        filestore.store(&id, crate::filestore::Part {
+            offset: 0,
+            content: b"BARBAZ".to_vec(),
+            file_len: b"BARBAZ".len() as u64,
+            file_sha256: [
+                0xeb, 0x65, 0x7a, 0x64, 0x57, 0x46, 0xe8, 0xf0,
+                0xfe, 0x60, 0xc6, 0x20, 0x1a, 0xf3, 0xab, 0x10,
+                0x50, 0x24, 0x16, 0xcc, 0xb1, 0xad, 0x91, 0xad,
+                0x42, 0x27, 0xd6, 0xf0, 0x39, 0x2f, 0x77, 0x6d,
+            ],
+        }).unwrap();
+
+        let contents = std::fs::read(filestore.path(&id).unwrap())
+            .unwrap();
+        assert_eq!(contents, b"BARBAZ");
     }
 }
