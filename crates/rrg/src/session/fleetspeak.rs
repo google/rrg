@@ -5,9 +5,11 @@ use log::{error, info};
 /// This is a normal session type that that is associated with some flow on the
 /// server. It keeps track of the responses it sends and collects statistics
 /// about network and runtime utilization to kill the action if it is needed.
-pub struct FleetspeakSession<'a> {
+pub struct FleetspeakSession<'a, 'fs> {
     /// Arguments passed to the agent.
     args: &'a crate::args::Args,
+    /// Filestore of the current process (if available).
+    filestore: Option<&'fs crate::filestore::Filestore>,
     /// A builder for responses sent through Fleetspeak to the GRR server.
     response_builder: crate::ResponseBuilder,
     /// Number of bytes sent since the session was created.
@@ -20,7 +22,7 @@ pub struct FleetspeakSession<'a> {
     real_time_limit: Option<std::time::Duration>,
 }
 
-impl<'a> FleetspeakSession<'a> {
+impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
 
     /// Dispatches the given `request` to an appropriate action handler.
     ///
@@ -36,7 +38,10 @@ impl<'a> FleetspeakSession<'a> {
     /// signal to Fleetspeak will do so with frequency not greater than the one
     /// specified the arguments passed to the agent.
     pub fn dispatch(
+        // TODO(@panhania): The list of arguments to this function starts to be
+        // unwieldy, we should refeactor it through some builder pattern.
         args: &'a crate::args::Args,
+        filestore: Option<&'fs crate::filestore::Filestore>,
         request: Result<crate::Request, crate::ParseRequestError>,
     ) {
         let request_id = match &request {
@@ -59,6 +64,7 @@ impl<'a> FleetspeakSession<'a> {
                 let filters = request.take_filters();
                 let mut session = FleetspeakSession {
                     args,
+                    filestore,
                     response_builder: response_builder.with_filters(filters),
                     network_bytes_sent: 0,
                     network_bytes_limit: request.network_bytes_limit(),
@@ -81,7 +87,7 @@ impl<'a> FleetspeakSession<'a> {
     }
 }
 
-impl<'a> FleetspeakSession<'a> {
+impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
 
     /// Checks whether the network bytes limit was crossed.
     ///
@@ -121,10 +127,15 @@ impl<'a> FleetspeakSession<'a> {
     }
 }
 
-impl<'a> crate::session::Session for FleetspeakSession<'a> {
+impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
 
     fn args(&self) -> &crate::args::Args {
         self.args
+    }
+
+    fn filestore(&self) -> crate::session::Result<&crate::filestore::Filestore> {
+        self.filestore
+            .ok_or(crate::session::FilestoreUnavailableError.into())
     }
 
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>

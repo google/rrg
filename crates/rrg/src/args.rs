@@ -62,6 +62,25 @@ pub struct Args {
            description="whether to log to a file")]
     pub log_to_file: Option<std::path::PathBuf>,
 
+    /// Determines whether to enable filestore (and where its root folder is).
+    #[argh(option,
+           long="filestore-dir",
+           arg_name="PATH",
+           description="whether and where to enable filestore")]
+    pub filestore_dir: Option<std::path::PathBuf>,
+
+    /// TTL for filestore files after which they are deleted.
+    #[argh(option,
+           long="filestore-ttl",
+           arg_name="DURATION",
+           // TODO: https://github.com/rust-lang/rust/issues/120301
+           //
+           // Simplify once `duration-constructors` is stable.
+           default="::std::time::Duration::from_secs(1 * 60 * 60 * 24 * 14)", // 2 weeks.
+           description="how long filestore files should live",
+           from_str_fn(parse_duration))]
+    pub filestore_ttl: Duration,
+
     /// The public key for verfying signed commands.
     #[argh(option,
        long="command-verification-key",

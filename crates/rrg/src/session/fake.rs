@@ -13,6 +13,10 @@ use crate::Sink;
 /// that the action sends and lets the creator inspect them later.
 pub struct FakeSession {
     args: crate::args::Args,
+    filestore: Option<crate::filestore::Filestore>,
+    // We need to keep the temporary directory handle around or otherwise it
+    // will be deleted and the filestore object won't be valid anymore.
+    filestore_tempdir: Option<tempfile::TempDir>,
     replies: Vec<Box<dyn Any>>,
     parcels: std::collections::HashMap<Sink, Vec<Box<dyn Any>>>,
 }
@@ -28,6 +32,8 @@ impl FakeSession {
             verbosity: log::LevelFilter::Debug,
             log_to_stdout: false,
             log_to_file: None,
+            filestore_dir: None,
+            filestore_ttl: std::time::Duration::ZERO,
         })
     }
 
@@ -35,9 +41,27 @@ impl FakeSession {
     pub fn with_args(args: crate::args::Args) -> FakeSession {
         FakeSession {
             args,
+            filestore: None,
+            filestore_tempdir: None,
             replies: Vec::new(),
             parcels: std::collections::HashMap::new(),
         }
+    }
+
+    /// Enables a filestore through a temporary folder in the fake session.
+    pub fn with_filestore(mut self) -> FakeSession {
+        let filestore_tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = crate::filestore::init(
+            &filestore_tempdir,
+            std::time::Duration::MAX,
+        ).unwrap();
+
+        self.filestore = Some(filestore);
+        self.filestore_tempdir = Some(filestore_tempdir);
+
+        self
     }
 
     /// Yields the number of replies that this session sent so far.
@@ -129,6 +153,11 @@ impl crate::session::Session for FakeSession {
         &self.args
     }
 
+    fn filestore(&self) -> crate::session::Result<&crate::filestore::Filestore> {
+        self.filestore.as_ref()
+            .ok_or(crate::session::FilestoreUnavailableError.into())
+    }
+
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>
     where
         I: crate::response::Item + 'static,
@@ -149,5 +178,50 @@ impl crate::session::Session for FakeSession {
     }
 
     fn heartbeat(&mut self) {
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn without_filestore() {
+        let session = FakeSession::new();
+
+        use crate::session::Session as _;
+        assert!(!session.filestore().is_ok());
+    }
+
+    #[test]
+    fn with_filestore() {
+        let session = FakeSession::new()
+            .with_filestore();
+
+        use crate::session::Session as _;
+        let filestore = session.filestore()
+            .unwrap();
+
+        let id = crate::filestore::Id {
+            flow_id: 0xf00,
+            file_id: String::from("foo"),
+        };
+
+        filestore.store(&id, crate::filestore::Part {
+            offset: 0,
+            content: b"BARBAZ".to_vec(),
+            file_len: b"BARBAZ".len() as u64,
+            file_sha256: [
+                0xeb, 0x65, 0x7a, 0x64, 0x57, 0x46, 0xe8, 0xf0,
+                0xfe, 0x60, 0xc6, 0x20, 0x1a, 0xf3, 0xab, 0x10,
+                0x50, 0x24, 0x16, 0xcc, 0xb1, 0xad, 0x91, 0xad,
+                0x42, 0x27, 0xd6, 0xf0, 0x39, 0x2f, 0x77, 0x6d,
+            ],
+        }).unwrap();
+
+        let contents = std::fs::read(filestore.path(&id).unwrap())
+            .unwrap();
+        assert_eq!(contents, b"BARBAZ");
     }
 }
