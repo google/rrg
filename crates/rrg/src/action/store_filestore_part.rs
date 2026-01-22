@@ -23,7 +23,19 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    todo!()
+    let status = session.filestore_store(&args.file_id, crate::filestore::Part {
+        offset: args.part_offset,
+        content: args.part_content,
+        file_len: args.file_len,
+        file_sha256: args.file_sha256,
+    })?;
+
+    session.reply(Item {
+        file_id: args.file_id,
+        status,
+    })?;
+
+    Ok(())
 }
 
 impl crate::request::Args for Args {
@@ -69,5 +81,63 @@ impl crate::response::Item for Item {
         });
 
         proto
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn handle_complete() {
+        let mut session = crate::session::FakeSession::new()
+            .with_filestore();
+
+        let args = Args {
+            file_id: String::from("foo"),
+            file_sha256: sha256(b"BARBAZ"),
+            file_len: b"BARBAZ".len() as u64,
+            part_offset: 0,
+            part_content: b"BARBAZ".to_vec(),
+        };
+        assert!(handle(&mut session, args).is_ok());
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.file_id, "foo");
+        assert_eq!(item.status, crate::filestore::Status::Complete);
+    }
+
+    #[test]
+    fn handle_pending() {
+        let mut session = crate::session::FakeSession::new()
+            .with_filestore();
+
+        let args = Args {
+            file_id: String::from("foo"),
+            file_sha256: sha256(b"BARBAZ"),
+            file_len: b"BARBAZ".len() as u64,
+            part_offset: 0,
+            part_content: b"BAR".to_vec(),
+        };
+        assert!(handle(&mut session, args).is_ok());
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.file_id, "foo");
+        assert_eq!(item.status, crate::filestore::Status::Pending {
+            offset: b"BAR".len() as u64,
+            len: b"BAZ".len() as u64,
+        });
+    }
+
+    fn sha256(content: &[u8]) -> [u8; 32] {
+        use sha2::Digest as _;
+
+        let mut sha256 = sha2::Sha256::new();
+        sha256.update(content);
+        sha256.finalize()
+            .into()
     }
 }
