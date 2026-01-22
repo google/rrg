@@ -66,16 +66,16 @@ pub enum Status {
 }
 
 /// Identifier of a filestore file.
-pub struct Id {
+pub struct Id<'s> {
     /// Identifier of the flow which owns the file.
     pub flow_id: u64,
     /// Name of the file.
     ///
     /// This name must be unique within the flow that owns the file.
-    pub file_id: String,
+    pub file_id: &'s str,
 }
 
-impl std::fmt::Display for Id {
+impl<'s> std::fmt::Display for Id<'s> {
 
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:X}/{}", self.flow_id, self.file_id)
@@ -654,7 +654,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         filestore.store(&foo_id, Part {
@@ -687,7 +687,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         filestore.store(&foo_id, Part {
@@ -721,7 +721,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         filestore.store(&foo_id, Part {
@@ -755,7 +755,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         assert_eq! {
@@ -783,7 +783,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         assert_eq! {
@@ -811,7 +811,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         assert_eq! {
@@ -863,7 +863,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         assert_eq! {
@@ -915,7 +915,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         assert_eq! {
@@ -967,15 +967,15 @@ mod tests {
 
         let foobar_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foobar"),
+            file_id: "foobar",
         };
         let foobaz_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foobaz"),
+            file_id: "foobaz",
         };
         let quux_id = Id {
             flow_id: 0xc0000c5,
-            file_id: String::from("quux"),
+            file_id: "quux",
         };
 
         assert_eq! {
@@ -1029,7 +1029,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         filestore.store(&foo_id, Part {
@@ -1058,7 +1058,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         let error = filestore.store(&foo_id, Part {
@@ -1080,7 +1080,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         let error = filestore.store(&foo_id, Part {
@@ -1102,7 +1102,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         let error = filestore.store(&foo_id, Part {
@@ -1124,7 +1124,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         filestore.store(&foo_id, Part {
@@ -1150,7 +1150,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         let error = filestore.delete(&foo_id).unwrap_err();

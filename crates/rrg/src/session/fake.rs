@@ -185,7 +185,7 @@ impl crate::session::Session for FakeSession {
 
         filestore.store(&crate::filestore::Id {
             flow_id: 0xFA4E,
-            file_id: String::from(file_id),
+            file_id,
         }, part)
             .map_err(|error| crate::session::Error {
                 kind: crate::session::ErrorKind::FilestoreStoreFailure,
@@ -202,7 +202,7 @@ impl crate::session::Session for FakeSession {
 
         filestore.path(&crate::filestore::Id {
             flow_id: 0xFA4E,
-            file_id: String::from(file_id),
+            file_id,
         })
             .map_err(|error| crate::session::Error {
                 kind: crate::session::ErrorKind::FilestoreInvalidPath,
