@@ -183,7 +183,7 @@ impl crate::session::Session for FakeSession {
         let filestore = self.filestore.as_ref()
             .ok_or(crate::session::FilestoreUnavailableError)?;
 
-        filestore.store(&crate::filestore::Id {
+        filestore.store(crate::filestore::Id {
             flow_id: 0xFA4E,
             file_id,
         }, part)
@@ -200,7 +200,7 @@ impl crate::session::Session for FakeSession {
         let filestore = self.filestore.as_ref()
             .ok_or(crate::session::FilestoreUnavailableError)?;
 
-        filestore.path(&crate::filestore::Id {
+        filestore.path(crate::filestore::Id {
             flow_id: 0xFA4E,
             file_id,
         })
