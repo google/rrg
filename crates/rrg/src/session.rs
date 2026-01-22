@@ -24,7 +24,7 @@ mod fleetspeak;
 pub use crate::session::fake::FakeSession;
 pub use crate::session::fleetspeak::FleetspeakSession;
 
-pub use self::error::{Error, FilestoreUnavailableError};
+pub use self::error::{Error, ErrorKind, FilestoreUnavailableError};
 
 /// A specialized `Result` type for sessions.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -34,9 +34,6 @@ pub trait Session {
 
     /// Provides the arguments passed to the agent.
     fn args(&self) -> &crate::args::Args;
-
-    /// Provides the filestore accessor (if available).
-    fn filestore(&self) -> Result<&crate::filestore::Filestore>;
 
     /// Sends a reply to the flow that call the action.
     fn reply<I>(&mut self, item: I) -> Result<()>
@@ -48,6 +45,27 @@ pub trait Session {
 
     /// Sends a heartbeat signal to the Fleetspeak process.
     fn heartbeat(&mut self);
+
+    /// Stores a part for of the specified file in the filestore.
+    ///
+    /// See [`Filestore::store`] for more details.
+    ///
+    /// [`Filestore::store`]: crate::filestore::Filestore::store
+    fn filestore_store(
+        &self,
+        file_id: &str,
+        part: crate::filestore::Part,
+    ) -> Result<crate::filestore::Status>;
+
+    /// Returns an absolute filesystem path to the specified filestore file.
+    ///
+    /// See [`Filestore::path`] for more details.
+    ///
+    /// [`Filestore::path`]: crate::filestore::Filestore::path
+    fn filestore_path(
+        &self,
+        file_id: &str,
+    ) -> Result<std::path::PathBuf>;
 }
 
 #[cfg(test)]

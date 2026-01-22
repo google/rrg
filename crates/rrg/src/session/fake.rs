@@ -153,11 +153,6 @@ impl crate::session::Session for FakeSession {
         &self.args
     }
 
-    fn filestore(&self) -> crate::session::Result<&crate::filestore::Filestore> {
-        self.filestore.as_ref()
-            .ok_or(crate::session::FilestoreUnavailableError.into())
-    }
-
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>
     where
         I: crate::response::Item + 'static,
@@ -179,6 +174,41 @@ impl crate::session::Session for FakeSession {
 
     fn heartbeat(&mut self) {
     }
+
+    fn filestore_store(
+        &self,
+        file_id: &str,
+        part: crate::filestore::Part,
+    ) -> crate::session::Result<crate::filestore::Status> {
+        let filestore = self.filestore.as_ref()
+            .ok_or(crate::session::FilestoreUnavailableError)?;
+
+        filestore.store(&crate::filestore::Id {
+            flow_id: 0xFA4E,
+            file_id: String::from(file_id),
+        }, part)
+            .map_err(|error| crate::session::Error {
+                kind: crate::session::ErrorKind::FilestoreStoreFailure,
+                error: Box::new(error),
+            })
+    }
+
+    fn filestore_path(
+        &self,
+        file_id: &str,
+    ) -> crate::session::Result<std::path::PathBuf> {
+        let filestore = self.filestore.as_ref()
+            .ok_or(crate::session::FilestoreUnavailableError)?;
+
+        filestore.path(&crate::filestore::Id {
+            flow_id: 0xFA4E,
+            file_id: String::from(file_id),
+        })
+            .map_err(|error| crate::session::Error {
+                kind: crate::session::ErrorKind::FilestoreInvalidPath,
+                error: Box::new(error),
+            })
+    }
 }
 
 #[cfg(test)]
@@ -187,28 +217,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn without_filestore() {
+    fn without_filestore_store() {
         let session = FakeSession::new();
 
         use crate::session::Session as _;
-        assert!(!session.filestore().is_ok());
+        let error = session.filestore_store("foo", crate::filestore::Part {
+            offset: 0,
+            content: b"BARBAZ".to_vec(),
+            file_len: b"BARBAZ".len() as u64,
+            file_sha256: [0x00; 32],
+        }).unwrap_err();
+        assert_eq!(error.kind, crate::session::ErrorKind::FilestoreUnavailable);
+    }
+
+    #[test]
+    fn without_filestore_path() {
+        let session = FakeSession::new();
+
+        use crate::session::Session as _;
+        let error = session.filestore_path("foo")
+            .unwrap_err();
+        assert_eq!(error.kind, crate::session::ErrorKind::FilestoreUnavailable);
     }
 
     #[test]
     fn with_filestore() {
+        use crate::session::Session as _;
+
         let session = FakeSession::new()
             .with_filestore();
 
-        use crate::session::Session as _;
-        let filestore = session.filestore()
-            .unwrap();
-
-        let id = crate::filestore::Id {
-            flow_id: 0xf00,
-            file_id: String::from("foo"),
-        };
-
-        filestore.store(&id, crate::filestore::Part {
+        session.filestore_store("foo", crate::filestore::Part {
             offset: 0,
             content: b"BARBAZ".to_vec(),
             file_len: b"BARBAZ".len() as u64,
@@ -220,8 +259,9 @@ mod tests {
             ],
         }).unwrap();
 
-        let contents = std::fs::read(filestore.path(&id).unwrap())
+        let path = session.filestore_path("foo")
             .unwrap();
-        assert_eq!(contents, b"BARBAZ");
+
+        assert_eq!(std::fs::read(path).unwrap(), b"BARBAZ");
     }
 }

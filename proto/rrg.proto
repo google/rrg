@@ -165,6 +165,10 @@ message Status {
       INVALID_FILTER = 10;
       // Filestore operation was requested but it is not available.
       FILESTORE_UNAVAILABLE = 12;
+      // Storing a part in the filestore failed.
+      FILESTORE_STORE_FAILURE = 13;
+      // Filesystem path of the given filestore file could not be retrieved.
+      FILESTORE_INVALID_PATH = 14;
     }
 
     // Type of the error.

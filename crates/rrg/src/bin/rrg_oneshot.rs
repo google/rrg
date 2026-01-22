@@ -36,10 +36,6 @@ impl rrg::session::Session for OneshotSession {
         &self.args
     }
 
-    fn filestore(&self) -> rrg::session::Result<&rrg::filestore::Filestore> {
-        Err(rrg::session::FilestoreUnavailableError.into())
-    }
-
     fn reply<I>(&mut self, item: I) -> rrg::session::Result<()>
     where
         I: rrg::Item + 'static,
@@ -63,6 +59,21 @@ impl rrg::session::Session for OneshotSession {
     }
 
     fn heartbeat(&mut self) {}
+
+    fn filestore_store(
+        &self,
+        _file_id: &str,
+        _part: rrg::filestore::Part,
+    ) -> rrg::session::Result<rrg::filestore::Status> {
+        Err(rrg::session::FilestoreUnavailableError.into())
+    }
+
+    fn filestore_path(
+        &self,
+        _file_id: &str,
+    ) -> rrg::session::Result<std::path::PathBuf> {
+        Err(rrg::session::FilestoreUnavailableError.into())
+    }
 }
 
 fn main() {
