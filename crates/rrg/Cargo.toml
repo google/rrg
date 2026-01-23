@@ -12,7 +12,6 @@ default = [
     "action-get_file_metadata-md5",
     "action-get_file_metadata-sha1",
     "action-get_file_metadata-sha256",
-    "action-get_file_metadata_kmx",
     "action-get_file_contents",
     "action-get_file_sha256",
     "action-grep_file_contents",
