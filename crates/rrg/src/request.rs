@@ -17,6 +17,8 @@ pub enum Action {
     GetSystemMetadata,
     /// Get metadata about the specified file.
     GetFileMetadata,
+    /// Get metadata about the specified file using Keramics.
+    GetFileMetadataKmx,
     /// Get contents of the specified file.
     GetFileContents,
     /// Get contents of the specified file using Keramics.
@@ -67,6 +69,7 @@ impl std::fmt::Display for Action {
         match *self {
             Action::GetSystemMetadata => write!(fmt, "get_system_metadata"),
             Action::GetFileMetadata => write!(fmt, "get_file_metadata"),
+            Action::GetFileMetadataKmx => write!(fmt, "get_file_metadata_kmx"),
             Action::GetFileContents => write!(fmt, "get_file_contents"),
             Action::GetFileContentsKmx => write!(fmt, "get_file_contents_kmx"),
             Action::GetFileSha256 => write!(fmt, "get_file_sha256"),
@@ -122,6 +125,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
         match proto {
             GET_SYSTEM_METADATA => Ok(Action::GetSystemMetadata),
             GET_FILE_METADATA => Ok(Action::GetFileMetadata),
+            GET_FILE_METADATA_KMX => Ok(Action::GetFileMetadataKmx),
             GET_FILE_CONTENTS => Ok(Action::GetFileContents),
             GET_FILE_CONTENTS_KMX => Ok(Action::GetFileContentsKmx),
             GET_FILE_SHA256 => Ok(Action::GetFileSha256),

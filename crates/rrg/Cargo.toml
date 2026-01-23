@@ -34,6 +34,7 @@ action-get_file_metadata = []
 action-get_file_metadata-md5 = ["action-get_file_metadata", "dep:md-5"]
 action-get_file_metadata-sha1 = ["action-get_file_metadata", "dep:sha1"]
 action-get_file_metadata-sha256 = ["action-get_file_metadata", "dep:sha2"]
+action-get_file_metadata_kmx = ["dep:keramics-core", "dep:keramics-datetime", "dep:keramics-formats", "dep:keramics-types", "dep:keramics-vfs"]
 action-get_file_contents = ["dep:sha2"]
 action-get_file_contents_kmx = ["dep:keramics-core", "dep:keramics-formats", "dep:keramics-types"]
 action-get_file_sha256 = ["dep:sha2"]
@@ -120,11 +121,19 @@ optional = true
 version = "0.0.0"
 optional = true
 
+[dependencies.keramics-datetime]
+version = "0.0.0"
+optional = true
+
 [dependencies.keramics-formats]
 version = "0.0.0"
 optional = true
 
 [dependencies.keramics-types]
+version = "0.0.0"
+optional = true
+
+[dependencies.keramics-vfs]
 version = "0.0.0"
 optional = true
 

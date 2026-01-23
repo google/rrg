@@ -19,6 +19,7 @@ const PROTOS: &'static [&'static str] = &[
     "../../proto/rrg/action/get_file_contents_kmx.proto",
     "../../proto/rrg/action/get_file_sha256.proto",
     "../../proto/rrg/action/get_file_metadata.proto",
+    "../../proto/rrg/action/get_file_metadata_kmx.proto",
     "../../proto/rrg/action/get_filesystem_timeline.proto",
     "../../proto/rrg/action/get_filesystem_timeline_tsk.proto",
     "../../proto/rrg/action/get_system_metadata.proto",
