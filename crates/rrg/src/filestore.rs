@@ -66,16 +66,17 @@ pub enum Status {
 }
 
 /// Identifier of a filestore file.
-pub struct Id {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Id<'s> {
     /// Identifier of the flow which owns the file.
     pub flow_id: u64,
     /// Name of the file.
     ///
     /// This name must be unique within the flow that owns the file.
-    pub file_id: String,
+    pub file_id: &'s str,
 }
 
-impl std::fmt::Display for Id {
+impl<'s> std::fmt::Display for Id<'s> {
 
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:X}/{}", self.flow_id, self.file_id)
@@ -179,7 +180,7 @@ impl Filestore {
     /// This function will return an error if any underlying disk operation
     /// can't complete. In such cases there is no guarantee about the state of
     /// the file on disk and it should not be used again.
-    pub fn store(&self, id: &Id, part: Part) -> std::io::Result<Status> {
+    pub fn store(&self, id: Id, part: Part) -> std::io::Result<Status> {
         log::info!("storing part at {} for '{}'", part.offset, id);
 
         // Note that in the code below we do not attempt to do any cleanup upon
@@ -424,7 +425,7 @@ impl Filestore {
     /// This function will return an error if any underlying disk operation
     /// can't complete. In such cases there is no guarantee about the state of
     /// the file on disk and it should not be used again.
-    pub fn delete(&self, id: &Id) -> std::io::Result<()> {
+    pub fn delete(&self, id: Id) -> std::io::Result<()> {
         std::fs::remove_file(self.file_path(id))
             .map_err(|error| std::io::Error::new(error.kind(), format! {
                 "could not delete file at '{}': {error}",
@@ -444,7 +445,7 @@ impl Filestore {
     /// This function will return an error if any underlying disk operation
     /// can't complete. In such cases there is no guarantee about the state of
     /// the file on disk and it should not be used again.
-    pub fn path(&self, id: &Id) -> std::io::Result<PathBuf> {
+    pub fn path(&self, id: Id) -> std::io::Result<PathBuf> {
         let file_path = self.file_path(id);
 
         let file_metadata = file_path.metadata()?;
@@ -603,14 +604,14 @@ impl Filestore {
         Ok(())
     }
 
-    fn file_path(&self, id: &Id) -> PathBuf {
+    fn file_path(&self, id: Id) -> PathBuf {
         self.path
             .join("files")
             .join(id.flow_id.to_string())
             .join(&id.file_id)
     }
 
-    fn part_path(&self, id: &Id, offset: u64) -> PathBuf {
+    fn part_path(&self, id: Id, offset: u64) -> PathBuf {
         self.path
             .join("parts")
             .join(id.flow_id.to_string())
@@ -654,16 +655,16 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
-        filestore.store(&foo_id, Part {
+        filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
             file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
-        filestore.delete(&foo_id).unwrap();
+        filestore.delete(foo_id).unwrap();
 
         Filestore::init(tempdir.path(), Duration::MAX)
             .unwrap();
@@ -687,10 +688,10 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
-        filestore.store(&foo_id, Part {
+        filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
@@ -721,10 +722,10 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
-        filestore.store(&foo_id, Part {
+        filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
@@ -755,11 +756,11 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: 0,
                 content: b"FOOBARBAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
@@ -768,7 +769,7 @@ mod tests {
             Status::Complete,
         };
 
-        let foo_contents = std::fs::read(filestore.path(&foo_id).unwrap())
+        let foo_contents = std::fs::read(filestore.path(foo_id).unwrap())
             .unwrap();
         assert_eq!(foo_contents, b"FOOBARBAZ");
     }
@@ -783,11 +784,11 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: 0,
                 content: b"".to_vec(),
                 file_len: 0,
@@ -796,7 +797,7 @@ mod tests {
             Status::Complete,
         };
 
-        let foo_contents = std::fs::read(filestore.path(&foo_id).unwrap())
+        let foo_contents = std::fs::read(filestore.path(foo_id).unwrap())
             .unwrap();
         assert_eq!(foo_contents, b"");
     }
@@ -811,11 +812,11 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
@@ -827,7 +828,7 @@ mod tests {
             },
         };
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
@@ -839,7 +840,7 @@ mod tests {
             },
         };
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: b"FOOBAR".len() as u64,
                 content: b"BAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
@@ -848,7 +849,7 @@ mod tests {
             Status::Complete,
         };
 
-        let foo_contents = std::fs::read(filestore.path(&foo_id).unwrap())
+        let foo_contents = std::fs::read(filestore.path(foo_id).unwrap())
             .unwrap();
         assert_eq!(foo_contents, b"FOOBARBAZ");
     }
@@ -863,11 +864,11 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: b"FOOBAR".len() as u64,
                 content: b"BAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
@@ -879,7 +880,7 @@ mod tests {
             },
         };
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
@@ -891,7 +892,7 @@ mod tests {
             },
         };
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
@@ -900,7 +901,7 @@ mod tests {
             Status::Complete,
         };
 
-        let foo_contents = std::fs::read(filestore.path(&foo_id).unwrap())
+        let foo_contents = std::fs::read(filestore.path(foo_id).unwrap())
             .unwrap();
         assert_eq!(foo_contents, b"FOOBARBAZ");
     }
@@ -915,11 +916,11 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
@@ -931,7 +932,7 @@ mod tests {
             },
         };
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: b"FOO".len() as u64,
                 content: b"".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
@@ -943,7 +944,7 @@ mod tests {
             },
         };
         assert_eq! {
-            filestore.store(&foo_id, Part {
+            filestore.store(foo_id, Part {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
@@ -952,7 +953,7 @@ mod tests {
             Status::Complete,
         };
 
-        let foo_contents = std::fs::read(filestore.path(&foo_id).unwrap())
+        let foo_contents = std::fs::read(filestore.path(foo_id).unwrap())
             .unwrap();
         assert_eq!(foo_contents, b"FOOBAR");
     }
@@ -967,19 +968,19 @@ mod tests {
 
         let foobar_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foobar"),
+            file_id: "foobar",
         };
         let foobaz_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foobaz"),
+            file_id: "foobaz",
         };
         let quux_id = Id {
             flow_id: 0xc0000c5,
-            file_id: String::from("quux"),
+            file_id: "quux",
         };
 
         assert_eq! {
-            filestore.store(&foobar_id, Part {
+            filestore.store(foobar_id, Part {
                 offset: 0,
                 content: b"FOOBAR".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
@@ -988,7 +989,7 @@ mod tests {
             Status::Complete,
         };
         assert_eq! {
-            filestore.store(&foobaz_id, Part {
+            filestore.store(foobaz_id, Part {
                 offset: 0,
                 content: b"FOOBAZ".to_vec(),
                 file_len: b"FOOBAZ".len() as u64,
@@ -997,7 +998,7 @@ mod tests {
             Status::Complete,
         };
         assert_eq! {
-            filestore.store(&quux_id, Part {
+            filestore.store(quux_id, Part {
                 offset: 0,
                 content: b"QUUX".to_vec(),
                 file_len: b"QUUX".len() as u64,
@@ -1006,15 +1007,15 @@ mod tests {
             Status::Complete,
         };
 
-        let foobar_contents = std::fs::read(filestore.path(&foobar_id).unwrap())
+        let foobar_contents = std::fs::read(filestore.path(foobar_id).unwrap())
             .unwrap();
         assert_eq!(foobar_contents, b"FOOBAR");
 
-        let foobaz_contents = std::fs::read(filestore.path(&foobaz_id).unwrap())
+        let foobaz_contents = std::fs::read(filestore.path(foobaz_id).unwrap())
             .unwrap();
         assert_eq!(foobaz_contents, b"FOOBAZ");
 
-        let quux_contents = std::fs::read(filestore.path(&quux_id).unwrap())
+        let quux_contents = std::fs::read(filestore.path(quux_id).unwrap())
             .unwrap();
         assert_eq!(quux_contents, b"QUUX");
     }
@@ -1029,17 +1030,17 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
-        filestore.store(&foo_id, Part {
+        filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
             file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
-        let error = filestore.store(&foo_id, Part {
+        let error = filestore.store(foo_id, Part {
             offset: 2,
             content: b"OBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
@@ -1058,10 +1059,10 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
-        let error = filestore.store(&foo_id, Part {
+        let error = filestore.store(foo_id, Part {
             offset: 18_446_744_073_709_551_600,
             content: vec![0xf0; 1337],
             file_len: b"FOOBAR".len() as u64,
@@ -1080,10 +1081,10 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
-        let error = filestore.store(&foo_id, Part {
+        let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOO".len() as u64,
@@ -1102,10 +1103,10 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
-        let error = filestore.store(&foo_id, Part {
+        let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOO".len() as u64,
@@ -1124,19 +1125,19 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
-        filestore.store(&foo_id, Part {
+        filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
             file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
-        assert!(filestore.delete(&foo_id).is_ok());
+        assert!(filestore.delete(foo_id).is_ok());
 
-        let error = filestore.path(&foo_id).unwrap_err();
+        let error = filestore.path(foo_id).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
     }
 
@@ -1150,10 +1151,10 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: String::from("foo"),
+            file_id: "foo",
         };
 
-        let error = filestore.delete(&foo_id).unwrap_err();
+        let error = filestore.delete(foo_id).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
     }
 

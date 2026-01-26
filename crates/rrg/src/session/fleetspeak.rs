@@ -185,9 +185,9 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
         let filestore = self.filestore
             .ok_or(crate::session::FilestoreUnavailableError)?;
 
-        filestore.store(&crate::filestore::Id {
+        filestore.store(crate::filestore::Id {
             flow_id: self.request_id.flow_id(),
-            file_id: String::from(file_id),
+            file_id: file_id,
         }, part)
             .map_err(|error| crate::session::Error {
                 kind: crate::session::ErrorKind::FilestoreStoreFailure,
@@ -202,9 +202,9 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
         let filestore = self.filestore
             .ok_or(crate::session::FilestoreUnavailableError)?;
 
-        filestore.path(&crate::filestore::Id {
+        filestore.path(crate::filestore::Id {
             flow_id: self.request_id.flow_id(),
-            file_id: String::from(file_id),
+            file_id: file_id,
         })
             .map_err(|error| crate::session::Error {
                 kind: crate::session::ErrorKind::FilestoreInvalidPath,

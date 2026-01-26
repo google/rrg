@@ -183,9 +183,9 @@ impl crate::session::Session for FakeSession {
         let filestore = self.filestore.as_ref()
             .ok_or(crate::session::FilestoreUnavailableError)?;
 
-        filestore.store(&crate::filestore::Id {
+        filestore.store(crate::filestore::Id {
             flow_id: 0xFA4E,
-            file_id: String::from(file_id),
+            file_id,
         }, part)
             .map_err(|error| crate::session::Error {
                 kind: crate::session::ErrorKind::FilestoreStoreFailure,
@@ -200,9 +200,9 @@ impl crate::session::Session for FakeSession {
         let filestore = self.filestore.as_ref()
             .ok_or(crate::session::FilestoreUnavailableError)?;
 
-        filestore.path(&crate::filestore::Id {
+        filestore.path(crate::filestore::Id {
             flow_id: 0xFA4E,
-            file_id: String::from(file_id),
+            file_id,
         })
             .map_err(|error| crate::session::Error {
                 kind: crate::session::ErrorKind::FilestoreInvalidPath,
