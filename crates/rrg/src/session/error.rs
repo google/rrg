@@ -7,9 +7,9 @@
 #[derive(Debug)]
 pub struct Error {
     /// A corresponding [`ErrorKind`] of this error.
-    kind: ErrorKind,
+    pub(super) kind: ErrorKind,
     /// A detailed error object.
-    error: Box<dyn std::error::Error>,
+    pub(super) error: Box<dyn std::error::Error>,
 }
 
 /// Kinds of errors that can happen during a session.
@@ -31,6 +31,10 @@ pub enum ErrorKind {
     RealTimeLimitExceeded,
     /// Filestore operation was requested but it is not available.
     FilestoreUnavailable,
+    /// Storing a part in the filestore failed.
+    FilestoreStoreFailure,
+    /// Filesystem path of the given filestore file could not be retrieved.
+    FilestoreInvalidPath,
 }
 
 impl Error {
@@ -101,6 +105,12 @@ impl std::fmt::Display for Error {
                 // it ourselves here.
                 write!(fmt, "{}", self.error)
             }
+            FilestoreStoreFailure => {
+                write!(fmt, "could not store filestore part: {}", self.error)
+            }
+            FilestoreInvalidPath => {
+                write!(fmt, "could not get filestore path: {}", self.error)
+            }
         }
     }
 }
@@ -167,6 +177,8 @@ impl From<ErrorKind> for rrg_proto::rrg::status::error::Type {
             NetworkBytesLimitExceeded => Self::NETWORK_BYTES_SENT_LIMIT_EXCEEDED,
             RealTimeLimitExceeded => Self::REAL_TIME_LIMIT_EXCEEDED,
             FilestoreUnavailable => Self::FILESTORE_UNAVAILABLE,
+            FilestoreStoreFailure => Self::FILESTORE_STORE_FAILURE,
+            FilestoreInvalidPath => Self::FILESTORE_INVALID_PATH,
         }
     }
 }

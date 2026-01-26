@@ -6,6 +6,8 @@ use log::{error, info};
 /// server. It keeps track of the responses it sends and collects statistics
 /// about network and runtime utilization to kill the action if it is needed.
 pub struct FleetspeakSession<'a, 'fs> {
+    /// Identifier of the request that spawned the session.
+    request_id: crate::RequestId,
     /// Arguments passed to the agent.
     args: &'a crate::args::Args,
     /// Filestore of the current process (if available).
@@ -63,6 +65,7 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
             Ok(mut request) => {
                 let filters = request.take_filters();
                 let mut session = FleetspeakSession {
+                    request_id,
                     args,
                     filestore,
                     response_builder: response_builder.with_filters(filters),
@@ -133,11 +136,6 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
         self.args
     }
 
-    fn filestore(&self) -> crate::session::Result<&crate::filestore::Filestore> {
-        self.filestore
-            .ok_or(crate::session::FilestoreUnavailableError.into())
-    }
-
     fn reply<I>(&mut self, item: I) -> crate::session::Result<()>
     where
         I: crate::response::Item,
@@ -177,5 +175,40 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
 
     fn heartbeat(&mut self) {
         fleetspeak::heartbeat_with_throttle(self.args.heartbeat_rate);
+    }
+
+    fn filestore_store(
+        &self,
+        file_id: &str,
+        part: crate::filestore::Part,
+    ) -> crate::session::Result<crate::filestore::Status> {
+        let filestore = self.filestore
+            .ok_or(crate::session::FilestoreUnavailableError)?;
+
+        filestore.store(&crate::filestore::Id {
+            flow_id: self.request_id.flow_id(),
+            file_id: String::from(file_id),
+        }, part)
+            .map_err(|error| crate::session::Error {
+                kind: crate::session::ErrorKind::FilestoreStoreFailure,
+                error: Box::new(error),
+            })
+    }
+
+    fn filestore_path(
+        &self,
+        file_id: &str,
+    ) -> crate::session::Result<std::path::PathBuf> {
+        let filestore = self.filestore
+            .ok_or(crate::session::FilestoreUnavailableError)?;
+
+        filestore.path(&crate::filestore::Id {
+            flow_id: self.request_id.flow_id(),
+            file_id: String::from(file_id),
+        })
+            .map_err(|error| crate::session::Error {
+                kind: crate::session::ErrorKind::FilestoreInvalidPath,
+                error: Box::new(error),
+            })
     }
 }
