@@ -15,9 +15,9 @@ enum Status {
 }
 
 message Args {
-  // Name of the file to which the part belongs to.
+  // Name of the file which the part belongs to.
   //
-  // This name must be unique within the flow that created file.
+  // This name must be unique within the flow that created the file.
   string file_id = 1;
 
   // SHA-256 digest of the content of the whole file.
@@ -26,7 +26,8 @@ message Args {
   // are ready.
   //
   // All parts belonging to the same file are expected to have the same digest.
-  // In case of discrepancies, arbitrary value will be used.
+  // In case of digest discrepancies between parts, there is no guarantee which
+  // digest value will be used for verification.
   bytes file_sha256 = 2;
 
   // Total size of the file.
@@ -34,7 +35,8 @@ message Args {
   // This is used to determine whether we received all the parts of the file.
   //
   // All parts belonging to the same file are expected to use the same total
-  // size value. In case of discrepancies, arbitrary value will be used.
+  // size value. In case of total size discrepancies between parts, there is no
+  // guarantee which total size value will be used for verification.
   uint64 file_size = 3;
 
   // Offset within the file of the content transferred in this action call.
@@ -45,9 +47,9 @@ message Args {
 }
 
 message Result {
-  // Name of the file to which the transferred part belongs to.
+  // Name of the file which the transferred part belongs to.
   string file_id = 1;
 
-  // Status of the file transfer after receiving this part.
+  // Status of the overall file transfer after receiving this part.
   Status status = 2;
 }
