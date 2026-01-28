@@ -189,6 +189,16 @@ impl Filestore {
     /// can't complete. In such cases there is no guarantee about the state of
     /// the file on disk and it should not be used again.
     pub fn store(&self, id: Id, part: Part) -> std::io::Result<Status> {
+        if part.content.is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format! {
+                    "empty content for file part at offset {}",
+                    part.offset,
+                },
+            ));
+        }
+
         log::info!("storing part at {} for '{}'", part.offset, id);
 
         // Note that in the code below we do not attempt to do any cleanup upon
@@ -783,34 +793,6 @@ mod tests {
     }
 
     #[test]
-    fn store_single_file_single_part_empty() {
-        let tempdir = tempfile::tempdir()
-            .unwrap();
-
-        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
-            .unwrap();
-
-        let foo_id = Id {
-            flow_id: 0xf00,
-            file_id: "foo",
-        };
-
-        assert_eq! {
-            filestore.store(foo_id, Part {
-                offset: 0,
-                content: b"".to_vec(),
-                file_len: 0,
-                file_sha256: sha256(b""),
-            }).unwrap(),
-            Status::Complete,
-        };
-
-        let foo_contents = std::fs::read(filestore.path(foo_id).unwrap())
-            .unwrap();
-        assert_eq!(foo_contents, b"");
-    }
-
-    #[test]
     fn store_single_file_multiple_parts() {
         let tempdir = tempfile::tempdir()
             .unwrap();
@@ -915,58 +897,6 @@ mod tests {
     }
 
     #[test]
-    fn store_single_file_multiple_parts_empty() {
-        let tempdir = tempfile::tempdir()
-            .unwrap();
-
-        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
-            .unwrap();
-
-        let foo_id = Id {
-            flow_id: 0xf00,
-            file_id: "foo",
-        };
-
-        assert_eq! {
-            filestore.store(foo_id, Part {
-                offset: 0,
-                content: b"FOO".to_vec(),
-                file_len: b"FOOBAR".len() as u64,
-                file_sha256: sha256(b"FOO"),
-            }).unwrap(),
-            Status::Pending {
-                offset: b"FOO".len() as u64,
-                len: b"BAR".len() as u64,
-            },
-        };
-        assert_eq! {
-            filestore.store(foo_id, Part {
-                offset: b"FOO".len() as u64,
-                content: b"".to_vec(),
-                file_len: b"FOOBAR".len() as u64,
-                file_sha256: sha256(b"FOOBAR"),
-            }).unwrap(),
-            Status::Pending {
-                offset: b"FOO".len() as u64,
-                len: b"BAR".len() as u64,
-            },
-        };
-        assert_eq! {
-            filestore.store(foo_id, Part {
-                offset: b"FOO".len() as u64,
-                content: b"BAR".to_vec(),
-                file_len: b"FOOBAR".len() as u64,
-                file_sha256: sha256(b"FOOBAR"),
-            }).unwrap(),
-            Status::Complete,
-        };
-
-        let foo_contents = std::fs::read(filestore.path(foo_id).unwrap())
-            .unwrap();
-        assert_eq!(foo_contents, b"FOOBAR");
-    }
-
-    #[test]
     fn store_multiple_files_single_part() {
         let tempdir = tempfile::tempdir()
             .unwrap();
@@ -1026,6 +956,28 @@ mod tests {
         let quux_contents = std::fs::read(filestore.path(quux_id).unwrap())
             .unwrap();
         assert_eq!(quux_contents, b"QUUX");
+    }
+
+    #[test]
+    fn store_empty_content() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: "foo",
+        };
+
+        let error = filestore.store(foo_id, Part {
+            offset: 0,
+            content: b"".to_vec(),
+            file_len: 0,
+            file_sha256: sha256(b""),
+        }).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
 
     #[test]
