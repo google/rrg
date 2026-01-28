@@ -78,6 +78,9 @@ pub mod dump_process_memory;
 #[cfg(feature = "action-scan_memory_yara")]
 pub mod scan_memory_yara;
 
+#[cfg(feature = "action-store_filestore_part")]
+pub mod store_filestore_part;
+
 use log::info;
 
 /// Dispatches the given `request` to an appropriate action handler.
@@ -187,6 +190,10 @@ where
         #[cfg(feature = "action-scan_memory_yara")]
         ScanProcessMemoryYara => {
             handle(session, request, self::scan_memory_yara::handle)
+        }
+        #[cfg(feature = "action-store_filestore_part")]
+        StoreFilestorePart => {
+            handle(session, request, self::store_filestore_part::handle)
         }
         // We allow `unreachable_patterns` because otherwise we get a warning if
         // we compile with all the actions enabled.

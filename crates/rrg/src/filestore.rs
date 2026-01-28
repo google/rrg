@@ -26,8 +26,14 @@ where
 /// be deleted.
 pub struct Part {
     /// Offset within the file of the content this part consits of.
+    ///
+    /// All parts belonging to the same file must not overlap (in particular it
+    /// means all offsets must be unique).
     pub offset: u64,
     /// Actual content of the file that this part consists of.
+    ///
+    /// All parts belonging to the same file must not overlap and the content
+    /// must not be empty.
     pub content: Vec<u8>,
     /// Total size of the file (in bytes).
     ///
@@ -35,7 +41,8 @@ pub struct Part {
     /// file.
     ///
     /// All parts belonging to the same file are expected to use the same total
-    /// length value. In case of discrepancies, arbitrary value will be used.
+    /// size value. In case of total size discrepancies between parts, there is
+    /// no guarantee which total size value will be used for verification.
     pub file_len: u64,
     /// SHA-256 digest of the content of the whole file.
     ///
@@ -43,7 +50,8 @@ pub struct Part {
     /// parts are ready.
     ///
     /// All parts belonging to the same file are expected to have the same
-    /// digest. In case of discrepancies, arbitrary value will be used.
+    /// digest. In case of digest discrepancies between parts, there is no
+    /// guarantee which digest value will be used for verification.
     pub file_sha256: [u8; 32],
 }
 
