@@ -40,9 +40,15 @@ message Args {
   uint64 file_size = 3;
 
   // Offset within the file of the content transferred in this action call.
+  //
+  // All parts belonging to the same file must not overlap (in particular it
+  // means all offsets must be unique).
   uint64 part_offset = 4;
 
   // Actual content of the part of the file transferred in this action call.
+  //
+  // All parts belonging to the same file must not overlap and the content must
+  // not be empty.
   bytes part_content = 5;
 }
 
