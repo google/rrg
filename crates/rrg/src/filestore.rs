@@ -41,7 +41,8 @@ pub struct Part {
     /// file.
     ///
     /// All parts belonging to the same file are expected to use the same total
-    /// length value. In case of discrepancies, arbitrary value will be used.
+    /// size value. In case of total size discrepancies between parts, there is
+    /// no guarantee which total size value will be used for verification.
     pub file_len: u64,
     /// SHA-256 digest of the content of the whole file.
     ///
@@ -49,7 +50,8 @@ pub struct Part {
     /// parts are ready.
     ///
     /// All parts belonging to the same file are expected to have the same
-    /// digest. In case of discrepancies, arbitrary value will be used.
+    /// digest. In case of digest discrepancies between parts, there is no
+    /// guarantee which digest value will be used for verification.
     pub file_sha256: [u8; 32],
 }
 
