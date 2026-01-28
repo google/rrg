@@ -1149,6 +1149,38 @@ mod tests {
     }
 
     #[test]
+    fn store_already_complete() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_id: "foo",
+        };
+
+        assert_eq! {
+            filestore.store(foo_id, Part {
+                offset: 0,
+                content: b"FOOBAR".to_vec(),
+                file_len: b"FOOBAR".len() as u64,
+                file_sha256: sha256(b"FOOBAR"),
+            }).unwrap(),
+            Status::Complete,
+        };
+
+        let error = filestore.store(foo_id, Part {
+            offset: 0,
+            content: b"FOOBAR".to_vec(),
+            file_len: b"FOOBAR".len() as u64,
+            file_sha256: sha256(b"FOOBAR"),
+        }).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+    }
+
+    #[test]
     fn delete_single_file() {
         let tempdir = tempfile::tempdir()
             .unwrap();
