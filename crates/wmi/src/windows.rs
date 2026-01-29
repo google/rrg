@@ -267,7 +267,7 @@ impl<'com> Iterator for QueryRows<'com> {
             };
 
             if status != windows_sys::Win32::Foundation::S_OK {
-                // SAFETY: Similarly to handling faiure of `Next`, we need to
+                // SAFETY: Similarly to handling failure of `Next`, we need to
                 // terminate early, so we are required to call `EndEnumeration`
                 // now. We swallow the error, as we still want to return the one
                 // from the `VariantClear` call.

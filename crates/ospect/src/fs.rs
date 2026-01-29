@@ -169,7 +169,7 @@ where
 /// # Errors
 ///
 /// This function will fail if the specified file or the attribute do not exist,
-/// the process does not have permission to access the file, the opreation is
+/// the process does not have permission to access the file, the operation is
 /// supported by the platform or if any other system error is raised.
 ///
 /// # Examples

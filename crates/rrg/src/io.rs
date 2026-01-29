@@ -14,7 +14,7 @@ use std::io::Read;
 // The same as in the Rust's standard library.
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
-/// Buffered reader for efficent line reading.
+/// Buffered reader for efficient line reading.
 ///
 /// This object works similarly to [`std::io::BufReader`] but is tailored for
 /// line reading capabilities.

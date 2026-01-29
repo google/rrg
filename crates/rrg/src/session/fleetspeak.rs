@@ -33,7 +33,7 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
     ///
     /// Note that the function accepts a `Result`. This is because we want to
     /// send the error (in case on occurred) back to the server. But this we can
-    /// do only within a sesssion, so we have to create a session from a perhaps
+    /// do only within a session, so we have to create a session from a perhaps
     /// invalid request.
     ///
     /// Long-running actions spawned by requests that need to send heartbeat

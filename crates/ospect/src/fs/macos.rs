@@ -67,7 +67,7 @@ where
     // first `listxattr` call if somebody tampered with the file in the mean-
     // time. To avoid having spurious empty slices (as each following null byte
     // would cause the `split_inclusive` iterator to yield one), we trim the
-    // buffer to the acutally returned length.
+    // buffer to the actually returned length.
     //
     // Note that it is impossible for the `len` value to increase, as otherwise
     // the `listxattr` would fail.
@@ -157,7 +157,7 @@ where
         return Err(std::io::Error::last_os_error());
     }
 
-    // In very rare cases (if the users tampers with the file inbetween calls to
+    // In very rare cases (if the users tampers with the file in between calls to
     // the `getxattr`), the length value can decrease. To avoid returning any
     // garbage at the end, we have to truncate the buffer to its real length.
     buf.truncate(len as usize);

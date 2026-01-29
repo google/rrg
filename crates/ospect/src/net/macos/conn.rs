@@ -333,7 +333,7 @@ impl Iterator for Connections {
                 std::mem::MaybeUninit::<crate::libc::socket_fdinfo>::uninit()
             };
 
-            // SAFETY: We verifed that the file descriptor corresponds to a
+            // SAFETY: We verified that the file descriptor corresponds to a
             // socket above. Then we just pass a pointer to the uninitialized
             // struct along with with its size. In case something goes wrong,
             // the function should report an error (which we verify below).
@@ -432,7 +432,7 @@ fn parse_port(port: libc::c_int) -> Result<u16, libc::c_int> {
     let port = u16::try_from(port)
         .map_err(|_| port)?;
 
-    // No documention mentions it (well, it would have to exist in the first
+    // No documentation mentions it (well, it would have to exist in the first
     // place), but from manual experimentation it is clear that port is also
     // stored using network-endian byte order and so we have to convert it to
     // something that Rust expects.

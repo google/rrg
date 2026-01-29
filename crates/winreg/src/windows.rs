@@ -260,8 +260,8 @@ impl Iterator for Subkeys {
 
         self.index += 1;
 
-        // SAFETY: We verified that the call above succeded, `name_len` should
-        // now be set to the number of characters (16-bit numbers) in the bufer
+        // SAFETY: We verified that the call above succeeded, `name_len` should
+        // now be set to the number of characters (16-bit numbers) in the buffer
         // excluding the null one at the end.
         unsafe {
             self.name_buf.set_len(name_len as usize);
@@ -382,7 +382,7 @@ impl ValueData {
                     // therefore be sure if we have a "genuine" empty string or
                     // if it was just missing null byte at the end. Skipping
                     // such string altogether does not seem to terrible given
-                    // they should not apprear in practice anyway.
+                    // they should not appear in practice anyway.
                     //
                     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumvaluea#remarks
                     // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types#string-values
@@ -536,8 +536,8 @@ impl Iterator for Values {
 
         self.index += 1;
 
-        // SAFETY: We verified that the call above succeded, `name_len` should
-        // now be set to the number of characters (16-bit numbers) in the bufer
+        // SAFETY: We verified that the call above succeeded, `name_len` should
+        // now be set to the number of characters (16-bit numbers) in the buffer
         // excluding the null one at the end.
         unsafe {
             self.name_buf.set_len(name_len as usize);
@@ -574,7 +574,7 @@ unsafe fn open_raw_key(
     key: windows_sys::Win32::System::Registry::HKEY,
     subkey_name: &OsStr,
 ) -> std::io::Result<OpenKey> {
-    // Windows API functions expect null-terminated 16-bit characater strings,
+    // Windows API functions expect null-terminated 16-bit character strings,
     // so we have to encode the name.
     use std::os::windows::ffi::OsStrExt as _;
     let mut subkey_name = subkey_name.encode_wide().collect::<Vec<u16>>();
@@ -679,7 +679,7 @@ unsafe fn query_raw_key_value_data(
     key: windows_sys::Win32::System::Registry::HKEY,
     value_name: &OsStr,
 ) -> std::io::Result<ValueData> {
-    // Windows API functions expect null-terminated 16-bit characater strings,
+    // Windows API functions expect null-terminated 16-bit character strings,
     // so we have to encode the name.
     use std::os::windows::ffi::OsStrExt as _;
     let mut value_name = value_name.encode_wide().collect::<Vec<u16>>();
@@ -721,7 +721,7 @@ unsafe fn query_raw_key_value_data(
     // SAFETY: This is just an FFI call as described in the docs [1].
     //
     // Here we already have the buffer allocated and we just pass it along with
-    // its size. Note that even in the extremelly unlikely case of the value
+    // its size. Note that even in the extremely unlikely case of the value
     // data size changing between the calls, there is no unsafety here and the
     // call will just fail with `ERROR_MORE_DATA`.
     //

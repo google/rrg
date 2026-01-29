@@ -5,7 +5,7 @@
 
 /// Adjoins `left` and `right` using Windows registry key separator (`\`).
 ///
-/// This is simlar to [`std::path::Path::join`] but for Windows registry keys.
+/// This is similar to [`std::path::Path::join`] but for Windows registry keys.
 ///
 /// # Examples
 ///

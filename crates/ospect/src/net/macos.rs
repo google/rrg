@@ -134,7 +134,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
                     *(addr.ifa_addr as *const libc::sockaddr_dl)
                 };
 
-                // Unfortunatelly, it is not uncommon to have some other non-MAC
+                // Unfortunately, it is not uncommon to have some other non-MAC
                 // addresses with the `AF_LINK` family. We simply ignore such.
                 if sockaddr.sdl_alen != 6 {
                     continue;
