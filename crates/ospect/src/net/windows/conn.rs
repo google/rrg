@@ -45,7 +45,7 @@ trait Row {
     /// An idiomatic Rust type that the row type corresponds to.
     type Connection;
 
-    /// Transforms a low-level row structore to an idiomatic Rust type.
+    /// Transforms a low-level row structure to an idiomatic Rust type.
     ///
     /// # Errors
     ///
@@ -385,7 +385,7 @@ where
     };
 
     // Unfortunately, because the API is designed the way it is, we cannot just
-    // convert the bufer at hand to a vector and then have a consuming iterator
+    // convert the buffer at hand to a vector and then have a consuming iterator
     // parsing the rows on-demand. We are forced to pre-parse everything and put
     // the results to another vector.
     let conns = rows
@@ -414,7 +414,7 @@ fn parse_port(val: u32) -> Option<u16> {
 /// the fits the model used by Rust.
 fn parse_ipv4_addr(val: u32) -> std::net::Ipv4Addr {
     // The documentation mentions that the value is in the same format as one
-    // in the `in_addr` [1] structure. While it is not stated explictly, it
+    // in the `in_addr` [1] structure. While it is not stated explicitly, it
     // means that the value is stored in big-endian order and `Ipv4` constructor
     // expectsa native-endian order.
     //

@@ -81,7 +81,7 @@ pub struct Args {
            from_str_fn(parse_duration))]
     pub filestore_ttl: Duration,
 
-    /// The public key for verfying signed commands.
+    /// The public key for verifying signed commands.
     #[argh(option,
        long="command-verification-key",
        arg_name="KEY",

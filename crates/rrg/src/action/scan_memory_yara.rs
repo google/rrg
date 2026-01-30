@@ -258,7 +258,7 @@ fn scan_region<M: MemoryReader>(
         let remaining = region.end_address() - offset;
         let length = remaining.min(chunk_size + chunk_overlap);
         // Any process will most likely have at least one region
-        // that cannot be read succesfully, so there's no point
+        // that cannot be read successfully, so there's no point
         // in reporting an error to the user if that happens,
         // just ignore it and continue.
         if let Ok(buf) = memory.read_chunk(offset, length) {
@@ -536,7 +536,7 @@ mod tests {
             pids: vec![std::process::id()],
             signature: r#"
             rule slow {
-                strings: 
+                strings:
                     $regex = /(a+)+z/
                 condition:
                     $regex

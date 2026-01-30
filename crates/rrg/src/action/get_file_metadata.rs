@@ -386,7 +386,7 @@ impl crate::request::Args for Args {
 
         let paths = proto.take_paths().into_iter()
             .map(PathBuf::try_from)
-            // TOOO(@panhania): Improve error handling (it is not obvious which
+            // TODO(@panhania): Improve error handling (it is not obvious which
             // path caused the error right now).
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| ParseArgsError::invalid_field("path", error))?;
@@ -1248,7 +1248,7 @@ mod tests {
         // filtered. We prune searching for paths containing `ba*`. In case of
         // filtering paths like `foo/bar` would be returned. However, with pru-
         // ning, such path should not be returned as during traversal path `foo`
-        // does not match and is discared with its entire subtree.
+        // does not match and is discarded with its entire subtree.
 
         std::fs::File::create(tempdir.join("foo").join("bar"))
             .unwrap();

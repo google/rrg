@@ -13,7 +13,7 @@ pub struct Startup {
     pub args: Vec<String>,
     /// Time at which the agent was started.
     pub agent_started: std::time::SystemTime,
-    // TOOD(@panhania): Add support for the `os_booted` field.
+    // TODO(@panhania): Add support for the `os_booted` field.
     pub os_kind: ospect::os::Kind,
 }
 

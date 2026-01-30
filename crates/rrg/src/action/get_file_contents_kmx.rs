@@ -848,9 +848,9 @@ mod tests {
             // To only finish the unmount after everything is properly flushed,
             // we wait until the background process is gone [1].
             //
-            // The only way to get the PID fo the background process seems to be
-            // through a "PID file" which is written by `guestmount`, so we use
-            // a temporary file for that.
+            // The only way to get the PID for the background process seems to
+            // be through a "PID file" which is written by `guestmount`, so we
+            // use a temporary file for that.
             //
             // [1]: https://libguestfs.org/guestmount.1.html#race-conditions-possible-when-shutting-down-the-connection
             let pid_file = tempfile::NamedTempFile::new()?;

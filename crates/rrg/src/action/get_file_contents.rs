@@ -130,7 +130,7 @@ impl crate::request::Args for Args {
 
         let paths = proto.take_paths().into_iter()
             .map(PathBuf::try_from)
-            // TOOO(@panhania): Improve error handling (it is not obvious which
+            // TODO(@panhania): Improve error handling (it is not obvious which
             // path caused the error right now).
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| ParseArgsError::invalid_field("paths", error))?;

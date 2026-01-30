@@ -378,7 +378,7 @@ impl<'fs> File<'fs> {
 }
 
 /// Stores file names found within the file metadata. Note that this is
-/// different from the file name stored in the directory heirarchy, and is
+/// different from the file name stored in the directory hierarchy, and is
 /// currently used for NTFS and FAT file systems only.
 pub struct MetaName {
     /// Name of the file, not including the name of the parent directory.

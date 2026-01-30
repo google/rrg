@@ -410,7 +410,7 @@ mod windows {
         // characters in `buf` (null-terminator included). Therefore there can be no buffer overflow.
         //
         // The function [verifies][1] whether the given `addr` is within the
-        // process address space and thus we do not need to add aditional safety
+        // process address space and thus we do not need to add additional safety
         // constraints on the parameter itself.
         //
         // [1]: https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmappedfilenamew#parameters
@@ -556,7 +556,7 @@ mod windows {
                 panic!("could not create file mapping");
             }
 
-            // SAFETY: we just cheched that the mapping was created succesfully.
+            // SAFETY: we just checked that the mapping was created successfully.
             // The raw handle was also not copied to another variable in the meantime
             let mapping = unsafe { OwnedHandle::from_raw_handle(mapping) };
 
@@ -647,7 +647,7 @@ impl From<Permissions> for rrg_proto::dump_process_memory::Permissions {
 /// Arguments of the `dump_process_memory` action.
 #[derive(Default)]
 pub struct Args {
-    /// PIDs of the processs whose memory we are interested in.
+    /// PIDs of the process whose memory we are interested in.
     pids: Vec<u32>,
 
     // Maximum amount of process memory to dump. Applies across all processes in `pids`.
@@ -736,7 +736,7 @@ impl Args {
 
 const MAX_BLOB_SIZE: u64 = 2 * (1024 * 1024);
 
-/// Succesful result of the `dump_process_memory` action.
+/// Successful result of the `dump_process_memory` action.
 /// Represents a single (potentially partially) dumped
 /// region of memory.
 struct OkItem {

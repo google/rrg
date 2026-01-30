@@ -394,7 +394,7 @@ fn _raw_device_path(path: &Path) -> std::io::Result<PathBuf> {
         .collect::<Vec<u16>>();
     // SAFETY: We call `GetFullPathNameW` [1] but with empty buffer only to get
     // a length of the buffer needed to hold the volume path. This is the reco-
-    // mmended approach [2] as giving insufficently big buffer we might end up
+    // mmended approach [2] as giving insufficiently big buffer we might end up
     // with an incomplete result. This works because volume path should not be
     // longer than the full path.
     //
@@ -490,7 +490,7 @@ mod tests {
             .unwrap();
 
         // We assert that the returned path really exists but we can't do much
-        // further as working with raw devices requires root priviledges.
+        // further as working with raw devices requires root privileges.
         assert!(std::fs::exists(raw_device_path(&tempfile).unwrap()).unwrap());
     }
 }

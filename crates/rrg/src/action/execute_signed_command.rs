@@ -32,11 +32,11 @@ pub struct Item {
     exit_status: std::process::ExitStatus,
     /// Standard output of the command executiom.
     stdout: Vec<u8>,
-    /// Wheather standard output is truncated.
+    /// Whether standard output is truncated.
     truncated_stdout: bool,
     /// Standard error of the command executiom.
     stderr: Vec<u8>,
-    /// Wheather stderr is truncated.
+    /// Whether stderr is truncated.
     truncated_stderr: bool,
 }
 
@@ -53,7 +53,7 @@ impl std::fmt::Display for MissingCommandVerificationKeyError {
 
 impl std::error::Error for MissingCommandVerificationKeyError {}
 
-/// An error indicating that stdin of the command couln't be captured.
+/// An error indicating that stdin of the command couldn't be captured.
 #[derive(Debug)]
 struct CommandExecutionError(std::io::Error);
 
@@ -230,7 +230,7 @@ where
             // able to catch all errors.
             command_stdin.flush()?;
 
-            // We explictly drop the pipe to notify the spawned command that
+            // We explicitly drop the pipe to notify the spawned command that
             // there is no more input incoming.
             drop(command_stdin);
 
@@ -701,7 +701,7 @@ mod tests {
         assert!(!item.truncated_stderr);
     }
 
-    // `/dev/zero` is specifix to Linux.
+    // `/dev/zero` is specific to Linux.
     #[cfg(target_os = "linux")]
     #[test]
     fn handle_stdout_large() {
@@ -869,7 +869,7 @@ mod tests {
         let ed25519_signature = signing_key.sign(&raw_command);
 
         // There is no direct analogue to `cat` on Windows but `findstr` can act
-        // similarly: it behaves like `grep`, outputing lines from the input
+        // similarly: it behaves like `grep`, outputting lines from the input
         // that match the given expression.
         //
         // What we do in this test is we provide a lot of "ABCD" lines and we
@@ -947,7 +947,7 @@ mod tests {
         let ed25519_signature = signing_key.sign(&raw_command);
 
         // In this test we pipe 2 MiB of data to `sleep` to verify that there is
-        // no deadlock when writing input. `sleep` does not consume anthing, so
+        // no deadlock when writing input. `sleep` does not consume anything, so
         // it should eventually start blocking—the timeout logic should still
         // work despite that.
 
@@ -1019,7 +1019,7 @@ mod tests {
 
         // In this test we pipe 2 MiB of data to the subprocess to verify that
         // there is no deadlock when writing input. The subprocess does not con-
-        // sume anthing and will eventually start blocking and the timeout logic
+        // sume anything and will eventually start blocking and the timeout logic
         // should still work despite that.
 
         let args = Args {

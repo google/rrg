@@ -101,9 +101,9 @@ pub fn hostname() -> std::io::Result<std::ffi::OsString> {
 
 /// Returns the FQDN of the currently running operating system.
 ///
-/// Note that FQDN retrival is not reliable on all operating systems and in some
-/// cases just a hostname can be returned instead (depending on the configration
-/// of the sepcific system).
+/// Note that FQDN retrieval is not reliable on all operating systems and in some
+/// cases just a hostname can be returned instead (depending on the configuration
+/// of the specific system).
 ///
 /// # Errors
 ///

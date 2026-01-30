@@ -105,7 +105,7 @@ impl From<ospect::fs::ExtAttr> for fs::FileExtAttr {
 
         // Extended attributes are not supported on Windows, so technically
         // we don't need to have this code. But in case somebody creates an
-        // aritficial extended attribute code it is better to be at least
+        // artificial extended attribute code it is better to be at least
         // somewhat covered.
         #[cfg(target_family = "windows")]
         {

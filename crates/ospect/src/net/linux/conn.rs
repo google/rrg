@@ -194,7 +194,7 @@ fn parse_tcp_connection<A>(
     // in order not to get empty parts, we also trim it.
     let mut parts = string.trim_start().split(char::is_whitespace);
 
-    // `sl` column (whathever that means but it is just a line number), we don't
+    // `sl` column (whatever that means but it is just a line number), we don't
     // care about it but expect it to be there.
     if parts.next().is_none() {
         return Err(ParseConnectionError::InvalidFormat);
@@ -217,7 +217,7 @@ fn parse_tcp_connection<A>(
 
     // The line afterwards may contain some ill-formed data and we could raise
     // an error if we detect it. However, we choose to be generous and not to do
-    // that to keep things simple. It also makes the code slightly more resilent
+    // that to keep things simple. It also makes the code slightly more resilient
     // to potential format changes.
 
     Ok(TcpConnectionInner {
@@ -294,7 +294,7 @@ fn parse_socket_addr_v6(string: &str) -> Result<std::net::SocketAddrV6, ParseSoc
 
     // procfs uses pretty awkward representation of IPv6 address [1, 2]. It is
     // grouped to 4 32-bit integers. Within each integer, each byte is displayed
-    // as a 2-digit hexadecimal number. Invidual bytes of the integer (so, two
+    // as a 2-digit hexadecimal number. Individual bytes of the integer (so, two
     // hex digit substrings) are in the host-endian order whereas the integers
     // itself are ordered from the most significant to the least significant.
     //

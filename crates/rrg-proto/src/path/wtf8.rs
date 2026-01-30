@@ -115,7 +115,7 @@ where
             _ => return Err(ParseError::IllegalByte(byte1)),
         }
 
-        // Code point to potentially ill-formed UTF-16 coversion based on [1].
+        // Code point to potentially ill-formed UTF-16 conversion based on [1].
         //
         // [1]: https://simonsapin.github.io/wtf-8/#encoding-ill-formed-utf-16
         if is_supplementary(&point) {

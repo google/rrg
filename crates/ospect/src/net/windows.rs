@@ -169,7 +169,7 @@ pub fn interfaces() -> std::io::Result<impl Iterator<Item = Interface>> {
                     // SAFETY: Accessing this union is safe because these are
                     // just alternative ways to "view" the data [1]. We use the
                     // "octets" view rather than the "single-integer" view not
-                    // to deal with endianess shenanigans.
+                    // to deal with endianness shenanigans.
                     //
                     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winsock2/ns-winsock2-in_addr
                     let ipv4_addr_octets = unsafe {

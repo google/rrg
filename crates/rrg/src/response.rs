@@ -11,7 +11,7 @@ use crate::filter::FilterSet;
 /// Protocol Buffers message that the GRR server can interpret. In other words,
 /// "items" are simply objects that can be converted to such messages.
 ///
-/// Note that unlike `From<protobuf::Message>`, implementors of this trait can
+/// Note that unlike `From<protobuf::Message>`, implementers of this trait can
 /// include a bit of "impurity" to the conversion (e.g. logging).
 pub trait Item: Sized {
     /// Low-level Protocol Buffers type representing the action results.
@@ -166,7 +166,7 @@ impl Status {
 /// Note that even though log messages are responses they do not have a unique
 /// identifier (unlike [`Status`] and [`Reply`] instances).
 pub struct Log<'r, 'a> {
-    /// A unique identifier of the request that casued the log message.
+    /// A unique identifier of the request that caused the log message.
     request_id: RequestId,
     /// The time at which the message was logged.
     timestamp: std::time::SystemTime,
