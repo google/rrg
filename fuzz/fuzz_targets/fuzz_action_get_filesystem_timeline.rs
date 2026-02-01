@@ -34,11 +34,11 @@ fn create_test_tree(entries: &[FsEntry]) -> Option<TempDir> {
     let root_path = temp_dir.path();
 
     for entry in entries {
-        // Prevent directory traversal ("../") and absolute paths to keep fuzzing safe
+        // Prevent directory traversal ("../") and absolute paths to keep fuzzing safe.
         if entry.path.contains("..") || entry.path.starts_with('/') {
             continue;
         }
-        // Remove nulls which panic Rust's file APIs
+        // Remove nulls which panic Rust's file APIs.
         let safe_path = entry.path.replace('\0', "");
         if safe_path.is_empty() {
             continue;
@@ -46,12 +46,12 @@ fn create_test_tree(entries: &[FsEntry]) -> Option<TempDir> {
 
         let full_path = root_path.join(&safe_path);
 
-        // Ensure Parent Directories Exist
+        // Best Effort: If 'parent' cannot be created (e.g. because part of the
+        // path is already a file), we ignore the error. The fuzzer generates
+        // conflicting paths constantly;
         if let Some(parent) = full_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-
-        // Create the Node (Dir, Symlink, or File)
         if entry.is_dir {
             let _ = fs::create_dir(&full_path);
         } else if entry.is_symlink {
@@ -68,7 +68,7 @@ fn create_test_tree(entries: &[FsEntry]) -> Option<TempDir> {
 }
 
 fuzz_target!(|input: FuzzInput| {
-    // Create a real directory tree in RAM (/tmp)
+    // Create a real directory tree in RAM (/tmp).
     let temp_dir = match create_test_tree(&input.entries) {
         Some(d) => d,
         None => return,

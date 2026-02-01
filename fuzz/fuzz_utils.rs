@@ -67,12 +67,17 @@ impl<'a> Arbitrary<'a> for FuzzRegex {
 impl MemFd {
     pub fn new(content: &[u8]) -> Option<Self> {
         let cname = CString::new("fuzzfd").unwrap();
+        // SAFETY: We provide a valid pointer to a null-terminated string and
+        // use flag `1` (MFD_CLOEXEC), ensuring the FD is closed on exec to avoid pollution,
+        // as actions use linked libraries not spawned processes
         let fd = unsafe { libc::memfd_create(cname.as_ptr(), 1) };
 
         if fd == -1 {
             return None;
         }
 
+        // SAFETY: We just created the file descriptor, so it is valid and we
+        // have exclusive ownership of it.
         let mut file = unsafe { File::from_raw_fd(fd) };
         if file.write_all(content).is_err() {
             return None;
@@ -93,6 +98,8 @@ impl MemFd {
 
 impl Drop for MemFd {
     fn drop(&mut self) {
+        // SAFETY: We own the file descriptor and we are in the destructor, so
+        // it is safe to close it to avoid leaks.
         unsafe { libc::close(self.fd) };
     }
 }
