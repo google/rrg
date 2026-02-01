@@ -1,5 +1,5 @@
 [package]
-name= "fuzz"
+name = "fuzz"
 version = "0.0.1"
 edition = "2024"
 publish = false
@@ -9,15 +9,15 @@ cargo-fuzz = true
 
 [lib]
 name = "fuzz_utils"
-path = "utils.rs"
+path = "fuzz_utils.rs"
 
 [dependencies]
-libfuzzer-sys="0.4"
+libfuzzer-sys = "0.4"
 protobuf = "3.7.2"
 libc = "0.2"
 arbitrary = { version = "1", features = ["derive"] }
-log = {version = "0.4.22", features = ["std"]}
-rrg-proto = {path = "../crates/rrg-proto"}
+log = { version = "0.4.22", features = ["std"] }
+rrg-proto = { path = "../crates/rrg-proto" }
 regex = "1"
 tempfile = "3.2"
 
@@ -52,7 +52,7 @@ features = [
 ]
 
 [workspace]
-members =["."]
+members = ["."]
 
 [[bin]]
 name = "fuzz_actions"

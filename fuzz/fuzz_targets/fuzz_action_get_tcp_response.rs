@@ -19,7 +19,7 @@ struct FuzzInput {
     connect_timeout_ns: u32,
     write_timeout_ns: u32,
     read_timeout_ns: u32,
-    // If true, send >1MB to trigger the "limit reached" path
+    // If true, send >1MB to trigger the "limit reached" path.
     flood_server: bool,
 }
 
@@ -42,7 +42,7 @@ fuzz_target!(|input: FuzzInput| {
         }
 
         if let Ok((mut stream, _)) = listener.accept() {
-            // Read whatever the agent sends
+            // Read whatever the agent sends.
             let mut buf = [0u8; 128];
             let _ = stream.read(&mut buf);
 

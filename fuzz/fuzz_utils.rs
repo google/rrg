@@ -25,6 +25,7 @@ pub struct MemFd {
 pub struct FuzzSession {
     args: rrg::args::Args,
     filestore: rrg::filestore::Filestore,
+    _filestore_tempdir: tempfile::TempDir,
 }
 
 pub fn make_proto_path(s: &str) -> rrg_proto::fs::Path {
@@ -35,7 +36,7 @@ pub fn make_proto_path(s: &str) -> rrg_proto::fs::Path {
 
 impl<'a> Arbitrary<'a> for FuzzRegex {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-        // 10% chance to be empty (no regex filtering)
+        // 10% chance to be empty (no regex filtering).
         if u.ratio(1, 10)? {
             return Ok(FuzzRegex(String::new()));
         }
@@ -46,7 +47,7 @@ impl<'a> Arbitrary<'a> for FuzzRegex {
             "foo|bar", "(a|b)+", "[^0-9]", "\\s+"
         ];
 
-        // 80% chance to pick a valid syntax (Single or Combined)
+        // 80% chance to pick a valid syntax (Single or Combined).
         if u.ratio(8, 10)? {
             let count = u.int_in_range(1..=3)?;
             let mut s = String::new();
@@ -57,7 +58,7 @@ impl<'a> Arbitrary<'a> for FuzzRegex {
             return Ok(FuzzRegex(s));
         }
 
-        // 10% chance to use raw random string (Tests invalid regex errors)
+        // 10% chance to use raw random string (Tests invalid regex errors).
         let s: String = u.arbitrary()?;
         Ok(FuzzRegex(s.replace('\0', "")))
     }
@@ -98,6 +99,7 @@ impl Drop for MemFd {
 
 impl FuzzSession {
     pub fn new() -> Self {
+        let temp_dir = tempfile::Builder::new().tempdir().unwrap();
         let args = rrg::args::Args {
             heartbeat_rate: Duration::ZERO,
             ping_rate: Duration::ZERO,
@@ -105,18 +107,19 @@ impl FuzzSession {
             verbosity: log::LevelFilter::Off,
             log_to_stdout: false,
             log_to_file: None,
-            filestore_dir: Some(std::env::temp_dir().join("rrg-fuzz-filestore")),
+            filestore_dir: Some(temp_dir.path().to_path_buf()),
             filestore_ttl: Duration::from_secs(3600),
         };
 
         let filestore = rrg::filestore::Filestore::init(
             &args.filestore_dir.clone().unwrap(),
             args.filestore_ttl,
-        ).expect("failed to init temporary filestore for fuzzing");
+        ).unwrap();
 
         Self {
             args,
             filestore,
+            _filestore_tempdir: temp_dir,
         }
     }
 }

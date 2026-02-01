@@ -34,7 +34,7 @@ struct FuzzCommand {
 
 #[derive(Debug, Arbitrary)]
 struct FuzzInput {
-    // The structured command we will serialize
+    // The structured command we will serialize.
     command: FuzzCommand,
 
     signature: Vec<u8>,
@@ -46,12 +46,8 @@ struct FuzzInput {
 fuzz_target!(|input: FuzzInput| {
     let mut session = FuzzSession::new();
 
-    //Construct the Inner 'Command' Proto ---
     let mut cmd_proto = rrg_proto::execute_signed_command::Command::new();
-
-    let mut path_proto = rrg_proto::fs::Path::new();
-    path_proto.set_raw_bytes(input.command.path.into_bytes());
-    cmd_proto.set_path(path_proto);
+    cmd_proto.mut_path().set_raw_bytes(input.command.path.into_bytes());
 
     for f_arg in input.command.args {
         let mut arg_proto = rrg_proto::execute_signed_command::command::Arg::new();
@@ -73,10 +69,8 @@ fuzz_target!(|input: FuzzInput| {
         cmd_proto.set_unsigned_stdin_allowed(input.command.unsigned_stdin_allowed);
     }
 
-    // Serialize the inner command to bytes
     let command_bytes = cmd_proto.write_to_bytes().unwrap_or_default();
 
-    // Construct the Outer Action Args ---
     let mut args = rrg_proto::execute_signed_command::Args::new();
     args.set_command(command_bytes);
     args.set_command_ed25519_signature(input.signature);
