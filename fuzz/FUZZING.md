@@ -23,6 +23,7 @@ To accelerate the fuzzer exploration the target's corpus directory can be seeded
 
 ```bash
 mkdir -p fuzz/corpus/fuzz_action_get_file_contents_kmx
+pushd fuzz/corpus/fuzz_action_get_file_contents_kmx
 
 # Fat32 (2MB)
 dd if=/dev/zero of=small_fat32.img bs=1M count=2
@@ -43,5 +44,6 @@ mkfs.ntfs -F -f small_ntfs.img
 dd if=/dev/zero of=disk_mbr.img bs=1M count=2
 echo "start=2048, type=83" | sfdisk disk_mbr.img
 
+popd
 cargo fuzz run fuzz_action_get_file_contents_kmx
 ```
