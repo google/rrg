@@ -136,8 +136,28 @@ impl rrg::session::Session for FuzzSession {
         &self.args
     }
 
-    fn filestore(&self) -> rrg::session::Result<&rrg::filestore::Filestore> {
-        Ok(&self.filestore)
+    fn filestore_store(
+        &self,
+        file_id: &str,
+        part: rrg::filestore::Part,
+    ) -> rrg::session::Result<rrg::filestore::Status> {
+
+        self.filestore.store(rrg::filestore::Id {
+            flow_id: 0xFA4E,
+            file_id,
+        }, part)
+            .map_err(rrg::session::Error::action)
+    }
+
+    fn filestore_path(
+        &self,
+        file_id: &str,
+    ) -> rrg::session::Result<std::path::PathBuf> {
+        self.filestore.path(rrg::filestore::Id {
+            flow_id: 0xFA4E,
+            file_id,
+        })
+            .map_err(rrg::session::Error::action)
     }
 
     fn reply<I: rrg::Item + 'static>(&mut self, _: I) -> rrg::session::Result<()> { Ok(()) }
