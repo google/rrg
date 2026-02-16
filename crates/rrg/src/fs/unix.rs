@@ -13,7 +13,10 @@ where
     root_dir_builder.recursive(true);
 
     use std::os::unix::fs::DirBuilderExt as _;
-    root_dir_builder.mode(0o700);
+    // We need `u32::from` because `DirBuilderExt::mode` takes `u32` but libc
+    // flags use `mode_t` which varies by platform (e.g. it is `u16` on Apple
+    // systems).
+    root_dir_builder.mode(u32::from(libc::S_IRWXU));
 
     root_dir_builder.create(path)
 }
