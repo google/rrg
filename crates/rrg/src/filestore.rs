@@ -136,21 +136,7 @@ impl Filestore {
     pub fn init(path: &Path, ttl: Duration) -> std::io::Result<Filestore> {
         log::info!("setting up filestore dir in '{}'", path.display());
 
-        let mut root_dir_builder = std::fs::DirBuilder::new();
-        root_dir_builder.recursive(true);
-
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::fs::DirBuilderExt as _;
-            root_dir_builder.mode(0o700);
-        }
-
-        // TODO: Restrict folder access on Windows.
-        //
-        // This seems quite involved process that involves wrangling with the
-        // Windows API.
-
-        root_dir_builder.create(path)
+        crate::fs::create_dir_private_all(path)
             .map_err(|error| std::io::Error::new(error.kind(), format! {
                 "could not create root dir at '{}': {error}",
                 path.display(),

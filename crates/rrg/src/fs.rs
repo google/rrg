@@ -9,6 +9,9 @@
 //! standard `std::fs` module. All functions are portable and should work on all
 //! supported platforms (perhaps with limited capabilities).
 
+#[cfg(target_family = "unix")]
+mod unix;
+
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::time::{Duration};
@@ -354,6 +357,25 @@ fn _remove_dir_if_empty(path: &Path) -> std::io::Result<bool> {
         Err(error) => {
             Err(error)
         }
+    }
+}
+
+pub fn create_dir_private_all<P>(path: P) -> std::io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    #[cfg(target_family = "unix")]
+    {
+        self::unix::create_dir_private_all(path.as_ref())
+    }
+
+    // TODO: Restrict folder access on Windows.
+    //
+    // This seems quite involved process that involves wrangling with the
+    // Windows API.
+    #[cfg(target_family = "windows")]
+    {
+        std::fs::create_dir_all(path)
     }
 }
 
@@ -783,5 +805,44 @@ mod tests {
         let empty = remove_dir_if_empty(tempdir.path())
             .unwrap();
         assert!(empty);
+    }
+
+    #[test]
+    fn create_dir_private_all_already_existing() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        create_dir_private_all(tempdir.path())
+            .unwrap();
+
+        // The temporary directory should still be empty.
+        assert_eq!(std::fs::read_dir(tempdir.path()).unwrap().count(), 0);
+
+        // The user should be able to create files in it.
+        std::fs::File::create_new(tempdir.path().join("quux"))
+            .unwrap();
+    }
+
+    #[test]
+    fn create_dir_private_all_one_level() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        create_dir_private_all(tempdir.path().join("foo"))
+            .unwrap();
+
+        // The user should be able to create files in the created folder.
+        std::fs::File::create_new(tempdir.path().join("foo").join("quux"))
+            .unwrap();
+    }
+
+    #[test]
+    fn create_dir_private_all_many_levels() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        create_dir_private_all(tempdir.path().join("foo").join("bar"))
+            .unwrap();
+
+        // The user should be able to create files in the created folders.
+        std::fs::File::create_new(tempdir.path().join("foo").join("bar").join("quux"))
+            .unwrap();
     }
 }
