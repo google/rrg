@@ -12,6 +12,9 @@
 #[cfg(target_family = "unix")]
 mod unix;
 
+#[cfg(target_family = "windows")]
+mod windows;
+
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::time::{Duration};
@@ -369,13 +372,9 @@ where
         self::unix::create_dir_private_all(path.as_ref())
     }
 
-    // TODO: Restrict folder access on Windows.
-    //
-    // This seems quite involved process that involves wrangling with the
-    // Windows API.
     #[cfg(target_family = "windows")]
     {
-        std::fs::create_dir_all(path)
+        self::windows::create_dir_private_all(path.as_ref())
     }
 }
 
