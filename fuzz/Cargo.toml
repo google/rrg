@@ -1,0 +1,91 @@
+[package]
+name = "fuzz"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[lib]
+name = "fuzz_utils"
+path = "fuzz_utils.rs"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+protobuf = "3.7.2"
+libc = "0.2"
+arbitrary = { version = "1", features = ["derive"] }
+log = { version = "0.4.22", features = ["std"] }
+rrg-proto = { path = "../crates/rrg-proto" }
+regex = "1"
+tempfile = "3.2"
+
+[dependencies.rrg]
+path = "../crates/rrg"
+default-features = false
+features = [
+    # Defaults
+    "action-get_system_metadata",
+    "action-get_file_metadata",
+    "action-get_file_metadata-md5",
+    "action-get_file_metadata-sha1",
+    "action-get_file_metadata-sha256",
+    "action-get_file_contents",
+    "action-get_file_sha256",
+    "action-grep_file_contents",
+    "action-get_filesystem_timeline",
+    "action-get_tcp_response",
+    "action-list_connections",
+    "action-list_interfaces",
+    "action-list_mounts",
+    "action-list_utmp_users",
+    "action-get_winreg_value",
+    "action-list_winreg_values",
+    "action-list_winreg_keys",
+    "action-query_wmi",
+    "action-execute_signed_command",
+    "action-dump_process_memory",
+
+    # kmx
+    "action-get_file_contents_kmx",
+]
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_actions"
+path = "fuzz_targets/fuzz_actions.rs"
+
+[[bin]]
+name = "fuzz_action_get_filesystem_timeline"
+path = "fuzz_targets/fuzz_action_get_filesystem_timeline.rs"
+
+[[bin]]
+name = "fuzz_action_grep_file_contents"
+path = "fuzz_targets/fuzz_action_grep_file_contents.rs"
+
+[[bin]]
+name = "fuzz_action_get_file_metadata"
+path = "fuzz_targets/fuzz_action_get_file_metadata.rs"
+
+[[bin]]
+name = "fuzz_action_get_file_contents"
+path = "fuzz_targets/fuzz_action_get_file_contents.rs"
+
+[[bin]]
+name = "fuzz_action_get_file_contents_kmx"
+path = "fuzz_targets/fuzz_action_get_file_contents_kmx.rs"
+
+[[bin]]
+name = "fuzz_action_get_file_sha256"
+path = "fuzz_targets/fuzz_action_get_file_sha256.rs"
+
+[[bin]]
+name = "fuzz_action_execute_signed_command"
+path = "fuzz_targets/fuzz_action_execute_signed_command.rs"
+
+[[bin]]
+name = "fuzz_action_get_tcp_response"
+path = "fuzz_targets/fuzz_action_get_tcp_response.rs"
