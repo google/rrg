@@ -9,6 +9,10 @@ pub fn create_dir_private_all<P>(path: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
+    _create_dir_private_all(path.as_ref())
+}
+
+fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
     let mut root_dir_builder = std::fs::DirBuilder::new();
     root_dir_builder.recursive(true);
 

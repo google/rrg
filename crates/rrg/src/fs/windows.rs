@@ -19,6 +19,10 @@ pub fn create_dir_private_all<P>(path: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
+    _create_dir_private_all(path.as_ref())
+}
+
+fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
     // We use capacity of 2: one for the current user and one for the admin
     // group.
     let mut acl = Acl::with_capacity(2)?;
