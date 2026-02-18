@@ -111,6 +111,22 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
         sec_desc.assume_init()
     };
 
+    // SAFETY: We set the control bits as described in the docs [1] using valid
+    // security descriptor and constant-defined bits. We verify the result of
+    // the call below.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-setsecuritydescriptorcontrol
+    let status = unsafe {
+        windows_sys::Win32::Security::SetSecurityDescriptorControl(
+            &mut sec_desc as *mut _ as *mut std::ffi::c_void,
+            windows_sys::Win32::Security::SE_DACL_PROTECTED,
+            windows_sys::Win32::Security::SE_DACL_PROTECTED,
+        )
+    };
+    if status == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
     // SAFETY: We call `SetSecurityDescriptorDacl` as described in the docs [1]
     // on a valid security descriptor (initialized and verified above) and a
     // valid instance of `ACL`. We verify the result of the call below.
