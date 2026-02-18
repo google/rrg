@@ -19,19 +19,6 @@ pub fn create_dir_private_all<P>(path: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    _create_dir_private_all(path.as_ref())
-}
-
-fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
-    if let Some(path_parent) = path.parent() {
-        _create_dir_private_all(path_parent)?;
-    }
-
-    use std::os::windows::ffi::OsStrExt as _;
-    let mut path_wide = path.as_os_str().encode_wide()
-        .collect::<Vec<u16>>();
-    path_wide.push(0);
-
     // We use capacity of 2: one for the current user and one for the admin
     // group.
     let mut acl = Acl::with_capacity(2)?;
@@ -176,6 +163,51 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
         bInheritHandle: windows_sys::Win32::Foundation::FALSE,
     };
 
+    // SAFETY: Security attributes were properly initialized now.
+    unsafe {
+        create_dir_with_sec_attrs_all(path.as_ref(), &sec_attrs)
+    }
+}
+
+/// Recursively creates a directory at the given path with the given security
+/// attributes.
+///
+/// # Safety
+///
+/// `sec_attrs` must be a valid instance of [`SECURTITY_ATTRIBUTES`].
+unsafe fn create_dir_with_sec_attrs_all(
+    path: &Path,
+    sec_attrs: &SECURITY_ATTRIBUTES,
+) -> std::io::Result<()>
+{
+    if let Some(path_parent) = path.parent() {
+        // SAFETY: `sec_attrs` is required to be a valid instance.
+        unsafe {
+            create_dir_with_sec_attrs_all(path_parent, sec_attrs)?
+        }
+    }
+
+    // SAFETY: `sec_attrs` is required to be a valid instance.
+    unsafe {
+        create_dir_with_sec_attrs(path, sec_attrs)
+    }
+}
+
+/// Creates a directory at the given path with the given security attributes.
+///
+/// # Safety
+///
+/// `sec_attrs` must be a valid instance of [`SECURTITY_ATTRIBUTES`].
+unsafe fn create_dir_with_sec_attrs(
+    path: &Path,
+    sec_attrs: &SECURITY_ATTRIBUTES,
+) -> std::io::Result<()>
+{
+    use std::os::windows::ffi::OsStrExt as _;
+    let mut path_wide = path.as_os_str().encode_wide()
+        .collect::<Vec<u16>>();
+    path_wide.push(0);
+
     // SAFETY: We call the function as descrined in the docs [1] on a valid wide
     // null-terminated path with a valid security attributes object.
     //
@@ -183,7 +215,7 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
     let status = unsafe {
         windows_sys::Win32::Storage::FileSystem::CreateDirectoryW(
             path_wide.as_ptr(),
-            &sec_attrs,
+            sec_attrs,
         )
     };
     if status == 0 {
