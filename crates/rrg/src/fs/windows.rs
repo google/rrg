@@ -196,7 +196,15 @@ unsafe fn create_dir_with_sec_attrs_all(
         create_dir_with_sec_attrs(path, sec_attrs)
     } {
         Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        // The directory might already exist which is fine. Note however that we
+        // do not match on `ErrorKind::AlreadyExists` and do a system call for
+        // checking the existence. There are two reason for that:
+        //
+        // 1. The path exists but it is not a directory. In that case we still
+        //    want to throw an error.
+        // 2. The path exists as a directory but we get some other error (e.g.
+        //    permission denied which happens for root folders like `C:\`).
+        Err(_) if path.is_dir() => Ok(()),
         Err(error) => Err(error),
     }
 }

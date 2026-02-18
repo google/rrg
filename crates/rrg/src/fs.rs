@@ -832,6 +832,18 @@ mod tests {
     }
 
     #[test]
+    fn create_dir_private_all_already_existing_file() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        std::fs::File::create_new(tempdir.path().join("foo"))
+            .unwrap();
+
+        let error = create_dir_private_all(tempdir.path().join("foo"))
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+    }
+
+    #[test]
     fn create_dir_private_all_one_level() {
         let tempdir = tempfile::tempdir().unwrap();
 
