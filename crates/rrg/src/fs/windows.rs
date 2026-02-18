@@ -318,6 +318,9 @@ impl AccessTokenInfo<TOKEN_USER> {
         let buf = unsafe {
             std::alloc::alloc(layout)
         };
+        if buf.is_null() {
+            std::alloc::handle_alloc_error(layout);
+        }
 
         // We create the result here already to trigger RAII deallocation of the
         // buffer in case the call below does not succeed.
@@ -412,6 +415,9 @@ impl Acl {
         let buf = unsafe {
             std::alloc::alloc(layout)
         };
+        if buf.is_null() {
+            std::alloc::handle_alloc_error(layout);
+        }
 
         // We create the result here already to trigger RAII deallocation of the
         // buffer in case the call below does not succeed.
