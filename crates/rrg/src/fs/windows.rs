@@ -39,9 +39,9 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
     let token_current_process = AccessToken::current_process()?;
     let token_current_user = AccessTokenInfo::user(token_current_process)?;
 
-    // SAFETY: We call `AddAccessAllowedAce` as described in the docs [1] on a
-    // valid instance of `ACL` using SID of a valid user. We verify the result
-    // of the call below.
+    // SAFETY: We call add an user ACE to the ACL as described in the docs [1]
+    // on a valid instance using SID of a valid user. We verify the result of
+    // the call below.
     //
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-addaccessallowedace
     let status = unsafe {
@@ -65,9 +65,9 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
     let mut admin_user_sid_len = {
         windows_sys::Win32::Security::SECURITY_MAX_SID_SIZE
     };
-    // SAFETY: We call `CreateWellKnownSid` as described in the docs [1] on a
-    // buffer large enough to contain the largest possible SID. We verify the
-    // result of the call below.
+    // SAFETY: We call get SID for the admin group as described in the docs [1]
+    // on a buffer large enough to contain the largest possible SID. We verify
+    // the result of the call below.
     //
     // [1]: https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createwellknownsid
     let status = unsafe {
@@ -85,6 +85,11 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
         }));
     }
 
+    // SAFETY: We call add an admin ACE to the ACL as described in the docs [1]
+    // on a just retrieved and verified SID. We verify the result of the call
+    // below.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-addaccessallowedace
     let status = unsafe {
         windows_sys::Win32::Security::AddAccessAllowedAce(
             &mut *acl,
@@ -384,7 +389,7 @@ impl Acl {
             buf,
         };
 
-        // SAFETY: We call `InitializeAcl` as described in the docs [1] with the
+        // SAFETY: We initialize the ACL as described in the docs [1] with the
         // pre-allocated buffer aligned to hold `ACL` data. We correctly pass
         // its length along and verify the result blow.
         //
