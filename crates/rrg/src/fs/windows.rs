@@ -191,9 +191,13 @@ unsafe fn create_dir_with_sec_attrs_all(
         }
     }
 
-    // SAFETY: `sec_attrs` is required to be a valid instance.
-    unsafe {
+    // SAFETY: `sec_attrs` is a valid instance.
+    match unsafe {
         create_dir_with_sec_attrs(path, sec_attrs)
+    } {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(error),
     }
 }
 
@@ -223,16 +227,7 @@ unsafe fn create_dir_with_sec_attrs(
         )
     };
     if status == 0 {
-        // SAFETY: `GetLastError` is always safe to call.
-        //
-        // We use it over the standard `Error::last_os_error` to match on error
-        // code specifically mentioned in `CreateDirectoryW` documentation in-
-        // stead of `ErrorKind::AlreadyExists` that is not guaranteed to corres-
-        // pond to it (but it almost certainly will).
-        match unsafe { windows_sys::Win32::Foundation::GetLastError() } {
-            windows_sys::Win32::Foundation::ERROR_ALREADY_EXISTS => (),
-            error => return Err(std::io::Error::from_raw_os_error(error as i32)),
-        }
+        return Err(std::io::Error::last_os_error());
     }
 
     Ok(())
