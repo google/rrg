@@ -32,10 +32,12 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
         .collect::<Vec<u16>>();
     path_wide.push(0);
 
+    // We use capacity of 2: one for the current user and one for the admin
+    // group.
+    let mut acl = Acl::with_capacity(2)?;
+
     let token_current_process = AccessToken::current_process()?;
     let token_current_user = AccessTokenInfo::user(token_current_process)?;
-
-    let mut acl = Acl::with_capacity(1)?;
 
     // SAFETY: We call `AddAccessAllowedAce` as described in the docs [1] on a
     // valid instance of `ACL` using SID of a valid user. We verify the result
@@ -48,6 +50,41 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
             windows_sys::Win32::Security::ACL_REVISION,
             windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS,
             token_current_user.User.Sid,
+        )
+    };
+    if status == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    let mut admin_user_sid = {
+        [0; windows_sys::Win32::Security::SECURITY_MAX_SID_SIZE as usize]
+    };
+    let mut admin_user_sid_len = {
+        windows_sys::Win32::Security::SECURITY_MAX_SID_SIZE
+    };
+    // SAFETY: We call `CreateWellKnownSid` as described in the docs [1] on a
+    // buffer large enough to contain the largest possible SID. We verify the
+    // result of the call below.
+    //
+    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createwellknownsid
+    let status = unsafe {
+        windows_sys::Win32::Security::CreateWellKnownSid(
+            windows_sys::Win32::Security::WinBuiltinAdministratorsSid,
+            std::ptr::null_mut(),
+            &mut admin_user_sid as *mut _ as *mut std::ffi::c_void,
+            &mut admin_user_sid_len,
+        )
+    };
+    if status == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    let status = unsafe {
+        windows_sys::Win32::Security::AddAccessAllowedAce(
+            &mut *acl,
+            windows_sys::Win32::Security::ACL_REVISION,
+            windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS,
+            &mut admin_user_sid as *mut _ as *mut std::ffi::c_void,
         )
     };
     if status == 0 {
