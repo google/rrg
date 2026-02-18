@@ -53,7 +53,10 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
         )
     };
     if status == 0 {
-        return Err(std::io::Error::last_os_error());
+        let error = std::io::Error::last_os_error();
+        return Err(std::io::Error::new(error.kind(), format! {
+            "could not add current user ACE to ACL: {error}",
+        }));
     }
 
     let mut admin_user_sid = {
@@ -76,7 +79,10 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
         )
     };
     if status == 0 {
-        return Err(std::io::Error::last_os_error());
+        let error = std::io::Error::last_os_error();
+        return Err(std::io::Error::new(error.kind(), format! {
+            "could not create builtin admin group SID: {error}",
+        }));
     }
 
     let status = unsafe {
@@ -88,7 +94,10 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
         )
     };
     if status == 0 {
-        return Err(std::io::Error::last_os_error());
+        let error = std::io::Error::last_os_error();
+        return Err(std::io::Error::new(error.kind(), format! {
+            "could not add admins ACE to ACL: {error}",
+        }));
     }
 
     let mut sec_desc = std::mem::MaybeUninit::<SECURITY_DESCRIPTOR>::uninit();
@@ -103,7 +112,10 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
         )
     };
     if status == 0 {
-        return Err(std::io::Error::last_os_error());
+        let error = std::io::Error::last_os_error();
+        return Err(std::io::Error::new(error.kind(), format! {
+            "could not initialize security descriptor: {error}",
+        }));
     }
     // SAFETY: We initialized the security descriptor and verified that it suc-
     // ceeded.
@@ -124,7 +136,10 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
         )
     };
     if status == 0 {
-        return Err(std::io::Error::last_os_error());
+        let error = std::io::Error::last_os_error();
+        return Err(std::io::Error::new(error.kind(), format! {
+            "could not enable security descriptor DACL protection: {error}",
+        }));
     }
 
     // SAFETY: We call `SetSecurityDescriptorDacl` as described in the docs [1]
@@ -141,7 +156,10 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
         )
     };
     if status == 0 {
-        return Err(std::io::Error::last_os_error());
+        let error = std::io::Error::last_os_error();
+        return Err(std::io::Error::new(error.kind(), format! {
+            "could not set security descriptor DACL: {error}",
+        }));
     }
 
     // See [1] for the details on invididual fields.
@@ -203,7 +221,10 @@ impl AccessToken {
             )
         };
         if status == 0 {
-            return Err(std::io::Error::last_os_error());
+            let error = std::io::Error::last_os_error();
+            return Err(std::io::Error::new(error.kind(), format! {
+                "could not open access token for the current process: {error}",
+            }));
         }
         // SAFETY: We verified that the call above succeeded, so `handle` should
         // now be properly initialized.
@@ -286,7 +307,10 @@ impl AccessTokenInfo<TOKEN_USER> {
             )
         };
         if status == 0 {
-            return Err(std::io::Error::last_os_error());
+            let error = std::io::Error::last_os_error();
+            return Err(std::io::Error::new(error.kind(), format! {
+                "could not get access token user information: {error}",
+            }));
         }
 
         // The call above succeeded, so the buffer now contains valid instance
@@ -373,7 +397,10 @@ impl Acl {
             )
         };
         if status == 0 {
-            return Err(std::io::Error::last_os_error());
+            let error = std::io::Error::last_os_error();
+            return Err(std::io::Error::new(error.kind(), format! {
+                "could not initialize ACL: {error}",
+            }));
         }
 
         // The call above succeeded, so the buffer now contains valid instance
