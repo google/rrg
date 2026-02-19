@@ -21,6 +21,8 @@ pub struct Args {
     args: Vec<String>,
     /// Environment in which to invoke the executable.
     env: std::collections::HashMap<String, String>,
+    /// Environment variables which to inherit from the current process.
+    env_inherited: Vec<String>,
     stdin: Vec<u8>,
     ed25519_signature: ed25519_dalek::Signature,
     timeout: std::time::Duration,
@@ -186,10 +188,20 @@ where
         None => return Err(crate::session::Error::action(MissingCommandVerificationKeyError)),
     };
 
+    let env_inherited = args.env_inherited.iter()
+        .flat_map(|var| match std::env::var(var) {
+            Ok(value) => Some((var, value)),
+            Err(error) => {
+                log::warn!("failed to inherit '{var}': {error}");
+                None
+            }
+        });
+
     let mut command_process = std::process::Command::new(&args.path)
         .stdin(std::process::Stdio::piped())
         .args(args.args)
         .env_clear()
+        .envs(env_inherited)
         .envs(args.env)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -456,6 +468,7 @@ impl crate::request::Args for Args {
             path,
             args,
             env,
+            env_inherited: command.take_env_inherited(),
             ed25519_signature,
             stdin,
             timeout,
@@ -533,6 +546,7 @@ mod tests {
             args: ["Hello,", "world!"]
                 .into_iter().map(String::from).collect(),
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
@@ -563,6 +577,7 @@ mod tests {
             args: ["/C", "echo", "Hello,", "world!"]
                 .into_iter().map(String::from).collect(),
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
@@ -592,6 +607,7 @@ mod tests {
             path: "cat".into(),
             args: Vec::default(),
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             stdin: "Hello, world!".as_bytes().to_vec(),
             ed25519_signature,
             timeout: std::time::Duration::from_secs(5),
@@ -621,6 +637,7 @@ mod tests {
             path: "findstr".into(),
             args: vec![String::from("world")],
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: "Hello, world!".as_bytes().to_vec(),
             timeout: std::time::Duration::from_secs(5),
@@ -650,6 +667,7 @@ mod tests {
             path: "true".into(),
             args: Vec::default(),
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             // In this test we write a lot of input to a command that does not
             // care about it. This is to verify that we are never stuck on wri-
             // ting even if it is never consumed.
@@ -683,6 +701,7 @@ mod tests {
             args: ["/c", "exit"]
                 .map(String::from).into(),
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             // In this test we write a lot of input to a command that does not
             // care about it. This is to verify that we are never stuck on wri-
             // ting even if it is never consumed.
@@ -720,6 +739,7 @@ mod tests {
             args: ["--bytes=67108864" /* 64 MiB */, "/dev/zero"]
                 .map(String::from).into(),
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             stdin: Vec::default(),
             ed25519_signature,
             timeout: std::time::Duration::from_secs(5),
@@ -753,6 +773,7 @@ mod tests {
             args: Vec::default(),
             env: [(String::from("MY_ENV_VAR"), String::from("Hello, world!"))]
                 .into(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
@@ -785,6 +806,7 @@ mod tests {
             args: vec![String::from("/c"), String::from("echo %MY_ENV_VAR%")],
             env: [(String::from("MY_ENV_VAR"), String::from("Hello, world!"))]
                 .into(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout: std::time::Duration::from_secs(5),
@@ -795,6 +817,137 @@ mod tests {
 
         assert!(item.exit_status.success());
         assert_eq!(item.stdout, "Hello, world!\r\n".as_bytes());
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_env_inherited() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "printenv".into(),
+            args: Vec::default(),
+            env: std::collections::HashMap::new(),
+            env_inherited: vec![String::from("PATH")],
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+
+        let stdout = String::from_utf8_lossy(&item.stdout);
+        match std::env::var("PATH") {
+            Ok(path) => assert!(stdout.contains(&format!("PATH={path}"))),
+            Err(_) => assert!(!stdout.contains("PATH=")),
+        }
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_env_inherited() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "cmd".into(),
+            args: vec![String::from("/c"), String::from("echo %SystemRoot%")],
+            env: std::collections::HashMap::new(),
+            env_inherited: vec![String::from("SystemRoot")],
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+
+        let stdout = String::from_utf8_lossy(&item.stdout);
+        assert!(stdout.to_uppercase().contains("WINDOWS"));
+    }
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_env_inherited_explicit() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "printenv".into(),
+            args: Vec::default(),
+            env: [(String::from("HOME"), String::from("/tmp"))]
+                .into(),
+            env_inherited: vec![String::from("HOME")],
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+
+        let stdout = String::from_utf8_lossy(&item.stdout);
+        assert!(stdout.contains(&format!("HOME=/tmp")));
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_env_inherited_explicit() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key());
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "cmd".into(),
+            args: vec![String::from("/c"), String::from("echo %TEMP%")],
+            env: [(String::from("TEMP"), String::from("C:\\Foo\\Bar"))]
+                .into(),
+            env_inherited: vec![String::from("TEMP")],
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+        assert_eq!(session.reply_count(), 1);
+        let item = session.reply::<Item>(0);
+
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, "C:\\Foo\\Bar\r\n".as_bytes());
         assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
@@ -843,6 +996,7 @@ mod tests {
             path: "cat".into(),
             args: Vec::default(),
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: ("A".repeat(MAX_STDOUT_SIZE) + "truncated").into_bytes(),
             timeout: std::time::Duration::from_secs(5),
@@ -881,6 +1035,7 @@ mod tests {
             path: "findstr".into(),
             args: vec![String::from("ABCD")],
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: Vec::from("ABCD\r\n".repeat(MAX_STDOUT_SIZE)),
             timeout: std::time::Duration::from_secs(5),
@@ -918,6 +1073,7 @@ mod tests {
             path: "sleep".into(),
             args: vec![(timeout.as_secs() + 1).to_string()],
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout,
@@ -956,6 +1112,7 @@ mod tests {
             path: "sleep".into(),
             args: vec![(timeout.as_secs() + 1).to_string()],
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: vec![0xFF; 2 * 1024 * 1024],
             timeout,
@@ -992,6 +1149,7 @@ mod tests {
             args: ["/q", "/c", "for /l %i in () do echo off"]
                 .into_iter().map(String::from).collect(),
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: Vec::from(b""),
             timeout,
@@ -1030,6 +1188,7 @@ mod tests {
             args: ["/q", "/c", "for /l %i in () do echo off"]
                 .into_iter().map(String::from).collect(),
             env: std::collections::HashMap::new(),
+            env_inherited: Vec::new(),
             ed25519_signature,
             stdin: vec![0xFF; 2 * 1024 * 1024],
             timeout,

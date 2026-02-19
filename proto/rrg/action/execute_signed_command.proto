@@ -34,12 +34,19 @@ message Command {
 
   // Environment in which to invoke the command.
   //
-  // Note that environment variables are not inherited from the RRG process
-  // and are empty if not specified.
+  // Note that environment variables are not inherited from the RRG process by
+  // default and are empty if not specified. To inherit specific variables from
+  // the RRG process use `env_inherited`.
   map<string, string> env_signed = 3;
 
   // Environment variables that can be specified outside of the command.
   repeated string env_unsigned_allowed = 7;
+
+  // Environment variables that are inherited from the RRG process.
+  //
+  // If a variable is set to be inherited but an explicit value is provided,
+  // the explicit value takes precedence.
+  repeated string env_inherited = 8;
 
   oneof stdin {
     // Fixed standard input to pass to the executed command.
