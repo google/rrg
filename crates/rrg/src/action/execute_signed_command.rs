@@ -42,9 +42,12 @@ pub struct Item {
     truncated_stderr: bool,
 }
 
+/// Argument that is to be passed to the executed command.
 #[derive(Debug, PartialEq, Eq)]
 enum CommandArg {
+    /// String literal passed to the command as-is.
     Literal(String),
+    /// Filestore file identifier resolved to a path passed to the command.
     FileId(String),
 }
 
