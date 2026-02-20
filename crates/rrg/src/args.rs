@@ -81,6 +81,8 @@ pub struct Args {
            from_str_fn(parse_duration))]
     pub filestore_ttl: Duration,
 
+    // TODO(@panhania): This should be renamed to `verifying_key`. It is both
+    // shorter and more consistent with the type.
     /// The public key for verifying signed commands.
     #[argh(option,
        long="command-verification-key",
