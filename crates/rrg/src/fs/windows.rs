@@ -4,15 +4,10 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 use std::path::Path;
-use windows_sys::Win32::{
-    Foundation::{
-        HANDLE,
-    },
-    Security::{
-        ACL, ACCESS_ALLOWED_ACE,
-        SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
-        TOKEN_USER,
-    },
+use windows_sys::Win32::Security::{
+    ACL, ACCESS_ALLOWED_ACE,
+    SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
+    TOKEN_USER,
 };
 
 pub fn create_dir_private_all<P>(path: P) -> std::io::Result<()>
@@ -251,7 +246,7 @@ unsafe fn create_dir_with_sec_attrs(
 ///
 /// [1]: https://learn.microsoft.com/en-us/windows/win32/secgloss/a-gly#_SECURITY_ACCESS_TOKEN_GLY
 struct AccessToken {
-    handle: HANDLE,
+    handle: std::os::windows::io::OwnedHandle,
 }
 
 impl AccessToken {
@@ -276,29 +271,18 @@ impl AccessToken {
                 "could not open access token for the current process: {error}",
             }));
         }
+
         // SAFETY: We verified that the call above succeeded, so `handle` should
         // now be properly initialized.
         let handle = unsafe {
-            handle.assume_init()
+            use std::os::windows::io::{OwnedHandle, FromRawHandle as _};
+
+            OwnedHandle::from_raw_handle(handle.assume_init())
         };
 
         Ok(AccessToken {
-            handle
+            handle,
         })
-    }
-}
-
-impl Drop for AccessToken {
-
-    fn drop(&mut self) {
-        // SAFETY: `self.handle` is guaranteed to be a valid token handle, so we
-        // can close it when we are done as described in the docs for opening
-        // it [1].
-        //
-        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocesstoken
-        let _ = unsafe {
-            windows_sys::Win32::Foundation::CloseHandle(self.handle)
-        };
     }
 }
 
@@ -355,8 +339,10 @@ impl AccessTokenInfo<TOKEN_USER> {
         //
         // [1]: https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-gettokeninformation
         let status = unsafe {
+            use std::os::windows::io::AsRawHandle as _;
+
             windows_sys::Win32::Security::GetTokenInformation(
-                token.handle,
+                token.handle.as_raw_handle(),
                 windows_sys::Win32::Security::TokenUser,
                 result.buf.cast::<std::ffi::c_void>(),
                 buf_len,
