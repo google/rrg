@@ -45,12 +45,17 @@ pub struct Item {
 #[derive(Debug, PartialEq, Eq)]
 enum CommandArg {
     Literal(String),
+    FileId(String),
 }
 
 impl CommandArg {
 
     fn literal<S: Into<String>>(string: S) -> CommandArg {
         CommandArg::Literal(string.into())
+    }
+
+    fn file_id<S: Into<String>>(file_id: S) -> CommandArg {
+        CommandArg::FileId(file_id.into())
     }
 }
 
@@ -209,9 +214,15 @@ where
             }
         });
 
-    let command_args = args.args.into_iter().map(|arg| match arg {
-        CommandArg::Literal(arg) => std::ffi::OsString::from(arg),
-    });
+    let command_args = args.args.into_iter()
+        .map(|arg| match arg {
+            CommandArg::Literal(string) => {
+                Ok(std::ffi::OsString::from(string))
+            }
+            CommandArg::FileId(file_id) => {
+                Ok(session.filestore_path(&file_id)?.into_os_string())
+            }
+        }).collect::<crate::session::Result<Vec<_>>>()?;
 
     let mut command_process = std::process::Command::new(&args.path)
         .stdin(std::process::Stdio::piped())
@@ -424,6 +435,7 @@ impl crate::request::Args for Args {
         args.extend(command.take_args_signed().into_iter().map(CommandArg::literal));
 
         let mut unsigned_args_iter = proto.take_unsigned_args().into_iter();
+        let mut file_ids_iter = proto.take_file_ids().into_iter();
 
         for (arg_idx, mut arg) in command.take_args().into_iter().enumerate() {
             let arg = if arg.unsigned_allowed() {
@@ -434,6 +446,11 @@ impl crate::request::Args for Args {
                             idx: arg_idx,
                         }))
                     }
+                }
+            } else if arg.file_id_allowed() {
+                match file_ids_iter.next() {
+                    Some(file_id) => CommandArg::file_id(file_id),
+                    None => todo!(),
                 }
             } else {
                 CommandArg::literal(arg.take_signed())
@@ -549,7 +566,7 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     #[test]
-    fn handle_command_args() {
+    fn handle_command_args_literal() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
@@ -578,9 +595,51 @@ mod tests {
         assert!(!item.truncated_stderr);
     }
 
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_command_args_file_id() {
+        use crate::session::Session as _;
+
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key())
+            .with_filestore();
+
+        session.filestore_store("foo", crate::filestore::Part {
+            offset: 0,
+            content: b"Lorem ipsum.\n".to_vec(),
+            file_len: b"Lorem ipsum.\n".len() as u64,
+            file_sha256: sha256(b"Lorem ipsum.\n"),
+        }).unwrap();
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "cat".into(),
+            args: [CommandArg::file_id("foo")]
+                .into(),
+            env: std::collections::HashMap::new(),
+            env_inherited: vec![],
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, "Lorem ipsum.\n".as_bytes());
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
     #[cfg(target_family = "windows")]
     #[test]
-    fn handle_command_args() {
+    fn handle_command_args_literal() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
@@ -605,6 +664,48 @@ mod tests {
         assert!(item.exit_status.success());
         assert_eq!(item.stderr, b"");
         assert_eq!(item.stdout, "Hello, world!\r\n".as_bytes());
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_command_args_file_id() {
+        use crate::session::Session as _;
+
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key())
+            .with_filestore();
+
+        session.filestore_store("foo", crate::filestore::Part {
+            offset: 0,
+            content: b"Lorem ipsum.\r\n".to_vec(),
+            file_len: b"Lorem ipsum.\r\n".len() as u64,
+            file_sha256: sha256(b"Lorem ipsum.\r\n"),
+        }).unwrap();
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "findstr".into(),
+            args: [CommandArg::literal("ipsum"), CommandArg::file_id("foo")]
+                .into(),
+            env: std::collections::HashMap::new(),
+            env_inherited: vec![],
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, "Lorem ipsum.\r\n".as_bytes());
+        assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
     }
@@ -1489,6 +1590,15 @@ mod tests {
         // TODO(@panhania): Assert details of the error once exposed in
         // `ParseArgsError`.
         assert!(<Args as crate::request::Args>::from_proto(args_proto).is_err());
+    }
+
+    fn sha256(content: &[u8]) -> [u8; 32] {
+        use sha2::Digest as _;
+
+        let mut sha256 = sha2::Sha256::new();
+        sha256.update(content);
+        sha256.finalize()
+            .into()
     }
 }
 
