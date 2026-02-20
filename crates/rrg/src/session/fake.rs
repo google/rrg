@@ -53,9 +53,12 @@ impl FakeSession {
         let filestore_tempdir = tempfile::tempdir()
             .unwrap();
 
+        self.args.filestore_dir = Some(filestore_tempdir.path().to_path_buf());
+        self.args.filestore_ttl = std::time::Duration::MAX;
+
         let filestore = crate::filestore::init(
             &filestore_tempdir,
-            std::time::Duration::MAX,
+            self.args.filestore_ttl,
         ).unwrap();
 
         self.filestore = Some(filestore);
@@ -219,6 +222,7 @@ mod tests {
     #[test]
     fn without_filestore_store() {
         let session = FakeSession::new();
+        assert!(session.args.filestore_dir.is_none());
 
         use crate::session::Session as _;
         let error = session.filestore_store([0x00; 32], crate::filestore::Part {
@@ -232,6 +236,7 @@ mod tests {
     #[test]
     fn without_filestore_path() {
         let session = FakeSession::new();
+        assert!(session.args.filestore_dir.is_none());
 
         use crate::session::Session as _;
         let error = session.filestore_path([0x00; 32])
@@ -245,6 +250,7 @@ mod tests {
 
         let session = FakeSession::new()
             .with_filestore();
+        assert!(session.args.filestore_dir.is_some());
 
         session.filestore_store(sha256(b"BARBAZ"), crate::filestore::Part {
             offset: 0,
