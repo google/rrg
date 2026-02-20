@@ -18,7 +18,7 @@ pub struct Args {
     /// Path to the executable file to execute.
     path: std::path::PathBuf,
     /// Command-line arguments to pass to the executable.
-    args: Vec<String>,
+    args: Vec<CommandArg>,
     /// Environment in which to invoke the executable.
     env: std::collections::HashMap<String, String>,
     /// Environment variables which to inherit from the current process.
@@ -40,6 +40,26 @@ pub struct Item {
     stderr: Vec<u8>,
     /// Whether stderr is truncated.
     truncated_stderr: bool,
+}
+
+/// Argument that is to be passed to the executed command.
+#[derive(Debug, PartialEq, Eq)]
+enum CommandArg {
+    /// String literal passed to the command as-is.
+    Literal(String),
+    /// Filestore file identifier resolved to a path passed to the command.
+    FileId(String),
+}
+
+impl CommandArg {
+
+    fn literal<S: Into<String>>(string: S) -> CommandArg {
+        CommandArg::Literal(string.into())
+    }
+
+    fn file_id<S: Into<String>>(file_id: S) -> CommandArg {
+        CommandArg::FileId(file_id.into())
+    }
 }
 
 /// An error indicating that the command signature is missing.
@@ -94,6 +114,36 @@ impl std::fmt::Display for ExcessiveUnsignedArgsError {
 }
 
 impl std::error::Error for ExcessiveUnsignedArgsError {}
+
+/// An error indicating that the file id was required but not provided.
+#[derive(Debug)]
+struct MissingFileIdError {
+    idx: usize,
+}
+
+impl std::fmt::Display for MissingFileIdError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "missing file id at {}", self.idx)
+    }
+}
+
+impl std::error::Error for MissingFileIdError {}
+
+/// An error indicating that there were more file ids provided than expected.
+#[derive(Debug)]
+struct ExcessiveFileIdsError {
+    count: usize,
+}
+
+impl std::fmt::Display for ExcessiveFileIdsError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{} excessive file ids", self.count)
+    }
+}
+
+impl std::error::Error for ExcessiveFileIdsError {}
 
 impl std::error::Error for CommandExecutionError {}
 
@@ -197,9 +247,19 @@ where
             }
         });
 
+    let command_args = args.args.into_iter()
+        .map(|arg| match arg {
+            CommandArg::Literal(string) => {
+                Ok(std::ffi::OsString::from(string))
+            }
+            CommandArg::FileId(file_id) => {
+                Ok(session.filestore_path(&file_id)?.into_os_string())
+            }
+        }).collect::<crate::session::Result<Vec<_>>>()?;
+
     let mut command_process = std::process::Command::new(&args.path)
         .stdin(std::process::Stdio::piped())
-        .args(args.args)
+        .args(command_args)
         .env_clear()
         .envs(env_inherited)
         .envs(args.env)
@@ -405,22 +465,32 @@ impl crate::request::Args for Args {
 
         // We use `args_signed` for compatibility reasons. Once the field is not
         // in active use anymore, this should be deleted.
-        args.extend(command.take_args_signed());
+        args.extend(command.take_args_signed().into_iter().map(CommandArg::literal));
 
         let mut unsigned_args_iter = proto.take_unsigned_args().into_iter();
+        let mut file_ids_iter = proto.take_file_ids().into_iter();
 
         for (arg_idx, mut arg) in command.take_args().into_iter().enumerate() {
             let arg = if arg.unsigned_allowed() {
                 match unsigned_args_iter.next() {
-                    Some(arg) => arg,
+                    Some(arg) => CommandArg::literal(arg),
                     None => {
                         return Err(ParseArgsError::invalid_field("unsigned args", MissingUnsignedArgError {
                             idx: arg_idx,
                         }))
                     }
                 }
+            } else if arg.file_id_allowed() {
+                match file_ids_iter.next() {
+                    Some(file_id) => CommandArg::file_id(file_id),
+                    None => {
+                        return Err(ParseArgsError::invalid_field("file ids", MissingFileIdError {
+                            idx: arg_idx,
+                        }))
+                    },
+                }
             } else {
-                arg.take_signed()
+                CommandArg::literal(arg.take_signed())
             };
 
             args.push(arg);
@@ -429,6 +499,12 @@ impl crate::request::Args for Args {
         if unsigned_args_left > 0 {
             return Err(ParseArgsError::invalid_field("unsigned args", ExcessiveUnsignedArgsError {
                 count: unsigned_args_left,
+            }));
+        }
+        let file_ids_left = file_ids_iter.count();
+        if file_ids_left > 0 {
+            return Err(ParseArgsError::invalid_field("file ids", ExcessiveFileIdsError {
+                count: file_ids_left,
             }));
         }
 
@@ -533,7 +609,7 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     #[test]
-    fn handle_command_args() {
+    fn handle_command_args_literal() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
@@ -544,7 +620,7 @@ mod tests {
             raw_command,
             path: "echo".into(),
             args: ["Hello,", "world!"]
-                .into_iter().map(String::from).collect(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -562,9 +638,51 @@ mod tests {
         assert!(!item.truncated_stderr);
     }
 
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_command_args_file_id() {
+        use crate::session::Session as _;
+
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key())
+            .with_filestore();
+
+        session.filestore_store("foo", crate::filestore::Part {
+            offset: 0,
+            content: b"Lorem ipsum.\n".to_vec(),
+            file_len: b"Lorem ipsum.\n".len() as u64,
+            file_sha256: sha256(b"Lorem ipsum.\n"),
+        }).unwrap();
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "cat".into(),
+            args: [CommandArg::file_id("foo")]
+                .into(),
+            env: std::collections::HashMap::new(),
+            env_inherited: vec![],
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, "Lorem ipsum.\n".as_bytes());
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
     #[cfg(target_family = "windows")]
     #[test]
-    fn handle_command_args() {
+    fn handle_command_args_literal() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session = prepare_session(signing_key.verifying_key());
 
@@ -575,7 +693,7 @@ mod tests {
             raw_command,
             path: "cmd".into(),
             args: ["/C", "echo", "Hello,", "world!"]
-                .into_iter().map(String::from).collect(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -589,6 +707,48 @@ mod tests {
         assert!(item.exit_status.success());
         assert_eq!(item.stderr, b"");
         assert_eq!(item.stdout, "Hello, world!\r\n".as_bytes());
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_command_args_file_id() {
+        use crate::session::Session as _;
+
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session = prepare_session(signing_key.verifying_key())
+            .with_filestore();
+
+        session.filestore_store("foo", crate::filestore::Part {
+            offset: 0,
+            content: b"Lorem ipsum.\r\n".to_vec(),
+            file_len: b"Lorem ipsum.\r\n".len() as u64,
+            file_sha256: sha256(b"Lorem ipsum.\r\n"),
+        }).unwrap();
+
+        let raw_command = Vec::default();
+        let ed25519_signature = signing_key.sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            path: "findstr".into(),
+            args: [CommandArg::literal("ipsum"), CommandArg::file_id("foo")]
+                .into(),
+            env: std::collections::HashMap::new(),
+            env_inherited: vec![],
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, "Lorem ipsum.\r\n".as_bytes());
+        assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
     }
@@ -635,7 +795,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "findstr".into(),
-            args: vec![String::from("world")],
+            args: ["world"]
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -699,7 +860,7 @@ mod tests {
             raw_command,
             path: "cmd".into(),
             args: ["/c", "exit"]
-                .map(String::from).into(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             // In this test we write a lot of input to a command that does not
@@ -737,7 +898,7 @@ mod tests {
             // never get stuck on a full pipe.
             path: "head".into(),
             args: ["--bytes=67108864" /* 64 MiB */, "/dev/zero"]
-                .map(String::from).into(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             stdin: Vec::default(),
@@ -803,7 +964,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "cmd".into(),
-            args: vec![String::from("/c"), String::from("echo %MY_ENV_VAR%")],
+            args: ["/c", "echo %MY_ENV_VAR%"]
+                .map(CommandArg::literal).into(),
             env: [(String::from("MY_ENV_VAR"), String::from("Hello, world!"))]
                 .into(),
             env_inherited: Vec::new(),
@@ -869,7 +1031,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "cmd".into(),
-            args: vec![String::from("/c"), String::from("echo %SystemRoot%")],
+            args: ["/c", "echo %SystemRoot%"]
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: vec![String::from("SystemRoot")],
             ed25519_signature,
@@ -934,7 +1097,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "cmd".into(),
-            args: vec![String::from("/c"), String::from("echo %TEMP%")],
+            args: ["/c", "echo %TEMP%"]
+                .map(CommandArg::literal).into(),
             env: [(String::from("TEMP"), String::from("C:\\Foo\\Bar"))]
                 .into(),
             env_inherited: vec![String::from("TEMP")],
@@ -1033,7 +1197,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "findstr".into(),
-            args: vec![String::from("ABCD")],
+            args: ["ABCD"]
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -1071,7 +1236,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "sleep".into(),
-            args: vec![(timeout.as_secs() + 1).to_string()],
+            args: [(timeout.as_secs() + 1).to_string()]
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -1110,7 +1276,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "sleep".into(),
-            args: vec![(timeout.as_secs() + 1).to_string()],
+            args: [(timeout.as_secs() + 1).to_string()]
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -1147,7 +1314,7 @@ mod tests {
             // instead we just hang the program forever using an infinite loop.
             path: "cmd".into(),
             args: ["/q", "/c", "for /l %i in () do echo off"]
-                .into_iter().map(String::from).collect(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -1186,7 +1353,7 @@ mod tests {
             // instead we just hang the program forever using an infinite loop.
             path: "cmd".into(),
             args: ["/q", "/c", "for /l %i in () do echo off"]
-                .into_iter().map(String::from).collect(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -1231,7 +1398,12 @@ mod tests {
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
         assert_eq!(args.path, std::path::Path::new("/foo/bar"));
-        assert_eq!(args.args, ["foo", "bar", "quux", "norf"]);
+        assert_eq!(args.args, [
+            CommandArg::literal("foo"),
+            CommandArg::literal("bar"),
+            CommandArg::literal("quux"),
+            CommandArg::literal("norf"),
+        ]);
     }
 
     #[test]
@@ -1262,7 +1434,44 @@ mod tests {
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
         assert_eq!(args.path, std::path::Path::new("/foo/bar"));
-        assert_eq!(args.args, ["quux", "norf"]);
+        assert_eq!(args.args, [
+            CommandArg::literal("quux"),
+            CommandArg::literal("norf"),
+        ]);
+    }
+
+    #[test]
+    fn args_from_proto_args_file_id() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+
+        let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_quux.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_quux);
+
+        let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_norf.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_norf);
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+        args_proto.mut_file_ids().push(String::from("quux"));
+        args_proto.mut_file_ids().push(String::from("norf"));
+
+        let args = <Args as crate::request::Args>::from_proto(args_proto)
+            .unwrap();
+        assert_eq!(args.path, std::path::Path::new("/foo/bar"));
+        assert_eq!(args.args, [
+            CommandArg::file_id("quux"),
+            CommandArg::file_id("norf"),
+        ]);
     }
 
     #[test]
@@ -1280,6 +1489,10 @@ mod tests {
         arg_norf.set_signed(String::from("norf"));
         command_proto.mut_args().push(arg_norf);
 
+        let mut arg_blargh = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_blargh.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_blargh);
+
         let mut arg_thud = rrg_proto::execute_signed_command::command::Arg::new();
         arg_thud.set_unsigned_allowed(true);
         command_proto.mut_args().push(arg_thud);
@@ -1292,12 +1505,18 @@ mod tests {
         args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
         args_proto.set_command(command_bytes);
         args_proto.mut_unsigned_args().push(String::from("quux"));
+        args_proto.mut_file_ids().push(String::from("blargh"));
         args_proto.mut_unsigned_args().push(String::from("thud"));
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
         assert_eq!(args.path, std::path::Path::new("/foo/bar"));
-        assert_eq!(args.args, ["quux", "norf", "thud"]);
+        assert_eq!(args.args, [
+            CommandArg::literal("quux"),
+            CommandArg::literal("norf"),
+            CommandArg::file_id("blargh"),
+            CommandArg::literal("thud"),
+        ]);
     }
 
     #[test]
@@ -1354,6 +1573,66 @@ mod tests {
         args_proto.mut_unsigned_args().push(String::from("quux"));
         args_proto.mut_unsigned_args().push(String::from("norf"));
         args_proto.mut_unsigned_args().push(String::from("thud"));
+
+        // TODO(@panhania): Assert details of the error once exposed in
+        // `ParseArgsError`.
+        assert!(<Args as crate::request::Args>::from_proto(args_proto).is_err());
+    }
+
+    #[test]
+    fn args_from_proto_file_ids_missing() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+
+        let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_quux.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_quux);
+
+        let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_norf.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_norf);
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+        args_proto.mut_file_ids().push(String::from("quux"));
+
+        // TODO(@panhania): Assert details of the error once exposed in
+        // `ParseArgsError`.
+        assert!(<Args as crate::request::Args>::from_proto(args_proto).is_err());
+    }
+
+    #[test]
+    fn args_from_proto_file_ids_excessive() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+
+        let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_quux.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_quux);
+
+        let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_norf.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_norf);
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+        args_proto.mut_file_ids().push(String::from("quux"));
+        args_proto.mut_file_ids().push(String::from("norf"));
+        args_proto.mut_file_ids().push(String::from("thud"));
 
         // TODO(@panhania): Assert details of the error once exposed in
         // `ParseArgsError`.
@@ -1455,6 +1734,15 @@ mod tests {
         // `ParseArgsError`.
         assert!(<Args as crate::request::Args>::from_proto(args_proto).is_err());
     }
+
+    fn sha256(content: &[u8]) -> [u8; 32] {
+        use sha2::Digest as _;
+
+        let mut sha256 = sha2::Sha256::new();
+        sha256.update(content);
+        sha256.finalize()
+            .into()
+    }
 }
 
 #[cfg(test)]
@@ -1481,7 +1769,8 @@ mod tests {
                 // ecution we just run `echo` (as this is safe and preverified
                 // commands could have some dangerous stuff in there).
                 path: "echo".into(),
-                args: vec![String::from("foo")],
+                args: ["foo"]
+                    .map(CommandArg::literal).into(),
                 env: std::collections::HashMap::new(),
                 // Again, we provide a signature of just 0. This should not pass
                 // the normal verification but we want to test that it is not
