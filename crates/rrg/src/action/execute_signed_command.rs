@@ -1438,6 +1438,40 @@ mod tests {
     }
 
     #[test]
+    fn args_from_proto_args_file_id() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+
+        let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_quux.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_quux);
+
+        let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_norf.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_norf);
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+        args_proto.mut_file_ids().push(String::from("quux"));
+        args_proto.mut_file_ids().push(String::from("norf"));
+
+        let args = <Args as crate::request::Args>::from_proto(args_proto)
+            .unwrap();
+        assert_eq!(args.path, std::path::Path::new("/foo/bar"));
+        assert_eq!(args.args, [
+            CommandArg::file_id("quux"),
+            CommandArg::file_id("norf"),
+        ]);
+    }
+
+    #[test]
     fn args_form_proto_args_mixed() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
 
@@ -1452,6 +1486,10 @@ mod tests {
         arg_norf.set_signed(String::from("norf"));
         command_proto.mut_args().push(arg_norf);
 
+        let mut arg_blargh = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_blargh.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_blargh);
+
         let mut arg_thud = rrg_proto::execute_signed_command::command::Arg::new();
         arg_thud.set_unsigned_allowed(true);
         command_proto.mut_args().push(arg_thud);
@@ -1464,6 +1502,7 @@ mod tests {
         args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
         args_proto.set_command(command_bytes);
         args_proto.mut_unsigned_args().push(String::from("quux"));
+        args_proto.mut_file_ids().push(String::from("blargh"));
         args_proto.mut_unsigned_args().push(String::from("thud"));
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
@@ -1472,6 +1511,7 @@ mod tests {
         assert_eq!(args.args, [
             CommandArg::literal("quux"),
             CommandArg::literal("norf"),
+            CommandArg::file_id("blargh"),
             CommandArg::literal("thud"),
         ]);
     }
@@ -1530,6 +1570,66 @@ mod tests {
         args_proto.mut_unsigned_args().push(String::from("quux"));
         args_proto.mut_unsigned_args().push(String::from("norf"));
         args_proto.mut_unsigned_args().push(String::from("thud"));
+
+        // TODO(@panhania): Assert details of the error once exposed in
+        // `ParseArgsError`.
+        assert!(<Args as crate::request::Args>::from_proto(args_proto).is_err());
+    }
+
+    #[test]
+    fn args_from_proto_file_ids_missing() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+
+        let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_quux.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_quux);
+
+        let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_norf.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_norf);
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+        args_proto.mut_file_ids().push(String::from("quux"));
+
+        // TODO(@panhania): Assert details of the error once exposed in
+        // `ParseArgsError`.
+        assert!(<Args as crate::request::Args>::from_proto(args_proto).is_err());
+    }
+
+    #[test]
+    fn args_from_proto_file_ids_excessive() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+
+        let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_quux.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_quux);
+
+        let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_norf.set_file_id_allowed(true);
+        command_proto.mut_args().push(arg_norf);
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+        args_proto.mut_file_ids().push(String::from("quux"));
+        args_proto.mut_file_ids().push(String::from("norf"));
+        args_proto.mut_file_ids().push(String::from("thud"));
 
         // TODO(@panhania): Assert details of the error once exposed in
         // `ParseArgsError`.
