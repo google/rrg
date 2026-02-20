@@ -18,7 +18,7 @@ pub struct Args {
     /// Path to the executable file to execute.
     path: std::path::PathBuf,
     /// Command-line arguments to pass to the executable.
-    args: Vec<String>,
+    args: Vec<CommandArg>,
     /// Environment in which to invoke the executable.
     env: std::collections::HashMap<String, String>,
     /// Environment variables which to inherit from the current process.
@@ -40,6 +40,27 @@ pub struct Item {
     stderr: Vec<u8>,
     /// Whether stderr is truncated.
     truncated_stderr: bool,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum CommandArg {
+    Literal(String),
+}
+
+impl CommandArg {
+
+    fn literal<S: Into<String>>(string: S) -> CommandArg {
+        CommandArg::Literal(string.into())
+    }
+}
+
+impl AsRef<std::ffi::OsStr> for CommandArg {
+
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        match self {
+            CommandArg::Literal(string) => string.as_ref(),
+        }
+    }
 }
 
 /// An error indicating that the command signature is missing.
@@ -405,14 +426,14 @@ impl crate::request::Args for Args {
 
         // We use `args_signed` for compatibility reasons. Once the field is not
         // in active use anymore, this should be deleted.
-        args.extend(command.take_args_signed());
+        args.extend(command.take_args_signed().into_iter().map(CommandArg::literal));
 
         let mut unsigned_args_iter = proto.take_unsigned_args().into_iter();
 
         for (arg_idx, mut arg) in command.take_args().into_iter().enumerate() {
             let arg = if arg.unsigned_allowed() {
                 match unsigned_args_iter.next() {
-                    Some(arg) => arg,
+                    Some(arg) => CommandArg::literal(arg),
                     None => {
                         return Err(ParseArgsError::invalid_field("unsigned args", MissingUnsignedArgError {
                             idx: arg_idx,
@@ -420,7 +441,7 @@ impl crate::request::Args for Args {
                     }
                 }
             } else {
-                arg.take_signed()
+                CommandArg::literal(arg.take_signed())
             };
 
             args.push(arg);
@@ -544,7 +565,7 @@ mod tests {
             raw_command,
             path: "echo".into(),
             args: ["Hello,", "world!"]
-                .into_iter().map(String::from).collect(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -575,7 +596,7 @@ mod tests {
             raw_command,
             path: "cmd".into(),
             args: ["/C", "echo", "Hello,", "world!"]
-                .into_iter().map(String::from).collect(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -635,7 +656,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "findstr".into(),
-            args: vec![String::from("world")],
+            args: ["world"]
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -699,7 +721,7 @@ mod tests {
             raw_command,
             path: "cmd".into(),
             args: ["/c", "exit"]
-                .map(String::from).into(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             // In this test we write a lot of input to a command that does not
@@ -737,7 +759,7 @@ mod tests {
             // never get stuck on a full pipe.
             path: "head".into(),
             args: ["--bytes=67108864" /* 64 MiB */, "/dev/zero"]
-                .map(String::from).into(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             stdin: Vec::default(),
@@ -803,7 +825,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "cmd".into(),
-            args: vec![String::from("/c"), String::from("echo %MY_ENV_VAR%")],
+            args: ["/c", "echo %MY_ENV_VAR%"]
+                .map(CommandArg::literal).into(),
             env: [(String::from("MY_ENV_VAR"), String::from("Hello, world!"))]
                 .into(),
             env_inherited: Vec::new(),
@@ -869,7 +892,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "cmd".into(),
-            args: vec![String::from("/c"), String::from("echo %SystemRoot%")],
+            args: ["/c", "echo %SystemRoot%"]
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: vec![String::from("SystemRoot")],
             ed25519_signature,
@@ -934,7 +958,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "cmd".into(),
-            args: vec![String::from("/c"), String::from("echo %TEMP%")],
+            args: ["/c", "echo %TEMP%"]
+                .map(CommandArg::literal).into(),
             env: [(String::from("TEMP"), String::from("C:\\Foo\\Bar"))]
                 .into(),
             env_inherited: vec![String::from("TEMP")],
@@ -1033,7 +1058,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "findstr".into(),
-            args: vec![String::from("ABCD")],
+            args: ["ABCD"]
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -1071,7 +1097,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "sleep".into(),
-            args: vec![(timeout.as_secs() + 1).to_string()],
+            args: [(timeout.as_secs() + 1).to_string()]
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -1110,7 +1137,8 @@ mod tests {
         let args = Args {
             raw_command,
             path: "sleep".into(),
-            args: vec![(timeout.as_secs() + 1).to_string()],
+            args: [(timeout.as_secs() + 1).to_string()]
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -1147,7 +1175,7 @@ mod tests {
             // instead we just hang the program forever using an infinite loop.
             path: "cmd".into(),
             args: ["/q", "/c", "for /l %i in () do echo off"]
-                .into_iter().map(String::from).collect(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -1186,7 +1214,7 @@ mod tests {
             // instead we just hang the program forever using an infinite loop.
             path: "cmd".into(),
             args: ["/q", "/c", "for /l %i in () do echo off"]
-                .into_iter().map(String::from).collect(),
+                .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
             ed25519_signature,
@@ -1231,7 +1259,12 @@ mod tests {
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
         assert_eq!(args.path, std::path::Path::new("/foo/bar"));
-        assert_eq!(args.args, ["foo", "bar", "quux", "norf"]);
+        assert_eq!(args.args, [
+            CommandArg::literal("foo"),
+            CommandArg::literal("bar"),
+            CommandArg::literal("quux"),
+            CommandArg::literal("norf"),
+        ]);
     }
 
     #[test]
@@ -1262,7 +1295,10 @@ mod tests {
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
         assert_eq!(args.path, std::path::Path::new("/foo/bar"));
-        assert_eq!(args.args, ["quux", "norf"]);
+        assert_eq!(args.args, [
+            CommandArg::literal("quux"),
+            CommandArg::literal("norf"),
+        ]);
     }
 
     #[test]
@@ -1297,7 +1333,11 @@ mod tests {
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
         assert_eq!(args.path, std::path::Path::new("/foo/bar"));
-        assert_eq!(args.args, ["quux", "norf", "thud"]);
+        assert_eq!(args.args, [
+            CommandArg::literal("quux"),
+            CommandArg::literal("norf"),
+            CommandArg::literal("thud"),
+        ]);
     }
 
     #[test]
@@ -1481,7 +1521,8 @@ mod tests {
                 // ecution we just run `echo` (as this is safe and preverified
                 // commands could have some dangerous stuff in there).
                 path: "echo".into(),
-                args: vec![String::from("foo")],
+                args: ["foo"]
+                    .map(CommandArg::literal).into(),
                 env: std::collections::HashMap::new(),
                 // Again, we provide a signature of just 0. This should not pass
                 // the normal verification but we want to test that it is not
