@@ -54,15 +54,6 @@ impl CommandArg {
     }
 }
 
-impl AsRef<std::ffi::OsStr> for CommandArg {
-
-    fn as_ref(&self) -> &std::ffi::OsStr {
-        match self {
-            CommandArg::Literal(string) => string.as_ref(),
-        }
-    }
-}
-
 /// An error indicating that the command signature is missing.
 #[derive(Debug)]
 struct MissingCommandVerificationKeyError;
@@ -218,9 +209,13 @@ where
             }
         });
 
+    let command_args = args.args.into_iter().map(|arg| match arg {
+        CommandArg::Literal(arg) => std::ffi::OsString::from(arg),
+    });
+
     let mut command_process = std::process::Command::new(&args.path)
         .stdin(std::process::Stdio::piped())
-        .args(args.args)
+        .args(command_args)
         .env_clear()
         .envs(env_inherited)
         .envs(args.env)
