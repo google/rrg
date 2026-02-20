@@ -112,6 +112,36 @@ impl std::fmt::Display for ExcessiveUnsignedArgsError {
 
 impl std::error::Error for ExcessiveUnsignedArgsError {}
 
+/// An error indicating that the file id was required but not provided.
+#[derive(Debug)]
+struct MissingFileIdError {
+    idx: usize,
+}
+
+impl std::fmt::Display for MissingFileIdError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "missing file id at {}", self.idx)
+    }
+}
+
+impl std::error::Error for MissingFileIdError {}
+
+/// An error indicating that there were more file ids provided than expected.
+#[derive(Debug)]
+struct ExcessiveFileIdsError {
+    count: usize,
+}
+
+impl std::fmt::Display for ExcessiveFileIdsError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{} excessive file ids", self.count)
+    }
+}
+
+impl std::error::Error for ExcessiveFileIdsError {}
+
 impl std::error::Error for CommandExecutionError {}
 
 /// An error indicating that the given unsigned environment variable was not
@@ -450,7 +480,11 @@ impl crate::request::Args for Args {
             } else if arg.file_id_allowed() {
                 match file_ids_iter.next() {
                     Some(file_id) => CommandArg::file_id(file_id),
-                    None => todo!(),
+                    None => {
+                        return Err(ParseArgsError::invalid_field("file ids", MissingFileIdError {
+                            idx: arg_idx,
+                        }))
+                    },
                 }
             } else {
                 CommandArg::literal(arg.take_signed())
@@ -462,6 +496,12 @@ impl crate::request::Args for Args {
         if unsigned_args_left > 0 {
             return Err(ParseArgsError::invalid_field("unsigned args", ExcessiveUnsignedArgsError {
                 count: unsigned_args_left,
+            }));
+        }
+        let file_ids_left = file_ids_iter.count();
+        if file_ids_left > 0 {
+            return Err(ParseArgsError::invalid_field("file ids", ExcessiveFileIdsError {
+                count: file_ids_left,
             }));
         }
 
