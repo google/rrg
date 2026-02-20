@@ -178,7 +178,10 @@ fn _create_dir_private_all(path: &Path) -> std::io::Result<()> {
 ///
 /// # Safety
 ///
-/// `sec_attrs` must be a valid instance of [`SECURTITY_ATTRIBUTES`].
+/// `sec_attrs` must be a [a properly initialized][1] instance of
+/// [`SECURTITY_ATTRIBUTES`].
+///
+/// [1]: https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/aa379560(v=vs.85)#members
 unsafe fn create_dir_with_sec_attrs_all(
     path: &Path,
     sec_attrs: &SECURITY_ATTRIBUTES,
@@ -197,8 +200,8 @@ unsafe fn create_dir_with_sec_attrs_all(
     } {
         Ok(()) => Ok(()),
         // The directory might already exist which is fine. Note however that we
-        // do not match on `ErrorKind::AlreadyExists` and do a system call for
-        // checking the existence. There are two reason for that:
+        // do not match on `ErrorKind::AlreadyExists`, instead we do a system
+        // call for checking the existence. There are two reason for that:
         //
         // 1. The path exists but it is not a directory. In that case we still
         //    want to throw an error.
@@ -213,7 +216,10 @@ unsafe fn create_dir_with_sec_attrs_all(
 ///
 /// # Safety
 ///
-/// `sec_attrs` must be a valid instance of [`SECURTITY_ATTRIBUTES`].
+/// `sec_attrs` must be a [a properly initialized][1] instance of
+/// [`SECURTITY_ATTRIBUTES`].
+///
+/// [1]: https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/aa379560(v=vs.85)#members
 unsafe fn create_dir_with_sec_attrs(
     path: &Path,
     sec_attrs: &SECURITY_ATTRIBUTES,
@@ -298,7 +304,11 @@ impl Drop for AccessToken {
 
 /// RAII wrapper for information about an [access token][1].
 ///
+/// `T` parameter indicates a [type of information][2] about an access token
+/// this wrapper holds in its buffer.
+///
 /// [1]: https://learn.microsoft.com/en-us/windows/win32/secgloss/a-gly#_SECURITY_ACCESS_TOKEN_GLY
+/// [2]: https://learn.microsoft.com/en-us/windows/win32/api/winnt/ne-winnt-token_information_class
 struct AccessTokenInfo<T> {
     layout: std::alloc::Layout,
     buf: *mut u8,
