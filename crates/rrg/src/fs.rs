@@ -9,6 +9,12 @@
 //! standard `std::fs` module. All functions are portable and should work on all
 //! supported platforms (perhaps with limited capabilities).
 
+#[cfg(target_family = "unix")]
+mod unix;
+
+#[cfg(target_family = "windows")]
+mod windows;
+
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::time::{Duration};
@@ -354,6 +360,31 @@ fn _remove_dir_if_empty(path: &Path) -> std::io::Result<bool> {
         Err(error) => {
             Err(error)
         }
+    }
+}
+
+/// Creates a directory and all its parents that is private to the current user.
+///
+/// This is very similar to the standard [`std::fs::create_dir_all`] with the
+/// difference that the created directory is usable only by the current user.
+///
+/// The exact definition of _private_ a varies by platform. On Unix systems it
+/// amounts to using 0o700 as the file mode whereas on Windows it adds user (and
+/// admins) [DACL][1].
+///
+/// [1]: https://learn.microsoft.com/en-us/windows/win32/secauthz/dacls-and-aces
+pub fn create_dir_private_all<P>(path: P) -> std::io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    #[cfg(target_family = "unix")]
+    {
+        self::unix::create_dir_private_all(path.as_ref())
+    }
+
+    #[cfg(target_family = "windows")]
+    {
+        self::windows::create_dir_private_all(path.as_ref())
     }
 }
 
@@ -783,5 +814,56 @@ mod tests {
         let empty = remove_dir_if_empty(tempdir.path())
             .unwrap();
         assert!(empty);
+    }
+
+    #[test]
+    fn create_dir_private_all_already_existing() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        create_dir_private_all(tempdir.path())
+            .unwrap();
+
+        // The temporary directory should still be empty.
+        assert_eq!(std::fs::read_dir(tempdir.path()).unwrap().count(), 0);
+
+        // The user should be able to create files in it.
+        std::fs::File::create_new(tempdir.path().join("quux"))
+            .unwrap();
+    }
+
+    #[test]
+    fn create_dir_private_all_already_existing_file() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        std::fs::File::create_new(tempdir.path().join("foo"))
+            .unwrap();
+
+        let error = create_dir_private_all(tempdir.path().join("foo"))
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+    }
+
+    #[test]
+    fn create_dir_private_all_one_level() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        create_dir_private_all(tempdir.path().join("foo"))
+            .unwrap();
+
+        // The user should be able to create files in the created folder.
+        std::fs::File::create_new(tempdir.path().join("foo").join("quux"))
+            .unwrap();
+    }
+
+    #[test]
+    fn create_dir_private_all_many_levels() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        create_dir_private_all(tempdir.path().join("foo").join("bar"))
+            .unwrap();
+
+        // The user should be able to create files in the created folders.
+        std::fs::File::create_new(tempdir.path().join("foo").join("bar").join("quux"))
+            .unwrap();
     }
 }
