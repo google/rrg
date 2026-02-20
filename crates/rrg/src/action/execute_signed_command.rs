@@ -189,7 +189,7 @@ where
     };
 
     let env_inherited = args.env_inherited.iter()
-        .flat_map(|var| match std::env::var(var) {
+        .filter_map(|var| match std::env::var(var) {
             Ok(value) => Some((var, value)),
             Err(error) => {
                 log::warn!("failed to inherit '{var}': {error}");
