@@ -15,10 +15,7 @@ enum Status {
 }
 
 message Args {
-  // Name of the file which the part belongs to.
-  //
-  // This name must be unique within the flow that created the file.
-  string file_id = 1;
+  reserved 1;
 
   // SHA-256 digest of the content of the whole file.
   //
@@ -53,8 +50,7 @@ message Args {
 }
 
 message Result {
-  // Name of the file which the transferred part belongs to.
-  string file_id = 1;
+  reserved 1;
 
   // SHA-256 digest of the file which the transferred part belongs to.
   bytes file_sha256 = 3;
