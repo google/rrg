@@ -15,6 +15,7 @@ pub struct Args {
 /// Result of the `store_filestore_part` action.
 pub struct Item {
     file_id: String,
+    file_sha256: [u8; 32],
     status: crate::filestore::Status,
 }
 
@@ -31,6 +32,7 @@ where
 
     session.reply(Item {
         file_id: args.file_id,
+        file_sha256: args.file_sha256,
         status,
     })?;
 
@@ -70,6 +72,7 @@ impl crate::response::Item for Item {
     fn into_proto(self) -> Self::Proto {
         let mut proto = Self::Proto::new();
         proto.set_file_id(self.file_id);
+        proto.set_file_sha256(self.file_sha256.to_vec());
         proto.set_status(match self.status {
             crate::filestore::Status::Complete => {
                 rrg_proto::store_filestore_part::Status::COMPLETE
@@ -105,6 +108,7 @@ mod tests {
 
         let item = session.reply::<Item>(0);
         assert_eq!(item.file_id, "foo");
+        assert_eq!(item.file_sha256, sha256(b"BARBAZ"));
         assert_eq!(item.status, crate::filestore::Status::Complete);
     }
 
@@ -125,6 +129,7 @@ mod tests {
 
         let item = session.reply::<Item>(0);
         assert_eq!(item.file_id, "foo");
+        assert_eq!(item.file_sha256, sha256(b"BARBAZ"));
         assert_eq!(item.status, crate::filestore::Status::Pending {
             offset: b"BAR".len() as u64,
             len: b"BAZ".len() as u64,

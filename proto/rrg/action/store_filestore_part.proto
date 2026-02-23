@@ -56,6 +56,9 @@ message Result {
   // Name of the file which the transferred part belongs to.
   string file_id = 1;
 
+  // SHA-256 digest of the file which the transferred part belongs to.
+  bytes file_sha256 = 3;
+
   // Status of the overall file transfer after receiving this part.
   Status status = 2;
 }
