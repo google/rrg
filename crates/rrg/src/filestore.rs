@@ -639,6 +639,46 @@ impl Filestore {
     }
 }
 
+/// Wrapper for ASCII-represented SHA-256 digest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct Sha256 {
+    // TODO(https://github.com/rust-lang/rust/issues/110998): Refactor once
+    // `ascii_char` is stable.
+    ascii: [u8; 64],
+}
+
+impl From<[u8; 32]> for Sha256 {
+
+    fn from(octets: [u8; 32]) -> Sha256 {
+        let mut ascii = [0u8; 64];
+        let mut ascii_slice = &mut ascii[..];
+
+        for octet in octets {
+            use std::io::Write as _;
+
+            write!(&mut ascii_slice, "{:02x}", octet)
+                .expect("invalid octet or ASCII buffer");
+        }
+
+        Sha256 { ascii }
+    }
+}
+
+impl Sha256 {
+
+    fn as_str(&self) -> &str {
+        str::from_utf8(&self.ascii)
+            .expect("invalid ASCII")
+    }
+}
+
+impl std::fmt::Display for Sha256 {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1207,6 +1247,19 @@ mod tests {
 
         let error = filestore.delete(foo_id).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn sha256_as_str() {
+        assert_eq! {
+            Sha256::from([
+                0xf0, 0xba, 0x55, 0x55, 0x00, 0x11, 0x22, 0x33,
+                0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x55, 0x44,
+                0x01, 0x23, 0x45, 0x67, 0x89, 0x0a, 0xbc, 0xde,
+                0x98, 0x76, 0x54, 0x32, 0x10, 0xfe, 0xdc, 0xba,
+            ]).as_str(),
+            "f0ba555500112233aabbccddeeff554401234567890abcde9876543210fedcba",
+        };
     }
 
     fn sha256(content: &[u8]) -> [u8; 32] {
