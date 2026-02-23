@@ -478,9 +478,14 @@ impl crate::request::Args for Args {
                 }
             } else if arg.file_sha256_allowed() {
                 match file_sha256s_iter.next() {
-                    Some(file_sha256) => match <[u8; 32]>::try_from(file_sha256) {
-                        Ok(file_sha256) => CommandArg::FileSha256(file_sha256),
-                        Err(error) => todo!(),
+                    Some(file_sha256) => {
+                        let file_sha256 = <[u8; 32]>::try_from(&file_sha256[..])
+                            .map_err(|error| ParseArgsError::invalid_field(
+                                "file SHA-256s",
+                                error,
+                            ))?;
+
+                        CommandArg::FileSha256(file_sha256)
                     }
                     None => {
                         return Err(ParseArgsError::invalid_field("file SHA-256s", MissingFileSha256sError {
