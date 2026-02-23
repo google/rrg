@@ -44,15 +44,6 @@ pub struct Part {
     /// size value. In case of total size discrepancies between parts, there is
     /// no guarantee which total size value will be used for verification.
     pub file_len: u64,
-    /// SHA-256 digest of the content of the whole file.
-    ///
-    /// This is used to verify the integrity of the transferred file once all
-    /// parts are ready.
-    ///
-    /// All parts belonging to the same file are expected to have the same
-    /// digest. In case of digest discrepancies between parts, there is no
-    /// guarantee which digest value will be used for verification.
-    pub file_sha256: [u8; 32],
 }
 
 /// Status of a filestore file.
@@ -411,13 +402,13 @@ impl Filestore {
             }))?;
         let sha256 = <[u8; 32]>::from(sha256.finalize());
 
-        if sha256 != part.file_sha256 {
+        if sha256 != id.file_sha256 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format! {
-                    "computed digest ({:?}) doesn't match the expected one ({:?})",
-                    sha256,
-                    part.file_sha256,
+                    "computed digest ({}) doesn't match the expected one ({})",
+                    Sha256::from(sha256),
+                    Sha256::from(id.file_sha256),
                 },
             ));
         }
@@ -719,7 +710,6 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
         filestore.delete(foo_id).unwrap();
 
@@ -752,7 +742,6 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         let files_entries = std::fs::read_dir(tempdir.path().join("files"))
@@ -786,7 +775,6 @@ mod tests {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         let parts_entries = std::fs::read_dir(tempdir.path().join("parts"))
@@ -821,7 +809,6 @@ mod tests {
                 offset: 0,
                 content: b"FOOBARBAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -849,7 +836,6 @@ mod tests {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Pending {
                 offset: b"FOO".len() as u64,
@@ -861,7 +847,6 @@ mod tests {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Pending {
                 offset: b"FOOBAR".len() as u64,
@@ -873,7 +858,6 @@ mod tests {
                 offset: b"FOOBAR".len() as u64,
                 content: b"BAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -901,7 +885,6 @@ mod tests {
                 offset: b"FOOBAR".len() as u64,
                 content: b"BAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Pending {
                 offset: 0,
@@ -913,7 +896,6 @@ mod tests {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Pending {
                 offset: 0,
@@ -925,7 +907,6 @@ mod tests {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -961,7 +942,6 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAR".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
-                file_sha256: sha256(b"FOOBAR"),
             }).unwrap(),
             Status::Complete,
         };
@@ -970,7 +950,6 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAZ".to_vec(),
                 file_len: b"FOOBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -979,7 +958,6 @@ mod tests {
                 offset: 0,
                 content: b"QUUX".to_vec(),
                 file_len: b"QUUX".len() as u64,
-                file_sha256: sha256(b"QUUX"),
             }).unwrap(),
             Status::Complete,
         };
@@ -1014,7 +992,6 @@ mod tests {
             offset: 0,
             content: b"".to_vec(),
             file_len: 0,
-            file_sha256: sha256(b""),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1036,14 +1013,12 @@ mod tests {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
     }
@@ -1065,14 +1040,12 @@ mod tests {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBA".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
     }
@@ -1094,14 +1067,12 @@ mod tests {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         let error = filestore.store(foo_id, Part {
             offset: 2,
             content: b"OBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1123,7 +1094,6 @@ mod tests {
             offset: 18_446_744_073_709_551_600,
             content: vec![0xf0; 1337],
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1145,7 +1115,6 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOO".len() as u64,
-            file_sha256: sha256(b"FOO"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1167,7 +1136,6 @@ mod tests {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOO".len() as u64,
-            file_sha256: sha256(b"BAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1190,7 +1158,6 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAR".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
-                file_sha256: sha256(b"FOOBAR"),
             }).unwrap(),
             Status::Complete,
         };
@@ -1199,7 +1166,6 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
     }
@@ -1221,7 +1187,6 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         assert!(filestore.delete(foo_id).is_ok());

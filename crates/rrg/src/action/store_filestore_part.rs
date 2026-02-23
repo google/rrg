@@ -27,7 +27,6 @@ where
         offset: args.part_offset,
         content: args.part_content,
         file_len: args.file_len,
-        file_sha256: args.file_sha256,
     })?;
 
     session.reply(Item {
