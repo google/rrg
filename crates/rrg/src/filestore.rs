@@ -89,27 +89,29 @@ pub struct Filestore {
 impl Filestore {
 
     // Here is an overview example of the folder structure and the nomenclature
-    // the code below uses to refer to it.
+    // the code below uses to refer to it. Uppercase hexadecimal string repre-
+    // sent flow identifiers whereas lowercase hexadecimal strings represent
+    // file SHA-256 digests (using only 4 digits for brevity).
     //
     // ```
     // • root/         | "root dir"
     // └── parts/      | "parts dir"      (pending)
     // │ └── F1A1A1/   | "flow parts dir" (for flow `F1A1A1`)
-    // │ │ └── foo/    | "file parts dir" (for file `F1A1A1/foo`)
-    // │ │ │ └── 0     | "part"           (for file `F1A1A1/foo` at offset 0)
-    // │ │ │ └── 42    | "part"           (for file `F1A1A1/foo` at offset 42)
-    // │ │ └── bar/    | "file parts dir" (for file `F1A1A1/bar`)
-    // │ │   └── 0     | "part"           (for file `F1A1A1/bar` at offset 0)
-    // │ │   └── 314   | "part"           (for file `F1A1A1/bar` at offset 314)
+    // │ │ └── e1e1/   | "file parts dir" (for file `F1A1A1/e1e1`)
+    // │ │ │ └── 0     | "part"           (for file `F1A1A1/e1e1` at offset 0)
+    // │ │ │ └── 42    | "part"           (for file `F1A1A1/e1e1` at offset 42)
+    // │ │ └── f2f2/   | "file parts dir" (for file `F1A1A1/f2f2`)
+    // │ │   └── 0     | "part"           (for file `F1A1A1/f2f2` at offset 0)
+    // │ │   └── 314   | "part"           (for file `F1A1A1/f2f2` at offset 314)
     // │ └── F2B2B2/   | "flow parts dir" (for flow `F2B2B2`)
-    // │   └── bar/    | "file parts dir" (for file `F2B2B2/bar`)
-    // │     └── 121   | "file parts dir" (for file `F2B2B2/bar` at offset 121)
+    // │   └── e1e1/   | "file parts dir" (for file `F2B2B2/e1e1`)
+    // │     └── 121   | "file parts dir" (for file `F2B2B2/e1e1` at offset 121)
     // └── files/      | "files dir"      (complete)
     //   └── F1A1A1/   | "flow files dir" (for flow `F1A1A1`)
-    //   │ └── quux    | "file"           (for file `F1A1A1/quux`)
-    //   │ └── norf    | "file"           (for file `F1A1A1/norf`)
+    //   │ └── c3c3    | "file"           (for file `F1A1A1/c3c3`)
+    //   │ └── d4d4    | "file"           (for file `F1A1A1/d4d4`)
     //   └── F3C3C3/   | "flow files dir" (for flow `F3C3C3`)
-    //     └── thud    | "file"           (for file `F3C3C3/thud`)
+    //     └── b5b5    | "file"           (for file `F3C3C3/b5b5`)
     // ```
 
     /// Initializes the filestore at the specified path with the given file TTL.
