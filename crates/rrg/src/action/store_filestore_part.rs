@@ -23,7 +23,7 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    let status = session.filestore_store(&args.file_id, crate::filestore::Part {
+    let status = session.filestore_store(args.file_sha256, crate::filestore::Part {
         offset: args.part_offset,
         content: args.part_content,
         file_len: args.file_len,

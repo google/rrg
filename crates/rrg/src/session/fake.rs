@@ -177,7 +177,7 @@ impl crate::session::Session for FakeSession {
 
     fn filestore_store(
         &self,
-        file_id: &str,
+        file_sha256: [u8; 32],
         part: crate::filestore::Part,
     ) -> crate::session::Result<crate::filestore::Status> {
         let filestore = self.filestore.as_ref()
@@ -185,7 +185,7 @@ impl crate::session::Session for FakeSession {
 
         filestore.store(crate::filestore::Id {
             flow_id: 0xFA4E,
-            file_id,
+            file_sha256,
         }, part)
             .map_err(|error| crate::session::Error {
                 kind: crate::session::ErrorKind::FilestoreStoreFailure,
@@ -195,14 +195,14 @@ impl crate::session::Session for FakeSession {
 
     fn filestore_path(
         &self,
-        file_id: &str,
+        file_sha256: [u8; 32],
     ) -> crate::session::Result<std::path::PathBuf> {
         let filestore = self.filestore.as_ref()
             .ok_or(crate::session::FilestoreUnavailableError)?;
 
         filestore.path(crate::filestore::Id {
             flow_id: 0xFA4E,
-            file_id,
+            file_sha256,
         })
             .map_err(|error| crate::session::Error {
                 kind: crate::session::ErrorKind::FilestoreInvalidPath,
@@ -221,7 +221,7 @@ mod tests {
         let session = FakeSession::new();
 
         use crate::session::Session as _;
-        let error = session.filestore_store("foo", crate::filestore::Part {
+        let error = session.filestore_store([0x00; 32], crate::filestore::Part {
             offset: 0,
             content: b"BARBAZ".to_vec(),
             file_len: b"BARBAZ".len() as u64,
@@ -235,7 +235,7 @@ mod tests {
         let session = FakeSession::new();
 
         use crate::session::Session as _;
-        let error = session.filestore_path("foo")
+        let error = session.filestore_path([0x00; 32])
             .unwrap_err();
         assert_eq!(error.kind, crate::session::ErrorKind::FilestoreUnavailable);
     }
@@ -247,21 +247,25 @@ mod tests {
         let session = FakeSession::new()
             .with_filestore();
 
-        session.filestore_store("foo", crate::filestore::Part {
+        session.filestore_store(sha256(b"BARBAZ"), crate::filestore::Part {
             offset: 0,
             content: b"BARBAZ".to_vec(),
             file_len: b"BARBAZ".len() as u64,
-            file_sha256: [
-                0xeb, 0x65, 0x7a, 0x64, 0x57, 0x46, 0xe8, 0xf0,
-                0xfe, 0x60, 0xc6, 0x20, 0x1a, 0xf3, 0xab, 0x10,
-                0x50, 0x24, 0x16, 0xcc, 0xb1, 0xad, 0x91, 0xad,
-                0x42, 0x27, 0xd6, 0xf0, 0x39, 0x2f, 0x77, 0x6d,
-            ],
+            file_sha256: sha256(b"BARBAZ"),
         }).unwrap();
 
-        let path = session.filestore_path("foo")
+        let path = session.filestore_path(sha256(b"BARBAZ"))
             .unwrap();
 
         assert_eq!(std::fs::read(path).unwrap(), b"BARBAZ");
+    }
+
+    fn sha256(content: &[u8]) -> [u8; 32] {
+        use sha2::Digest as _;
+
+        let mut sha256 = sha2::Sha256::new();
+        sha256.update(content);
+        sha256.finalize()
+            .into()
     }
 }

@@ -75,19 +75,17 @@ pub enum Status {
 
 /// Identifier of a filestore file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Id<'s> {
+pub struct Id {
     /// Identifier of the flow which owns the file.
     pub flow_id: u64,
-    /// Name of the file.
-    ///
-    /// This name must be unique within the flow that owns the file.
-    pub file_id: &'s str,
+    /// SHA-256 of the file.
+    pub file_sha256: [u8; 32],
 }
 
-impl<'s> std::fmt::Display for Id<'s> {
+impl<'s> std::fmt::Display for Id {
 
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:X}/{}", self.flow_id, self.file_id)
+        write!(f, "{:X}/{}", self.flow_id, Sha256::from(self.file_sha256))
     }
 }
 
@@ -627,14 +625,14 @@ impl Filestore {
         self.path
             .join("files")
             .join(id.flow_id.to_string())
-            .join(&id.file_id)
+            .join(Sha256::from(id.file_sha256).as_str())
     }
 
     fn part_path(&self, id: Id, offset: u64) -> PathBuf {
         self.path
             .join("parts")
             .join(id.flow_id.to_string())
-            .join(&id.file_id)
+            .join(Sha256::from(id.file_sha256).as_str())
             .join(offset.to_string())
     }
 }
@@ -714,7 +712,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
@@ -747,7 +745,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
@@ -781,7 +779,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
@@ -815,7 +813,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBARBAZ"),
         };
 
         assert_eq! {
@@ -843,7 +841,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBARBAZ"),
         };
 
         assert_eq! {
@@ -895,7 +893,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBARBAZ"),
         };
 
         assert_eq! {
@@ -947,15 +945,15 @@ mod tests {
 
         let foobar_id = Id {
             flow_id: 0xf00,
-            file_id: "foobar",
+            file_sha256: sha256(b"FOOBAR"),
         };
         let foobaz_id = Id {
             flow_id: 0xf00,
-            file_id: "foobaz",
+            file_sha256: sha256(b"FOOBAZ"),
         };
         let quux_id = Id {
             flow_id: 0xc0000c5,
-            file_id: "quux",
+            file_sha256: sha256(b"QUUX"),
         };
 
         assert_eq! {
@@ -1009,7 +1007,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b""),
         };
 
         let error = filestore.store(foo_id, Part {
@@ -1031,7 +1029,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
@@ -1060,7 +1058,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
@@ -1089,7 +1087,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
@@ -1118,7 +1116,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         let error = filestore.store(foo_id, Part {
@@ -1140,7 +1138,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOO"),
         };
 
         let error = filestore.store(foo_id, Part {
@@ -1162,7 +1160,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"BAR"),
         };
 
         let error = filestore.store(foo_id, Part {
@@ -1184,7 +1182,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         assert_eq! {
@@ -1216,7 +1214,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
@@ -1242,7 +1240,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         let error = filestore.delete(foo_id).unwrap_err();

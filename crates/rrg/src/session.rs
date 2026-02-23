@@ -53,7 +53,7 @@ pub trait Session {
     /// [`Filestore::store`]: crate::filestore::Filestore::store
     fn filestore_store(
         &self,
-        file_id: &str,
+        file_sha256: [u8; 32],
         part: crate::filestore::Part,
     ) -> Result<crate::filestore::Status>;
 
@@ -64,7 +64,7 @@ pub trait Session {
     /// [`Filestore::path`]: crate::filestore::Filestore::path
     fn filestore_path(
         &self,
-        file_id: &str,
+        file_sha256: [u8; 32],
     ) -> Result<std::path::PathBuf>;
 }
 
