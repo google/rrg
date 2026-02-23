@@ -604,27 +604,14 @@ mod tests {
 
     use super::*;
 
-    fn prepare_session(verification_key: ed25519_dalek::VerifyingKey) -> crate::session::FakeSession {
-        crate::session::FakeSession::with_args(crate::args::Args {
-            heartbeat_rate: std::time::Duration::from_secs(0),
-            ping_rate: std::time::Duration::from_secs(0),
-            command_verification_key: Some(verification_key),
-            verbosity: log::LevelFilter::Debug,
-            log_to_stdout: false,
-            log_to_file: None,
-            filestore_dir: None,
-            filestore_ttl: std::time::Duration::ZERO,
-        })
-    }
-
     #[cfg(target_family = "unix")]
     #[test]
     fn handle_command_args_literal() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -653,8 +640,8 @@ mod tests {
     fn handle_command_args_file_id() {
         use crate::session::Session as _;
 
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key())
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key()
             .with_filestore();
 
         session.filestore_store(sha256(b"Lorem ipsum.\n"), crate::filestore::Part {
@@ -664,7 +651,7 @@ mod tests {
         }).unwrap();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -692,11 +679,11 @@ mod tests {
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_command_args_literal() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -725,8 +712,8 @@ mod tests {
     fn handle_command_args_file_id() {
         use crate::session::Session as _;
 
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key())
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key()
             .with_filestore();
 
         session.filestore_store(sha256(b"Lorem ipsum.\r\n"), crate::filestore::Part {
@@ -736,7 +723,7 @@ mod tests {
         }).unwrap();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -766,11 +753,11 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn handle_stdin() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -796,11 +783,11 @@ mod tests {
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_stdin() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -827,11 +814,11 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn handle_stdin_unconsumed() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -860,11 +847,11 @@ mod tests {
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_stdin_unconsumed() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -895,11 +882,11 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn handle_stdout_large() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -932,11 +919,11 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn handle_env() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -965,11 +952,11 @@ mod tests {
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_env() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -997,11 +984,11 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn handle_env_inherited() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -1032,11 +1019,11 @@ mod tests {
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_env_inherited() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -1065,11 +1052,11 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn handle_env_inherited_explicit() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -1098,11 +1085,11 @@ mod tests {
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_env_inherited_explicit() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -1132,16 +1119,17 @@ mod tests {
         use protobuf::Message as _;
         use crate::request::Args as _;
 
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let mut command = rrg_proto::execute_signed_command::Command::new();
         command.set_path(std::path::PathBuf::from("ls").into());
 
         let raw_command = command.write_to_bytes().unwrap();
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let mut args_proto = rrg_proto::execute_signed_command::Args::new();
-        args_proto.set_command_ed25519_signature(signing_key.sign(&raw_command).to_vec());
+        args_proto.set_command_ed25519_signature(ed25519_signature.to_vec());
         args_proto.set_command(raw_command);
         args_proto.mut_timeout().seconds = 5;
 
@@ -1159,11 +1147,11 @@ mod tests {
     #[cfg(target_family = "unix")]
     #[test]
     fn handle_truncate_output() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -1190,11 +1178,11 @@ mod tests {
     #[cfg(target_family = "windows")]
     #[test]
     fn handle_truncate_output() {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         // There is no direct analogue to `cat` on Windows but `findstr` can act
         // similarly: it behaves like `grep`, outputting lines from the input
@@ -1237,11 +1225,11 @@ mod tests {
     fn handle_kill_if_timeout() {
         let timeout = std::time::Duration::from_secs(0);
 
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -1272,11 +1260,11 @@ mod tests {
     fn handle_kill_if_timeout_large_stdin() {
         let timeout = std::time::Duration::from_secs(0);
 
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         // In this test we pipe 2 MiB of data to `sleep` to verify that there is
         // no deadlock when writing input. `sleep` does not consume anything, so
@@ -1312,11 +1300,11 @@ mod tests {
     fn handle_kill_if_timeout() {
         let timeout = std::time::Duration::from_secs(0);
 
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         let args = Args {
             raw_command,
@@ -1346,11 +1334,11 @@ mod tests {
     fn handle_kill_if_timeout_large_stdin() {
         let timeout = std::time::Duration::from_secs(0);
 
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-        let mut session = prepare_session(signing_key.verifying_key());
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key();
 
         let raw_command = Vec::default();
-        let ed25519_signature = signing_key.sign(&raw_command);
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
 
         // In this test we pipe 2 MiB of data to the subprocess to verify that
         // there is no deadlock when writing input. The subprocess does not con-
