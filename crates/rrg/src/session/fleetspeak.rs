@@ -179,7 +179,7 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
 
     fn filestore_store(
         &self,
-        file_id: &str,
+        file_sha256: [u8; 32],
         part: crate::filestore::Part,
     ) -> crate::session::Result<crate::filestore::Status> {
         let filestore = self.filestore
@@ -187,7 +187,7 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
 
         filestore.store(crate::filestore::Id {
             flow_id: self.request_id.flow_id(),
-            file_id: file_id,
+            file_sha256,
         }, part)
             .map_err(|error| crate::session::Error {
                 kind: crate::session::ErrorKind::FilestoreStoreFailure,
@@ -197,14 +197,14 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
 
     fn filestore_path(
         &self,
-        file_id: &str,
+        file_sha256: [u8; 32],
     ) -> crate::session::Result<std::path::PathBuf> {
         let filestore = self.filestore
             .ok_or(crate::session::FilestoreUnavailableError)?;
 
         filestore.path(crate::filestore::Id {
             flow_id: self.request_id.flow_id(),
-            file_id: file_id,
+            file_sha256,
         })
             .map_err(|error| crate::session::Error {
                 kind: crate::session::ErrorKind::FilestoreInvalidPath,

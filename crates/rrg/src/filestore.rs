@@ -44,15 +44,6 @@ pub struct Part {
     /// size value. In case of total size discrepancies between parts, there is
     /// no guarantee which total size value will be used for verification.
     pub file_len: u64,
-    /// SHA-256 digest of the content of the whole file.
-    ///
-    /// This is used to verify the integrity of the transferred file once all
-    /// parts are ready.
-    ///
-    /// All parts belonging to the same file are expected to have the same
-    /// digest. In case of digest discrepancies between parts, there is no
-    /// guarantee which digest value will be used for verification.
-    pub file_sha256: [u8; 32],
 }
 
 /// Status of a filestore file.
@@ -75,19 +66,17 @@ pub enum Status {
 
 /// Identifier of a filestore file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Id<'s> {
+pub struct Id {
     /// Identifier of the flow which owns the file.
     pub flow_id: u64,
-    /// Name of the file.
-    ///
-    /// This name must be unique within the flow that owns the file.
-    pub file_id: &'s str,
+    /// SHA-256 of the file.
+    pub file_sha256: [u8; 32],
 }
 
-impl<'s> std::fmt::Display for Id<'s> {
+impl<'s> std::fmt::Display for Id {
 
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:X}/{}", self.flow_id, self.file_id)
+        write!(f, "{:X}/{}", self.flow_id, Sha256Str::from(self.file_sha256))
     }
 }
 
@@ -100,27 +89,29 @@ pub struct Filestore {
 impl Filestore {
 
     // Here is an overview example of the folder structure and the nomenclature
-    // the code below uses to refer to it.
+    // the code below uses to refer to it. Uppercase hexadecimal string repre-
+    // sent flow identifiers whereas lowercase hexadecimal strings represent
+    // file SHA-256 digests (using only 4 digits for brevity).
     //
     // ```
     // • root/         | "root dir"
     // └── parts/      | "parts dir"      (pending)
     // │ └── F1A1A1/   | "flow parts dir" (for flow `F1A1A1`)
-    // │ │ └── foo/    | "file parts dir" (for file `F1A1A1/foo`)
-    // │ │ │ └── 0     | "part"           (for file `F1A1A1/foo` at offset 0)
-    // │ │ │ └── 42    | "part"           (for file `F1A1A1/foo` at offset 42)
-    // │ │ └── bar/    | "file parts dir" (for file `F1A1A1/bar`)
-    // │ │   └── 0     | "part"           (for file `F1A1A1/bar` at offset 0)
-    // │ │   └── 314   | "part"           (for file `F1A1A1/bar` at offset 314)
+    // │ │ └── e1e1/   | "file parts dir" (for file `F1A1A1/e1e1`)
+    // │ │ │ └── 0     | "part"           (for file `F1A1A1/e1e1` at offset 0)
+    // │ │ │ └── 42    | "part"           (for file `F1A1A1/e1e1` at offset 42)
+    // │ │ └── f2f2/   | "file parts dir" (for file `F1A1A1/f2f2`)
+    // │ │   └── 0     | "part"           (for file `F1A1A1/f2f2` at offset 0)
+    // │ │   └── 314   | "part"           (for file `F1A1A1/f2f2` at offset 314)
     // │ └── F2B2B2/   | "flow parts dir" (for flow `F2B2B2`)
-    // │   └── bar/    | "file parts dir" (for file `F2B2B2/bar`)
-    // │     └── 121   | "file parts dir" (for file `F2B2B2/bar` at offset 121)
+    // │   └── e1e1/   | "file parts dir" (for file `F2B2B2/e1e1`)
+    // │     └── 121   | "file parts dir" (for file `F2B2B2/e1e1` at offset 121)
     // └── files/      | "files dir"      (complete)
     //   └── F1A1A1/   | "flow files dir" (for flow `F1A1A1`)
-    //   │ └── quux    | "file"           (for file `F1A1A1/quux`)
-    //   │ └── norf    | "file"           (for file `F1A1A1/norf`)
+    //   │ └── c3c3    | "file"           (for file `F1A1A1/c3c3`)
+    //   │ └── d4d4    | "file"           (for file `F1A1A1/d4d4`)
     //   └── F3C3C3/   | "flow files dir" (for flow `F3C3C3`)
-    //     └── thud    | "file"           (for file `F3C3C3/thud`)
+    //     └── b5b5    | "file"           (for file `F3C3C3/b5b5`)
     // ```
 
     /// Initializes the filestore at the specified path with the given file TTL.
@@ -413,13 +404,13 @@ impl Filestore {
             }))?;
         let sha256 = <[u8; 32]>::from(sha256.finalize());
 
-        if sha256 != part.file_sha256 {
+        if sha256 != id.file_sha256 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format! {
-                    "computed digest ({:?}) doesn't match the expected one ({:?})",
-                    sha256,
-                    part.file_sha256,
+                    "computed digest ({}) doesn't match the expected one ({})",
+                    Sha256Str::from(sha256),
+                    Sha256Str::from(id.file_sha256),
                 },
             ));
         }
@@ -627,15 +618,55 @@ impl Filestore {
         self.path
             .join("files")
             .join(id.flow_id.to_string())
-            .join(&id.file_id)
+            .join(Sha256Str::from(id.file_sha256).as_str())
     }
 
     fn part_path(&self, id: Id, offset: u64) -> PathBuf {
         self.path
             .join("parts")
             .join(id.flow_id.to_string())
-            .join(&id.file_id)
+            .join(Sha256Str::from(id.file_sha256).as_str())
             .join(offset.to_string())
+    }
+}
+
+/// Wrapper for ASCII-represented SHA-256 digest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct Sha256Str {
+    // TODO(https://github.com/rust-lang/rust/issues/110998): Refactor once
+    // `ascii_char` is stable.
+    ascii: [u8; 64],
+}
+
+impl From<[u8; 32]> for Sha256Str {
+
+    fn from(octets: [u8; 32]) -> Sha256Str {
+        let mut ascii = [0u8; 64];
+        let mut ascii_slice = &mut ascii[..];
+
+        for octet in octets {
+            use std::io::Write as _;
+
+            write!(&mut ascii_slice, "{:02x}", octet)
+                .expect("invalid octet or ASCII buffer");
+        }
+
+        Sha256Str { ascii }
+    }
+}
+
+impl Sha256Str {
+
+    fn as_str(&self) -> &str {
+        str::from_utf8(&self.ascii)
+            .expect("invalid ASCII")
+    }
+}
+
+impl std::fmt::Display for Sha256Str {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 
@@ -674,14 +705,13 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
         filestore.delete(foo_id).unwrap();
 
@@ -707,14 +737,13 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         let files_entries = std::fs::read_dir(tempdir.path().join("files"))
@@ -741,14 +770,13 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         let parts_entries = std::fs::read_dir(tempdir.path().join("parts"))
@@ -775,7 +803,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBARBAZ"),
         };
 
         assert_eq! {
@@ -783,7 +811,6 @@ mod tests {
                 offset: 0,
                 content: b"FOOBARBAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -803,7 +830,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBARBAZ"),
         };
 
         assert_eq! {
@@ -811,7 +838,6 @@ mod tests {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Pending {
                 offset: b"FOO".len() as u64,
@@ -823,7 +849,6 @@ mod tests {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Pending {
                 offset: b"FOOBAR".len() as u64,
@@ -835,7 +860,6 @@ mod tests {
                 offset: b"FOOBAR".len() as u64,
                 content: b"BAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -855,7 +879,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBARBAZ"),
         };
 
         assert_eq! {
@@ -863,7 +887,6 @@ mod tests {
                 offset: b"FOOBAR".len() as u64,
                 content: b"BAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Pending {
                 offset: 0,
@@ -875,7 +898,6 @@ mod tests {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Pending {
                 offset: 0,
@@ -887,7 +909,6 @@ mod tests {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBARBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -907,15 +928,15 @@ mod tests {
 
         let foobar_id = Id {
             flow_id: 0xf00,
-            file_id: "foobar",
+            file_sha256: sha256(b"FOOBAR"),
         };
         let foobaz_id = Id {
             flow_id: 0xf00,
-            file_id: "foobaz",
+            file_sha256: sha256(b"FOOBAZ"),
         };
         let quux_id = Id {
             flow_id: 0xc0000c5,
-            file_id: "quux",
+            file_sha256: sha256(b"QUUX"),
         };
 
         assert_eq! {
@@ -923,7 +944,6 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAR".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
-                file_sha256: sha256(b"FOOBAR"),
             }).unwrap(),
             Status::Complete,
         };
@@ -932,7 +952,6 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAZ".to_vec(),
                 file_len: b"FOOBAZ".len() as u64,
-                file_sha256: sha256(b"FOOBAZ"),
             }).unwrap(),
             Status::Complete,
         };
@@ -941,7 +960,6 @@ mod tests {
                 offset: 0,
                 content: b"QUUX".to_vec(),
                 file_len: b"QUUX".len() as u64,
-                file_sha256: sha256(b"QUUX"),
             }).unwrap(),
             Status::Complete,
         };
@@ -969,14 +987,13 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b""),
         };
 
         let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"".to_vec(),
             file_len: 0,
-            file_sha256: sha256(b""),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -991,21 +1008,19 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
     }
@@ -1020,21 +1035,19 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBA".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
     }
@@ -1049,21 +1062,19 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         let error = filestore.store(foo_id, Part {
             offset: 2,
             content: b"OBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1078,14 +1089,13 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         let error = filestore.store(foo_id, Part {
             offset: 18_446_744_073_709_551_600,
             content: vec![0xf0; 1337],
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1100,14 +1110,13 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOO"),
         };
 
         let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOO".len() as u64,
-            file_sha256: sha256(b"FOO"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1122,14 +1131,13 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"BAR"),
         };
 
         let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOO".len() as u64,
-            file_sha256: sha256(b"BAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1144,7 +1152,7 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         assert_eq! {
@@ -1152,7 +1160,6 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAR".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
-                file_sha256: sha256(b"FOOBAR"),
             }).unwrap(),
             Status::Complete,
         };
@@ -1161,7 +1168,6 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
     }
@@ -1176,14 +1182,13 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
-            file_sha256: sha256(b"FOOBAR"),
         }).unwrap();
 
         assert!(filestore.delete(foo_id).is_ok());
@@ -1202,11 +1207,24 @@ mod tests {
 
         let foo_id = Id {
             flow_id: 0xf00,
-            file_id: "foo",
+            file_sha256: sha256(b"FOOBAR"),
         };
 
         let error = filestore.delete(foo_id).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn sha256_as_str() {
+        assert_eq! {
+            Sha256Str::from([
+                0xf0, 0xba, 0x55, 0x55, 0x00, 0x11, 0x22, 0x33,
+                0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x55, 0x44,
+                0x01, 0x23, 0x45, 0x67, 0x89, 0x0a, 0xbc, 0xde,
+                0x98, 0x76, 0x54, 0x32, 0x10, 0xfe, 0xdc, 0xba,
+            ]).as_str(),
+            "f0ba555500112233aabbccddeeff554401234567890abcde9876543210fedcba",
+        };
     }
 
     fn sha256(content: &[u8]) -> [u8; 32] {

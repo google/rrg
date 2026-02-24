@@ -62,7 +62,7 @@ impl rrg::session::Session for OneshotSession {
 
     fn filestore_store(
         &self,
-        _file_id: &str,
+        _file_sha256: [u8; 32],
         _part: rrg::filestore::Part,
     ) -> rrg::session::Result<rrg::filestore::Status> {
         Err(rrg::session::FilestoreUnavailableError.into())
@@ -70,7 +70,7 @@ impl rrg::session::Session for OneshotSession {
 
     fn filestore_path(
         &self,
-        _file_id: &str,
+        _file_sha256: [u8; 32],
     ) -> rrg::session::Result<std::path::PathBuf> {
         Err(rrg::session::FilestoreUnavailableError.into())
     }

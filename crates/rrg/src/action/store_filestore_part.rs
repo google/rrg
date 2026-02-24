@@ -5,7 +5,6 @@
 
 /// Arguments of the `store_filestore_part` action.
 pub struct Args {
-    file_id: String,
     file_sha256: [u8; 32],
     file_len: u64,
     part_offset: u64,
@@ -14,7 +13,7 @@ pub struct Args {
 
 /// Result of the `store_filestore_part` action.
 pub struct Item {
-    file_id: String,
+    file_sha256: [u8; 32],
     status: crate::filestore::Status,
 }
 
@@ -23,15 +22,14 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    let status = session.filestore_store(&args.file_id, crate::filestore::Part {
+    let status = session.filestore_store(args.file_sha256, crate::filestore::Part {
         offset: args.part_offset,
         content: args.part_content,
         file_len: args.file_len,
-        file_sha256: args.file_sha256,
     })?;
 
     session.reply(Item {
-        file_id: args.file_id,
+        file_sha256: args.file_sha256,
         status,
     })?;
 
@@ -43,7 +41,6 @@ impl crate::request::Args for Args {
     type Proto = rrg_proto::store_filestore_part::Args;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
-        let file_id = proto.take_file_id();
         let file_sha256 = <[u8; 32]>::try_from(&proto.take_file_sha256()[..])
             .map_err(|error| crate::request::ParseArgsError::invalid_field(
                 "file_sha256",
@@ -55,7 +52,6 @@ impl crate::request::Args for Args {
         let part_content = proto.take_part_content();
 
         Ok(Args {
-            file_id,
             file_sha256,
             file_len,
             part_offset,
@@ -70,7 +66,7 @@ impl crate::response::Item for Item {
 
     fn into_proto(self) -> Self::Proto {
         let mut proto = Self::Proto::new();
-        proto.set_file_id(self.file_id);
+        proto.set_file_sha256(self.file_sha256.to_vec());
         proto.set_status(match self.status {
             crate::filestore::Status::Complete => {
                 rrg_proto::store_filestore_part::Status::COMPLETE
@@ -95,7 +91,6 @@ mod tests {
             .with_filestore();
 
         let args = Args {
-            file_id: String::from("foo"),
             file_sha256: sha256(b"BARBAZ"),
             file_len: b"BARBAZ".len() as u64,
             part_offset: 0,
@@ -105,7 +100,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
-        assert_eq!(item.file_id, "foo");
+        assert_eq!(item.file_sha256, sha256(b"BARBAZ"));
         assert_eq!(item.status, crate::filestore::Status::Complete);
     }
 
@@ -115,7 +110,6 @@ mod tests {
             .with_filestore();
 
         let args = Args {
-            file_id: String::from("foo"),
             file_sha256: sha256(b"BARBAZ"),
             file_len: b"BARBAZ".len() as u64,
             part_offset: 0,
@@ -125,7 +119,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
-        assert_eq!(item.file_id, "foo");
+        assert_eq!(item.file_sha256, sha256(b"BARBAZ"));
         assert_eq!(item.status, crate::filestore::Status::Pending {
             offset: b"BAR".len() as u64,
             len: b"BAZ".len() as u64,
