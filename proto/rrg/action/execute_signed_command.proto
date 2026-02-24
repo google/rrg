@@ -23,7 +23,7 @@ message Command {
 
       // Whether to allow passing path to a filestore file specified in the
       // request as the argument.
-      bool file_sha256_allowed = 3;
+      bool filestore_file_sha256_allowed = 3;
     }
   }
 
@@ -99,7 +99,7 @@ message Args {
   // i-th file specified here will be provided as a path to the file on disk to
   // the i-th argument of the signed command that has `filestore_file_allowed`
   // set.
-  repeated bytes file_sha256s = 7;
+  repeated bytes filestore_file_sha256s = 7;
 
   // An [Ed25519][1] signature of the command.
   //
