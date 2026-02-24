@@ -48,7 +48,7 @@ enum CommandArg {
     /// String literal passed to the command as-is.
     Literal(String),
     /// Filestore file SHA-256 digest, resolved to a path passed to the command.
-    FileSha256([u8; 32]),
+    FilestoreFileSha256([u8; 32]),
 }
 
 impl CommandArg {
@@ -113,33 +113,33 @@ impl std::error::Error for ExcessiveUnsignedArgsError {}
 
 /// An error indicating that file SHA-256 was required but not provided.
 #[derive(Debug)]
-struct MissingFileSha256Error {
+struct MissingFilestoreFileSha256Error {
     idx: usize,
 }
 
-impl std::fmt::Display for MissingFileSha256Error {
+impl std::fmt::Display for MissingFilestoreFileSha256Error {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "missing file SHA-256 at {}", self.idx)
+        write!(fmt, "missing filestore file SHA-256 at {}", self.idx)
     }
 }
 
-impl std::error::Error for MissingFileSha256Error {}
+impl std::error::Error for MissingFilestoreFileSha256Error {}
 
 /// An error indicating that there were more SHA-256s provided than expected.
 #[derive(Debug)]
-struct ExcessiveFileSha256sError {
+struct ExcessiveFilestoreFileSha256sError {
     count: usize,
 }
 
-impl std::fmt::Display for ExcessiveFileSha256sError {
+impl std::fmt::Display for ExcessiveFilestoreFileSha256sError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{} excessive file SHA-256s", self.count)
+        write!(fmt, "{} excessive filestore file SHA-256s", self.count)
     }
 }
 
-impl std::error::Error for ExcessiveFileSha256sError {}
+impl std::error::Error for ExcessiveFilestoreFileSha256sError {}
 
 impl std::error::Error for CommandExecutionError {}
 
@@ -248,7 +248,7 @@ where
             CommandArg::Literal(string) => {
                 Ok(std::ffi::OsString::from(string))
             }
-            CommandArg::FileSha256(file_sha256) => {
+            CommandArg::FilestoreFileSha256(file_sha256) => {
                 Ok(session.filestore_path(file_sha256)?.into_os_string())
             }
         }).collect::<crate::session::Result<Vec<_>>>()?;
@@ -464,7 +464,7 @@ impl crate::request::Args for Args {
         args.extend(command.take_args_signed().into_iter().map(CommandArg::literal));
 
         let mut unsigned_args_iter = proto.take_unsigned_args().into_iter();
-        let mut file_sha256s_iter = proto.take_file_sha256s().into_iter();
+        let mut filestore_file_sha256s_iter = proto.take_filestore_file_sha256s().into_iter();
 
         for (arg_idx, mut arg) in command.take_args().into_iter().enumerate() {
             let arg = if arg.unsigned_allowed() {
@@ -476,8 +476,8 @@ impl crate::request::Args for Args {
                         }))
                     }
                 }
-            } else if arg.file_sha256_allowed() {
-                match file_sha256s_iter.next() {
+            } else if arg.filestore_file_sha256_allowed() {
+                match filestore_file_sha256s_iter.next() {
                     Some(file_sha256) => {
                         let file_sha256 = <[u8; 32]>::try_from(&file_sha256[..])
                             .map_err(|error| ParseArgsError::invalid_field(
@@ -485,12 +485,15 @@ impl crate::request::Args for Args {
                                 error,
                             ))?;
 
-                        CommandArg::FileSha256(file_sha256)
+                        CommandArg::FilestoreFileSha256(file_sha256)
                     }
                     None => {
-                        return Err(ParseArgsError::invalid_field("file SHA-256s", MissingFileSha256Error {
-                            idx: arg_idx,
-                        }))
+                        return Err(ParseArgsError::invalid_field(
+                            "filestore file SHA-256s",
+                            MissingFilestoreFileSha256Error {
+                                idx: arg_idx,
+                            },
+                        ))
                     },
                 }
             } else {
@@ -505,11 +508,14 @@ impl crate::request::Args for Args {
                 count: unsigned_args_left,
             }));
         }
-        let file_sha256s_left = file_sha256s_iter.count();
-        if file_sha256s_left > 0 {
-            return Err(ParseArgsError::invalid_field("file SHA-256s", ExcessiveFileSha256sError {
-                count: file_sha256s_left,
-            }));
+        let filestore_file_sha256s_left = filestore_file_sha256s_iter.count();
+        if filestore_file_sha256s_left > 0 {
+            return Err(ParseArgsError::invalid_field(
+                "filestore file SHA-256s",
+                ExcessiveFilestoreFileSha256sError {
+                    count: filestore_file_sha256s_left,
+                },
+            ));
         }
 
         let mut env = std::collections::HashMap::new();
@@ -663,7 +669,7 @@ mod tests {
         let args = Args {
             raw_command,
             path: "cat".into(),
-            args: [CommandArg::FileSha256(sha256(b"Lorem ipsum.\n"))]
+            args: [CommandArg::FilestoreFileSha256(sha256(b"Lorem ipsum.\n"))]
                 .into(),
             env: std::collections::HashMap::new(),
             env_inherited: vec![],
@@ -737,7 +743,7 @@ mod tests {
             path: "findstr".into(),
             args: [
                 CommandArg::literal("ipsum"),
-                CommandArg::FileSha256(sha256(b"Lorem ipsum.\r\n")),
+                CommandArg::FilestoreFileSha256(sha256(b"Lorem ipsum.\r\n")),
             ].into(),
             env: std::collections::HashMap::new(),
             env_inherited: vec![],
@@ -1452,11 +1458,11 @@ mod tests {
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_file_sha256_allowed(true);
+        arg_quux.set_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_file_sha256_allowed(true);
+        arg_norf.set_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1466,15 +1472,15 @@ mod tests {
         let mut args_proto = rrg_proto::execute_signed_command::Args::new();
         args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
         args_proto.set_command(command_bytes);
-        args_proto.mut_file_sha256s().push([0xaa; 32].to_vec());
-        args_proto.mut_file_sha256s().push([0xbb; 32].to_vec());
+        args_proto.mut_filestore_file_sha256s().push([0xaa; 32].to_vec());
+        args_proto.mut_filestore_file_sha256s().push([0xbb; 32].to_vec());
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
         assert_eq!(args.path, std::path::Path::new("/foo/bar"));
         assert_eq!(args.args, [
-            CommandArg::FileSha256([0xaa; 32]),
-            CommandArg::FileSha256([0xbb; 32]),
+            CommandArg::FilestoreFileSha256([0xaa; 32]),
+            CommandArg::FilestoreFileSha256([0xbb; 32]),
         ]);
     }
 
@@ -1494,7 +1500,7 @@ mod tests {
         command_proto.mut_args().push(arg_norf);
 
         let mut arg_blargh = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_blargh.set_file_sha256_allowed(true);
+        arg_blargh.set_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_blargh);
 
         let mut arg_thud = rrg_proto::execute_signed_command::command::Arg::new();
@@ -1509,7 +1515,7 @@ mod tests {
         args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
         args_proto.set_command(command_bytes);
         args_proto.mut_unsigned_args().push(String::from("quux"));
-        args_proto.mut_file_sha256s().push([0xaa; 32].to_vec());
+        args_proto.mut_filestore_file_sha256s().push([0xaa; 32].to_vec());
         args_proto.mut_unsigned_args().push(String::from("thud"));
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
@@ -1518,7 +1524,7 @@ mod tests {
         assert_eq!(args.args, [
             CommandArg::literal("quux"),
             CommandArg::literal("norf"),
-            CommandArg::FileSha256([0xaa; 32]),
+            CommandArg::FilestoreFileSha256([0xaa; 32]),
             CommandArg::literal("thud"),
         ]);
     }
@@ -1591,11 +1597,11 @@ mod tests {
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_file_sha256_allowed(true);
+        arg_quux.set_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_file_sha256_allowed(true);
+        arg_norf.set_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1605,7 +1611,7 @@ mod tests {
         let mut args_proto = rrg_proto::execute_signed_command::Args::new();
         args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
         args_proto.set_command(command_bytes);
-        args_proto.mut_file_sha256s().push([0xaa; 32].to_vec());
+        args_proto.mut_filestore_file_sha256s().push([0xaa; 32].to_vec());
 
         // TODO(@panhania): Assert details of the error once exposed in
         // `ParseArgsError`.
@@ -1620,11 +1626,11 @@ mod tests {
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_file_sha256_allowed(true);
+        arg_quux.set_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_file_sha256_allowed(true);
+        arg_norf.set_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1634,9 +1640,9 @@ mod tests {
         let mut args_proto = rrg_proto::execute_signed_command::Args::new();
         args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
         args_proto.set_command(command_bytes);
-        args_proto.mut_file_sha256s().push([0xaa; 32].to_vec());
-        args_proto.mut_file_sha256s().push([0xbb; 32].to_vec());
-        args_proto.mut_file_sha256s().push([0xcc; 32].to_vec());
+        args_proto.mut_filestore_file_sha256s().push([0xaa; 32].to_vec());
+        args_proto.mut_filestore_file_sha256s().push([0xbb; 32].to_vec());
+        args_proto.mut_filestore_file_sha256s().push([0xcc; 32].to_vec());
 
         // TODO(@panhania): Assert details of the error once exposed in
         // `ParseArgsError`.
