@@ -17,6 +17,7 @@ pub struct FakeSession {
     // We need to keep the temporary directory handle around or otherwise it
     // will be deleted and the filestore object won't be valid anymore.
     filestore_tempdir: Option<tempfile::TempDir>,
+    command_signing_key: Option<ed25519_dalek::SigningKey>,
     replies: Vec<Box<dyn Any>>,
     parcels: std::collections::HashMap<Sink, Vec<Box<dyn Any>>>,
 }
@@ -28,7 +29,7 @@ impl FakeSession {
         FakeSession::with_args(crate::args::Args {
             heartbeat_rate: std::time::Duration::from_secs(0),
             ping_rate: std::time::Duration::from_secs(0),
-            command_verification_key: Some(ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng).verifying_key()),
+            command_verification_key: None,
             verbosity: log::LevelFilter::Debug,
             log_to_stdout: false,
             log_to_file: None,
@@ -43,6 +44,7 @@ impl FakeSession {
             args,
             filestore: None,
             filestore_tempdir: None,
+            command_signing_key: None,
             replies: Vec::new(),
             parcels: std::collections::HashMap::new(),
         }
@@ -53,15 +55,37 @@ impl FakeSession {
         let filestore_tempdir = tempfile::tempdir()
             .unwrap();
 
+        self.args.filestore_dir = Some(filestore_tempdir.path().to_path_buf());
+        self.args.filestore_ttl = std::time::Duration::MAX;
+
         let filestore = crate::filestore::init(
             &filestore_tempdir,
-            std::time::Duration::MAX,
+            self.args.filestore_ttl,
         ).unwrap();
 
         self.filestore = Some(filestore);
         self.filestore_tempdir = Some(filestore_tempdir);
 
         self
+    }
+
+    /// Enables a command signing key in the fake session.
+    pub fn with_command_signing_key(mut self) -> FakeSession {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        self.args.command_verification_key = Some(signing_key.verifying_key());
+        self.command_signing_key = Some(signing_key);
+
+        self
+    }
+
+    /// Returns the command signing key associated with the session.
+    ///
+    /// This method will panic if the session was not created with the command
+    /// signing key enabled (see [`FakeSession::with_command_signing_key`]).
+    pub fn command_signing_key(&self) -> &ed25519_dalek::SigningKey {
+        self.command_signing_key.as_ref()
+            .expect("no command signing key")
     }
 
     /// Yields the number of replies that this session sent so far.
@@ -219,6 +243,7 @@ mod tests {
     #[test]
     fn without_filestore_store() {
         let session = FakeSession::new();
+        assert!(session.args.filestore_dir.is_none());
 
         use crate::session::Session as _;
         let error = session.filestore_store([0x00; 32], crate::filestore::Part {
@@ -232,6 +257,7 @@ mod tests {
     #[test]
     fn without_filestore_path() {
         let session = FakeSession::new();
+        assert!(session.args.filestore_dir.is_none());
 
         use crate::session::Session as _;
         let error = session.filestore_path([0x00; 32])
@@ -245,6 +271,7 @@ mod tests {
 
         let session = FakeSession::new()
             .with_filestore();
+        assert!(session.args.filestore_dir.is_some());
 
         session.filestore_store(sha256(b"BARBAZ"), crate::filestore::Part {
             offset: 0,
@@ -256,6 +283,22 @@ mod tests {
             .unwrap();
 
         assert_eq!(std::fs::read(path).unwrap(), b"BARBAZ");
+    }
+
+    #[test]
+    fn with_command_signing_key() {
+        use crate::session::Session as _;
+        use ed25519_dalek::{Signer as _, Verifier as _};
+
+        let session = FakeSession::new()
+            .with_command_signing_key();
+
+        let signing_key = session.command_signing_key();
+        let verifying_key = session.args().command_verification_key
+            .unwrap();
+
+        let sig = signing_key.sign(b"FOOBAR");
+        assert!(verifying_key.verify(b"FOOBAR", &sig).is_ok());
     }
 
     fn sha256(content: &[u8]) -> [u8; 32] {
