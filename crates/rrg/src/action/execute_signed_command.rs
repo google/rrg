@@ -1158,6 +1158,105 @@ mod tests {
         assert!(!item.truncated_stderr);
     }
 
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_command_exec_filestore_file() {
+        use crate::session::Session as _;
+
+        const SCRIPT: &'static [u8] = b"\
+#!/usr/bin/bash
+echo 'Hello, world!'
+        ";
+
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key()
+            .with_filestore();
+
+        session.filestore_store(sha256(SCRIPT), crate::filestore::Part {
+            offset: 0,
+            content: SCRIPT.to_vec(),
+            file_len: SCRIPT.len() as u64,
+            file_exec: true,
+        }).unwrap();
+
+        let raw_command = Vec::default();
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            exec: CommandExec::FilestoreFileSha256(sha256(SCRIPT)),
+            args: Vec::default(),
+            env: std::collections::HashMap::default(),
+            env_inherited: Vec::default(),
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, b"Hello, world!\n");
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
+    #[cfg(target_family = "windows")]
+    #[test]
+    fn handle_command_exec_filestore_file() {
+        use crate::session::Session as _;
+
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key()
+            .with_filestore();
+
+        // Unlike on Linux, there is no shebang that we could use to treat given
+        // file as a batch or PowerShell script. Instead, we just store in the
+        // filestore standard `findstr.exe` utility (by copying it bit-for-bit)
+        // and execute that on some string.
+        let findstr_exe = std::fs::read([
+            std::env::var("SystemRoot").unwrap().as_str(),
+            "System32",
+            "findstr.exe",
+        ].iter().collect::<std::path::PathBuf>())
+            .unwrap();
+
+        session.filestore_store(sha256(&findstr_exe), crate::filestore::Part {
+            offset: 0,
+            content: findstr_exe.to_vec(),
+            file_len: findstr_exe.len() as u64,
+            file_exec: true,
+        }).unwrap();
+
+        let raw_command = Vec::default();
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            exec: CommandExec::FilestoreFileSha256(sha256(&findstr_exe)),
+            args: ["world"]
+                .map(CommandArg::literal).into(),
+            env: std::collections::HashMap::default(),
+            env_inherited: Vec::default(),
+            ed25519_signature,
+            stdin: Vec::from(b"Hello, world!"),
+            timeout: std::time::Duration::from_secs(5),
+        };
+        handle(&mut session, args).unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, b"Hello, world!\r\n");
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+    }
+
     #[test]
     fn handle_invalid_signature() {
         use protobuf::Message as _;
