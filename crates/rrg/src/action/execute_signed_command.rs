@@ -15,8 +15,8 @@ const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duratio
 /// Arguments of the `execute_signed_command` action.
 pub struct Args {
     raw_command: Vec<u8>,
-    /// Path to the executable file to execute.
-    path: std::path::PathBuf,
+    /// Executable to use.
+    exec: CommandExec,
     /// Command-line arguments to pass to the executable.
     args: Vec<CommandArg>,
     /// Environment in which to invoke the executable.
@@ -40,6 +40,23 @@ pub struct Item {
     stderr: Vec<u8>,
     /// Whether stderr is truncated.
     truncated_stderr: bool,
+}
+
+/// Executable to use for the command.
+#[derive(Debug, PartialEq, Eq)]
+enum CommandExec {
+    /// Filestystem path to the executable file to use.
+    Path(std::path::PathBuf),
+    /// SHA-256 digest of a filestore file to use.
+    // TODO(#192): Refactor with some SHA-256 wrapper type.
+    FilestoreFileSha256([u8; 32]),
+}
+
+impl CommandExec {
+
+    fn path<P: Into<std::path::PathBuf>>(path: P) -> CommandExec {
+        CommandExec::Path(path.into())
+    }
 }
 
 /// Argument that is to be passed to the executed command.
@@ -243,6 +260,15 @@ where
             }
         });
 
+    let command_path = match args.exec {
+        CommandExec::Path(path) => {
+            path
+        }
+        CommandExec::FilestoreFileSha256(file_sha256) => {
+            session.filestore_path(file_sha256)?
+        }
+    };
+
     let command_args = args.args.into_iter()
         .map(|arg| match arg {
             CommandArg::Literal(string) => {
@@ -253,7 +279,7 @@ where
             }
         }).collect::<crate::session::Result<Vec<_>>>()?;
 
-    let mut command_process = std::process::Command::new(&args.path)
+    let mut command_process = std::process::Command::new(&command_path)
         .stdin(std::process::Stdio::piped())
         .args(command_args)
         .env_clear()
@@ -358,7 +384,7 @@ where
         Ok(stderr)
     });
 
-    log::info!("starting '{}' (timeout: {:?})", args.path.display(), args.timeout);
+    log::info!("starting '{}' (timeout: {:?})", command_path.display(), args.timeout);
     loop {
         let time_elapsed = command_start_time.elapsed();
         let time_left = args.timeout.saturating_sub(time_elapsed);
@@ -386,7 +412,7 @@ where
 
     log::info! {
         "done executing '{}' after {:?}, exit status: {}",
-        args.path.display(),
+        command_path.display(),
         command_start_time.elapsed(),
         exit_status,
     };
@@ -454,8 +480,24 @@ impl crate::request::Args for Args {
             rrg_proto::execute_signed_command::Command::parse_from_bytes(&raw_command)
                 .map_err(|error| ParseArgsError::invalid_field("command", error))?;
 
-        let path = std::path::PathBuf::try_from(command.take_path())
-            .map_err(|error| ParseArgsError::invalid_field("command path", error))?;
+        let exec = if command.has_filestore_file_sha256() {
+            let file_sha256 = command.take_filestore_file_sha256();
+            let file_sha256 = <[u8; 32]>::try_from(&file_sha256[..])
+                .map_err(|error| ParseArgsError::invalid_field(
+                    "command filestore file SHA-256",
+                    error,
+                ))?;
+
+            CommandExec::FilestoreFileSha256(file_sha256)
+        } else {
+            let path = std::path::PathBuf::try_from(command.take_path())
+                .map_err(|error| ParseArgsError::invalid_field(
+                    "command path",
+                    error,
+                ))?;
+
+            CommandExec::path(path)
+        };
 
         let mut args = Vec::new();
 
@@ -551,7 +593,7 @@ impl crate::request::Args for Args {
 
         Ok(Args {
             raw_command,
-            path,
+            exec,
             args,
             env,
             env_inherited: command.take_env_inherited(),
@@ -615,7 +657,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "echo".into(),
+            exec: CommandExec::path("echo"),
             args: ["Hello,", "world!"]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -656,7 +698,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "cat".into(),
+            exec: CommandExec::path("cat"),
             args: [CommandArg::FilestoreFileSha256(sha256(b"Lorem ipsum.\n"))]
                 .into(),
             env: std::collections::HashMap::new(),
@@ -688,7 +730,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "cmd".into(),
+            exec: CommandExec::path("cmd"),
             args: ["/C", "echo", "Hello,", "world!"]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -729,7 +771,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "findstr".into(),
+            exec: CommandExec::path("findstr"),
             args: [
                 CommandArg::literal("ipsum"),
                 CommandArg::FilestoreFileSha256(sha256(b"Lorem ipsum.\r\n")),
@@ -763,7 +805,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "cat".into(),
+            exec: CommandExec::path("cat"),
             args: Vec::default(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
@@ -793,7 +835,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "findstr".into(),
+            exec: CommandExec::path("findstr"),
             args: ["world"]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -824,7 +866,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "true".into(),
+            exec: CommandExec::path("true"),
             args: Vec::default(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
@@ -857,7 +899,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "cmd".into(),
+            exec: CommandExec::path("cmd"),
             args: ["/c", "exit"]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -895,7 +937,7 @@ mod tests {
             // In this test we read large amount of data from the output of the
             // child process. This should ensure we always consume the data and
             // never get stuck on a full pipe.
-            path: "head".into(),
+            exec: CommandExec::path("head"),
             args: ["--bytes=67108864" /* 64 MiB */, "/dev/zero"]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -929,7 +971,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "printenv".into(),
+            exec: CommandExec::path("printenv"),
             args: Vec::default(),
             env: [(String::from("MY_ENV_VAR"), String::from("Hello, world!"))]
                 .into(),
@@ -962,7 +1004,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "cmd".into(),
+            exec: CommandExec::path("cmd"),
             args: ["/c", "echo %MY_ENV_VAR%"]
                 .map(CommandArg::literal).into(),
             env: [(String::from("MY_ENV_VAR"), String::from("Hello, world!"))]
@@ -994,7 +1036,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "printenv".into(),
+            exec: CommandExec::path("printenv"),
             args: Vec::default(),
             env: std::collections::HashMap::new(),
             env_inherited: vec![String::from("PATH")],
@@ -1029,7 +1071,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "cmd".into(),
+            exec: CommandExec::path("cmd"),
             args: ["/c", "echo %SystemRoot%"]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -1062,7 +1104,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "printenv".into(),
+            exec: CommandExec::path("printenv"),
             args: Vec::default(),
             env: [(String::from("HOME"), String::from("/tmp"))]
                 .into(),
@@ -1095,7 +1137,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "cmd".into(),
+            exec: CommandExec::path("cmd"),
             args: ["/c", "echo %TEMP%"]
                 .map(CommandArg::literal).into(),
             env: [(String::from("TEMP"), String::from("C:\\Foo\\Bar"))]
@@ -1157,7 +1199,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "cat".into(),
+            exec: CommandExec::path("cat"),
             args: Vec::default(),
             env: std::collections::HashMap::new(),
             env_inherited: Vec::new(),
@@ -1196,7 +1238,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "findstr".into(),
+            exec: CommandExec::path("findstr"),
             args: ["ABCD"]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -1235,7 +1277,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "sleep".into(),
+            exec: CommandExec::path("sleep"),
             args: [(timeout.as_secs() + 1).to_string()]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -1275,7 +1317,7 @@ mod tests {
 
         let args = Args {
             raw_command,
-            path: "sleep".into(),
+            exec: CommandExec::path("sleep"),
             args: [(timeout.as_secs() + 1).to_string()]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -1312,7 +1354,7 @@ mod tests {
             raw_command,
             // The `timeout` command seems to be unavailable e.g. on Wine so
             // instead we just hang the program forever using an infinite loop.
-            path: "cmd".into(),
+            exec: CommandExec::path("cmd"),
             args: ["/q", "/c", "for /l %i in () do echo off"]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -1351,7 +1393,7 @@ mod tests {
             raw_command,
             // The `timeout` command seems to be unavailable e.g. on Wine so
             // instead we just hang the program forever using an infinite loop.
-            path: "cmd".into(),
+            exec: CommandExec::path("cmd"),
             args: ["/q", "/c", "for /l %i in () do echo off"]
                 .map(CommandArg::literal).into(),
             env: std::collections::HashMap::new(),
@@ -1397,7 +1439,7 @@ mod tests {
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
-        assert_eq!(args.path, std::path::Path::new("/foo/bar"));
+        assert_eq!(args.exec, CommandExec::path("/foo/bar"));
         assert_eq!(args.args, [
             CommandArg::literal("foo"),
             CommandArg::literal("bar"),
@@ -1433,7 +1475,7 @@ mod tests {
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
-        assert_eq!(args.path, std::path::Path::new("/foo/bar"));
+        assert_eq!(args.exec, CommandExec::path("/foo/bar"));
         assert_eq!(args.args, [
             CommandArg::literal("quux"),
             CommandArg::literal("norf"),
@@ -1467,7 +1509,7 @@ mod tests {
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
-        assert_eq!(args.path, std::path::Path::new("/foo/bar"));
+        assert_eq!(args.exec, CommandExec::path("/foo/bar"));
         assert_eq!(args.args, [
             CommandArg::FilestoreFileSha256([0xaa; 32]),
             CommandArg::FilestoreFileSha256([0xbb; 32]),
@@ -1510,7 +1552,7 @@ mod tests {
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
-        assert_eq!(args.path, std::path::Path::new("/foo/bar"));
+        assert_eq!(args.exec, CommandExec::path("/foo/bar"));
         assert_eq!(args.args, [
             CommandArg::literal("quux"),
             CommandArg::literal("norf"),
@@ -1658,7 +1700,7 @@ mod tests {
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
-        assert_eq!(args.path, std::path::Path::new("/foo/bar"));
+        assert_eq!(args.exec, CommandExec::path("/foo/bar"));
         assert_eq!(args.env["FOO"], "quux");
         assert_eq!(args.env["BAR"], "thud");
     }
@@ -1684,7 +1726,7 @@ mod tests {
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
-        assert_eq!(args.path, std::path::Path::new("/foo/bar"));
+        assert_eq!(args.exec, CommandExec::path("/foo/bar"));
         assert_eq!(args.env["FOO"], "quux");
         assert_eq!(args.env["BAR"], "thud");
     }

@@ -27,8 +27,15 @@ message Command {
     }
   }
 
-  // Path to the executable file to execute.
-  rrg.fs.Path path = 1;
+  oneof exec {
+    // Path to the executable file to execute.
+    rrg.fs.Path path = 1;
+
+    // SHA-256 digest of a filestore file to execute.
+    //
+    // The filestore file must have been stored with the executable bit set.
+    bytes filestore_file_sha256 = 9;
+  }
 
   // Arguments to pass to the command.
   repeated string args_signed = 2; // TODO: Deprecate this field.
