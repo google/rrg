@@ -47,7 +47,7 @@ pub struct Item {
 enum CommandArg {
     /// String literal passed to the command as-is.
     Literal(String),
-    /// Filestore file SHA-256 resolved to a path passed to the command.
+    /// Filestore file SHA-256 digest, resolved to a path passed to the command.
     FileSha256([u8; 32]),
 }
 
@@ -113,18 +113,18 @@ impl std::error::Error for ExcessiveUnsignedArgsError {}
 
 /// An error indicating that file SHA-256 was required but not provided.
 #[derive(Debug)]
-struct MissingFileSha256sError {
+struct MissingFileSha256Error {
     idx: usize,
 }
 
-impl std::fmt::Display for MissingFileSha256sError {
+impl std::fmt::Display for MissingFileSha256Error {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(fmt, "missing file SHA-256 at {}", self.idx)
     }
 }
 
-impl std::error::Error for MissingFileSha256sError {}
+impl std::error::Error for MissingFileSha256Error {}
 
 /// An error indicating that there were more SHA-256s provided than expected.
 #[derive(Debug)]
@@ -488,7 +488,7 @@ impl crate::request::Args for Args {
                         CommandArg::FileSha256(file_sha256)
                     }
                     None => {
-                        return Err(ParseArgsError::invalid_field("file SHA-256s", MissingFileSha256sError {
+                        return Err(ParseArgsError::invalid_field("file SHA-256s", MissingFileSha256Error {
                             idx: arg_idx,
                         }))
                     },
