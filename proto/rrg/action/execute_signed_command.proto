@@ -27,7 +27,7 @@ message Command {
     }
   }
 
-  oneof exec {
+  oneof executable {
     // Path to the executable file to execute.
     rrg.fs.Path path = 1;
 
