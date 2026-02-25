@@ -441,6 +441,16 @@ impl Filestore {
         let sha256 = <[u8; 32]>::from(sha256.finalize());
 
         if sha256 != id.file_sha256 {
+            std::fs::remove_file(&file_path)
+                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                    "could not remove file with invalid SHA-256 at '{}': {error}",
+                    file_path.display(),
+                }))?;
+
+            // Note that we do not explicitly delete individual parts after un-
+            // successful verification. They will eventually be deleted by the
+            // filestore TTL cleaner and can be useful for potential debugging.
+
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format! {
@@ -1240,6 +1250,10 @@ echo 'Hello, world!'
             file_exec: false,
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+
+        let error = filestore.path(foo_id)
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
     }
 
     #[test]
