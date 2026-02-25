@@ -1164,7 +1164,7 @@ mod tests {
         use crate::session::Session as _;
 
         const SCRIPT: &'static [u8] = b"\
-#!/usr/bin/bash
+#!/usr/bin/env bash
 echo 'Hello, world!'
         ";
 
