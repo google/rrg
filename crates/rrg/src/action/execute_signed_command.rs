@@ -648,6 +648,7 @@ mod tests {
             offset: 0,
             content: b"Lorem ipsum.\n".to_vec(),
             file_len: b"Lorem ipsum.\n".len() as u64,
+            file_exec: false,
         }).unwrap();
 
         let raw_command = Vec::default();
@@ -720,6 +721,7 @@ mod tests {
             offset: 0,
             content: b"Lorem ipsum.\r\n".to_vec(),
             file_len: b"Lorem ipsum.\r\n".len() as u64,
+            file_exec: false,
         }).unwrap();
 
         let raw_command = Vec::default();
