@@ -389,10 +389,13 @@ impl Filestore {
             {
                 use std::os::unix::fs::OpenOptionsExt as _;
 
+                // We need `u32::from` because `DirBuilderExt::mode` takes `u32`
+                // but libc flags use `mode_t` which varies by platform (e.g. it
+                // is `u16` on Apple systems).
                 if part.file_exec {
-                    file_opts.mode(libc::S_IRWXU);
+                    file_opts.mode(u32::from(libc::S_IRWXU));
                 } else {
-                    file_opts.mode(libc::S_IRUSR | libc::S_IWUSR);
+                    file_opts.mode(u32::from(libc::S_IRUSR | libc::S_IWUSR));
                 }
             }
 
