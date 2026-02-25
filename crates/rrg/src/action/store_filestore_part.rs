@@ -26,6 +26,8 @@ where
         offset: args.part_offset,
         content: args.part_content,
         file_len: args.file_len,
+        // TODO: Add support for executable bit in `store_filestore_part`.
+        file_exec: false,
     })?;
 
     session.reply(Item {

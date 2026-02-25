@@ -44,6 +44,20 @@ pub struct Part {
     /// size value. In case of total size discrepancies between parts, there is
     /// no guarantee which total size value will be used for verification.
     pub file_len: u64,
+    /// Determines whether the file gets the executable bit.
+    ///
+    /// By default files stored in filestore are regular files that can be read
+    /// by RRG (and its subprocesses). However, sometimes files also need to be
+    /// executed and Unix derivatives this requires the executable bit on the
+    /// file to be set.
+    ///
+    /// This has effect no effect on Windows (which determines whether a file is
+    /// executable by inspecting its magic bytes).
+    ///
+    /// All parts belonging to the same file are expected to use the same value
+    /// for the executable bit. In case of executable bit discrepancies between
+    /// parts, there is no guarantee about the final mode of the file.
+    pub file_exec: bool,
 }
 
 /// Status of a filestore file.
@@ -364,11 +378,30 @@ impl Filestore {
                 flow_files_dir_path.display(),
             }))?;
 
-        let mut file = std::fs::File::create_new(&file_path)
-            .map_err(|error| std::io::Error::new(error.kind(), format! {
-                "could not create file at '{}': {error}",
-                file_path.display(),
-            }))?;
+        let mut file = {
+            let mut file_opts = std::fs::OpenOptions::new();
+            file_opts
+                .create_new(true)
+                .write(true)
+                .read(true);
+
+            #[cfg(target_family = "unix")]
+            {
+                use std::os::unix::fs::OpenOptionsExt as _;
+
+                if part.file_exec {
+                    file_opts.mode(libc::S_IRWXU);
+                } else {
+                    file_opts.mode(libc::S_IRUSR | libc::S_IWUSR);
+                }
+            }
+
+            file_opts.open(&file_path)
+                .map_err(|error| std::io::Error::new(error.kind(), format! {
+                    "could not create file at '{}': {error}",
+                    file_path.display(),
+                }))?
+        };
 
         for part in parts.iter() {
             let part_offset = part.offset;
@@ -712,6 +745,7 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap();
         filestore.delete(foo_id).unwrap();
 
@@ -744,6 +778,7 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap();
 
         let files_entries = std::fs::read_dir(tempdir.path().join("files"))
@@ -777,6 +812,7 @@ mod tests {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap();
 
         let parts_entries = std::fs::read_dir(tempdir.path().join("parts"))
@@ -811,6 +847,7 @@ mod tests {
                 offset: 0,
                 content: b"FOOBARBAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Complete,
         };
@@ -838,6 +875,7 @@ mod tests {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Pending {
                 offset: b"FOO".len() as u64,
@@ -849,6 +887,7 @@ mod tests {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Pending {
                 offset: b"FOOBAR".len() as u64,
@@ -860,6 +899,7 @@ mod tests {
                 offset: b"FOOBAR".len() as u64,
                 content: b"BAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Complete,
         };
@@ -887,6 +927,7 @@ mod tests {
                 offset: b"FOOBAR".len() as u64,
                 content: b"BAZ".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Pending {
                 offset: 0,
@@ -898,6 +939,7 @@ mod tests {
                 offset: b"FOO".len() as u64,
                 content: b"BAR".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Pending {
                 offset: 0,
@@ -909,6 +951,7 @@ mod tests {
                 offset: 0,
                 content: b"FOO".to_vec(),
                 file_len: b"FOOBARBAZ".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Complete,
         };
@@ -944,6 +987,7 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAR".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Complete,
         };
@@ -952,6 +996,7 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAZ".to_vec(),
                 file_len: b"FOOBAZ".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Complete,
         };
@@ -960,6 +1005,7 @@ mod tests {
                 offset: 0,
                 content: b"QUUX".to_vec(),
                 file_len: b"QUUX".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Complete,
         };
@@ -975,6 +1021,47 @@ mod tests {
         let quux_contents = std::fs::read(filestore.path(quux_id).unwrap())
             .unwrap();
         assert_eq!(quux_contents, b"QUUX");
+    }
+
+    #[test]
+    // The executable bit makes sense only on Unix platforms.
+    #[cfg_attr(not(target_family = "unix"), ignore)]
+    fn store_file_exec_true() {
+        const SCRIPT: &'static [u8] = b"\
+#!/usr/bin/bash
+echo 'Hello, world!'
+        ";
+
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+            .unwrap();
+
+        let script_id = Id {
+            flow_id: 0xf00,
+            file_sha256: sha256(SCRIPT),
+        };
+
+        assert_eq! {
+            filestore.store(script_id, Part {
+                offset: 0,
+                content: SCRIPT.to_vec(),
+                file_len: SCRIPT.len() as u64,
+                file_exec: true,
+            }).unwrap(),
+            Status::Complete,
+        };
+
+        // The script should be executable. Instead of just verifying its mode,
+        // we verify that it is possible to actually execute it.
+        let script_path = filestore.path(script_id)
+            .unwrap();
+        let script_output = std::process::Command::new(script_path).output()
+            .unwrap();
+        assert!(script_output.status.success());
+        assert_eq!(script_output.stdout, b"Hello, world!\n");
+        assert_eq!(script_output.stderr, b"");
     }
 
     #[test]
@@ -994,6 +1081,7 @@ mod tests {
             offset: 0,
             content: b"".to_vec(),
             file_len: 0,
+            file_exec: false,
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1015,12 +1103,14 @@ mod tests {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap();
 
         let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
     }
@@ -1042,12 +1132,14 @@ mod tests {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap();
 
         let error = filestore.store(foo_id, Part {
             offset: 0,
             content: b"FOOBA".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
     }
@@ -1069,12 +1161,14 @@ mod tests {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap();
 
         let error = filestore.store(foo_id, Part {
             offset: 2,
             content: b"OBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1096,6 +1190,7 @@ mod tests {
             offset: 18_446_744_073_709_551_600,
             content: vec![0xf0; 1337],
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1117,6 +1212,7 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOO".len() as u64,
+            file_exec: false,
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1138,6 +1234,7 @@ mod tests {
             offset: 0,
             content: b"FOO".to_vec(),
             file_len: b"FOO".len() as u64,
+            file_exec: false,
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
@@ -1160,6 +1257,7 @@ mod tests {
                 offset: 0,
                 content: b"FOOBAR".to_vec(),
                 file_len: b"FOOBAR".len() as u64,
+                file_exec: false,
             }).unwrap(),
             Status::Complete,
         };
@@ -1168,6 +1266,7 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
     }
@@ -1189,6 +1288,7 @@ mod tests {
             offset: 0,
             content: b"FOOBAR".to_vec(),
             file_len: b"FOOBAR".len() as u64,
+            file_exec: false,
         }).unwrap();
 
         assert!(filestore.delete(foo_id).is_ok());

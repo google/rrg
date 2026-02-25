@@ -250,6 +250,7 @@ mod tests {
             offset: 0,
             content: b"BARBAZ".to_vec(),
             file_len: b"BARBAZ".len() as u64,
+            file_exec: false,
         }).unwrap_err();
         assert_eq!(error.kind, crate::session::ErrorKind::FilestoreUnavailable);
     }
@@ -277,6 +278,7 @@ mod tests {
             offset: 0,
             content: b"BARBAZ".to_vec(),
             file_len: b"BARBAZ".len() as u64,
+            file_exec: false,
         }).unwrap();
 
         let path = session.filestore_path(sha256(b"BARBAZ"))
