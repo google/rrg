@@ -34,6 +34,21 @@ message Args {
   // guarantee which total size value will be used for verification.
   uint64 file_size = 2;
 
+  // Determines whether the file gets the executable bit.
+  //
+  // By default files stored in filestore are regular files that can be read by
+  // RRG (and its subprocesses). However, sometimes files also need to be execu-
+  // ted and Unix derivatives this requires the executable bit on the file to be
+  // set.
+  //
+  // This has no effect on Windows (which determines whether a file's executable
+  // by inspecting its magic bytes).
+  //
+  // All parts belonging to the same file are expected to use the same value for
+  // the executable bit. In case of executable bit discrepancies between parts,
+  // there is no guarantee about the final mode of the file.
+  bool file_executable = 5;
+
   // Offset within the file of the content transferred in this action call.
   //
   // All parts belonging to the same file must not overlap (in particular it

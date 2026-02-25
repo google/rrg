@@ -7,6 +7,7 @@
 pub struct Args {
     file_sha256: [u8; 32],
     file_len: u64,
+    file_exec: bool,
     part_offset: u64,
     part_content: Vec<u8>,
 }
@@ -26,8 +27,7 @@ where
         offset: args.part_offset,
         content: args.part_content,
         file_len: args.file_len,
-        // TODO: Add support for executable bit in `store_filestore_part`.
-        file_exec: false,
+        file_exec: args.file_exec,
     })?;
 
     session.reply(Item {
@@ -49,6 +49,7 @@ impl crate::request::Args for Args {
                 error,
             ))?;
         let file_len = proto.file_size();
+        let file_exec = proto.file_executable();
 
         let part_offset = proto.part_offset();
         let part_content = proto.take_part_content();
@@ -56,6 +57,7 @@ impl crate::request::Args for Args {
         Ok(Args {
             file_sha256,
             file_len,
+            file_exec,
             part_offset,
             part_content,
         })
@@ -95,6 +97,7 @@ mod tests {
         let args = Args {
             file_sha256: sha256(b"BARBAZ"),
             file_len: b"BARBAZ".len() as u64,
+            file_exec: false,
             part_offset: 0,
             part_content: b"BARBAZ".to_vec(),
         };
@@ -114,6 +117,7 @@ mod tests {
         let args = Args {
             file_sha256: sha256(b"BARBAZ"),
             file_len: b"BARBAZ".len() as u64,
+            file_exec: false,
             part_offset: 0,
             part_content: b"BAR".to_vec(),
         };
