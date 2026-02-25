@@ -1028,7 +1028,7 @@ mod tests {
     #[cfg_attr(not(target_family = "unix"), ignore)]
     fn store_file_exec_true() {
         const SCRIPT: &'static [u8] = b"\
-#!/usr/bin/bash
+#!/usr/bin/env bash
 echo 'Hello, world!'
         ";
 
