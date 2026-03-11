@@ -644,6 +644,52 @@ impl From<Permissions> for rrg_proto::dump_process_memory::Permissions {
     }
 }
 
+/// Criteria for filtering memory regions.
+///
+/// `RegionFilter` defines a set of rules used to evaluate whether a specific
+/// memory region should be included in a target set. This logic is exposed via
+/// the `matches` method: if a region possesses an attribute that corresponds to
+/// an enabled `skip_*` flag, `matches` returns `false` (indicating exclusion).
+/// Otherwise, it returns `true` (indicating inclusion).
+///
+/// By default, all skip flags are `false`. This means that using
+/// `RegionFilter::default()` creates a completely permissive filter,
+/// including everything without any exclusions.
+#[derive(Default)]
+pub struct RegionFilter {
+    /// Excludes filesystem-mapped memory regions (e.g., memory-mapped files).
+    pub skip_mapped_files: bool,
+    /// Excludes memory regions shared with other processes (e.g., shared libraries or IPC memory).
+    pub skip_shared_regions: bool,
+    /// Excludes memory regions containing executable data (e.g., `.text` sections).
+    pub skip_executable_regions: bool,
+    /// Excludes memory regions that are strictly read-only (e.g., `.rodata` sections).
+    pub skip_readonly_regions: bool,
+}
+
+impl RegionFilter {
+    /// Evaluates whether a given memory region should be included based on the filter rules.
+    pub fn matches(&self, region: &MappedRegion) -> bool {
+        if self.skip_shared_regions && region.permissions.shared {
+            return false;
+        }
+        if self.skip_executable_regions && region.permissions.execute {
+            return false;
+        }
+        if self.skip_mapped_files && (region.inode.is_some() || region.path.is_some()) {
+            return false;
+        }
+        if self.skip_readonly_regions
+            && region.permissions.read
+            && !region.permissions.write
+            && !region.permissions.execute
+        {
+            return false;
+        }
+        true
+    }
+}
+
 /// Arguments of the `dump_process_memory` action.
 #[derive(Default)]
 pub struct Args {
@@ -660,14 +706,8 @@ pub struct Args {
     // If not reached, the remaining memory pages will be dumped up to `total_size_limit`.
     priority_offsets: Option<Vec<u64>>,
 
-    // Set this flag to avoid dumping mapped files.
-    skip_mapped_files: bool,
-    // Set this flag to avoid dumping shared memory regions.
-    skip_shared_regions: bool,
-    // Set this flag to avoid dumping executable memory regions.
-    skip_executable_regions: bool,
-    // Set this flag to avoid dumping readonly memory regions.
-    skip_readonly_regions: bool,
+    // Determines which memory regions should be considered for dumping.
+    filter: RegionFilter,
 }
 
 use crate::request::ParseArgsError;
@@ -703,34 +743,13 @@ impl crate::request::Args for Args {
             pids: proto.take_pids(),
             total_size_limit: proto.total_size_limit,
             priority_offsets,
-            skip_mapped_files: proto.skip_mapped_files,
-            skip_shared_regions: proto.skip_shared_regions,
-            skip_executable_regions: proto.skip_executable_regions,
-            skip_readonly_regions: proto.skip_readonly_regions,
+            filter: RegionFilter {
+                skip_mapped_files: proto.skip_mapped_files,
+                skip_shared_regions: proto.skip_shared_regions,
+                skip_executable_regions: proto.skip_executable_regions,
+                skip_readonly_regions: proto.skip_readonly_regions,
+            },
         })
-    }
-}
-
-impl Args {
-    /// Whether `region` should be dumped according to `self`'s filtering parameters.
-    fn should_dump(&self, region: &MappedRegion) -> bool {
-        if self.skip_shared_regions && region.permissions.shared {
-            return false;
-        }
-        if self.skip_executable_regions && region.permissions.execute {
-            return false;
-        }
-        if self.skip_mapped_files && (region.inode.is_some() || region.path.is_some()) {
-            return false;
-        }
-        if self.skip_readonly_regions
-            && region.permissions.read
-            && !region.permissions.write
-            && !region.permissions.execute
-        {
-            return false;
-        }
-        true
     }
 }
 
@@ -923,9 +942,7 @@ where
     S: crate::session::Session,
 {
     let mut total_size_left = args.total_size_limit.unwrap_or(u64::MAX);
-    // Circumvent borrow checker complaint about partial moves with `take`
-    let pids = std::mem::take(&mut args.pids);
-    for pid in pids {
+    for pid in args.pids {
         let regions = match MappedRegionIter::from_pid(pid) {
             Ok(regions) => regions,
             Err(cause) => {
@@ -959,7 +976,7 @@ where
         // so we enforce that by `take`ing it here.
         // This too is a workaround for partial moves.
         let offsets = args.priority_offsets.take();
-        let regions = regions.into_iter().filter(|reg| args.should_dump(reg));
+        let regions = regions.into_iter().filter(|reg| args.filter.matches(reg));
 
         let regions = if let Some(offsets) = offsets {
             sort_by_priority(regions, offsets)
@@ -1199,8 +1216,11 @@ pub mod tests {
             pids: vec![std::process::id()],
             // Set limit to keep unit test time reasonable
             total_size_limit: Some(10000),
-            skip_executable_regions: true,
-            skip_shared_regions: true,
+            filter: RegionFilter {
+                skip_executable_regions: true,
+                skip_shared_regions: true,
+                ..Default::default()
+            },
             ..Default::default()
         };
 
