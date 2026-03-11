@@ -254,11 +254,6 @@ impl crate::request::Args for Args {
 
         let len = match proto.length() {
             0 => usize::MAX,
-            len if len > MAX_BLOB_LEN as u64 => {
-                return Err(ParseArgsError::invalid_field("length", LenError {
-                    len,
-                }));
-            },
             len => len as usize,
         };
 
@@ -344,26 +339,6 @@ impl std::fmt::Display for FileErrorKind {
             FileErrorKind::Read => write!(fmt, "read contents failed"),
         }
     }
-}
-
-/// An error indicating that the action was invoked with invalid length.
-#[derive(Debug)]
-struct LenError {
-    len: u64,
-}
-
-impl std::fmt::Display for LenError {
-
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write! {
-            fmt,
-            "provided length ({}) is bigger than allowed ({})",
-            self.len, MAX_BLOB_LEN
-        }
-    }
-}
-
-impl std::error::Error for LenError {
 }
 
 #[cfg(test)]
