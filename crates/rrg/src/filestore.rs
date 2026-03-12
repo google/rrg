@@ -90,7 +90,7 @@ pub struct Id {
 impl<'s> std::fmt::Display for Id {
 
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:X}/{}", self.flow_id, Sha256Str::from(self.file_sha256))
+        write!(f, "{}/{}", FlowIdStr::from(self.flow_id), Sha256Str::from(self.file_sha256))
     }
 }
 
@@ -663,16 +663,54 @@ impl Filestore {
     fn file_path(&self, id: Id) -> PathBuf {
         self.path
             .join("files")
-            .join(id.flow_id.to_string())
+            .join(FlowIdStr::from(id.flow_id).as_str())
             .join(Sha256Str::from(id.file_sha256).as_str())
     }
 
     fn part_path(&self, id: Id, offset: u64) -> PathBuf {
         self.path
             .join("parts")
-            .join(id.flow_id.to_string())
+            .join(FlowIdStr::from(id.flow_id).as_str())
             .join(Sha256Str::from(id.file_sha256).as_str())
             .join(offset.to_string())
+    }
+}
+
+/// Wwrapper for ASCII-represented flow identifier.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct FlowIdStr {
+    // TODO(https://github.com/rust-lang/rust/issues/110998): Refactor once
+    // `ascii_char` is stable.
+    ascii: [u8; 16],
+}
+
+impl From<u64> for FlowIdStr {
+
+    fn from(flow_id: u64) -> FlowIdStr {
+        let mut ascii = [0u8; 16];
+        let mut ascii_slice = &mut ascii[..];
+
+        use std::io::Write as _;
+
+        write!(&mut ascii_slice, "{:016X}", flow_id)
+            .expect("invalid ASCII buffer");
+
+        FlowIdStr { ascii }
+    }
+}
+
+impl FlowIdStr {
+
+    fn as_str(&self) -> &str {
+        str::from_utf8(&self.ascii)
+            .expect("invalid ASCII")
+    }
+}
+
+impl std::fmt::Display for FlowIdStr {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 
@@ -1329,6 +1367,22 @@ echo 'Hello, world!'
 
         let error = filestore.delete(foo_id).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn flow_id_str() {
+        assert_eq! {
+            FlowIdStr::from(0x1337C0FEE0FF1CE5).to_string(),
+            "1337C0FEE0FF1CE5",
+        };
+    }
+
+    #[test]
+    fn flow_id_str_padding() {
+        assert_eq! {
+            FlowIdStr::from(0x1337C0FEE).to_string(),
+            "00000001337C0FEE",
+        }
     }
 
     #[test]
