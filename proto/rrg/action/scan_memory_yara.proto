@@ -13,7 +13,12 @@ message Args {
   repeated uint32 pids = 1;
 
   // YARA signature source to use for scanning.
-  string signature = 2;
+  oneof signature_oneof {
+      // Signature passed inline with the request as a UTF-8 string.
+      string signature_inline = 2;
+      // SHA-256 checksum of the signature, which must have been previously stored in the filestore.
+      bytes signature_file_sha256 = 10;
+  }
 
   // Maximum time spent scanning a single process.
   google.protobuf.Duration timeout = 3;

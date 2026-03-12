@@ -11,13 +11,21 @@ use yara_x::blocks::Scanner;
 
 use rrg_proto::scan_memory_yara as proto;
 
+/// Source code of a YARA signature.
+pub enum Signature {
+    /// A YARA signature whose contents are contained directly in the `String` field.
+    Inline(String),
+    /// A YARA signature whose contents must be retrieved from the filestore by its SHA-256.
+    Filestore([u8; 32]),
+}
+
 /// Arguments of the `scan_memory_yara` action.
 pub struct Args {
     /// PIDs of the processes whose memory we are interested in.
     pids: Vec<u32>,
 
     /// YARA signature source to use for scanning.
-    signature: String,
+    signature: Signature,
 
     /// Maximum time spent scanning a single process.
     timeout: Option<Duration>,
@@ -33,6 +41,17 @@ pub struct Args {
     chunk_overlap: u64,
 }
 
+#[derive(Debug)]
+struct MissingSignatureError;
+
+impl std::fmt::Display for MissingSignatureError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "no YARA signature provided")
+    }
+}
+
+impl std::error::Error for MissingSignatureError {}
+
 use crate::request::ParseArgsError;
 impl crate::request::Args for Args {
     type Proto = proto::Args;
@@ -46,9 +65,24 @@ impl crate::request::Args for Args {
             timeout = Some(proto.take_timeout().into())
         }
 
+        let signature = if proto.has_signature_inline() {
+            Signature::Inline(proto.take_signature_inline())
+        } else if proto.has_signature_file_sha256() {
+            let file_sha256 = <[u8; 32]>::try_from(&proto.take_signature_file_sha256()[..])
+                .map_err(|error| {
+                    crate::request::ParseArgsError::invalid_field("signature_file_sha256", error)
+                })?;
+            Signature::Filestore(file_sha256)
+        } else {
+            return Err(ParseArgsError::invalid_field(
+                "yara_signature",
+                MissingSignatureError,
+            ));
+        };
+
         Ok(Self {
             pids: proto.pids,
-            signature: proto.signature,
+            signature,
             timeout,
             filter: RegionFilter {
                 skip_mapped_files: proto.skip_mapped_files,
@@ -249,9 +283,16 @@ where
     use crate::action::dump_process_memory::{MappedRegionIter, ReadableProcessMemory};
 
     let rules = {
+        let source_bytes = match args.signature {
+            Signature::Inline(source) => source.into_bytes(),
+            Signature::Filestore(file_sha256) => {
+                let path = session.filestore_path(file_sha256)?;
+                std::fs::read(path).map_err(crate::session::Error::action)?
+            }
+        };
         let mut compiler = Compiler::new();
         compiler
-            .add_source(args.signature.as_str())
+            .add_source(source_bytes.as_slice())
             .map_err(crate::session::Error::action)?;
         compiler.build()
     };
@@ -457,7 +498,8 @@ mod tests {
         let mut session = crate::session::FakeSession::new();
         let args = Args {
             pids: vec![std::process::id()],
-            signature: r#"
+            signature: Signature::Inline(
+                r#"
             rule ExampleRule {
                 strings:
                     $regex = /mypreciouss*/
@@ -465,7 +507,8 @@ mod tests {
                     $regex
             }
             "#
-            .to_string(),
+                .to_string(),
+            ),
             // Set limit to keep unit test time reasonable
             timeout: Some(Duration::from_secs(30)),
             chunk_size: 100 * 1024 * 1024,
@@ -494,6 +537,75 @@ mod tests {
         drop(mem);
     }
 
+    fn sha256(content: &[u8]) -> [u8; 32] {
+        use sha2::Digest as _;
+
+        let mut sha256 = sha2::Sha256::new();
+        sha256.update(content);
+        sha256.finalize().into()
+    }
+
+    #[test]
+    fn reads_signature_from_filestore() {
+        use crate::filestore;
+        use crate::session::Session as _;
+
+        // Hold onto some memory.
+        // The resulting rule should match in the program
+        // text and/or in the heap contents.
+        let mem = b"mypreciousssss".to_vec();
+
+        // Force the memory to be allocated with a compiler hint
+        std::hint::black_box(mem.as_ptr());
+
+        let mut session = crate::session::FakeSession::new().with_filestore();
+
+        let signature = br#"
+            rule ExampleRule {
+                strings:
+                    $regex = /mypreciouss*/
+                condition:
+                    $regex
+            }
+            "#;
+        let file_sha256 = sha256(signature);
+        let status = session
+            .filestore_store(
+                file_sha256,
+                filestore::Part {
+                    offset: 0,
+                    content: signature.to_vec(),
+                    file_len: signature.len() as u64,
+                    file_exec: false,
+                },
+            )
+            .unwrap();
+        assert_eq!(status, filestore::Status::Complete);
+
+        let args = Args {
+            pids: vec![std::process::id()],
+            signature: Signature::Filestore(file_sha256),
+            // Set limit to keep unit test time reasonable
+            timeout: Some(Duration::from_secs(30)),
+            chunk_size: 100 * 1024 * 1024,
+            chunk_overlap: 50 * 1024 * 1024,
+            filter: Default::default(),
+        };
+
+        handle(&mut session, args).unwrap();
+
+        let reply = session
+            .replies::<Item>()
+            .next()
+            .expect("handle did not produce any replies")
+            .as_ref()
+            .expect("handle produced non-ok reply");
+        assert!(!reply.matching_rules.is_empty(), "scan rule did not match");
+
+        // Drop explicitly so mem is not optimized away for being unused.
+        drop(mem);
+    }
+
     #[test]
     fn applies_timeout() {
         let mut session = crate::session::FakeSession::new();
@@ -504,14 +616,16 @@ mod tests {
 
         let args = Args {
             pids: vec![std::process::id()],
-            signature: r#"
+            signature: Signature::Inline(
+                r#"
             rule slow {
                 strings:
                     $regex = /(a+)+z/
                 condition:
                     $regex
             }"#
-            .to_string(),
+                .to_string(),
+            ),
             timeout: Some(Duration::from_millis(500)),
             chunk_size: 10000,
             chunk_overlap: 500,
