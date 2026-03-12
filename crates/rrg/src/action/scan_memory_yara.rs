@@ -3,7 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use crate::action::dump_process_memory::{MappedRegion, MemoryReader};
+use crate::action::dump_process_memory::{MappedRegion, MemoryReader, RegionFilter};
 use std::time::Duration;
 
 use yara_x::Compiler;
@@ -12,7 +12,6 @@ use yara_x::blocks::Scanner;
 use rrg_proto::scan_memory_yara as proto;
 
 /// Arguments of the `scan_memory_yara` action.
-#[derive(Default)]
 pub struct Args {
     /// PIDs of the processes whose memory we are interested in.
     pids: Vec<u32>,
@@ -23,14 +22,8 @@ pub struct Args {
     /// Maximum time spent scanning a single process.
     timeout: Option<Duration>,
 
-    /// Set this flag to avoid scanning mapped files.
-    skip_mapped_files: bool,
-    /// Set this flag to avoid scanning shared memory regions.
-    skip_shared_regions: bool,
-    /// Set this flag to avoid scanning executable memory regions.
-    skip_executable_regions: bool,
-    /// Set this flag to avoid scanning readonly memory regions.
-    skip_readonly_regions: bool,
+    /// Determines which memory regions should be considered for scanning.
+    filter: RegionFilter,
 
     /// Length of the chunks used to read large memory regions, in bytes.
     chunk_size: u64,
@@ -57,36 +50,15 @@ impl crate::request::Args for Args {
             pids: proto.pids,
             signature: proto.signature,
             timeout,
-            skip_mapped_files: proto.skip_mapped_files,
-            skip_shared_regions: proto.skip_shared_regions,
-            skip_executable_regions: proto.skip_executable_regions,
-            skip_readonly_regions: proto.skip_readonly_regions,
+            filter: RegionFilter {
+                skip_mapped_files: proto.skip_mapped_files,
+                skip_shared_regions: proto.skip_shared_regions,
+                skip_executable_regions: proto.skip_executable_regions,
+                skip_readonly_regions: proto.skip_readonly_regions,
+            },
             chunk_size: proto.chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE),
             chunk_overlap: proto.chunk_overlap.unwrap_or(DEFAULT_CHUNK_OVERLAP),
         })
-    }
-}
-
-impl Args {
-    /// Whether `region` should be dumped according to `self`'s filtering parameters.
-    fn should_dump(&self, region: &MappedRegion) -> bool {
-        if self.skip_shared_regions && region.permissions.shared {
-            return false;
-        }
-        if self.skip_executable_regions && region.permissions.execute {
-            return false;
-        }
-        if self.skip_mapped_files && (region.inode.is_some() || region.path.is_some()) {
-            return false;
-        }
-        if self.skip_readonly_regions
-            && region.permissions.read
-            && !region.permissions.write
-            && !region.permissions.execute
-        {
-            return false;
-        }
-        true
     }
 }
 
@@ -270,7 +242,7 @@ fn scan_region<M: MemoryReader>(
 }
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
-pub fn handle<S>(session: &mut S, mut args: Args) -> crate::session::Result<()>
+pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
@@ -284,9 +256,7 @@ where
         compiler.build()
     };
 
-    // Circumvent borrow checker complaint about partial moves with `take`
-    let pids = std::mem::take(&mut args.pids);
-    for pid in pids {
+    for pid in args.pids {
         let regions = match MappedRegionIter::from_pid(pid) {
             Ok(regions) => regions,
             Err(cause) => {
@@ -321,7 +291,7 @@ where
 
         if let Err(error) = regions
             .into_iter()
-            .filter(|reg| args.should_dump(reg))
+            .filter(|reg| args.filter.matches(reg))
             .try_for_each(|region| {
                 scan_region(
                     &region,
@@ -500,7 +470,7 @@ mod tests {
             timeout: Some(Duration::from_secs(30)),
             chunk_size: 100 * 1024 * 1024,
             chunk_overlap: 50 * 1024 * 1024,
-            ..Default::default()
+            filter: Default::default(),
         };
 
         handle(&mut session, args).unwrap();
@@ -545,7 +515,7 @@ mod tests {
             timeout: Some(Duration::from_millis(500)),
             chunk_size: 10000,
             chunk_overlap: 500,
-            ..Default::default()
+            filter: Default::default(),
         };
 
         handle(&mut session, args).unwrap();
