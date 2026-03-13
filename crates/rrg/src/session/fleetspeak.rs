@@ -94,6 +94,7 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
                     // increment the response id.
                     response_id: session.next_response_id,
                     network_bytes_sent: session.network_bytes_sent,
+                    real_time: session.real_time_start.elapsed(),
                     filtered_out_count: session.filtered_out_count,
                     result,
                 }
@@ -105,6 +106,7 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
                     request_id,
                     response_id: next_response_id,
                     network_bytes_sent: 0,
+                    real_time: std::time::Duration::ZERO,
                     filtered_out_count: 0,
                     result: Err(crate::session::Error::from(error)),
                 }
