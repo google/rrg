@@ -29,4 +29,4 @@ pub use ping::Ping;
 pub use startup::Startup;
 
 pub use request::{ParseRequestError, Request, RequestId};
-pub use response::{Item, LogBuilder, Parcel, ResponseBuilder, ResponseId, Sink};
+pub use response::{Item, LogBuilder, Parcel, ResponseId, Sink};
