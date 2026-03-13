@@ -115,6 +115,8 @@ pub struct Status {
     pub request_id: RequestId,
     /// A unique response identifier of this status.
     pub response_id: ResponseId,
+    /// Number of bytes sent during execution of the action.
+    pub network_bytes_sent: u64,
     /// Number of items that have been rejected by filters.
     pub filtered_out_count: u32,
     /// The action execution status.
@@ -366,6 +368,7 @@ impl From<Status> for rrg_proto::rrg::Status {
             proto.set_error(error.into());
         }
 
+        proto.set_network_bytes_sent(status.network_bytes_sent);
         proto.set_filtered_out_count(status.filtered_out_count);
 
         proto

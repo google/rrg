@@ -93,6 +93,7 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
                     // is dropped at the end of this scope), we do not need to
                     // increment the response id.
                     response_id: session.next_response_id,
+                    network_bytes_sent: session.network_bytes_sent,
                     filtered_out_count: session.filtered_out_count,
                     result,
                 }
@@ -103,6 +104,7 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
                 crate::response::Status {
                     request_id,
                     response_id: next_response_id,
+                    network_bytes_sent: 0,
                     filtered_out_count: 0,
                     result: Err(crate::session::Error::from(error)),
                 }
