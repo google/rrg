@@ -12,8 +12,12 @@ pub struct FleetspeakSession<'a, 'fs> {
     args: &'a crate::args::Args,
     /// Filestore of the current process (if available).
     filestore: Option<&'fs crate::filestore::Filestore>,
-    /// A builder for responses sent through Fleetspeak to the GRR server.
-    response_builder: crate::ResponseBuilder,
+    /// The response identifier assigned to the next generated response.
+    next_response_id: crate::ResponseId,
+    /// Filters to apply to the results before they are sent.
+    filters: crate::filter::FilterSet,
+    /// Number of items that have been rejected by filters.
+    filtered_out_count: u32,
     /// Number of bytes sent since the session was created.
     network_bytes_sent: u64,
     /// Number of bytes we are allowed to send within the session.
@@ -59,16 +63,21 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
 
         info!("received request '{request_id}'");
 
-        let response_builder = crate::ResponseBuilder::new(request_id);
+        // Response identifiers that GRR agents use start at 1. The server
+        // assumes this to determine the number of expected messages when the
+        // status message is received. Thus, we have to replicate the behaviour
+        // of the existing GRR agent and start at 1 as well.
+        let next_response_id = crate::ResponseId(1);
 
         let status = match request {
             Ok(mut request) => {
-                let filters = request.take_filters();
                 let mut session = FleetspeakSession {
                     request_id,
                     args,
                     filestore,
-                    response_builder: response_builder.with_filters(filters),
+                    next_response_id,
+                    filters: request.take_filters(),
+                    filtered_out_count: 0,
                     network_bytes_sent: 0,
                     network_bytes_limit: request.network_bytes_limit(),
                     real_time_start: std::time::Instant::now(),
@@ -78,11 +87,29 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
                 let result = crate::log::ResponseLogger::new(&request)
                     .context(|| crate::action::dispatch(&mut session, request));
 
-                session.response_builder.status(result)
+                crate::response::Status {
+                    request_id: request_id,
+                    // Because status is the last response to be sent (`session`
+                    // is dropped at the end of this scope), we do not need to
+                    // increment the response id.
+                    response_id: session.next_response_id,
+                    network_bytes_sent: session.network_bytes_sent,
+                    real_time: session.real_time_start.elapsed(),
+                    filtered_out_count: session.filtered_out_count,
+                    result,
+                }
             },
             Err(error) => {
                 error!("invalid request '{request_id}': {error}");
-                response_builder.status(Err(error.into()))
+
+                crate::response::Status {
+                    request_id,
+                    response_id: next_response_id,
+                    network_bytes_sent: 0,
+                    real_time: std::time::Duration::ZERO,
+                    filtered_out_count: 0,
+                    result: Err(crate::session::Error::from(error)),
+                }
             }
         };
 
@@ -142,11 +169,24 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
     {
         let item = crate::response::PreparedItem::from(item);
 
-        use crate::response::FilteredReply::*;
-        let reply = match self.response_builder.reply(item) {
-            Accepted(reply) => reply,
-            Rejected => return Ok(()),
-            Error(error) => return Err(error.into()),
+        let reply = match self.filters.eval(item.as_proto()) {
+            Ok(true) => {
+                let response_id = self.next_response_id;
+                self.next_response_id.0 += 1;
+
+                crate::response::Reply {
+                    request_id: self.request_id,
+                    response_id,
+                    item,
+                }
+            }
+            Ok(false) => {
+                self.filtered_out_count += 1;
+                return Ok(())
+            }
+            Err(error) => {
+                return Err(error.into())
+            }
         };
 
         self.network_bytes_sent += reply.send_unaccounted() as u64;

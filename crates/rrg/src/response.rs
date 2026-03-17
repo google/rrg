@@ -64,11 +64,11 @@ impl<I: Item> From<I> for PreparedItem<I> {
 /// [`Item`]: crate::response::Item
 pub struct Reply<I: Item> {
     /// A unique request identifier for which this item was yielded.
-    request_id: RequestId,
+    pub request_id: RequestId,
     /// A unique response identifier of this item.
-    response_id: ResponseId,
+    pub response_id: ResponseId,
     /// An actual item that the action yielded.
-    item: PreparedItem<I>,
+    pub item: PreparedItem<I>,
 }
 
 impl<I: Item> Reply<I> {
@@ -112,13 +112,17 @@ impl<I: Item> Reply<I> {
 /// succeeded and error details in case it did not.
 pub struct Status {
     /// A unique request identifier for which this status is generated.
-    request_id: RequestId,
+    pub request_id: RequestId,
     /// A unique response identifier of this status.
-    response_id: ResponseId,
+    pub response_id: ResponseId,
+    /// Number of bytes sent during execution of the action.
+    pub network_bytes_sent: u64,
+    /// Total real (wall) time execution of the action took.
+    pub real_time: std::time::Duration,
     /// Number of items that have been rejected by filters.
-    filtered_out_count: u32,
+    pub filtered_out_count: u32,
     /// The action execution status.
-    result: Result<(), crate::session::Error>,
+    pub result: Result<(), crate::session::Error>,
 }
 
 impl Status {
@@ -199,93 +203,12 @@ impl<'r, 'a> Log<'r, 'a> {
     }
 }
 
-/// An action reply message after applying filters to the contained item.
-pub enum FilteredReply<I: Item> {
-    /// Item passed the filters and can be sent as a reply.
-    Accepted(Reply<I>),
-    /// Item was rejected by the filters.
-    Rejected,
-    /// Error occurred when applying filters to the item.
-    Error(crate::filter::Error),
-}
-
 // TODO(@panhania): We should have some kind of end-to-end test that verifies
 // that all responses sent by RRG are consecutive integers.
 
 /// A unique identifier of a response.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ResponseId(pub(super) u64);
-
-/// Response factory for building many responses to a single request.
-pub struct ResponseBuilder {
-    /// A unique request identifier for which we build responses.
-    request_id: RequestId,
-    /// The response identifier assigned to the next generated response.
-    next_response_id: ResponseId,
-    /// Filters to apply to the results before they are sent.
-    filters: FilterSet,
-    /// Number of items that have been rejected by filters.
-    filtered_out_count: u32,
-}
-
-impl ResponseBuilder {
-
-    /// Creates a new response builder for the specified request.
-    pub fn new(request_id: RequestId) -> ResponseBuilder {
-        ResponseBuilder {
-            request_id,
-            // Response identifiers that GRR agents use start at 1. The server
-            // assumes this to determine the number of expected messages when
-            // the status message is received. Thus, we have to replicate the
-            // behaviour of the existing GRR agent and start at 1 as well.
-            next_response_id: ResponseId(1),
-            filters: FilterSet::empty(),
-            filtered_out_count: 0,
-        }
-    }
-
-    /// Creates a new response builder that will filter results.
-    pub fn with_filters(mut self, filters: FilterSet) -> ResponseBuilder {
-        self.filters = filters;
-        self
-    }
-
-    /// Builds a new status response for the given action outcome.
-    pub fn status(self, result: crate::session::Result<()>) -> Status {
-        Status {
-            request_id: self.request_id,
-            // Because this method consumes the builder, we do not need to
-            // increment the response id.
-            response_id: self.next_response_id,
-            filtered_out_count: self.filtered_out_count,
-            result,
-        }
-    }
-
-    /// Builds a new reply response for the given action item.
-    pub fn reply<I: Item>(&mut self, item: PreparedItem<I>) -> FilteredReply<I>
-    where
-        I: Item,
-    {
-        match self.filters.eval(&item.proto) {
-            Ok(true) => {
-                let response_id = self.next_response_id;
-                self.next_response_id.0 += 1;
-
-                FilteredReply::Accepted(Reply {
-                    request_id: self.request_id.clone(),
-                    response_id,
-                    item,
-                })
-            }
-            Ok(false) => {
-                self.filtered_out_count += 1;
-                FilteredReply::Rejected
-            }
-            Err(error) => FilteredReply::Error(error),
-        }
-    }
-}
 
 /// Log factory for building many log responses to a single request.
 pub struct LogBuilder {
@@ -447,6 +370,8 @@ impl From<Status> for rrg_proto::rrg::Status {
             proto.set_error(error.into());
         }
 
+        proto.set_network_bytes_sent(status.network_bytes_sent);
+        proto.set_real_time(status.real_time.into());
         proto.set_filtered_out_count(status.filtered_out_count);
 
         proto
