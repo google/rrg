@@ -753,7 +753,7 @@ impl crate::request::Args for Args {
     }
 }
 
-const MAX_BLOB_SIZE: u64 = 2 * (1024 * 1024);
+const MAX_BLOB_SIZE: u64 = 1024 * 1024; // 1 MiB
 
 /// Successful result of the `dump_process_memory` action.
 /// Represents a single (potentially partially) dumped
