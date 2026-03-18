@@ -73,5 +73,5 @@ message Result {
   repeated Rule matching_rules = 2;
   
   // Error message set if something went wrong when scanning this process' memory.
-  string error = 9;
+  optional string error = 9;
 }

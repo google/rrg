@@ -58,37 +58,37 @@ message Result {
   uint32 pid = 1;
 
   // Start offset of the memory region in the process' address space.
-  uint64 region_start = 2;
+  optional uint64 region_start = 2;
   // End offset of the memory region in the process' address space.
-  uint64 region_end = 3;
+  optional uint64 region_end = 3;
 
   // A SHA-256 hash of the chunk of memory contents sent to the blob sink.
   //
   // Set only if `error` is not set.
-  bytes blob_sha256 = 4;
+  optional bytes blob_sha256 = 4;
 
   // Offset relative to `region_start` that this chunk starts at.
   //
   // Set only if `error` is not set.
-  uint64 offset = 5;
+  optional uint64 offset = 5;
 
   // Size of the chunk of memory that was sent to the blob sink.
   // Will be <= `region_end - region_start`
   //
   // Set only if `error` is not set.
-  uint64 size = 6;
+  optional uint64 size = 6;
 
   // Permissions associated with this region of memory.
   //
   // Set only if `error` is not set.
-  Permissions permissions = 7;
+  optional Permissions permissions = 7;
 
   // Set if this region of memory is mapped to a file on disk.
   // Contains the absolute path to the file in question.
   //
   // Set only if `error` is not set.
-  rrg.fs.Path file_path = 8;
+  optional rrg.fs.Path file_path = 8;
 
   // Error message set if something went wrong when processing the region.
-  string error = 9;
+  optional string error = 9;
 }
