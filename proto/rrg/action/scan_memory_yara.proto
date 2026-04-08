@@ -23,6 +23,11 @@ message Args {
   // Maximum time spent scanning a single process.
   google.protobuf.Duration timeout = 3;
 
+  // Maximum number of matches returned for each pattern in the given YARA signature.
+  // Scanning for a particular pattern will stop once this number of matches has been found in memory.
+  // No error will be emitted in that case.
+  optional uint32 max_matches_per_pattern = 11;
+
   // Set this flag to avoid scanning mapped files.
   bool skip_mapped_files = 4;
   // Set this flag to avoid scanning shared memory regions. Applies to Linux only.

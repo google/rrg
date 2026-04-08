@@ -30,6 +30,9 @@ pub struct Args {
     /// Maximum time spent scanning a single process.
     timeout: Option<Duration>,
 
+    /// Maximum number of matches returned for each pattern in `signature`.
+    max_matches_per_pattern: Option<usize>,
+
     /// Determines which memory regions should be considered for scanning.
     filter: RegionFilter,
 
@@ -64,6 +67,12 @@ impl crate::request::Args for Args {
         if proto.has_timeout() {
             timeout = Some(proto.take_timeout().into())
         }
+        let mut max_matches_per_pattern: Option<usize> = None;
+        if let Some(limit) = proto.max_matches_per_pattern {
+            max_matches_per_pattern = Some(limit.try_into().map_err(|error| {
+                crate::request::ParseArgsError::invalid_field("max_matches_per_pattern", error)
+            })?);
+        }
 
         let signature = if proto.has_signature_inline() {
             Signature::Inline(proto.take_signature_inline())
@@ -84,6 +93,7 @@ impl crate::request::Args for Args {
             pids: proto.pids,
             signature,
             timeout,
+            max_matches_per_pattern,
             filter: RegionFilter {
                 skip_mapped_files: proto.skip_mapped_files,
                 skip_shared_regions: proto.skip_shared_regions,
@@ -329,6 +339,9 @@ where
         if let Some(timeout) = args.timeout {
             scanner.set_timeout(timeout);
         }
+        if let Some(limit) = args.max_matches_per_pattern {
+            scanner.max_matches_per_pattern(limit);
+        }
 
         if let Err(error) = regions
             .into_iter()
@@ -511,6 +524,7 @@ mod tests {
             ),
             // Set limit to keep unit test time reasonable
             timeout: Some(Duration::from_secs(30)),
+            max_matches_per_pattern: None,
             chunk_size: 100 * 1024 * 1024,
             chunk_overlap: 50 * 1024 * 1024,
             filter: Default::default(),
@@ -587,6 +601,7 @@ mod tests {
             signature: Signature::Filestore(file_sha256),
             // Set limit to keep unit test time reasonable
             timeout: Some(Duration::from_secs(30)),
+            max_matches_per_pattern: None,
             chunk_size: 100 * 1024 * 1024,
             chunk_overlap: 50 * 1024 * 1024,
             filter: Default::default(),
@@ -627,6 +642,7 @@ mod tests {
                 .to_string(),
             ),
             timeout: Some(Duration::from_millis(500)),
+            max_matches_per_pattern: None,
             chunk_size: 10000,
             chunk_overlap: 500,
             filter: Default::default(),
@@ -640,5 +656,74 @@ mod tests {
                 .filter_map(|item| item.as_ref().err())
                 .any(|err| matches!(err.error, Error::Scan(yara_x::ScanError::Timeout)))
         );
+    }
+
+    #[test]
+    fn applies_match_limit() {
+        let mut session = crate::session::FakeSession::new();
+
+        // Hold onto some memory that we'll be scanning for.
+        let needles: Vec<String> = vec!["one fish two fish red fish blue fish".to_string(); 100];
+        let args = Args {
+            pids: vec![std::process::id()],
+            signature: Signature::Inline(
+                r#"
+            rule color {
+                strings:
+                    $red = "red"
+                    $blue = "blue"
+                condition:
+                    $red or $blue
+            }
+            rule animal {
+                strings:
+                    $fish = "fish"
+                condition:
+                    $fish
+            }
+            "#
+                .to_string(),
+            ),
+            timeout: None,
+            max_matches_per_pattern: Some(5),
+            chunk_size: 10000,
+            chunk_overlap: 500,
+            filter: Default::default(),
+        };
+
+        handle(&mut session, args).unwrap();
+
+        // Scan has finished, can drop it now.
+        drop(needles);
+
+        assert_eq!(
+            session
+                .parcels::<crate::blob::Blob>(crate::Sink::Blob)
+                .count(),
+            5 * 3, // 5 matches for each pattern ("red", "blue", and "fish")
+        );
+
+        let reply = session
+            .replies::<Item>()
+            .next()
+            .expect("handle did not produce any replies")
+            .as_ref()
+            .expect("handle produced non-ok reply");
+
+        let matching_patterns: Vec<&Pattern> = reply
+            .matching_rules
+            .iter()
+            .flat_map(|rule| rule.patterns.iter())
+            .collect();
+        assert_eq!(matching_patterns.len(), 3);
+        for pattern in matching_patterns {
+            assert_eq!(
+                pattern.matches.len(),
+                5,
+                "pattern {} has more than 5 matches: {:?}",
+                pattern.identifier,
+                pattern.matches
+            );
+        }
     }
 }
