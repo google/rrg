@@ -157,7 +157,20 @@ where
                     buf.capacity(),
                 };
 
-                let mut file = match std::fs::File::open(&entry.path) {
+                let mut file_open_opts = std::fs::OpenOptions::new();
+                file_open_opts.read(true);
+
+                // Some regular files can be blocking (e.g. `/proc/kmsg` on
+                // Linux) so we do only non-blocking reads to avoid process
+                // hangups. A would-be-blocking read will result in an error
+                // and so the file will be simply skipped.
+                #[cfg(target_family = "unix")]
+                {
+                    use std::os::unix::fs::OpenOptionsExt as _;
+                    file_open_opts.custom_flags(libc::O_NONBLOCK);
+                }
+
+                let mut file = match file_open_opts.open(&entry.path) {
                     Ok(file) => file,
                     Err(error) => {
                         log::error! {
@@ -307,7 +320,19 @@ fn digest(path: &Path, metadata: &std::fs::Metadata, args: &Args) -> Digest {
         return Digest::default();
     }
 
-    let mut file = match std::fs::File::open(path) {
+    let mut file_open_opts = std::fs::OpenOptions::new();
+    file_open_opts.read(true);
+
+    // Some regular files can be blocking (e.g. `/proc/kmsg` on Linux) so we do
+    // only non-blocking reads to avoid process hangups. A would-be-blocking
+    // read will result in an error and so the file will be simply skipped.
+    #[cfg(target_family = "unix")]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        file_open_opts.custom_flags(libc::O_NONBLOCK);
+    }
+
+    let mut file = match file_open_opts.open(path) {
         Ok(file) => std::io::BufReader::new(file),
         Err(error) => {
             log::error!("failed to open '{}' for digest: {error}", path.display());
