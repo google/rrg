@@ -12,6 +12,8 @@ pub struct Args {
     paths: Vec<PathBuf>,
     /// Limit on the depth of recursion when visiting subfolders.
     max_depth: u32,
+    /// Limit on the size of the file contents.
+    max_size: u64,
     /// Whether to collect MD5 digest of the file contents.
     md5: bool,
     /// Whether to collect SHA-1 digest of the file contents.
@@ -139,6 +141,17 @@ where
                     continue
                 }
             };
+
+            if entry.metadata.len() > args.max_size {
+                log::info! {
+                    "size of '{}' ({}) exceeds the limit ({}), skipping",
+                    entry.metadata.len(),
+                    entry.path.display(),
+                    args.max_size,
+                };
+
+                continue
+            }
 
             if !args.contents_regex.as_str().is_empty() {
                 // Non-files obviously cannot match the contents conditions. We
@@ -409,6 +422,11 @@ impl crate::request::Args for Args {
     fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
 
+        let max_size = match proto.max_size() {
+            0 => u64::MAX,
+            max_size => max_size,
+        };
+
         let paths = proto.take_paths().into_iter()
             .map(PathBuf::try_from)
             // TODO(@panhania): Improve error handling (it is not obvious which
@@ -426,6 +444,7 @@ impl crate::request::Args for Args {
             paths,
             path_canon: proto.path_canonical(),
             max_depth: proto.max_depth(),
+            max_size,
             md5: proto.md5(),
             sha1: proto.sha1(),
             sha256: proto.sha256(),
@@ -489,6 +508,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.path().join("foo")],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -508,6 +528,7 @@ mod tests {
         let args = Args {
             paths: vec![PathBuf::from("foo/bar/baz")],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -532,6 +553,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.join("foo").to_path_buf()],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -565,6 +587,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.join("link")],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -604,6 +627,7 @@ mod tests {
         let args = Args {
             paths: vec![tempfile.path().to_path_buf()],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -643,6 +667,7 @@ mod tests {
         let args = Args {
             paths: vec![tempfile.path().to_owned()],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -677,6 +702,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -719,6 +745,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -766,6 +793,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -825,6 +853,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -889,6 +918,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -919,6 +949,50 @@ mod tests {
         assert_eq!(item_file2.ext_attrs[0].value, b"value2");
     }
 
+    #[test]
+    fn handle_max_size() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+        let tempdir = tempdir.path();
+
+        std::fs::write(tempdir.join("file_len_2"), b"12")
+            .unwrap();
+        std::fs::write(tempdir.join("file_len_3"), b"123")
+            .unwrap();
+        std::fs::write(tempdir.join("file_len_5"), b"12345")
+            .unwrap();
+        std::fs::write(tempdir.join("file_len_7"), b"1234567")
+            .unwrap();
+        std::fs::write(tempdir.join("file_len_11"), b"12345678901")
+            .unwrap();
+
+        let args = Args {
+            paths: vec![tempdir.to_path_buf()],
+            max_depth: 1,
+            max_size: 5,
+            md5: false,
+            sha1: false,
+            sha256: false,
+            path_pruning_regex: Regex::new("").unwrap(),
+            path_canon: false,
+            contents_regex: Regex::new("").unwrap(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        let items_by_path = session.replies::<Item>()
+            .map(|item| (item.path.clone(), item))
+            .collect::<std::collections::HashMap<_, _>>();
+
+        assert!(items_by_path.contains_key(&tempdir.join("file_len_2")));
+        assert!(items_by_path.contains_key(&tempdir.join("file_len_3")));
+        assert!(items_by_path.contains_key(&tempdir.join("file_len_5")));
+
+        assert!(!items_by_path.contains_key(&tempdir.join("file_len_7")));
+        assert!(!items_by_path.contains_key(&tempdir.join("file_len_11")));
+    }
+
     #[cfg(feature = "action-get_file_metadata-md5")]
     #[test]
     fn handle_md5_file() {
@@ -932,6 +1006,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.join("file")],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: true,
             sha1: false,
             sha256: false,
@@ -968,6 +1043,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
+            max_size: u64::MAX,
             md5: true,
             sha1: false,
             sha256: false,
@@ -1014,6 +1090,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.join("file")],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: true,
             sha256: false,
@@ -1050,6 +1127,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
+            max_size: u64::MAX,
             md5: false,
             sha1: true,
             sha256: false,
@@ -1096,6 +1174,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.join("file")],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: true,
@@ -1134,6 +1213,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: 1,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: true,
@@ -1178,6 +1258,7 @@ mod tests {
         let args = Args {
             paths: vec!["/dev/urandom".into()],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: true,
             sha1: true,
             sha256: true,
@@ -1232,6 +1313,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1287,6 +1369,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1341,6 +1424,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1380,6 +1464,7 @@ mod tests {
         let args = Args {
             paths: vec![tempfile.path().to_path_buf()],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1407,6 +1492,7 @@ mod tests {
         let args = Args {
             paths: vec![tempfile.path().to_path_buf()],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1434,6 +1520,7 @@ mod tests {
         let args = Args {
             paths: vec![tempfile.path().to_path_buf()],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1462,6 +1549,7 @@ mod tests {
         let args = Args {
             paths: vec![tempfile.path().to_path_buf()],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1490,6 +1578,7 @@ mod tests {
         let args = Args {
             paths: vec![tempfile.path().to_path_buf()],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1510,6 +1599,7 @@ mod tests {
         let args = Args {
             paths: vec![PathBuf::from("/dev/zero")],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1547,6 +1637,7 @@ mod tests {
                 tempfile_bar.path().to_path_buf(),
             ],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1575,6 +1666,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.to_path_buf()],
             max_depth: u32::MAX,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1615,6 +1707,7 @@ mod tests {
                 tempdir.join("file3").to_path_buf(),
             ],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1666,6 +1759,7 @@ mod tests {
                 tempdir_2.to_path_buf(),
             ],
             max_depth: 1,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1718,6 +1812,7 @@ mod tests {
                 tempdir.join("existing2").to_path_buf(),
             ],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1756,6 +1851,7 @@ mod tests {
                 tempdir.join(".").join("dir").join("..").join("dir").join("file"),
             ],
             max_depth: 0,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
@@ -1790,6 +1886,7 @@ mod tests {
         let args = Args {
             paths: vec![tempdir.join("dir").join("..").join("dir")],
             max_depth: 1,
+            max_size: u64::MAX,
             md5: false,
             sha1: false,
             sha256: false,
