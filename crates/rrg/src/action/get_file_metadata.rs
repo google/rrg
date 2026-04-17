@@ -162,7 +162,8 @@ where
 
                 // Some regular files can be blocking (e.g. `/proc/kmsg` on
                 // Linux) so we do only non-blocking reads to avoid process
-                // hangups.
+                // hangups. A would-be-blocking read will result in an error
+                // and so the file will be simply skipped.
                 #[cfg(target_family = "unix")]
                 {
                     use std::os::unix::fs::OpenOptionsExt as _;
@@ -323,7 +324,8 @@ fn digest(path: &Path, metadata: &std::fs::Metadata, args: &Args) -> Digest {
     file_open_opts.read(true);
 
     // Some regular files can be blocking (e.g. `/proc/kmsg` on Linux) so we do
-    // only non-blocking reads to avoid process hangups.
+    // only non-blocking reads to avoid process hangups. A would-be-blocking
+    // read will result in an error and so the file will be simply skipped.
     #[cfg(target_family = "unix")]
     {
         use std::os::unix::fs::OpenOptionsExt as _;
