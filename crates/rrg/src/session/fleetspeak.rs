@@ -87,6 +87,24 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
                 let result = crate::log::ResponseLogger::new(&request)
                     .context(|| crate::action::dispatch(&mut session, request));
 
+                match result.as_ref() {
+                    Ok(()) => {
+                        info! {
+                            "request '{request_id} succeeded \
+                             ({} response(s), {} filtered out)",
+                            // Note that this number includes not only action
+                            // results but also parcels and the status response.
+                            session.next_response_id.0,
+                            session.filtered_out_count,
+                        };
+                    }
+                    Err(error) => {
+                        info! {
+                            "request '{request_id}' failed: {error}",
+                        };
+                    }
+                }
+
                 crate::response::Status {
                     request_id: request_id,
                     // Because status is the last response to be sent (`session`
