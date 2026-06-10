@@ -30,6 +30,24 @@ impl Metadata {
             // only for special return values or arguments.
             .unwrap_or(0)
     }
+
+    /// Returns name of the process.
+    pub fn name(&self) -> std::ffi::OsString {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let name_bytes = self.raw.kp_proc.p_comm.map(|byte| byte as u8);
+        // Name is null-terminated so we need to take it only until the null
+        // byte.
+        let name_bytes = match name_bytes.iter().position(|byte| *byte == 0) {
+            Some(idx) => &name_bytes[..idx],
+            // This should not happen as the string has to be null-terminated
+            // but just to be on the safe side, we don't panic and just take the
+            // full string.
+            None => &name_bytes[..],
+        };
+
+        std::ffi::OsStr::from_bytes(name_bytes).to_os_string()
+    }
 }
 
 /// Returns an iterator yielding metadata for all processes on the system.
@@ -136,6 +154,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(metadata.parent_id(), 0);
-        // TODO(@panhania): Assert name of the process once we expose it.
+        assert_eq!(metadata.name(), "launchd");
     }
 }
