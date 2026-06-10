@@ -5,19 +5,35 @@
 
 /// Returns an iterator yielding identifiers of all processes on the system.
 pub fn ids() -> std::io::Result<impl Iterator<Item = std::io::Result<u32>>> {
-    Ids::new()
+    Ok(all()?.map(|metadata| Ok(metadata?.id())))
 }
 
-/// A macOS-specific implementation of the iterator over process identifiers.
-struct Ids {
-    /// An iterator over the process metadata returned by a `sysctl` call.
-    iter: std::vec::IntoIter<crate::libc::kinfo_proc>,
+/// Metadata about the process (specific to macOS).
+pub struct Metadata {
+    raw: crate::libc::kinfo_proc,
 }
 
-impl Ids {
+impl Metadata {
 
-    /// Creates a new iterator over system process identifiers.
-    fn new() -> std::io::Result<Ids> {
+    /// PID of the process this metadata corresponds to.
+    pub fn id(&self) -> u32 {
+        u32::try_from(self.raw.kp_proc.p_pid)
+            // PID for a live process should never be negative and sign is used
+            // only for special return values or arguments.
+            .unwrap_or(0)
+    }
+
+    /// PID of the parent of the process this metadata corresponds to.
+    pub fn parent_id(&self) -> u32 {
+        u32::try_from(self.raw.kp_eproc.e_ppid)
+            // PID for a live process should never be negative and sign is used
+            // only for special return values or arguments.
+            .unwrap_or(0)
+    }
+}
+
+/// Returns an iterator yielding metadata for all processes on the system.
+pub fn all() -> std::io::Result<impl Iterator<Item = std::io::Result<Metadata>>> {
         const KINFO_PROC_SIZE: usize = {
             std::mem::size_of::<crate::libc::kinfo_proc>()
         };
@@ -94,27 +110,32 @@ impl Ids {
             buf.set_len(buf_len);
         }
 
-        Ok(Ids {
-            iter: buf.into_iter(),
-        })
-    }
+        Ok(buf.into_iter().map(|raw| Ok(Metadata { raw })))
 }
 
-impl Iterator for Ids {
+#[cfg(test)]
+mod tests {
 
-    type Item = std::io::Result<u32>;
+    use super::*;
 
-    fn next(&mut self) -> Option<std::io::Result<u32>> {
-        let proc = self.iter.next()?;
+    #[test]
+    pub fn all_self_exists() {
+        let metadata = all()
+            .unwrap().filter_map(Result::ok)
+            .find(|metadata| metadata.id() == std::process::id())
+            .unwrap();
 
-        let pid = match u32::try_from(proc.kp_proc.p_pid) {
-            Ok(pid) => pid,
-            Err(error) => {
-                use std::io::{Error, ErrorKind};
-                return Some(Err(Error::new(ErrorKind::InvalidData, error)));
-            },
-        };
+        assert_eq!(metadata.parent_id(), std::os::unix::process::parent_id());
+    }
 
-        Some(Ok(pid))
+    #[test]
+    pub fn all_launchd_exists() {
+        let metadata = all()
+            .unwrap().filter_map(Result::ok)
+            .find(|metadata| metadata.id() == 1)
+            .unwrap();
+
+        assert_eq!(metadata.parent_id(), 0);
+        // TODO(@panhania): Assert name of the process once we expose it.
     }
 }
