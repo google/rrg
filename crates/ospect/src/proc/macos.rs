@@ -283,7 +283,7 @@ mod tests {
     use super::*;
 
     #[test]
-    pub fn all_self_exists() {
+    fn all_self_exists() {
         let metadata = all()
             .unwrap().filter_map(Result::ok)
             .find(|metadata| metadata.id() == std::process::id())
@@ -302,7 +302,7 @@ mod tests {
     }
 
     #[test]
-    pub fn all_launchd_exists() {
+    fn all_launchd_exists() {
         let metadata = all()
             .unwrap().filter_map(Result::ok)
             .find(|metadata| metadata.id() == 1)
