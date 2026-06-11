@@ -48,6 +48,102 @@ impl Metadata {
 
         std::ffi::OsStr::from_bytes(name_bytes).to_os_string()
     }
+
+    pub fn args(&self) -> std::io::Result<Args> {
+        let mut mib = [
+            libc::CTL_KERN,
+            libc::KERN_PROCARGS2,
+            self.id() as libc::c_int,
+        ];
+
+        let mut buf_size = std::mem::MaybeUninit::uninit();
+
+        // SAFETY: We call the `sysctl` function as described in the FreeBSD
+        // documentation [1] (macOS's kernel derives from FreeBSD). We check for
+        // errors afterwards.
+        //
+        // Note that the `KERN_PROCARGS2` sytem call that we use here is not
+        // documented in the official documentation [2] but we can see how it
+        // works in the kernel source [3].
+        //
+        // Despite the call being undocumented this code should not cause any
+        // undefined behaviour: we pass input and output buffers along with its
+        // size. In the worst case we will get back garbage data but we will
+        // only access memory that we explicitly allocated and own.
+        //
+        // This is the first call where we don't pass any buffer and we just
+        // want to estimate the size of the buffer to hold the data. It should
+        // be returned thought the fourth (`oldlenp`) argument.
+        //
+        // [1]: https://man.freebsd.org/cgi/man.cgi?sysctl(3)
+        // [2]: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/sysctl.3.html
+        // [3]: https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_sysctl.c#L1300-L1326
+        let code = unsafe {
+            libc::sysctl(
+                mib.as_mut_ptr(), mib.len() as libc::c_uint,
+                std::ptr::null_mut(), buf_size.as_mut_ptr(),
+                std::ptr::null_mut(), 0,
+            )
+        };
+        if code != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+
+        // SAFETY: If the call to `sysctl` succeeded, we can assume that the
+        // `buf_size` is now filled with the expected size of the buffer.
+        let mut buf_size = unsafe {
+            buf_size.assume_init()
+        };
+        // Note that we do not need to worry about any alignment issues (the
+        // kernel writes an `i32` with the argument count to the beginning of
+        // the buffer) as it is not used directly but instead the kernel makes
+        // its copy in the kernel space and uses that instead.
+        let mut buf = vec![0u8; buf_size as usize];
+
+        // SAFETY: We create a buffer of the size specified by the previous call
+        // to `sysctl`. We verify whether the call succeeded below.
+        //
+        // The rest is as with the `sysctl` call above.
+        let code = unsafe {
+            libc::sysctl(
+                mib.as_mut_ptr(), mib.len() as libc::c_uint,
+                buf.as_mut_ptr().cast::<libc::c_void>(), &mut buf_size,
+                std::ptr::null_mut(), 0,
+            )
+        };
+        if code != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+
+        let argc_bytes = <[u8; 4]>::try_from(&buf[0..4])
+            .map_err(|error| std::io::Error::new(
+                std::io::ErrorKind::Other,
+                error,
+            ))?;
+        let argc = usize::try_from(libc::c_int::from_ne_bytes(argc_bytes))
+            .map_err(|error| std::io::Error::new(
+                std::io::ErrorKind::Other,
+                error,
+            ))?;
+
+        // We start at index `4` because of the argc placed at the beginning
+        // which we parsed already.
+        let mut buf_index = 4;
+        // Then we need to skip the executable path that is placed in the
+        // buffer. The executable path is null-terminated.
+        buf_index += &buf[buf_index..].iter().position(|byte| *byte == 0)
+            .unwrap_or(0);
+        // The executable path is not only null-terminated but also null-padded,
+        // so we need to skip this padding as well.
+        buf_index += &buf[buf_index..].iter().position(|byte| *byte != 0)
+            .unwrap_or(0);
+
+        Ok(Args {
+            buf,
+            buf_index,
+            argc_left: argc,
+        })
+    }
 }
 
 /// Returns an iterator yielding metadata for all processes on the system.
@@ -131,6 +227,56 @@ pub fn all() -> std::io::Result<impl Iterator<Item = std::io::Result<Metadata>>>
         Ok(buf.into_iter().map(|raw| Ok(Metadata { raw })))
 }
 
+/// Iterator over the arguments of the process.
+pub struct Args {
+    /// Buffer with process argument data as returned by the kernel from the
+    /// `KERN_PROCARGS2` system call.
+    buf: Vec<u8>,
+    /// Position within `buf` for the next argument lookup.
+    buf_index: usize,
+    /// Number of arguments left to yield.
+    ///
+    /// This is needed because the buffer might be actually bigger than the
+    /// data it holds, so we would not know where to end otherwise. Moreover, it
+    /// allows as to implement `ExactSizeIterator` for the type.
+    argc_left: usize,
+}
+
+impl Iterator for Args {
+
+    type Item = std::ffi::OsString;
+
+    fn next(&mut self) -> Option<std::ffi::OsString> {
+        if self.argc_left == 0 {
+            return None;
+        }
+
+        let slice = &self.buf[self.buf_index..];
+        let Some(slice_index) = slice.iter().position(|byte| *byte == 0) else {
+            // This should generally never happen as all arguments should be
+            // null-terminated.
+            return None;
+        };
+
+        use std::os::unix::ffi::OsStrExt as _;
+        let result = std::ffi::OsStr::from_bytes(&slice[..slice_index])
+            .to_os_string();
+
+        // `+ 1` because we want to skip the null byte.
+        self.buf_index += slice_index + 1;
+        self.argc_left -= 1;
+
+        Some(result)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.argc_left, Some(self.argc_left))
+    }
+}
+
+impl ExactSizeIterator for Args {
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -144,6 +290,15 @@ mod tests {
             .unwrap();
 
         assert_eq!(metadata.parent_id(), std::os::unix::process::parent_id());
+
+        let mut args = metadata.args().unwrap();
+        let mut args_env = std::env::args_os();
+
+        for (arg, arg_env) in args.by_ref().zip(args_env.by_ref()) {
+            assert_eq!(arg, arg_env);
+        }
+        assert_eq!(args.next(), None);
+        assert_eq!(args_env.next(), None);
     }
 
     #[test]
@@ -155,5 +310,42 @@ mod tests {
 
         assert_eq!(metadata.parent_id(), 0);
         assert_eq!(metadata.name(), "launchd");
+    }
+
+    #[test]
+    fn all_subprocess() {
+        // TODO(rust-lang/rust#144426): Simplify once `drop_guard` is stable.
+        struct ChildDropGuard(std::process::Child);
+        impl Drop for ChildDropGuard {
+            fn drop(&mut self) {
+                // We ignore errors as there is not much we can do when
+                // dropping.
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        let cat = std::process::Command::new("cat")
+            // We want to have some argument to verify that argument retrival
+            // works and we want to block until the stdin is not closed. `-`
+            // strikes both.
+            .arg("-")
+            .stdin(std::process::Stdio::piped())
+            .spawn().unwrap();
+
+        // We need to use a guard because `std::process::Command` does not end
+        // on its own at the end of the scope unless we `wait`.
+        let cat = ChildDropGuard(cat);
+
+        let metadata = all().unwrap().filter_map(Result::ok)
+            .find(|metadata| metadata.id() == cat.0.id()).unwrap();
+
+        assert_eq!(metadata.parent_id(), std::process::id());
+        assert_eq!(metadata.name(), "cat");
+
+        let mut args = metadata.args().unwrap();
+        assert_eq!(args.next().unwrap(), "cat");
+        assert_eq!(args.next().unwrap(), "-");
+        assert_eq!(args.next(), None);
     }
 }
