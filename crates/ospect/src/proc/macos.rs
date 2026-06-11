@@ -5,7 +5,18 @@
 
 /// Returns an iterator yielding identifiers of all processes on the system.
 pub fn ids() -> std::io::Result<impl Iterator<Item = std::io::Result<u32>>> {
-    Ok(all()?.map(|metadata| Ok(metadata?.id())))
+    Ok(sysctl_kern_proc()?.into_iter().map(|proc| {
+        u32::try_from(proc.kp_proc.p_pid)
+            .map_err(|error| std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                error,
+            ))
+    }))
+}
+
+/// Returns an iterator yielding metadata for all processes on the system.
+pub fn all() -> std::io::Result<impl Iterator<Item = std::io::Result<Metadata>>> {
+    Ok(sysctl_kern_proc()?.into_iter().map(|raw| Ok(Metadata { raw })))
 }
 
 /// Metadata about the process (specific to macOS).
@@ -81,11 +92,6 @@ impl Metadata {
             argc_left: argc,
         })
     }
-}
-
-/// Returns an iterator yielding metadata for all processes on the system.
-pub fn all() -> std::io::Result<impl Iterator<Item = std::io::Result<Metadata>>> {
-    Ok(sysctl_kern_proc()?.into_iter().map(|raw| Ok(Metadata { raw })))
 }
 
 /// Iterator over the arguments of the process.
