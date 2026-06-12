@@ -108,11 +108,11 @@ impl Metadata {
         let mut buf_index = 4;
         // Then we need to skip the executable path that is placed in the
         // buffer. The executable path is null-terminated.
-        buf_index += &proc_args[buf_index..].iter().position(|byte| *byte == 0)
+        buf_index += proc_args[buf_index..].iter().position(|byte| *byte == 0)
             .unwrap_or(0);
         // The executable path is not only null-terminated but also null-padded,
         // so we need to skip this padding as well.
-        buf_index += &proc_args[buf_index..].iter().position(|byte| *byte != 0)
+        buf_index += proc_args[buf_index..].iter().position(|byte| *byte != 0)
             .unwrap_or(0);
 
         Ok(Args {
