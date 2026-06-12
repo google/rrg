@@ -144,8 +144,6 @@ impl<'m> Iterator for Args<'m> {
             return None;
         }
 
-        dbg!(String::from_utf8_lossy(&self.argv));
-
         let Some(index) = self.argv.iter().position(|byte| *byte == 0) else {
             // This should generally never happen as all arguments should be
             // null-terminated.
