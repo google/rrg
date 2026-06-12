@@ -40,7 +40,7 @@ impl Metadata {
     pub fn id(&self) -> u32 {
         u32::try_from(self.proc.kp_proc.p_pid)
             // PID for a live process should never be negative and sign is used
-            // only for special return values or arguments.
+            // only for special return values or arguments of POSIX functions.
             .unwrap_or(0)
     }
 
