@@ -70,6 +70,24 @@ impl Metadata {
         std::ffi::OsStr::from_bytes(name_bytes).to_os_string()
     }
 
+    pub fn exe(&self) -> std::io::Result<std::path::PathBuf> {
+        let proc_args = self.proc_args.as_ref()
+            .map_err(|error| std::io::Error::from_raw_os_error(*error))?;
+
+        // We start at index `4` because of the 4-byte argc value placed at the
+        // beginning of the buffer.
+        let exe_start = 4;
+        // Executable name is null-terminated so we find the position of the
+        // first null byte since the beginning.
+        let exe_len = proc_args[exe_start..].iter().position(|byte| *byte == 0)
+            .unwrap_or(0);
+
+        let exe_bytes = &proc_args[exe_start..][..exe_len];
+
+        use std::os::unix::ffi::OsStrExt as _;
+        Ok(std::path::PathBuf::from(std::ffi::OsStr::from_bytes(&exe_bytes)))
+    }
+
     pub fn args(&self) -> std::io::Result<Args<'_>> {
         let proc_args = self.proc_args.as_ref()
             .map_err(|error| std::io::Error::from_raw_os_error(*error))?;
@@ -323,6 +341,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(metadata.parent_id(), std::os::unix::process::parent_id());
+        assert_eq!(metadata.exe().unwrap(), std::env::current_exe().unwrap());
 
         let mut args = metadata.args().unwrap();
         let mut args_env = std::env::args_os();
