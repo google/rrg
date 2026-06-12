@@ -36,7 +36,7 @@ pub struct Metadata {
 
 impl Metadata {
 
-    /// PID of the process this metadata corresponds to.
+    /// Returns PID of the process this metadata corresponds to.
     pub fn id(&self) -> u32 {
         u32::try_from(self.proc.kp_proc.p_pid)
             // PID for a live process should never be negative and sign is used
@@ -44,7 +44,7 @@ impl Metadata {
             .unwrap_or(0)
     }
 
-    /// PID of the parent of the process this metadata corresponds to.
+    /// Returns PID of the parent of the process this metadata corresponds to.
     pub fn parent_id(&self) -> u32 {
         u32::try_from(self.proc.kp_eproc.e_ppid)
             // PID for a live process should never be negative and sign is used
@@ -70,6 +70,7 @@ impl Metadata {
         std::ffi::OsStr::from_bytes(name_bytes).to_os_string()
     }
 
+    /// Returns filesystem path to the executable of the process.
     pub fn exe(&self) -> std::io::Result<std::path::PathBuf> {
         let proc_args = self.proc_args.as_ref()
             .map_err(|error| std::io::Error::from_raw_os_error(*error))?;
@@ -88,6 +89,7 @@ impl Metadata {
         Ok(std::path::PathBuf::from(std::ffi::OsStr::from_bytes(&exe_bytes)))
     }
 
+    /// Returns an iterator over the arguments of the process.
     pub fn args(&self) -> std::io::Result<Args<'_>> {
         let proc_args = self.proc_args.as_ref()
             .map_err(|error| std::io::Error::from_raw_os_error(*error))?;
