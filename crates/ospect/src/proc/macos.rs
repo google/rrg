@@ -5,7 +5,10 @@
 
 /// Returns an iterator yielding identifiers of all processes on the system.
 pub fn ids() -> std::io::Result<impl Iterator<Item = std::io::Result<u32>>> {
-    Ok(sysctl_kern_proc()?.into_iter().map(|proc| {
+    let procs = sysctl_kern_proc()
+        .map_err(std::io::Error::from_raw_os_error)?;
+
+    Ok(procs.into_iter().map(|proc| {
         u32::try_from(proc.kp_proc.p_pid)
             .map_err(|error| std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -16,7 +19,10 @@ pub fn ids() -> std::io::Result<impl Iterator<Item = std::io::Result<u32>>> {
 
 /// Returns an iterator yielding metadata for all processes on the system.
 pub fn all() -> std::io::Result<impl Iterator<Item = std::io::Result<Metadata>>> {
-    Ok(sysctl_kern_proc()?.into_iter().map(|proc| Ok(Metadata {
+    let procs = sysctl_kern_proc()
+        .map_err(std::io::Error::from_raw_os_error)?;
+
+    Ok(procs.into_iter().map(|proc| Ok(Metadata {
         proc,
         proc_args: sysctl_kern_procargs2(proc.kp_proc.p_pid),
     })))
@@ -25,7 +31,7 @@ pub fn all() -> std::io::Result<impl Iterator<Item = std::io::Result<Metadata>>>
 /// Metadata about the process (specific to macOS).
 pub struct Metadata {
     proc: crate::libc::kinfo_proc,
-    proc_args: std::io::Result<Vec<u8>>,
+    proc_args: Result<Vec<u8>, i32>,
 }
 
 impl Metadata {
@@ -66,15 +72,7 @@ impl Metadata {
 
     pub fn args(&self) -> std::io::Result<Args<'_>> {
         let proc_args = self.proc_args.as_ref()
-            // `std::io::Error` does not implement `Clone` so we have to do the
-            // little dance below.
-            .map_err(|error| match error.raw_os_error() {
-                Some(error) => std::io::Error::from_raw_os_error(error),
-                None => std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "unexpected error",
-                ),
-            })?;
+            .map_err(|error| std::io::Error::from_raw_os_error(*error))?;
 
         let argc_bytes = <[u8; 4]>::try_from(&proc_args[0..4])
             .map_err(|error| std::io::Error::new(
@@ -155,7 +153,9 @@ impl<'m> Iterator for Args<'m> {
 impl<'m> ExactSizeIterator for Args<'m> {
 }
 
-fn sysctl_kern_proc() -> std::io::Result<Vec<crate::libc::kinfo_proc>> {
+// TODO(rust-lang/rust#107792): Switch to `std::io::RawOsError` once
+// `raw_os_error_ty` is stable.
+fn sysctl_kern_proc() -> Result<Vec<crate::libc::kinfo_proc>, i32> {
     const KINFO_PROC_SIZE: usize = {
         std::mem::size_of::<crate::libc::kinfo_proc>()
     };
@@ -189,7 +189,7 @@ fn sysctl_kern_proc() -> std::io::Result<Vec<crate::libc::kinfo_proc>> {
         )
     };
     if code != 0 {
-        return Err(std::io::Error::last_os_error());
+        return Err(std::io::Error::last_os_error().raw_os_error().unwrap());
     }
 
     // SAFETY: If the call to `sysctl` succeeded, we can assume that the
@@ -221,11 +221,11 @@ fn sysctl_kern_proc() -> std::io::Result<Vec<crate::libc::kinfo_proc>> {
         )
     };
     if code != 0 {
-        return Err(std::io::Error::last_os_error());
+        return Err(std::io::Error::last_os_error().raw_os_error().unwrap());
     }
 
     if buf_size % KINFO_PROC_SIZE != 0 {
-        return Err(std::io::ErrorKind::InvalidData.into());
+        return Err(libc::EPROTO);
     }
 
     let buf_len = buf_size / KINFO_PROC_SIZE;
@@ -239,7 +239,9 @@ fn sysctl_kern_proc() -> std::io::Result<Vec<crate::libc::kinfo_proc>> {
     Ok(buf)
 }
 
-fn sysctl_kern_procargs2(pid: libc::pid_t) -> std::io::Result<Vec<u8>> {
+// TODO(rust-lang/rust#107792): Switch to `std::io::RawOsError` once
+// `raw_os_error_ty` is stable.
+fn sysctl_kern_procargs2(pid: libc::pid_t) -> Result<Vec<u8>, i32> {
     let mut mib = [
         libc::CTL_KERN,
         libc::KERN_PROCARGS2,
@@ -276,7 +278,7 @@ fn sysctl_kern_procargs2(pid: libc::pid_t) -> std::io::Result<Vec<u8>> {
         )
     };
     if code != 0 {
-        return Err(std::io::Error::last_os_error());
+        return Err(std::io::Error::last_os_error().raw_os_error().unwrap());
     }
 
     // SAFETY: If the call to `sysctl` succeeded, we can assume that the
@@ -302,7 +304,7 @@ fn sysctl_kern_procargs2(pid: libc::pid_t) -> std::io::Result<Vec<u8>> {
         )
     };
     if code != 0 {
-        return Err(std::io::Error::last_os_error());
+        return Err(std::io::Error::last_os_error().raw_os_error().unwrap());
     }
 
     Ok(buf)
