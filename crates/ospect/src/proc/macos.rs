@@ -16,19 +16,23 @@ pub fn ids() -> std::io::Result<impl Iterator<Item = std::io::Result<u32>>> {
 
 /// Returns an iterator yielding metadata for all processes on the system.
 pub fn all() -> std::io::Result<impl Iterator<Item = std::io::Result<Metadata>>> {
-    Ok(sysctl_kern_proc()?.into_iter().map(|raw| Ok(Metadata { raw })))
+    Ok(sysctl_kern_proc()?.into_iter().map(|proc| Ok(Metadata {
+        proc,
+        proc_args: sysctl_kern_procargs2(proc.kp_proc.p_pid),
+    })))
 }
 
 /// Metadata about the process (specific to macOS).
 pub struct Metadata {
-    raw: crate::libc::kinfo_proc,
+    proc: crate::libc::kinfo_proc,
+    proc_args: std::io::Result<Vec<u8>>,
 }
 
 impl Metadata {
 
     /// PID of the process this metadata corresponds to.
     pub fn id(&self) -> u32 {
-        u32::try_from(self.raw.kp_proc.p_pid)
+        u32::try_from(self.proc.kp_proc.p_pid)
             // PID for a live process should never be negative and sign is used
             // only for special return values or arguments.
             .unwrap_or(0)
@@ -36,7 +40,7 @@ impl Metadata {
 
     /// PID of the parent of the process this metadata corresponds to.
     pub fn parent_id(&self) -> u32 {
-        u32::try_from(self.raw.kp_eproc.e_ppid)
+        u32::try_from(self.proc.kp_eproc.e_ppid)
             // PID for a live process should never be negative and sign is used
             // only for special return values or arguments.
             .unwrap_or(0)
@@ -46,7 +50,7 @@ impl Metadata {
     pub fn name(&self) -> std::ffi::OsString {
         use std::os::unix::ffi::OsStrExt as _;
 
-        let name_bytes = self.raw.kp_proc.p_comm.map(|byte| byte as u8);
+        let name_bytes = self.proc.kp_proc.p_comm.map(|byte| byte as u8);
         // Name is null-terminated so we need to take it only until the null
         // byte.
         let name_bytes = match name_bytes.iter().position(|byte| *byte == 0) {
@@ -60,10 +64,19 @@ impl Metadata {
         std::ffi::OsStr::from_bytes(name_bytes).to_os_string()
     }
 
-    pub fn args(&self) -> std::io::Result<Args> {
-        let buf = sysctl_kern_procargs2(self.raw.kp_proc.p_pid)?;
+    pub fn args(&self) -> std::io::Result<Args<'_>> {
+        let proc_args = self.proc_args.as_ref()
+            // `std::io::Error` does not implement `Clone` so we have to do the
+            // little dance below.
+            .map_err(|error| match error.raw_os_error() {
+                Some(error) => std::io::Error::from_raw_os_error(error),
+                None => std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "unexpected error",
+                ),
+            })?;
 
-        let argc_bytes = <[u8; 4]>::try_from(&buf[0..4])
+        let argc_bytes = <[u8; 4]>::try_from(&proc_args[0..4])
             .map_err(|error| std::io::Error::new(
                 std::io::ErrorKind::Other,
                 error,
@@ -79,28 +92,25 @@ impl Metadata {
         let mut buf_index = 4;
         // Then we need to skip the executable path that is placed in the
         // buffer. The executable path is null-terminated.
-        buf_index += &buf[buf_index..].iter().position(|byte| *byte == 0)
+        buf_index += &proc_args[buf_index..].iter().position(|byte| *byte == 0)
             .unwrap_or(0);
         // The executable path is not only null-terminated but also null-padded,
         // so we need to skip this padding as well.
-        buf_index += &buf[buf_index..].iter().position(|byte| *byte != 0)
+        buf_index += &proc_args[buf_index..].iter().position(|byte| *byte != 0)
             .unwrap_or(0);
 
         Ok(Args {
-            buf,
-            buf_index,
+            argv: &proc_args[buf_index..],
             argc_left: argc,
         })
     }
 }
 
 /// Iterator over the arguments of the process.
-pub struct Args {
-    /// Buffer with process argument data as returned by the kernel from the
-    /// `KERN_PROCARGS2` system call.
-    buf: Vec<u8>,
-    /// Position within `buf` for the next argument lookup.
-    buf_index: usize,
+pub struct Args<'m> {
+    /// Slice of the buffer with process argument data as returned by the kernel
+    /// from the `KERN_PROCARGS2` system call.
+    argv: &'m [u8],
     /// Number of arguments left to yield.
     ///
     /// This is needed because the buffer might be actually bigger than the
@@ -109,7 +119,7 @@ pub struct Args {
     argc_left: usize,
 }
 
-impl Iterator for Args {
+impl<'m> Iterator for Args<'m> {
 
     type Item = std::ffi::OsString;
 
@@ -118,19 +128,20 @@ impl Iterator for Args {
             return None;
         }
 
-        let slice = &self.buf[self.buf_index..];
-        let Some(slice_index) = slice.iter().position(|byte| *byte == 0) else {
+        dbg!(String::from_utf8_lossy(&self.argv));
+
+        let Some(index) = self.argv.iter().position(|byte| *byte == 0) else {
             // This should generally never happen as all arguments should be
             // null-terminated.
             return None;
         };
 
         use std::os::unix::ffi::OsStrExt as _;
-        let result = std::ffi::OsStr::from_bytes(&slice[..slice_index])
+        let result = std::ffi::OsStr::from_bytes(&self.argv[..index])
             .to_os_string();
 
         // `+ 1` because we want to skip the null byte.
-        self.buf_index += slice_index + 1;
+        self.argv = &self.argv[index + 1..];
         self.argc_left -= 1;
 
         Some(result)
@@ -141,7 +152,7 @@ impl Iterator for Args {
     }
 }
 
-impl ExactSizeIterator for Args {
+impl<'m> ExactSizeIterator for Args<'m> {
 }
 
 fn sysctl_kern_proc() -> std::io::Result<Vec<crate::libc::kinfo_proc>> {
