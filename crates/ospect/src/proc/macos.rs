@@ -59,15 +59,12 @@ impl Metadata {
         let name_bytes = self.proc.kp_proc.p_comm.map(|byte| byte as u8);
         // Name is null-terminated so we need to take it only until the null
         // byte.
-        let name_bytes = match name_bytes.iter().position(|byte| *byte == 0) {
-            Some(idx) => &name_bytes[..idx],
+        let name_c_str = std::ffi::CStr::from_bytes_until_nul(&name_bytes)
             // This should not happen as the string has to be null-terminated
-            // but just to be on the safe side, we don't panic and just take the
-            // full string.
-            None => &name_bytes[..],
-        };
+            // but just to be on the safe side we provide some default.
+            .unwrap_or(c"");
 
-        std::ffi::OsStr::from_bytes(name_bytes).to_os_string()
+        std::ffi::OsStr::from_bytes(name_c_str.to_bytes()).to_os_string()
     }
 
     /// Returns filesystem path to the executable of the process.
@@ -75,18 +72,15 @@ impl Metadata {
         let proc_args = self.proc_args.as_ref()
             .map_err(|error| std::io::Error::from_raw_os_error(*error))?;
 
-        // We start at index `4` because of the 4-byte argc value placed at the
-        // beginning of the buffer.
-        let exe_start = 4;
-        // Executable name is null-terminated so we find the position of the
-        // first null byte since the beginning.
-        let exe_len = proc_args[exe_start..].iter().position(|byte| *byte == 0)
-            .unwrap_or(0);
-
-        let exe_bytes = &proc_args[exe_start..][..exe_len];
+        // Executable name is null-terminated. We start at index 4 because of
+        // the 4-byte argc value place at the beginning of the buffer.
+        let exe_c_str = std::ffi::CStr::from_bytes_until_nul(&proc_args[4..])
+            // This should not happen as the string has to be null-terminated
+            // but just to be on the safe side we provide some default.
+            .unwrap_or(c"");
 
         use std::os::unix::ffi::OsStrExt as _;
-        Ok(std::path::PathBuf::from(std::ffi::OsStr::from_bytes(&exe_bytes)))
+        Ok(std::ffi::OsStr::from_bytes(&exe_c_str.to_bytes()).into())
     }
 
     /// Returns an iterator over the arguments of the process.
