@@ -210,11 +210,7 @@ fn sysctl_kern_proc() -> Result<Vec<crate::libc::kinfo_proc>, i32> {
         buf_size.assume_init()
     } as usize;
 
-    let mut buf_len = buf_size / KINFO_PROC_SIZE;
-    if buf_size % KINFO_PROC_SIZE != 0 {
-        buf_len += 1;
-    }
-
+    let buf_len = buf_size.div_ceil(KINFO_PROC_SIZE);
     let mut buf = Vec::<crate::libc::kinfo_proc>::with_capacity(buf_len);
 
     // SAFETY: We create a buffer of the size specified by the previous call to
