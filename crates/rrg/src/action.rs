@@ -54,6 +54,9 @@ pub mod list_interfaces;
 #[cfg(feature = "action-list_mounts")]
 pub mod list_mounts;
 
+#[cfg(feature = "action-list_processes")]
+pub mod list_processes;
+
 #[cfg(feature = "action-list_utmp_users")]
 pub mod list_utmp_users;
 
@@ -158,6 +161,10 @@ where
         #[cfg(feature = "action-list_mounts")]
         ListMounts => {
             handle(session, request, self::list_mounts::handle)
+        }
+        #[cfg(feature = "action-list_processes")]
+        ListProcesses => {
+            handle(session, request, self::list_processes::handle)
         }
         #[cfg(feature = "action-list_utmp_users")]
         ListUtmpUsers => {

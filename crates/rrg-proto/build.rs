@@ -29,6 +29,7 @@ const PROTOS: &'static [&'static str] = &[
     "../../proto/rrg/action/list_connections.proto",
     "../../proto/rrg/action/list_interfaces.proto",
     "../../proto/rrg/action/list_mounts.proto",
+    "../../proto/rrg/action/list_processes.proto",
     "../../proto/rrg/action/list_utmp_users.proto",
     "../../proto/rrg/action/list_winreg_keys.proto",
     "../../proto/rrg/action/list_winreg_values.proto",
