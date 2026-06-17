@@ -430,62 +430,71 @@ mod tests {
 
     #[test]
     fn test_encode_and_decode_with_many_items_iter() {
-        let sample = bytes(rand::random::<[u8; 32]>());
-        let items = std::iter::repeat(sample.clone()).take(32 * 1024);
+        // TODO(rust-lang/rust#1496980): Simplify once `vec_from_fn` is stable.
+        let data = std::iter::repeat_with(|| bytes(rand::random::<[u8; 32]>()))
+            .take(32 * 1024)
+            .collect::<Vec<_>>();
 
         let opts = EncodeOpts {
             compression: Compression::default(),
             part_size: 4 * 1024,
         };
 
-        let chunks = encode_with_opts(items, opts)
+        let chunks = encode_with_opts(data.clone().into_iter(), opts)
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, BytesValue>(chunks.into_iter())
-            .map(Result::unwrap);
+        let items = decode::<_, BytesValue>(chunks.into_iter())
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
 
-        assert!(iter.all(|item| item == sample));
+        assert_eq!(items, data);
     }
 
     #[test]
     fn test_encode_and_decode_with_no_compression() {
-        let sample = bytes(rand::random::<[u8; 32]>());
-        let items = std::iter::repeat(sample.clone()).take(32 * 1024);
+        // TODO(rust-lang/rust#1496980): Simplify once `vec_from_fn` is stable.
+        let data = std::iter::repeat_with(|| bytes(rand::random::<[u8; 32]>()))
+            .take(32 * 1024)
+            .collect::<Vec<_>>();
 
         let opts = EncodeOpts {
             compression: Compression::none(),
             part_size: 4 * 1024,
         };
 
-        let chunks = encode_with_opts(items, opts)
+        let chunks = encode_with_opts(data.clone().into_iter(), opts)
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, BytesValue>(chunks.into_iter())
-            .map(Result::unwrap);
+        let items = decode::<_, BytesValue>(chunks.into_iter())
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
 
-        assert!(iter.all(|item| item == sample));
+        assert_eq!(items, data);
     }
 
     #[test]
     fn test_encode_and_decode_with_best_compression() {
-        let sample = bytes(rand::random::<[u8; 32]>());
-        let items = std::iter::repeat(sample.clone()).take(32 * 1024);
+        // TODO(rust-lang/rust#1496980): Simplify once `vec_from_fn` is stable.
+        let data = std::iter::repeat_with(|| bytes(rand::random::<[u8; 32]>()))
+            .take(32 * 1024)
+            .collect::<Vec<_>>();
 
         let opts = EncodeOpts {
             compression: Compression::best(),
             part_size: 4 * 1024,
         };
 
-        let chunks = encode_with_opts(items, opts)
+        let chunks = encode_with_opts(data.clone().into_iter(), opts)
             .map(Result::unwrap)
             .collect::<Vec<_>>();
 
-        let mut iter = decode::<_, BytesValue>(chunks.into_iter())
-            .map(Result::unwrap);
+        let items = decode::<_, BytesValue>(chunks.into_iter())
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
 
-        assert!(iter.all(|item| item == sample));
+        assert_eq!(items, data);
     }
 
     quickcheck::quickcheck! {
