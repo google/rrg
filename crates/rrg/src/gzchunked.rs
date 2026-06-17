@@ -441,8 +441,7 @@ mod tests {
         };
 
         let chunks = encode_with_opts(data.clone().into_iter(), opts)
-            .map(Result::unwrap)
-            .collect::<Vec<_>>();
+            .map(Result::unwrap);
 
         let items = decode::<_, BytesValue>(chunks.into_iter())
             .map(Result::unwrap)
@@ -464,8 +463,7 @@ mod tests {
         };
 
         let chunks = encode_with_opts(data.clone().into_iter(), opts)
-            .map(Result::unwrap)
-            .collect::<Vec<_>>();
+            .map(Result::unwrap);
 
         let items = decode::<_, BytesValue>(chunks.into_iter())
             .map(Result::unwrap)
@@ -487,8 +485,7 @@ mod tests {
         };
 
         let chunks = encode_with_opts(data.clone().into_iter(), opts)
-            .map(Result::unwrap)
-            .collect::<Vec<_>>();
+            .map(Result::unwrap);
 
         let items = decode::<_, BytesValue>(chunks.into_iter())
             .map(Result::unwrap)
