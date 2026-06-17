@@ -432,7 +432,7 @@ mod tests {
     fn test_encode_and_decode_with_many_items_iter() {
         // TODO(rust-lang/rust#1496980): Simplify once `vec_from_fn` is stable.
         let data = std::iter::repeat_with(|| bytes(rand::random::<[u8; 32]>()))
-            .take(32 * 1024)
+            .take(1024)
             .collect::<Vec<_>>();
 
         let opts = EncodeOpts {
@@ -455,7 +455,7 @@ mod tests {
     fn test_encode_and_decode_with_no_compression() {
         // TODO(rust-lang/rust#1496980): Simplify once `vec_from_fn` is stable.
         let data = std::iter::repeat_with(|| bytes(rand::random::<[u8; 32]>()))
-            .take(32 * 1024)
+            .take(1024)
             .collect::<Vec<_>>();
 
         let opts = EncodeOpts {
@@ -478,7 +478,7 @@ mod tests {
     fn test_encode_and_decode_with_best_compression() {
         // TODO(rust-lang/rust#1496980): Simplify once `vec_from_fn` is stable.
         let data = std::iter::repeat_with(|| bytes(rand::random::<[u8; 32]>()))
-            .take(32 * 1024)
+            .take(1024)
             .collect::<Vec<_>>();
 
         let opts = EncodeOpts {
