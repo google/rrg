@@ -33,6 +33,7 @@ impl FakeSession {
             verbosity: log::LevelFilter::Debug,
             log_to_stdout: false,
             log_to_file: None,
+            request_file: None,
             filestore_dir: None,
             filestore_ttl: std::time::Duration::ZERO,
         })

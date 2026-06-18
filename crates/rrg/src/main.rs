@@ -33,6 +33,44 @@ fn main() {
     rrg::Parcel::new(rrg::Sink::Startup, rrg::Startup::now())
         .send_unaccounted();
 
+    if let Some(request_file_path) = &args.request_file {
+        match rrg::abort::open_request_file(request_file_path) {
+            Ok(request_file) => {
+                info! {
+                    "request file at '{}' found, sending RRG abort information",
+                    request_file_path.display(),
+                };
+                rrg::Parcel::new(rrg::Sink::Abort, request_file.abort())
+                    .send_unaccounted();
+
+                match request_file.remove() {
+                    Ok(()) => {
+                        info! {
+                            "request file at '{}' removed",
+                            request_file_path.display(),
+                        }
+                    }
+                    Err(error) => {
+                        error! {
+                            "could not remove request file at '{}': {error}",
+                            request_file_path.display(),
+                        }
+                    }
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                // This is fine, we actually expect the file to not be there
+                // at almost all times.
+            }
+            Err(error) => {
+                error! {
+                    "could not open the request file at '{}': {error}",
+                    request_file_path.display(),
+                }
+            }
+        }
+    }
+
     // TODO(@panhania): Remove once no longer needed.
     if args.ping_rate > std::time::Duration::ZERO {
         std::thread::spawn(move || {

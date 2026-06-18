@@ -62,6 +62,13 @@ pub struct Args {
            description="whether to log to a file")]
     pub log_to_file: Option<std::path::PathBuf>,
 
+    /// Determines whether to enable request persistence (and where).
+    #[argh(option,
+           long="request-file",
+           arg_name="PATH",
+           description="whether and where to persist requests being processed")]
+    pub request_file: Option<std::path::PathBuf>,
+
     /// Determines whether to enable filestore (and where its root folder is).
     #[argh(option,
            long="filestore-dir",
