@@ -5,6 +5,7 @@
 
 // TODO: Hide irrelevant modules.
 
+pub mod abort;
 pub mod action;
 pub mod args;
 pub mod filestore;
