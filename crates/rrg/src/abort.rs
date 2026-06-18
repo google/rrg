@@ -56,14 +56,16 @@ impl RequestFileCreated {
     ///
     /// This should be only used if the request processing has been finished.
     pub fn remove(self) -> std::io::Result<()> {
-        // TODO(@panhania): Still attempt to delete the file even if unlock
-        // fails.
-        self.file.unlock()?;
+        // We still want to attempt to remove the file, even if unlocking it
+        // (for whatever reason) fails, so we don't immediately propagate the
+        // error but still report it at the end.
+        let result_unlock = self.file.unlock();
+
         drop(self.file);
 
         std::fs::remove_file(&self.path)?;
 
-        Ok(())
+        result_unlock
     }
 }
 
