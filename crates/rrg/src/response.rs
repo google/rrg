@@ -249,6 +249,8 @@ impl LogBuilder {
 pub enum Sink {
     /// Collects records of agent startup.
     Startup,
+    /// Collects records of agent aborts.
+    Abort,
     /// Collects binary blobs (e.g. fragments of files).
     Blob,
     /// Collects periodic ping messages.
@@ -260,6 +262,7 @@ impl From<Sink> for rrg_proto::rrg::Sink {
     fn from(sink: Sink) -> rrg_proto::rrg::Sink {
         match sink {
             Sink::Startup => rrg_proto::rrg::Sink::STARTUP,
+            Sink::Abort => rrg_proto::rrg::Sink::ABORT,
             Sink::Blob => rrg_proto::rrg::Sink::BLOB,
             Sink::Ping => rrg_proto::rrg::Sink::PING,
         }

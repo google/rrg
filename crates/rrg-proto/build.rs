@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 const PROTOS: &'static [&'static str] = &[
     "../../proto/rrg.proto",
+    "../../proto/rrg/abort.proto",
     "../../proto/rrg/blob.proto",
     "../../proto/rrg/fs.proto",
     "../../proto/rrg/net.proto",

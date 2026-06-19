@@ -163,9 +163,9 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RequestId {
     /// An identifier of the flow issuing the request.
-    flow_id: u64,
+    pub(crate) flow_id: u64,
     /// A server-issued identifier of the request (unique within the flow).
-    request_id: u64,
+    pub(crate) request_id: u64,
 }
 
 impl RequestId {

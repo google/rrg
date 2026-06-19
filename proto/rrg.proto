@@ -224,6 +224,8 @@ enum Sink {
   STARTUP = 1;
   // Accepts binary blobs (e.g. fragments of files).
   BLOB = 2;
+  // Accepts metadata about agent abort.
+  ABORT = 3;
   // Accepts periodic ping messages.
   //
   // TODO(@panhania): Remove once no longer needed.
