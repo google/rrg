@@ -10,8 +10,8 @@ import "google/protobuf/timestamp.proto";
 
 // Subset of the request information used for abort reporting.
 //
-// This is information is persisted in a file before request processing is
-// started. The file is deleted when the processing finishes.
+// This information is persisted in a file before request processing is started.
+// The file is deleted when the processing finishes.
 //
 // When the file is present during the agent startup, it means that the request
 // processing must have been aborted (either by the crash, RRG or Fleetspeak
