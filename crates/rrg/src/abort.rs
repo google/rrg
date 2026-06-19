@@ -245,7 +245,7 @@ mod tests {
         // We cannot use more concrete timestamps (e.g. before and after the
         // computation thread was started) because the filesystem clock and the
         // system time might not be in a perfect sync.
-        assert!(request_file.request_time >= std::time::UNIX_EPOCH);
+        assert!(request_file.request_time > std::time::UNIX_EPOCH);
 
         request_file.remove()
             .unwrap();
