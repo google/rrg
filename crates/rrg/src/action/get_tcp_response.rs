@@ -39,11 +39,26 @@ where
 
     log::info!("established connection to {}", args.addr);
 
+    // We have to set timeouts before we call `TcpStream::shutdown` below
+    // (including `set_read_timeout`). Some systems require the socket to
+    // be non-shutdown or to be still able to receive or send data [1].
+    //
+    // The problem is that if the server sent us everything it had to send and
+    // closed its end, even if we did not get to the reading part but shutdown
+    // our write end, it still trips over that check and fails with an error.
+    //
+    // [1]: https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/uipc_socket.c#L4749-L4755
     stream.set_write_timeout(Some(args.write_timeout))
         .map_err(|error| Error {
             kind: ErrorKind::InvalidWriteTimeout,
             inner: error,
         })?;
+    stream.set_read_timeout(Some(args.read_timeout))
+        .map_err(|error| Error {
+            kind: ErrorKind::InvalidReadTimeout,
+            inner: error,
+        })?;
+
     stream.write_all(&args.data)
         .map_err(|error| Error {
             kind: ErrorKind::Write,
@@ -60,11 +75,6 @@ where
 
     let mut data = Vec::new();
 
-    stream.set_read_timeout(Some(args.read_timeout))
-        .map_err(|error| Error {
-            kind: ErrorKind::InvalidReadTimeout,
-            inner: error,
-        })?;
     // We limit the number of bytes read to 1 MiB. Fleetspeak does not allow for
     // messages bigger than 2 MiB anyway.
     //
