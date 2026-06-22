@@ -277,6 +277,9 @@ impl CondOp {
             (I64(value), CondOp::I64Less(i64)) => {
                 Ok(value < *i64)
             }
+            (Enum(_, value), CondOp::I64Equal(i64)) => {
+                Ok(i64::from(value) == *i64)
+            }
             (value, _) => Err(ErrorRepr::TypeMismatch {
                 var_type: value.get_type(),
                 op_type: self.runtime_type(),
@@ -949,6 +952,15 @@ mod tests {
 
         message.value = -1337;
         assert!(filter!(var(1) < i64(-42)).eval(&message).unwrap());
+    }
+
+    #[test]
+    fn eval_enum_coercion() {
+        use protobuf::well_known_types::struct_::{NullValue, Value};
+        let mut message = Value::default();
+
+        message.set_null_value(NullValue::NULL_VALUE);
+        assert!(filter!(var(1) = i64(0)).eval(&message).unwrap());
     }
 
     #[test]

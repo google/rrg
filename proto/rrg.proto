@@ -339,6 +339,12 @@ message Condition {
     //
     // This operator works also for fields of type `int32` in which case the
     // values are going to be losslessly upcasted.
+    //
+    // This operator works also for enum fields in which case the numeric enum
+    // value (which is guaranteed to be a 32-bit signed integers [1]) is also
+    // going to be losslessly upcasted.
+    //
+    // [1]: https://protobuf.dev/programming-guides/encoding/#bools-and-enums
     int64 int64_equal = 10;
 
     // The condition is satisfied if the field is less than this integer.
