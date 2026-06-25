@@ -40,6 +40,8 @@ pub struct Item {
     stderr: Vec<u8>,
     /// Whether stderr is truncated.
     truncated_stderr: bool,
+    /// Whether the command reached the specified timeout before exiting.
+    timeout_reached: bool,
 }
 
 /// Executable to use for the command.
@@ -385,11 +387,14 @@ where
     });
 
     log::info!("starting '{}' (timeout: {:?})", command_path.display(), args.timeout);
+    let mut timeout_reached = false;
     loop {
         let time_elapsed = command_start_time.elapsed();
         let time_left = args.timeout.saturating_sub(time_elapsed);
 
         if time_left.is_zero() {
+            log::warn!("timeout reached; killing subprocess (pid: {})", command_process.id());
+            timeout_reached = true;
             break;
         }
 
@@ -458,6 +463,7 @@ where
         truncated_stderr: stderr.len() == MAX_STDERR_SIZE,
         stdout,
         stderr,
+        timeout_reached,
     })?;
 
     Ok(())
@@ -629,6 +635,7 @@ impl crate::response::Item for Item {
         proto.set_stderr(self.stderr);
         proto.set_stderr_truncated(self.truncated_stderr);
 
+        proto.set_timeout_reached(self.timeout_reached);
         proto
     }
 }
@@ -1392,6 +1399,7 @@ echo 'Hello, world!'
 
         use std::os::unix::process::ExitStatusExt as _;
 
+        assert!(item.timeout_reached);
         assert!(!item.exit_status.success());
         assert_eq!(item.exit_status.signal(), Some(libc::SIGKILL));
         assert_eq!(item.stderr, b"");
@@ -1432,6 +1440,7 @@ echo 'Hello, world!'
 
         use std::os::unix::process::ExitStatusExt as _;
 
+        assert!(item.timeout_reached);
         assert!(!item.exit_status.success());
         assert_eq!(item.exit_status.signal(), Some(libc::SIGKILL));
         assert_eq!(item.stderr, b"");
@@ -1467,6 +1476,7 @@ echo 'Hello, world!'
         assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
+        assert!(item.timeout_reached);
         assert!(!item.exit_status.success());
         assert_eq!(item.stderr, b"");
         assert_eq!(item.stdout, b"");
@@ -1506,6 +1516,7 @@ echo 'Hello, world!'
         assert_eq!(session.reply_count(), 1);
         let item = session.reply::<Item>(0);
 
+        assert!(item.timeout_reached);
         assert!(!item.exit_status.success());
         assert_eq!(item.stderr, b"");
         assert_eq!(item.stdout, b"");
