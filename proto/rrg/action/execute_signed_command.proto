@@ -155,5 +155,13 @@ message Result {
 
   // Set if value of `stderr` had to be truncated.
   bool stderr_truncated = 6;
+
+  // Set if the command timed out before finishing.
+  //
+  // This does not necessarily mean the command failed,
+  // as the process could have exited normally in the time
+  // between when the timeout was detected and when the process
+  // was killed.
+  bool timeout_reached = 7;
 }
 
