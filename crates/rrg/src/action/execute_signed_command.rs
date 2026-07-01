@@ -548,6 +548,14 @@ impl crate::request::Args for Args {
                         ))
                     },
                 }
+            } else if !arg.filestore_file_sha256_signed().is_empty() {
+                let file_sha256 = <[u8; 32]>::try_from(arg.filestore_file_sha256_signed())
+                    .map_err(|error| ParseArgsError::invalid_field(
+                        "file SHA-256",
+                        error,
+                    ))?;
+
+                CommandArg::FilestoreFileSha256(file_sha256)
             } else {
                 CommandArg::literal(arg.take_signed())
             };
@@ -1597,6 +1605,38 @@ echo 'Hello, world!'
     }
 
     #[test]
+    fn args_from_proto_args_file_id_signed() {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut command_proto = rrg_proto::execute_signed_command::Command::new();
+        command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
+
+        let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_quux.set_filestore_file_sha256_signed([0xaa; 32].to_vec());
+        command_proto.mut_args().push(arg_quux);
+
+        let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_norf.set_filestore_file_sha256_signed([0xbb; 32].to_vec());
+        command_proto.mut_args().push(arg_norf);
+
+        use protobuf::Message as _;
+        let command_bytes = command_proto.write_to_bytes()
+            .unwrap();
+
+        let mut args_proto = rrg_proto::execute_signed_command::Args::new();
+        args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
+        args_proto.set_command(command_bytes);
+
+        let args = <Args as crate::request::Args>::from_proto(args_proto)
+            .unwrap();
+        assert_eq!(args.exec, CommandExec::path("/foo/bar"));
+        assert_eq!(args.args, [
+            CommandArg::FilestoreFileSha256([0xaa; 32]),
+            CommandArg::FilestoreFileSha256([0xbb; 32]),
+        ]);
+    }
+
+    #[test]
     fn args_from_proto_args_file_id_unsigned() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
 
@@ -1645,6 +1685,10 @@ echo 'Hello, world!'
         arg_norf.set_signed(String::from("norf"));
         command_proto.mut_args().push(arg_norf);
 
+        let mut arg_ztesh = rrg_proto::execute_signed_command::command::Arg::new();
+        arg_ztesh.set_filestore_file_sha256_signed([0xbb; 32].to_vec());
+        command_proto.mut_args().push(arg_ztesh);
+
         let mut arg_blargh = rrg_proto::execute_signed_command::command::Arg::new();
         arg_blargh.set_filestore_file_sha256_unsigned_allowed(true);
         command_proto.mut_args().push(arg_blargh);
@@ -1670,6 +1714,7 @@ echo 'Hello, world!'
         assert_eq!(args.args, [
             CommandArg::literal("quux"),
             CommandArg::literal("norf"),
+            CommandArg::FilestoreFileSha256([0xbb; 32]),
             CommandArg::FilestoreFileSha256([0xaa; 32]),
             CommandArg::literal("thud"),
         ]);

@@ -21,6 +21,9 @@ message Command {
       // without it being pre-signed.
       bool unsigned_allowed = 2;
 
+      // Fixed filestore file to pass as an argument to the executed command.
+      bytes filestore_file_sha256_signed = 4;
+
       // Whether to allow passing path to a filestore file specified in the
       // request as the argument without it being pre-signed.
       bool filestore_file_sha256_unsigned_allowed = 3;
