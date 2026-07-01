@@ -139,7 +139,7 @@ struct MissingFilestoreFileSha256Error {
 impl std::fmt::Display for MissingFilestoreFileSha256Error {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "missing filestore file SHA-256 at {}", self.idx)
+        write!(fmt, "missing unsigned filestore file SHA-256 at {}", self.idx)
     }
 }
 
@@ -147,18 +147,18 @@ impl std::error::Error for MissingFilestoreFileSha256Error {}
 
 /// An error indicating that there were more SHA-256s provided than expected.
 #[derive(Debug)]
-struct ExcessiveFilestoreFileSha256sError {
+struct ExcessiveUnsignedFilestoreFileSha256sError {
     count: usize,
 }
 
-impl std::fmt::Display for ExcessiveFilestoreFileSha256sError {
+impl std::fmt::Display for ExcessiveUnsignedFilestoreFileSha256sError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{} excessive filestore file SHA-256s", self.count)
+        write!(fmt, "{} excessive unsigned filestore file SHA-256s", self.count)
     }
 }
 
-impl std::error::Error for ExcessiveFilestoreFileSha256sError {}
+impl std::error::Error for ExcessiveUnsignedFilestoreFileSha256sError {}
 
 impl std::error::Error for CommandExecutionError {}
 
@@ -511,8 +511,12 @@ impl crate::request::Args for Args {
         // in active use anymore, this should be deleted.
         args.extend(command.take_args_signed().into_iter().map(CommandArg::literal));
 
-        let mut unsigned_args_iter = proto.take_unsigned_args().into_iter();
-        let mut filestore_file_sha256s_iter = proto.take_filestore_file_sha256s().into_iter();
+        let mut unsigned_args_iter = {
+            proto.take_unsigned_args().into_iter()
+        };
+        let mut unsigned_filestore_file_sha256s_iter = {
+            proto.take_unsigned_filestore_file_sha256s().into_iter()
+        };
 
         for (arg_idx, mut arg) in command.take_args().into_iter().enumerate() {
             let arg = if arg.unsigned_allowed() {
@@ -524,8 +528,8 @@ impl crate::request::Args for Args {
                         }))
                     }
                 }
-            } else if arg.filestore_file_sha256_allowed() {
-                match filestore_file_sha256s_iter.next() {
+            } else if arg.filestore_file_sha256_unsigned_allowed() {
+                match unsigned_filestore_file_sha256s_iter.next() {
                     Some(file_sha256) => {
                         let file_sha256 = <[u8; 32]>::try_from(&file_sha256[..])
                             .map_err(|error| ParseArgsError::invalid_field(
@@ -556,12 +560,12 @@ impl crate::request::Args for Args {
                 count: unsigned_args_left,
             }));
         }
-        let filestore_file_sha256s_left = filestore_file_sha256s_iter.count();
-        if filestore_file_sha256s_left > 0 {
+        let unsigned_filestore_file_sha256s_left = unsigned_filestore_file_sha256s_iter.count();
+        if unsigned_filestore_file_sha256s_left > 0 {
             return Err(ParseArgsError::invalid_field(
-                "filestore file SHA-256s",
-                ExcessiveFilestoreFileSha256sError {
-                    count: filestore_file_sha256s_left,
+                "unsigned filestore file SHA-256s",
+                ExcessiveUnsignedFilestoreFileSha256sError {
+                    count: unsigned_filestore_file_sha256s_left,
                 },
             ));
         }
@@ -1593,18 +1597,18 @@ echo 'Hello, world!'
     }
 
     #[test]
-    fn args_from_proto_args_file_id() {
+    fn args_from_proto_args_file_id_unsigned() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
 
         let mut command_proto = rrg_proto::execute_signed_command::Command::new();
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_filestore_file_sha256_allowed(true);
+        arg_quux.set_filestore_file_sha256_unsigned_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_filestore_file_sha256_allowed(true);
+        arg_norf.set_filestore_file_sha256_unsigned_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1614,8 +1618,8 @@ echo 'Hello, world!'
         let mut args_proto = rrg_proto::execute_signed_command::Args::new();
         args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
         args_proto.set_command(command_bytes);
-        args_proto.mut_filestore_file_sha256s().push([0xaa; 32].to_vec());
-        args_proto.mut_filestore_file_sha256s().push([0xbb; 32].to_vec());
+        args_proto.mut_unsigned_filestore_file_sha256s().push([0xaa; 32].to_vec());
+        args_proto.mut_unsigned_filestore_file_sha256s().push([0xbb; 32].to_vec());
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
             .unwrap();
@@ -1642,7 +1646,7 @@ echo 'Hello, world!'
         command_proto.mut_args().push(arg_norf);
 
         let mut arg_blargh = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_blargh.set_filestore_file_sha256_allowed(true);
+        arg_blargh.set_filestore_file_sha256_unsigned_allowed(true);
         command_proto.mut_args().push(arg_blargh);
 
         let mut arg_thud = rrg_proto::execute_signed_command::command::Arg::new();
@@ -1657,7 +1661,7 @@ echo 'Hello, world!'
         args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
         args_proto.set_command(command_bytes);
         args_proto.mut_unsigned_args().push(String::from("quux"));
-        args_proto.mut_filestore_file_sha256s().push([0xaa; 32].to_vec());
+        args_proto.mut_unsigned_filestore_file_sha256s().push([0xaa; 32].to_vec());
         args_proto.mut_unsigned_args().push(String::from("thud"));
 
         let args = <Args as crate::request::Args>::from_proto(args_proto)
@@ -1732,18 +1736,18 @@ echo 'Hello, world!'
     }
 
     #[test]
-    fn args_from_proto_file_ids_missing() {
+    fn args_from_proto_file_ids_unsigned_missing() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
 
         let mut command_proto = rrg_proto::execute_signed_command::Command::new();
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_filestore_file_sha256_allowed(true);
+        arg_quux.set_filestore_file_sha256_unsigned_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_filestore_file_sha256_allowed(true);
+        arg_norf.set_filestore_file_sha256_unsigned_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1753,7 +1757,7 @@ echo 'Hello, world!'
         let mut args_proto = rrg_proto::execute_signed_command::Args::new();
         args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
         args_proto.set_command(command_bytes);
-        args_proto.mut_filestore_file_sha256s().push([0xaa; 32].to_vec());
+        args_proto.mut_unsigned_filestore_file_sha256s().push([0xaa; 32].to_vec());
 
         // TODO(@panhania): Assert details of the error once exposed in
         // `ParseArgsError`.
@@ -1761,18 +1765,18 @@ echo 'Hello, world!'
     }
 
     #[test]
-    fn args_from_proto_file_ids_excessive() {
+    fn args_from_proto_file_ids_unsigned_excessive() {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
 
         let mut command_proto = rrg_proto::execute_signed_command::Command::new();
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_filestore_file_sha256_allowed(true);
+        arg_quux.set_filestore_file_sha256_unsigned_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_filestore_file_sha256_allowed(true);
+        arg_norf.set_filestore_file_sha256_unsigned_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1782,9 +1786,9 @@ echo 'Hello, world!'
         let mut args_proto = rrg_proto::execute_signed_command::Args::new();
         args_proto.set_command_ed25519_signature(signing_key.sign(&command_bytes).to_vec());
         args_proto.set_command(command_bytes);
-        args_proto.mut_filestore_file_sha256s().push([0xaa; 32].to_vec());
-        args_proto.mut_filestore_file_sha256s().push([0xbb; 32].to_vec());
-        args_proto.mut_filestore_file_sha256s().push([0xcc; 32].to_vec());
+        args_proto.mut_unsigned_filestore_file_sha256s().push([0xaa; 32].to_vec());
+        args_proto.mut_unsigned_filestore_file_sha256s().push([0xbb; 32].to_vec());
+        args_proto.mut_unsigned_filestore_file_sha256s().push([0xcc; 32].to_vec());
 
         // TODO(@panhania): Assert details of the error once exposed in
         // `ParseArgsError`.
