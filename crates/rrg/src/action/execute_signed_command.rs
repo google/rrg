@@ -528,7 +528,7 @@ impl crate::request::Args for Args {
                         }))
                     }
                 }
-            } else if arg.filestore_file_sha256_unsigned_allowed() {
+            } else if arg.unsigned_filestore_file_sha256_allowed() {
                 match unsigned_filestore_file_sha256s_iter.next() {
                     Some(file_sha256) => {
                         let file_sha256 = <[u8; 32]>::try_from(&file_sha256[..])
@@ -548,8 +548,8 @@ impl crate::request::Args for Args {
                         ))
                     },
                 }
-            } else if !arg.filestore_file_sha256_signed().is_empty() {
-                let file_sha256 = <[u8; 32]>::try_from(arg.filestore_file_sha256_signed())
+            } else if !arg.signed_filestore_file_sha256().is_empty() {
+                let file_sha256 = <[u8; 32]>::try_from(arg.signed_filestore_file_sha256())
                     .map_err(|error| ParseArgsError::invalid_field(
                         "file SHA-256",
                         error,
@@ -1612,11 +1612,11 @@ echo 'Hello, world!'
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_filestore_file_sha256_signed([0xaa; 32].to_vec());
+        arg_quux.set_signed_filestore_file_sha256([0xaa; 32].to_vec());
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_filestore_file_sha256_signed([0xbb; 32].to_vec());
+        arg_norf.set_signed_filestore_file_sha256([0xbb; 32].to_vec());
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1644,11 +1644,11 @@ echo 'Hello, world!'
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_filestore_file_sha256_unsigned_allowed(true);
+        arg_quux.set_unsigned_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_filestore_file_sha256_unsigned_allowed(true);
+        arg_norf.set_unsigned_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1686,11 +1686,11 @@ echo 'Hello, world!'
         command_proto.mut_args().push(arg_norf);
 
         let mut arg_ztesh = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_ztesh.set_filestore_file_sha256_signed([0xbb; 32].to_vec());
+        arg_ztesh.set_signed_filestore_file_sha256([0xbb; 32].to_vec());
         command_proto.mut_args().push(arg_ztesh);
 
         let mut arg_blargh = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_blargh.set_filestore_file_sha256_unsigned_allowed(true);
+        arg_blargh.set_unsigned_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_blargh);
 
         let mut arg_thud = rrg_proto::execute_signed_command::command::Arg::new();
@@ -1788,11 +1788,11 @@ echo 'Hello, world!'
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_filestore_file_sha256_unsigned_allowed(true);
+        arg_quux.set_unsigned_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_filestore_file_sha256_unsigned_allowed(true);
+        arg_norf.set_unsigned_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
@@ -1817,11 +1817,11 @@ echo 'Hello, world!'
         command_proto.mut_path().set_raw_bytes(b"/foo/bar".into());
 
         let mut arg_quux = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_quux.set_filestore_file_sha256_unsigned_allowed(true);
+        arg_quux.set_unsigned_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_quux);
 
         let mut arg_norf = rrg_proto::execute_signed_command::command::Arg::new();
-        arg_norf.set_filestore_file_sha256_unsigned_allowed(true);
+        arg_norf.set_unsigned_filestore_file_sha256_allowed(true);
         command_proto.mut_args().push(arg_norf);
 
         use protobuf::Message as _;
