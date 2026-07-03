@@ -21,9 +21,12 @@ message Command {
       // without it being pre-signed.
       bool unsigned_allowed = 2;
 
+      // Fixed filestore file to pass as an argument to the executed command.
+      bytes signed_filestore_file_sha256 = 4;
+
       // Whether to allow passing path to a filestore file specified in the
-      // request as the argument.
-      bool filestore_file_sha256_allowed = 3;
+      // request as the argument without it being pre-signed.
+      bool unsigned_filestore_file_sha256_allowed = 3;
     }
   }
 
@@ -106,7 +109,7 @@ message Args {
   // i-th file specified here will be provided as a path to the file on disk to
   // the i-th argument of the signed command that has `filestore_file_allowed`
   // set.
-  repeated bytes filestore_file_sha256s = 7;
+  repeated bytes unsigned_filestore_file_sha256s = 7;
 
   // An [Ed25519][1] signature of the command.
   //
