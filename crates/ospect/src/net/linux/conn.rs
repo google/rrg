@@ -3,42 +3,95 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+use std::collections::HashSet;
+
 use crate::net::*;
 
 /// Returns an iterator over IPv4 TCP connections for the specified process.
 pub fn tcp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV4>>> {
-    let path = format!("/proc/{pid}/net/tcp");
+    let socket_inodes = get_open_socket_inodes(pid)?;
     Ok(TcpConnections {
         pid,
-        iter: Connections::new(path, parse_tcp_v4_connection)?,
-    }.map(|conn| Ok(TcpConnectionV4::from_inner(conn?))))
+        iter: Connections::new("/proc/net/tcp", parse_tcp_v4_connection)?,
+    }
+    .filter(move |conn| match conn {
+        Ok(conn) => socket_inodes.contains(&conn.inode),
+        Err(_) => true,
+    })
+    .map(|conn| Ok(TcpConnectionV4::from_inner(conn?))))
 }
 
 /// Returns an iterator over IPv6 TCP connections for the specified process.
 pub fn tcp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<TcpConnectionV6>>> {
-    let path = format!("/proc/{pid}/net/tcp6");
+    let socket_inodes = get_open_socket_inodes(pid)?;
     Ok(TcpConnections {
         pid,
-        iter: Connections::new(path, parse_tcp_v6_connection)?,
-    }.map(|conn| Ok(TcpConnectionV6::from_inner(conn?))))
+        iter: Connections::new("/proc/net/tcp6", parse_tcp_v6_connection)?,
+    }
+    .filter(move |conn| match conn {
+        Ok(conn) => socket_inodes.contains(&conn.inode),
+        Err(_) => true,
+    })
+    .map(|conn| Ok(TcpConnectionV6::from_inner(conn?))))
 }
 
 /// Returns an iterator over IPv4 UDP connections for the specified process.
 pub fn udp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV4>>> {
-    let path = format!("/proc/{pid}/net/udp");
+    let socket_inodes = get_open_socket_inodes(pid)?;
     Ok(UdpConnections {
         pid,
-        iter: Connections::new(path, parse_udp_v4_connection)?,
-    }.map(|conn| Ok(UdpConnectionV4::from_inner(conn?))))
+        iter: Connections::new("/proc/net/udp", parse_udp_v4_connection)?,
+    }
+    .filter(move |conn| match conn {
+        Ok(conn) => socket_inodes.contains(&conn.inode),
+        Err(_) => true,
+    })
+    .map(|conn| Ok(UdpConnectionV4::from_inner(conn?))))
 }
 
 /// Returns an iterator over IPv6 UDP connections for the specified process.
 pub fn udp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<UdpConnectionV6>>> {
-    let path = format!("/proc/{pid}/net/udp6");
+    let socket_inodes = get_open_socket_inodes(pid)?;
     Ok(UdpConnections {
         pid,
-        iter: Connections::new(path, parse_udp_v6_connection)?,
-    }.map(|conn| Ok(UdpConnectionV6::from_inner(conn?))))
+        iter: Connections::new("/proc/net/udp6", parse_udp_v6_connection)?,
+    }
+    .filter(move |conn| match conn {
+        Ok(conn) => socket_inodes.contains(&conn.inode),
+        Err(_) => true,
+    })
+    .map(|conn| Ok(UdpConnectionV6::from_inner(conn?))))
+}
+
+/// Returns a set of inodes of the given process' currently open sockets, parsed from procfs.
+/// The return value be used to cross-check whether a given connection "belongs" to the process.
+fn get_open_socket_inodes(pid: u32) -> std::io::Result<HashSet<u64>> {
+    fn parse_socket_inode(path_str: &str) -> Option<u64> {
+        let inode_num = path_str
+            .strip_prefix("socket:[")
+            .and_then(|str| str.strip_suffix(']'))?;
+        // Be lenient and treat a failure to parse an integer as the inode being absent.
+        // In practice, this should never happen.
+        inode_num.parse::<u64>().ok()
+    }
+
+    let mut results = HashSet::new();
+    for entry in std::fs::read_dir(format!("/proc/{pid}/fd"))?.filter_map(Result::ok) {
+        let Ok(resolved_path) = std::fs::read_link(entry.path()) else {
+            // `read_link` can fail.
+            continue;
+        };
+        let Some(path_str) = resolved_path.to_str() else {
+            // Fds can point to arbitrary disk paths which may not be UTF-8,
+            // but we don't care about those.
+            continue;
+        };
+        let Some(inode) = parse_socket_inode(path_str) else {
+            continue;
+        };
+        results.insert(inode);
+    }
+    Ok(results)
 }
 
 // TODO(rust-lang/rust#63063): Simplify as an alias to `impl`.
