@@ -164,6 +164,9 @@ struct TcpConnectionInner<A> {
     state: TcpState,
     /// An identifier of the process that owns the connection.
     pid: u32,
+    // inode identifier of the open socket file descriptor.
+    #[cfg(target_os = "linux")]
+    inode: u64,
 }
 
 /// Information about a TCP IPv4 connection.
@@ -315,6 +318,9 @@ pub struct UdpConnectionInner<A> {
     local_addr: A,
     /// An identifier of the process that owns the connection.
     pid: u32,
+    // inode identifier of the open socket file descriptor.
+    #[cfg(target_os = "linux")]
+    inode: u64,
 }
 
 /// Information about a UDP IPv4 connection.
@@ -660,6 +666,7 @@ mod tests {
 
         let mut conns = tcp_v4_connections(std::process::id())
             .unwrap()
+            .map(|x| dbg!(x))
             .filter_map(Result::ok);
 
         let server_conn = conns

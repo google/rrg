@@ -190,9 +190,7 @@ fn parse_tcp_connection<A>(
     string: &str,
     parse_socket_addr: fn(&str) -> Result<A, ParseSocketAddrError>,
 ) -> Result<TcpConnectionInner<A>, ParseConnectionError> {
-    // There can be some leading whitespace at the beginning of the line, so
-    // in order not to get empty parts, we also trim it.
-    let mut parts = string.trim_start().split(char::is_whitespace);
+    let mut parts = string.split_ascii_whitespace();
 
     // `sl` column (whatever that means but it is just a line number), we don't
     // care about it but expect it to be there.
@@ -215,16 +213,27 @@ fn parse_tcp_connection<A>(
     let state = parse_tcp_state(state_str)
         .map_err(ParseConnectionError::InvalidState)?;
 
+    // We don't care about these fields for now.
+    let _queues = parts.next().ok_or(ParseConnectionError::InvalidFormat)?;
+    let _tr_tm = parts.next().ok_or(ParseConnectionError::InvalidFormat)?;
+    let _retrnsmt = parts.next().ok_or(ParseConnectionError::InvalidFormat)?;
+    let _uid = parts.next().ok_or(ParseConnectionError::InvalidFormat)?;
+    let _timeout = parts.next().ok_or(ParseConnectionError::InvalidFormat)?;
+
+    let inode_str = parts.next().ok_or(ParseConnectionError::InvalidFormat)?;
+    let inode: u64 = inode_str.parse().map_err(|_| ParseConnectionError::InvalidFormat)?;
+
     // The line afterwards may contain some ill-formed data and we could raise
     // an error if we detect it. However, we choose to be generous and not to do
     // that to keep things simple. It also makes the code slightly more resilient
     // to potential format changes.
 
     Ok(TcpConnectionInner {
-        local_addr: local_addr,
-        remote_addr: remote_addr,
+        local_addr,
+        remote_addr,
         state,
         pid: 0, // Set at the iterator level where PID is available.
+        inode,
     })
 }
 
@@ -251,6 +260,7 @@ where
     Ok(UdpConnectionInner {
         local_addr: conn.local_addr,
         pid: 0, // Set at the iterator level where PID is available.
+        inode: conn.inode,
     })
 }
 
@@ -504,6 +514,7 @@ mod tests {
         assert_eq!(remote_addr.port(), 0);
 
         assert_eq!(conn.state, TcpState::Listen);
+        assert_eq!(conn.inode, 666333);
     }
 
     #[test]
@@ -523,6 +534,7 @@ mod tests {
         assert_eq!(remote_addr.port(), 0);
 
         assert_eq!(conn.state, TcpState::Listen);
+        assert_eq!(conn.inode, 666333);
     }
 
     #[test]
@@ -534,6 +546,7 @@ mod tests {
         let local_addr = conn.local_addr;
         assert_eq!(local_addr.ip(), &std::net::Ipv4Addr::from([127, 0, 0, 1]));
         assert_eq!(local_addr.port(), 0x0035);
+        assert_eq!(conn.inode, 6663330);
     }
 
     #[test]
@@ -547,6 +560,7 @@ mod tests {
         let local_addr = conn.local_addr;
         assert_eq!(local_addr.ip(), &"::".parse::<Ipv6Addr>().unwrap());
         assert_eq!(local_addr.port(), 0x14E9);
+        assert_eq!(conn.inode, 66333);
     }
 
     #[test]
