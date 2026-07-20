@@ -164,6 +164,9 @@ struct TcpConnectionInner<A> {
     state: TcpState,
     /// An identifier of the process that owns the connection.
     pid: u32,
+    // inode identifier of the open socket file descriptor.
+    #[cfg(target_os = "linux")]
+    inode: u64,
 }
 
 /// Information about a TCP IPv4 connection.
@@ -315,6 +318,9 @@ pub struct UdpConnectionInner<A> {
     local_addr: A,
     /// An identifier of the process that owns the connection.
     pid: u32,
+    // inode identifier of the open socket file descriptor.
+    #[cfg(target_os = "linux")]
+    inode: u64,
 }
 
 /// Information about a UDP IPv4 connection.
@@ -745,22 +751,25 @@ mod tests {
         let udp_socket_addr = udp_socket.local_addr()
             .unwrap();
 
-        let mut conns = all_connections()
+        let conns = all_connections()
             .unwrap()
-            .filter_map(Result::ok);
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
 
-        assert! {
-            conns.find(|conn| {
+        // Check that the sockets are found and that there are no duplicates
+
+        assert_eq!(
+            conns.iter().filter(|conn| {
                 conn.pid() == std::process::id() &&
                 conn.local_addr() == tcp_server_addr
-            }).is_some()
-        }
+            }).count(), 1
+        );
 
-        assert! {
-            conns.find(|conn| {
+        assert_eq!(
+            conns.iter().filter(|conn| {
                 conn.pid() == std::process::id() &&
                 conn.local_addr() == udp_socket_addr
-            }).is_some()
-        }
+            }).count(), 1
+        )
     }
 }
