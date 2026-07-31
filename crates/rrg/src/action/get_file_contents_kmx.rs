@@ -199,7 +199,7 @@ where
                             ),
                         },
                     }))?;
-                    continue
+                    break
                 }
             };
             buf.truncate(len_read);
