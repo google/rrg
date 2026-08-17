@@ -114,6 +114,7 @@ impl FuzzSession {
             verbosity: log::LevelFilter::Off,
             log_to_stdout: false,
             log_to_file: None,
+            request_file: None,
             filestore_dir: Some(temp_dir.path().to_path_buf()),
             filestore_ttl: Duration::from_secs(3600),
         };
@@ -138,24 +139,24 @@ impl rrg::session::Session for FuzzSession {
 
     fn filestore_store(
         &self,
-        file_id: &str,
+        file_sha256: [u8; 32],
         part: rrg::filestore::Part,
     ) -> rrg::session::Result<rrg::filestore::Status> {
 
         self.filestore.store(rrg::filestore::Id {
             flow_id: 0xFA4E,
-            file_id,
+            file_sha256,
         }, part)
             .map_err(rrg::session::Error::action)
     }
 
     fn filestore_path(
         &self,
-        file_id: &str,
+        file_sha256: [u8; 32],
     ) -> rrg::session::Result<std::path::PathBuf> {
         self.filestore.path(rrg::filestore::Id {
             flow_id: 0xFA4E,
-            file_id,
+            file_sha256,
         })
             .map_err(rrg::session::Error::action)
     }
