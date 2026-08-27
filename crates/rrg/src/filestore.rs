@@ -328,7 +328,7 @@ impl Filestore {
                 std::cmp::Ordering::Equal => (),
                 std::cmp::Ordering::Less => return Ok(Status::Pending {
                         offset: part_curr.offset + part_curr.len,
-                        len: part_curr.offset + part_curr.len - part_curr.offset,
+                        len: part_next.offset - (part_curr.offset + part_curr.len),
                 }),
                 std::cmp::Ordering::Greater => {
                     return Err(std::io::Error::new(
@@ -1010,6 +1010,43 @@ mod tests {
         let foo_contents = std::fs::read(filestore.path(foo_id).unwrap())
             .unwrap();
         assert_eq!(foo_contents, b"FOOBARBAZ");
+    }
+
+    #[test]
+    fn store_pending_interior_gap() {
+        let tempdir = tempfile::tempdir()
+            .unwrap();
+
+        let filestore = Filestore::init(tempdir.path(), Duration::MAX)
+            .unwrap();
+
+        let foo_id = Id {
+            flow_id: 0xf00,
+            file_sha256: sha256(&[0x00; 20]),
+        };
+
+        filestore.store(foo_id, Part {
+            offset: 0,
+            content: vec![0x00; 3],
+            file_len: 20,
+            file_exec: false,
+        }).unwrap();
+
+        // Leaves an interior hole of `[3; 10)` between the two stored parts. The
+        // reported length must be the size of that hole (7), not the size of the
+        // preceding part (3).
+        assert_eq! {
+            filestore.store(foo_id, Part {
+                offset: 10,
+                content: vec![0x00; 3],
+                file_len: 20,
+                file_exec: false,
+            }).unwrap(),
+            Status::Pending {
+                offset: 3,
+                len: 7,
+            },
+        };
     }
 
     #[test]
