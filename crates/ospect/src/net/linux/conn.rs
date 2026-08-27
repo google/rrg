@@ -12,7 +12,12 @@ pub fn tcp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<
     let socket_inodes = get_open_socket_inodes(pid)?;
     Ok(TcpConnections {
         pid,
-        iter: Connections::new("/proc/net/tcp", parse_tcp_v4_connection)?,
+        // We read the table through `/proc/{pid}/net` rather than `/proc/net` so
+        // that we observe it from the network namespace of the target process
+        // (e.g. a containerized one) instead of our own. The listing still
+        // contains every connection in that namespace, so we filter it down to
+        // the sockets actually owned by the process using `socket_inodes`.
+        iter: Connections::new(format!("/proc/{pid}/net/tcp"), parse_tcp_v4_connection)?,
     }
     .filter(move |conn| match conn {
         Ok(conn) => socket_inodes.contains(&conn.inode),
@@ -26,7 +31,7 @@ pub fn tcp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<
     let socket_inodes = get_open_socket_inodes(pid)?;
     Ok(TcpConnections {
         pid,
-        iter: Connections::new("/proc/net/tcp6", parse_tcp_v6_connection)?,
+        iter: Connections::new(format!("/proc/{pid}/net/tcp6"), parse_tcp_v6_connection)?,
     }
     .filter(move |conn| match conn {
         Ok(conn) => socket_inodes.contains(&conn.inode),
@@ -40,7 +45,7 @@ pub fn udp_v4(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<
     let socket_inodes = get_open_socket_inodes(pid)?;
     Ok(UdpConnections {
         pid,
-        iter: Connections::new("/proc/net/udp", parse_udp_v4_connection)?,
+        iter: Connections::new(format!("/proc/{pid}/net/udp"), parse_udp_v4_connection)?,
     }
     .filter(move |conn| match conn {
         Ok(conn) => socket_inodes.contains(&conn.inode),
@@ -54,7 +59,7 @@ pub fn udp_v6(pid: u32) -> std::io::Result<impl Iterator<Item = std::io::Result<
     let socket_inodes = get_open_socket_inodes(pid)?;
     Ok(UdpConnections {
         pid,
-        iter: Connections::new("/proc/net/udp6", parse_udp_v6_connection)?,
+        iter: Connections::new(format!("/proc/{pid}/net/udp6"), parse_udp_v6_connection)?,
     }
     .filter(move |conn| match conn {
         Ok(conn) => socket_inodes.contains(&conn.inode),
