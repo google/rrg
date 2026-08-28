@@ -286,6 +286,14 @@ impl<'com> Iterator for QueryRows<'com> {
             row.insert(name, value);
         }
 
+        // SAFETY: EndEnumeration must be called when enumeration is completed.
+        let status = unsafe {
+            (object.vtable().EndEnumeration)(object.as_raw_mut())
+        };
+        if status != windows_sys::Win32::Foundation::S_OK {
+            return Some(Err(Error::from_raw_hresult(status).into()));
+        }
+
         Some(Ok(row))
     }
 }
