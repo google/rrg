@@ -2,7 +2,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use fuzz_utils::FuzzSession;
+use fuzz_utils::{BoundedVec, FuzzSession, MAX_FUZZ_BUFFER_SIZE};
 use rrg::action::get_tcp_response;
 use rrg_proto::rrg::Request as RequestProto;
 use rrg::Request;
@@ -14,8 +14,8 @@ use std::sync::mpsc;
 
 #[derive(Debug, Arbitrary)]
 struct FuzzInput {
-    server_response: Vec<u8>,
-    agent_data: Vec<u8>,
+    server_response: BoundedVec<u8, MAX_FUZZ_BUFFER_SIZE>,
+    agent_data: BoundedVec<u8, MAX_FUZZ_BUFFER_SIZE>,
     connect_timeout_ns: u32,
     write_timeout_ns: u32,
     read_timeout_ns: u32,
@@ -76,7 +76,7 @@ fuzz_target!(|input: FuzzInput| {
     proto_addr.set_port(server_addr.port() as u32);
     args.set_address(proto_addr);
 
-    args.set_data(input.agent_data);
+    args.set_data(input.agent_data.into());
 
     fn make_duration(nanos: u32) -> protobuf::well_known_types::duration::Duration {
         let mut d = protobuf::well_known_types::duration::Duration::new();

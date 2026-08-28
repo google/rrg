@@ -6,7 +6,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use fuzz_utils::{FuzzSession, MemFd, make_proto_path};
+use fuzz_utils::{BoundedVec, FuzzSession, MemFd, make_proto_path, MAX_FUZZ_BUFFER_SIZE, MAX_FUZZ_VEC_LEN};
 use rrg::action::get_file_contents;
 use rrg_proto::rrg::Request as RequestProto;
 use rrg::Request;
@@ -14,8 +14,8 @@ use arbitrary::Arbitrary;
 
 #[derive(Debug, Arbitrary)]
 struct FuzzInput {
-    file_content: Vec<u8>,
-    offset: u64,
+    file_content: BoundedVec<u8, MAX_FUZZ_BUFFER_SIZE>,
+    offsets: BoundedVec<u64, MAX_FUZZ_VEC_LEN>,
     length: u64,
 }
 
@@ -31,7 +31,7 @@ fuzz_target!(|input: FuzzInput| {
 
     args.mut_paths().push(make_proto_path(&memfd.path));
 
-    args.set_offset(input.offset);
+    args.set_offsets(input.offsets.into());
     args.set_length(input.length);
 
     let mut proto = RequestProto::new();
