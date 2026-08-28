@@ -47,6 +47,7 @@ where
 
     use sha2::Digest as _;
     let mut sha256 = sha2::Sha256::new();
+    let mut len = 0u64;
     loop {
         let buf = match file.fill_buf() {
             Ok(buf) if buf.is_empty() => break,
@@ -57,11 +58,9 @@ where
 
         let buf_len = buf.len();
         file.consume(buf_len);
+        len += buf_len as u64;
     }
     let sha256 = <[u8; 32]>::from(sha256.finalize());
-
-    let len = file.stream_position()
-        .map_err(crate::session::Error::action)?;
 
     session.reply(Item {
         path: args.path,
