@@ -281,16 +281,35 @@ where
             }
         }).collect::<crate::session::Result<Vec<_>>>()?;
 
-    let mut command_process = std::process::Command::new(&command_path)
+    let mut command = std::process::Command::new(&command_path);
+    command
         .stdin(std::process::Stdio::piped())
         .args(command_args)
         .env_clear()
         .envs(env_inherited)
         .envs(args.env)
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(crate::session::Error::action)?;
+        .stderr(std::process::Stdio::piped());
+
+    // When executing files freshly written to the filestore on Linux, other
+    // threads forking concurrently can cause child processes to temporarily
+    // inherit open writable file descriptors, leading to `ETXTBSY` ("Text file
+    // busy", `ErrorKind::ExecutableFileBusy`). We retry with backoff so that
+    // the conflicting child process can complete `execve`/close `CLOEXEC` fds.
+    let mut command_process = {
+        let mut attempts = 0;
+        loop {
+            match command.spawn() {
+                Ok(process) => break process,
+                #[cfg(target_family = "unix")]
+                Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy && attempts < 5 => {
+                    attempts += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(error) => return Err(crate::session::Error::action(error)),
+            }
+        }
+    };
 
     let command_start_time = std::time::Instant::now();
 
