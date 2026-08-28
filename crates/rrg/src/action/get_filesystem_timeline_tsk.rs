@@ -227,7 +227,9 @@ fn make_entry(
     let mut proto = rrg_proto::get_filesystem_timeline::Entry::default();
     if let Some(name) = file.name() {
         let mut path = Vec::from(root);
-        path.push(b'/');
+        if !path.ends_with(b"/") {
+            path.push(b'/');
+        }
         path.extend_from_slice(parent_path);
         path.append(&mut name.into_bytes());
         proto.set_path(path);
