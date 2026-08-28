@@ -307,7 +307,7 @@ fn _remove_file_if_old(path: &Path, ttl: Duration) -> std::io::Result<bool> {
         // Most modern systems should have creation time available but this is
         // not guaranteed and we use modification time as a fallback approxima-
         // tion.
-        .or(metadata.modified())
+        .or_else(|_| metadata.modified())
         .map_err(|error| std::io::Error::new(error.kind(), format! {
             "could not obtain file creation time: {error}",
         }))?
