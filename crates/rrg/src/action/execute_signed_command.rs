@@ -10,6 +10,7 @@
 const MAX_STDOUT_SIZE: usize = 512 * 1024; // 512 KiB.
 const MAX_STDERR_SIZE: usize = 512 * 1024; // 512 KiB.
 
+const COMMAND_EXECUTION_BUSY_DELAY: std::time::Duration = std::time::Duration::from_millis(5);
 const COMMAND_EXECUTION_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Arguments of the `execute_signed_command` action.
@@ -281,18 +282,54 @@ where
             }
         }).collect::<crate::session::Result<Vec<_>>>()?;
 
-    let mut command_process = std::process::Command::new(&command_path)
+    let mut command = std::process::Command::new(&command_path);
+    command
         .stdin(std::process::Stdio::piped())
         .args(command_args)
         .env_clear()
         .envs(env_inherited)
         .envs(args.env)
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(crate::session::Error::action)?;
+        .stderr(std::process::Stdio::piped());
+
+    log::info!("starting '{}' (timeout: {:?})", command_path.display(), args.timeout);
 
     let command_start_time = std::time::Instant::now();
+
+    let mut command_process = loop {
+        match command.spawn() {
+            Ok(command_process) => break command_process,
+            // There is a chance that during the filestore file writing, a sub-
+            // process inherited the file descriptor and keeps it busy (see [1]
+            // and [2] for details).
+            //
+            // Until platforms add support for [`O_CLOFORK`] option (introduced
+            // in POSIX.1-2024), we have to mitigate the issue by waiting for
+            // the file to be executable.
+            //
+            // Note that realistically this should never happen in the real
+            // world as RRG is (almost) single-threaded and the delay between
+            // action execution is big enough. However, we do hit it in tests as
+            // Rust's standard testing harness executes them using multiple
+            // threads.
+            //
+            // [1]: https://github.com/golang/go/issues/22315
+            // [2]: https://bugs.openjdk.org/browse/JDK-8068370
+            //
+            // [`O_CLOFORK`]: https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/fcntl.h.html
+            Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                let time_elapsed = command_start_time.elapsed();
+                let time_left = args.timeout.saturating_sub(time_elapsed);
+
+                if time_left.is_zero() {
+                    return Err(crate::session::Error::action(error));
+                }
+
+                std::thread::sleep(std::cmp::min(COMMAND_EXECUTION_BUSY_DELAY, time_left));
+            }
+            Err(error) => return Err(crate::session::Error::action(error)),
+        }
+    };
 
     let mut command_stdin = command_process.stdin.take()
         .expect("no stdin pipe");
@@ -386,7 +423,6 @@ where
         Ok(stderr)
     });
 
-    log::info!("starting '{}' (timeout: {:?})", command_path.display(), args.timeout);
     let mut timeout_reached = false;
     loop {
         let time_elapsed = command_start_time.elapsed();
@@ -1221,6 +1257,113 @@ echo 'Hello, world!'
         assert_eq!(item.stderr, b"");
         assert!(!item.truncated_stdout);
         assert!(!item.truncated_stderr);
+    }
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn handle_command_exec_filestore_file_busy() {
+        use crate::session::Session as _;
+
+        const SCRIPT: &'static [u8] = b"\
+#!/usr/bin/env bash
+echo 'Hello, world!'
+        ";
+
+        let mut session = crate::session::FakeSession::new()
+            .with_command_signing_key()
+            .with_filestore();
+
+        session.filestore_store(sha256(SCRIPT), crate::filestore::Part {
+            offset: 0,
+            content: SCRIPT.to_vec(),
+            file_len: SCRIPT.len() as u64,
+            file_exec: true,
+        }).unwrap();
+
+        let script_filestore_path = session.filestore_path(sha256(SCRIPT))
+            .unwrap();
+
+        // TODO(rust-lang/rust#35121): Remove once the never type is stable.
+        enum Never {}
+
+        // We create a thread that keeps the file busy by opening the file for
+        // writing and closing it (to let the action actually have a chance at
+        // executing it).
+
+        // We need to make sure that the file occupier thread already started.
+        // Otherwise, the action thread might finish executing before the thread
+        // has a chance to keep the file busy.
+        let (occupier_started_sender, occupier_started_receiver) = {
+            std::sync::mpsc::channel::<Never>()
+        };
+        let (occupier_stop_sender, occupier_stop_receiver) = {
+            std::sync::mpsc::channel::<Never>()
+        };
+        let occupier = std::thread::spawn(move || {
+            drop(occupier_started_sender);
+
+            loop {
+                match occupier_stop_receiver.try_recv() {
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => (),
+                }
+
+                let file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(&script_filestore_path);
+                // There is a chance that the file occupier thread is unable to
+                // open the file because it is being executed by the action (and
+                // this is what we want eventually!), so we need to ignore these
+                // in the test as well.
+                if matches! {
+                    file.as_ref(),
+                    Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy,
+                } {
+                    continue
+                }
+                let file = file.unwrap();
+
+                for _ in 0..32 {
+                    std::thread::yield_now();
+                }
+
+                drop(file);
+            }
+        });
+
+        let raw_command = Vec::default();
+        let ed25519_signature = session.command_signing_key().sign(&raw_command);
+
+        let args = Args {
+            raw_command,
+            exec: CommandExec::FilestoreFileSha256(sha256(SCRIPT)),
+            args: Vec::default(),
+            env: std::collections::HashMap::default(),
+            env_inherited: Vec::default(),
+            ed25519_signature,
+            stdin: Vec::from(b""),
+            timeout: std::time::Duration::from_secs(5),
+        };
+
+        match occupier_started_receiver.recv() {
+            Err(std::sync::mpsc::RecvError) => (),
+        }
+
+        handle(&mut session, args).unwrap();
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert!(item.exit_status.success());
+        assert_eq!(item.stdout, b"Hello, world!\n");
+        assert_eq!(item.stderr, b"");
+        assert!(!item.truncated_stdout);
+        assert!(!item.truncated_stderr);
+
+        // Ensure we do not leave any zombie threads behind.
+        drop(occupier_stop_sender);
+        occupier.join()
+            .unwrap();
     }
 
     #[cfg(target_family = "windows")]

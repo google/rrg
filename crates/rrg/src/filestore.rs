@@ -397,6 +397,11 @@ impl Filestore {
                 } else {
                     file_opts.mode(u32::from(libc::S_IRUSR | libc::S_IWUSR));
                 }
+
+                // TODO(@panhania): Add [`O_CLOFORK`] flag once it is supported
+                // by Linux or macOS. It was introduced in POSIX.1-2024.
+                //
+                // [`O_CLOFORK`]: https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/fcntl.h.html
             }
 
             file_opts.open(&file_path)
