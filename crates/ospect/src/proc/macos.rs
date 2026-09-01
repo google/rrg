@@ -72,6 +72,10 @@ impl Metadata {
         let proc_args = self.proc_args.as_ref()
             .map_err(|error| std::io::Error::from_raw_os_error(*error))?;
 
+        if proc_args.len() < 4 {
+            return Err(std::io::ErrorKind::InvalidData.into());
+        }
+
         // Executable name is null-terminated. We start at index 4 because of
         // the 4-byte argc value place at the beginning of the buffer.
         let exe_c_str = std::ffi::CStr::from_bytes_until_nul(&proc_args[4..])
@@ -88,7 +92,10 @@ impl Metadata {
         let proc_args = self.proc_args.as_ref()
             .map_err(|error| std::io::Error::from_raw_os_error(*error))?;
 
-        let argc_bytes = <[u8; 4]>::try_from(&proc_args[0..4])
+        let Some(argc_slice) = proc_args.get(0..4) else {
+            return Err(std::io::ErrorKind::InvalidData.into());
+        };
+        let argc_bytes = <[u8; 4]>::try_from(argc_slice)
             .map_err(|error| std::io::Error::new(
                 std::io::ErrorKind::Other,
                 error,
