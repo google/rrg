@@ -145,8 +145,8 @@ where
             if entry.metadata.len() > args.max_size {
                 log::info! {
                     "size of '{}' ({}) exceeds the limit ({}), skipping",
-                    entry.metadata.len(),
                     entry.path.display(),
+                    entry.metadata.len(),
                     args.max_size,
                 };
 
