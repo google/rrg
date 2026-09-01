@@ -838,32 +838,23 @@ pub fn sort_by_priority(
     regions: impl Iterator<Item = MappedRegion>,
     mut offsets: Vec<u64>,
 ) -> VecDeque<MappedRegion> {
-    let mut deque = VecDeque::new();
-
     offsets.sort_unstable();
-    // regions are already sorted by increasing address
-    // they are also disjoint
-    let mut regions = regions.peekable();
+    offsets.dedup();
 
-    for offset in offsets {
-        while let Some(reg) = regions.peek()
-            && reg.end_address() <= offset
-        {
-            // Haven't reached offset yet
-            deque.push_back(regions.next().unwrap());
-        }
-        let Some(reg) = regions.next() else { break };
-        if reg.start_address() > offset {
-            // No region contains the offset
-            deque.push_back(reg);
+    let mut priority = VecDeque::new();
+    let mut other = VecDeque::new();
+
+    for region in regions {
+        let idx = offsets.partition_point(|&off| off < region.start_address());
+        if idx < offsets.len() && offsets[idx] < region.end_address() {
+            priority.push_back(region);
         } else {
-            // Region contains offset
-            deque.push_front(reg);
+            other.push_back(region);
         }
     }
-    // Add all remaining regions in whatever order they came in
-    deque.extend(regions);
-    deque
+
+    priority.append(&mut other);
+    priority
 }
 
 /// Reads the contents of all of process `pid`'s memory mappings
@@ -1231,5 +1222,41 @@ pub mod tests {
             assert!(!item.region.permissions.execute);
             assert!(!item.region.permissions.shared);
         }
+    }
+
+    #[test]
+    fn test_sort_by_priority() {
+        let regions = vec![
+            MappedRegion::from_bounds(1000, 2000),
+            MappedRegion::from_bounds(3000, 4000),
+            MappedRegion::from_bounds(5000, 6000),
+            MappedRegion::from_bounds(7000, 8000),
+            MappedRegion::from_bounds(9000, 10000),
+        ];
+
+        // Offsets:
+        // 500: before first region
+        // 3500: in region [3000, 4000)
+        // 3600: also in region [3000, 4000) (multiple offsets in same region)
+        // 4500: in gap between regions
+        // 7500: in region [7000, 8000)
+        let offsets = vec![7500, 3500, 500, 3600, 4500];
+
+        let result = sort_by_priority(regions.into_iter(), offsets);
+        let bounds: Vec<(u64, u64)> = result
+            .into_iter()
+            .map(|r| (r.start_address(), r.end_address()))
+            .collect();
+
+        assert_eq!(
+            bounds,
+            vec![
+                (3000, 4000),
+                (7000, 8000),
+                (1000, 2000),
+                (5000, 6000),
+                (9000, 10000),
+            ]
+        );
     }
 }
