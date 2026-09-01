@@ -1302,6 +1302,7 @@ echo 'Hello, world!'
         let occupier = std::thread::spawn(move || {
             drop(occupier_started_sender);
 
+            let mut yield_now_cycles = 1;
             loop {
                 match occupier_stop_receiver.try_recv() {
                     Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
@@ -1323,11 +1324,17 @@ echo 'Hello, world!'
                 }
                 let file = file.unwrap();
 
-                for _ in 0..32 {
+                for _ in 0..yield_now_cycles {
                     std::thread::yield_now();
                 }
 
                 drop(file);
+
+                for _ in 0..yield_now_cycles {
+                    std::thread::yield_now();
+                }
+
+                yield_now_cycles *= 2;
             }
         });
 
