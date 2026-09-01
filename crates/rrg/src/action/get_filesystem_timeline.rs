@@ -156,7 +156,10 @@ impl FromLossy<crate::fs::Entry> for rrg_proto::get_filesystem_timeline::Entry {
             if let Some(gid) = i64::try_from(entry.metadata.gid()).ok() {
                 proto.set_unix_gid(gid);
             }
-            proto.set_ctime_nanos(entry.metadata.ctime_nsec());
+            let ctime_nanos = entry.metadata.ctime()
+                .saturating_mul(1_000_000_000)
+                .saturating_add(entry.metadata.ctime_nsec());
+            proto.set_ctime_nanos(ctime_nanos);
         }
 
         #[cfg(target_family = "windows")]
@@ -377,6 +380,35 @@ mod tests {
         // Information about inode is not available on Windows.
         #[cfg(not(target_os = "windows"))]
         assert_eq!(entries[1].unix_ino(), entries[2].unix_ino());
+    }
+
+    #[test]
+    #[cfg(target_family = "unix")]
+    fn handle_ctime_nanos() {
+        use std::os::unix::fs::MetadataExt as _;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("foo");
+        std::fs::File::create(&file_path).unwrap();
+
+        let request = Args {
+            root: temp_dir.path().to_path_buf(),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, request).is_ok());
+
+        let entries = entries(&session);
+        let file_entry = entries.iter().find(|entry| path(entry) == Some(file_path.clone())).unwrap();
+
+        let metadata = std::fs::metadata(&file_path).unwrap();
+        let expected_ctime_nanos = metadata.ctime()
+            .saturating_mul(1_000_000_000)
+            .saturating_add(metadata.ctime_nsec());
+
+        assert_eq!(file_entry.ctime_nanos(), expected_ctime_nanos);
+        // Ensure ctime_nanos is not just the subsecond portion (< 1s since epoch).
+        assert!(file_entry.ctime_nanos() >= 1_000_000_000);
     }
 
     #[test]
