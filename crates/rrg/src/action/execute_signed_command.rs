@@ -189,7 +189,7 @@ struct DupUnsignedEnvError {
 impl std::fmt::Display for DupUnsignedEnvError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "'{}' not allowed as unsigned", self.name)
+        write!(fmt, "duplicate unsigned environment variable: '{}'", self.name)
     }
 }
 
