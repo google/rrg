@@ -1328,6 +1328,10 @@ echo 'Hello, world!'
                 }
 
                 drop(file);
+
+                for _ in 0..32 {
+                    std::thread::yield_now();
+                }
             }
         });
 
