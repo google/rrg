@@ -50,7 +50,7 @@ pub fn flags<P>(path: P) -> std::io::Result<u32> where
     if code == 0 {
         Ok(flags as u32)
     } else {
-        Err(std::io::Error::from_raw_os_error(code))
+        Err(std::io::Error::last_os_error())
     }
 }
 
