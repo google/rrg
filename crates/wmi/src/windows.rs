@@ -286,7 +286,11 @@ impl<'com> Iterator for QueryRows<'com> {
             row.insert(name, value);
         }
 
-        // SAFETY: EndEnumeration must be called when enumeration is completed.
+        // SAFETY: `object` is a valid WMI object for which we started an
+        // enumeration sequence, so it is safe (and recommended) to end it once
+        // we are done with it [1].
+        //
+        // [1]: https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemclassobject-endenumeration
         let status = unsafe {
             (object.vtable().EndEnumeration)(object.as_raw_mut())
         };
