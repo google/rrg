@@ -33,6 +33,9 @@ pub mod get_file_contents_kmx;
 #[cfg(feature = "action-get_file_sha256")]
 pub mod get_file_sha256;
 
+#[cfg(feature = "action-get_file_sha256_kmx")]
+pub mod get_file_sha256_kmx;
+
 #[cfg(feature = "action-grep_file_contents")]
 pub mod grep_file_contents;
 
@@ -133,6 +136,10 @@ where
         #[cfg(feature = "action-get_file_sha256")]
         GetFileSha256 => {
             handle(session, request, self::get_file_sha256::handle)
+        }
+        #[cfg(feature = "action-get_file_sha256_kmx")]
+        GetFileSha256Kmx => {
+            handle(session, request, self::get_file_sha256_kmx::handle)
         }
         #[cfg(feature = "action-grep_file_contents")]
         GrepFileContents => {

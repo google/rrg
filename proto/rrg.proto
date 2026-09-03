@@ -64,6 +64,8 @@ enum Action {
   GET_FILE_METADATA_KMX = 24;
   // Store part of a file to the local filestore.
   STORE_FILESTORE_PART = 25;
+  // Get SHA-256 hash of the specified file using Keramics.
+  GET_FILE_SHA256_KMX = 26;
 
   // TODO: Define more actions that should be supported.
 

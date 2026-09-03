@@ -25,6 +25,8 @@ pub enum Action {
     GetFileContentsKmx,
     /// Get SHA-256 hash of the specified file.
     GetFileSha256,
+    /// Get SHA-256 hash of the specified file using Keramics.
+    GetFileSha256Kmx,
     /// Grep the specified file for a pattern.
     GrepFileContents,
     /// List contents of a directory.
@@ -75,6 +77,7 @@ impl std::fmt::Display for Action {
             Action::GetFileContents => write!(fmt, "get_file_contents"),
             Action::GetFileContentsKmx => write!(fmt, "get_file_contents_kmx"),
             Action::GetFileSha256 => write!(fmt, "get_file_sha256"),
+            Action::GetFileSha256Kmx => write!(fmt, "get_file_sha256_kmx"),
             Action::GrepFileContents => write!(fmt, "grep_file_contents"),
             Action::ListDirectory => write!(fmt, "list_directory"),
             Action::ListProcesses => write!(fmt, "list_processes"),
@@ -132,6 +135,7 @@ impl TryFrom<rrg_proto::rrg::Action> for Action {
             GET_FILE_CONTENTS => Ok(Action::GetFileContents),
             GET_FILE_CONTENTS_KMX => Ok(Action::GetFileContentsKmx),
             GET_FILE_SHA256 => Ok(Action::GetFileSha256),
+            GET_FILE_SHA256_KMX => Ok(Action::GetFileSha256Kmx),
             GREP_FILE_CONTENTS => Ok(Action::GrepFileContents),
             LIST_DIRECTORY => Ok(Action::ListDirectory),
             LIST_PROCESSES => Ok(Action::ListProcesses),
