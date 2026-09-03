@@ -29,10 +29,10 @@ message Args {
   // Absolute paths to the file to get the contents of.
   repeated rrg.fs.Path paths = 1;
 
-  // Byte offset from which the content should be retrieved.
+  // Byte offsets from which the content should be retrieved.
   //
-  // If unset, starts from the beginning of the file.
-  uint64 offset = 2;
+  // If none are provided, starts from the beginning of the file.
+  repeated uint64 offsets = 2;
 
   // Number of bytes to from the file from the given offset to fetch.
   //
