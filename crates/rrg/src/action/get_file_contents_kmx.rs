@@ -19,8 +19,8 @@ pub struct Args {
     volume_path: VolumePath,
     /// Paths to the files to get the contents of.
     paths: Vec<keramics_formats::ntfs::NtfsPath>,
-    /// Offset from which to read the file contents.
-    offset: u64,
+    /// Offsets from which to read the file contents.
+    offsets: Vec<u64>,
     /// Number of bytes to read from the file.
     len: usize,
 }
@@ -160,63 +160,64 @@ where
             }
         };
 
-        let mut offset = args.offset;
-        let mut len_left = args.len;
+        for mut offset in args.offsets.iter().cloned() {
+            let mut len_left = args.len;
 
-        match file_data_stream.seek(std::io::SeekFrom::Start(offset)) {
-            Ok(_) => (),
-            Err(error) => {
-                session.reply(Err(ErrorItem {
-                    path: path.clone(),
-                    error: FileError {
-                        kind: FileErrorKind::Seek,
-                        cause: std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            error,
-                        ),
-                    },
-                }))?;
-                continue
-            }
-        }
-
-        loop {
-            use sha2::Digest as _;
-
-            let mut buf = vec![0; std::cmp::min(len_left, MAX_BLOB_LEN)];
-
-            let len_read = match file_data_stream.read(&mut buf[..]) {
-                Ok(0) => break,
-                Ok(len_read) => len_read,
+            match file_data_stream.seek(std::io::SeekFrom::Start(offset)) {
+                Ok(_) => (),
                 Err(error) => {
                     session.reply(Err(ErrorItem {
                         path: path.clone(),
                         error: FileError {
-                            kind: FileErrorKind::Read,
+                            kind: FileErrorKind::Seek,
                             cause: std::io::Error::new(
                                 std::io::ErrorKind::Other,
                                 error,
                             ),
                         },
                     }))?;
-                    break
+                    continue
                 }
-            };
-            buf.truncate(len_read);
+            }
 
-            let blob = crate::blob::Blob::from(buf);
-            let blob_sha256 = sha2::Sha256::digest(blob.as_bytes()).into();
+            loop {
+                use sha2::Digest as _;
 
-            session.send(crate::Sink::Blob, blob)?;
-            session.reply(Ok(OkItem {
-                path: path.clone(),
-                offset,
-                len: len_read,
-                blob_sha256,
-            }))?;
+                let mut buf = vec![0; std::cmp::min(len_left, MAX_BLOB_LEN)];
 
-            offset += len_read as u64;
-            len_left -= len_read;
+                let len_read = match file_data_stream.read(&mut buf[..]) {
+                    Ok(0) => break,
+                    Ok(len_read) => len_read,
+                    Err(error) => {
+                        session.reply(Err(ErrorItem {
+                            path: path.clone(),
+                            error: FileError {
+                                kind: FileErrorKind::Read,
+                                cause: std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    error,
+                                ),
+                            },
+                        }))?;
+                        break
+                    }
+                };
+                buf.truncate(len_read);
+
+                let blob = crate::blob::Blob::from(buf);
+                let blob_sha256 = sha2::Sha256::digest(blob.as_bytes()).into();
+
+                session.send(crate::Sink::Blob, blob)?;
+                session.reply(Ok(OkItem {
+                    path: path.clone(),
+                    offset,
+                    len: len_read,
+                    blob_sha256,
+                }))?;
+
+                offset += len_read as u64;
+                len_left -= len_read;
+            }
         }
     }
 
@@ -252,6 +253,11 @@ impl crate::request::Args for Args {
             Ok(keramics_formats::ntfs::NtfsPath::from(path))
         }).collect::<Result<Vec<_>, _>>()?;
 
+        let mut offsets = proto.take_offsets();
+        if offsets.is_empty() {
+            offsets.push(0);
+        }
+
         let len = match proto.length() {
             0 => usize::MAX,
             len => len as usize,
@@ -260,7 +266,7 @@ impl crate::request::Args for Args {
         Ok(Args {
             volume_path,
             paths,
-            offset: proto.offset(),
+            offsets,
             len,
         })
     }
@@ -355,7 +361,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\idonotexist")],
-            offset: 0,
+            offsets: vec![0],
             len: usize::MAX,
         };
 
@@ -384,7 +390,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\dir")],
-            offset: 0,
+            offsets: vec![0],
             len: usize::MAX,
         };
 
@@ -413,7 +419,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\empty")],
-            offset: 0,
+            offsets: vec![0],
             len: usize::MAX,
         };
 
@@ -440,7 +446,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
-            offset: 0,
+            offsets: vec![0],
             len: usize::MAX,
         };
 
@@ -476,7 +482,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
-            offset: 5,
+            offsets: vec![5],
             len: usize::MAX,
         };
 
@@ -512,7 +518,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
-            offset: 0,
+            offsets: vec![0],
             len: 5,
         };
 
@@ -548,7 +554,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             paths: vec![keramics_formats::ntfs::NtfsPath::from("\\file")],
-            offset: 0xb33f,
+            offsets: vec![0xb33f],
             len: MAX_BLOB_LEN + 1337,
         };
 
@@ -587,7 +593,7 @@ mod tests {
                 keramics_formats::ntfs::NtfsPath::from("\\bar"),
                 keramics_formats::ntfs::NtfsPath::from("\\baz"),
             ],
-            offset: 0,
+            offsets: vec![0],
             len: usize::MAX,
         };
 
@@ -646,7 +652,7 @@ mod tests {
                 keramics_formats::ntfs::NtfsPath::from("\\idonotexist"),
                 keramics_formats::ntfs::NtfsPath::from("\\bar"),
             ],
-            offset: 0,
+            offsets: vec![0],
             len: usize::MAX,
         };
 
@@ -693,6 +699,68 @@ mod tests {
         let item_error = items_by_path[&"\\idonotexist".into()]
             .as_ref().unwrap_err();
         assert_eq!(item_error.error.kind, FileErrorKind::OpenEntry);
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_many_offsets() {
+        let ntfs_file = ntfs_temp_file(|path| {
+            std::fs::write(path.join("foo"), b"0123456789")?;
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            paths: vec![
+                keramics_formats::ntfs::NtfsPath::from("\\foo"),
+            ],
+            offsets: vec![3, 7, 9],
+            len: 2,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        assert_eq!(session.reply_count(), 3);
+
+        let item_34 = session.reply::<Item>(0)
+            .as_ref().unwrap();
+        assert_eq!(item_34.path, "\\foo".into());
+        assert_eq!(item_34.offset, 3);
+        assert_eq!(item_34.len, 2);
+
+        let item_78 = session.reply::<Item>(1)
+            .as_ref().unwrap();
+        assert_eq!(item_78.path, "\\foo".into());
+        assert_eq!(item_78.offset, 7);
+        assert_eq!(item_78.len, 2);
+
+        let item_9 = session.reply::<Item>(2)
+            .as_ref().unwrap();
+        assert_eq!(item_9.path, "\\foo".into());
+        assert_eq!(item_9.offset, 9);
+        assert_eq!(item_9.len, 1);
+
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 3);
+
+        let blobs_by_sha256 = session
+            .parcels::<crate::blob::Blob>(crate::Sink::Blob)
+            .map(|blob| {
+                use sha2::Digest as _;
+                (sha2::Sha256::digest(blob.as_bytes()).into(), blob)
+            })
+            .collect::<std::collections::HashMap::<[u8; 32], _>>();
+
+        let blob_34 = blobs_by_sha256[&item_34.blob_sha256];
+        assert_eq!(blob_34.as_bytes(), b"34");
+
+        let blob_78 = blobs_by_sha256[&item_78.blob_sha256];
+        assert_eq!(blob_78.as_bytes(), b"78");
+
+        let blob_9 = blobs_by_sha256[&item_9.blob_sha256];
+        assert_eq!(blob_9.as_bytes(), b"9");
     }
 
     fn ntfs_temp_file(
