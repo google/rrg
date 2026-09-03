@@ -8,8 +8,8 @@ use std::path::PathBuf;
 pub struct Args {
     /// Absolute path to the file to get the SHA-256 hash of.
     path: PathBuf,
-    /// Byte offset from which the content should be hashed.
-    offset: u64,
+    /// Byte offsets from which the content should be hashed.
+    offsets: Vec<u64>,
     /// Number of bytes to hash (from the start offset).
     len: Option<std::num::NonZero<u64>>,
 }
@@ -37,37 +37,41 @@ where
         .map_err(crate::session::Error::action)?;
     let mut file = std::io::BufReader::new(file);
 
-    file.seek(std::io::SeekFrom::Start(args.offset))
-        .map_err(crate::session::Error::action)?;
+    for offset in args.offsets {
+        file.seek(std::io::SeekFrom::Start(offset))
+            .map_err(crate::session::Error::action)?;
 
-    let mut file = file.take(match args.len {
-        Some(len) => u64::from(len),
-        None => u64::MAX,
-    });
+        let mut file_limited = file.take(match args.len {
+            Some(len) => u64::from(len),
+            None => u64::MAX,
+        });
 
-    use sha2::Digest as _;
-    let mut sha256 = sha2::Sha256::new();
-    let mut len = 0u64;
-    loop {
-        let buf = match file.fill_buf() {
-            Ok(buf) if buf.is_empty() => break,
-            Ok(buf) => buf,
-            Err(error) => return Err(crate::session::Error::action(error)),
-        };
-        sha256.update(&buf[..]);
+        use sha2::Digest as _;
+        let mut sha256 = sha2::Sha256::new();
+        let mut len = 0u64;
+        loop {
+            let buf = match file_limited.fill_buf() {
+                Ok(buf) if buf.is_empty() => break,
+                Ok(buf) => buf,
+                Err(error) => return Err(crate::session::Error::action(error)),
+            };
+            sha256.update(&buf[..]);
 
-        let buf_len = buf.len();
-        file.consume(buf_len);
-        len += buf_len as u64;
+            let buf_len = buf.len();
+            file_limited.consume(buf_len);
+            len += buf_len as u64;
+        }
+        let sha256 = <[u8; 32]>::from(sha256.finalize());
+
+        session.reply(Item {
+            path: args.path.clone(),
+            offset: offset,
+            len,
+            sha256,
+        })?;
+
+        file = file_limited.into_inner();
     }
-    let sha256 = <[u8; 32]>::from(sha256.finalize());
-
-    session.reply(Item {
-        path: args.path,
-        offset: args.offset,
-        len,
-        sha256,
-    })?;
 
     Ok(())
 }
@@ -82,9 +86,14 @@ impl crate::request::Args for Args {
         let path = PathBuf::try_from(proto.take_path())
             .map_err(|error| ParseArgsError::invalid_field("path", error))?;
 
+        let mut offsets = proto.take_offsets();
+        if offsets.is_empty() {
+            offsets.push(0);
+        }
+
         Ok(Args {
             path,
-            offset: proto.offset(),
+            offsets,
             len: std::num::NonZero::new(proto.length()),
         })
     }
@@ -121,7 +130,7 @@ mod tests {
 
         let args = Args {
             path: tempfile.path().to_path_buf(),
-            offset: 0,
+            offsets: vec![0],
             len: None,
         };
 
@@ -154,7 +163,7 @@ mod tests {
 
         let args = Args {
             path: tempfile.path().to_path_buf(),
-            offset: u64::try_from("<ignore me>".len()).unwrap(),
+            offsets: vec![u64::try_from("<ignore me>".len()).unwrap()],
             len: None,
         };
 
@@ -177,6 +186,54 @@ mod tests {
     }
 
     #[test]
+    fn handle_offset_multiple() {
+        let mut tempfile = tempfile::NamedTempFile::new()
+            .unwrap();
+
+        use std::io::Write as _;
+        tempfile.as_file_mut().write_all(b"<ignore1>foo<ignore2>bar")
+            .unwrap();
+
+        let args = Args {
+            path: tempfile.path().to_path_buf(),
+            offsets: vec![
+                u64::try_from(b"<ignore1>".len()).unwrap(),
+                u64::try_from(b"<ignore1>foo<ignore2>".len()).unwrap(),
+            ],
+            len: std::num::NonZeroU64::new(3),
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 2);
+
+        let item_foo = session.reply::<Item>(0);
+        assert_eq!(item_foo.path, tempfile.path());
+        assert_eq!(item_foo.offset, 9);
+        assert_eq!(item_foo.len, 3);
+        assert_eq!(item_foo.sha256, [
+            // Pre-computed with `echo -n 'foo' | sha256sum`.
+            0x2c, 0x26, 0xb4, 0x6b, 0x68, 0xff, 0xc6, 0x8f,
+            0xf9, 0x9b, 0x45, 0x3c, 0x1d, 0x30, 0x41, 0x34,
+            0x13, 0x42, 0x2d, 0x70, 0x64, 0x83, 0xbf, 0xa0,
+            0xf9, 0x8a, 0x5e, 0x88, 0x62, 0x66, 0xe7, 0xae,
+        ]);
+
+        let item_bar = session.reply::<Item>(1);
+        assert_eq!(item_bar.path, tempfile.path());
+        assert_eq!(item_bar.offset, 21);
+        assert_eq!(item_bar.len, 3);
+        assert_eq!(item_bar.sha256, [
+            // Pre-computed with `echo -n 'bar' | sha256sum`.
+            0xfc, 0xde, 0x2b, 0x2e, 0xdb, 0xa5, 0x6b, 0xf4,
+            0x08, 0x60, 0x1f, 0xb7, 0x21, 0xfe, 0x9b, 0x5c,
+            0x33, 0x8d, 0x10, 0xee, 0x42, 0x9e, 0xa0, 0x4f,
+            0xae, 0x55, 0x11, 0xb6, 0x8f, 0xbf, 0x8f, 0xb9,
+        ]);
+    }
+
+    #[test]
     fn handle_len() {
         let mut tempfile = tempfile::NamedTempFile::new()
             .unwrap();
@@ -187,7 +244,7 @@ mod tests {
 
         let args = Args {
             path: tempfile.path().to_path_buf(),
-            offset: 0,
+            offsets: vec![0],
             len: std::num::NonZero::new(b"hello\n".len().try_into().unwrap()),
         };
 
@@ -220,7 +277,7 @@ mod tests {
 
         let args = Args {
             path: tempfile.path().to_path_buf(),
-            offset: 0,
+            offsets: vec![0],
             len: None,
         };
 
