@@ -259,6 +259,7 @@ mod tests {
 
     use super::*;
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
     #[test]
     fn handle_default() {
         let ntfs_file = ntfs_temp_file(|path| {
@@ -295,6 +296,7 @@ mod tests {
         ]);
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
     #[test]
     fn handle_offset() {
         let ntfs_file = ntfs_temp_file(|path| {
@@ -331,6 +333,7 @@ mod tests {
         ]);
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
     #[test]
     fn handle_offset_multiple() {
         let ntfs_file = ntfs_temp_file(|path| {
@@ -382,6 +385,7 @@ mod tests {
         ]);
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
     #[test]
     fn handle_len() {
         let ntfs_file = ntfs_temp_file(|path| {
@@ -418,6 +422,7 @@ mod tests {
         ]);
     }
 
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
     #[test]
     fn handle_large() {
         let ntfs_file = ntfs_temp_file_with_size(20 * 1024 * 1024, |path| {
