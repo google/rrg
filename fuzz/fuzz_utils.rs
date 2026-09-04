@@ -10,10 +10,31 @@ use std::ffi::CString;
 use std::io::Write;
 use std::time::Duration;
 
+// Empirical upper bound on buffer size.
+//
+// In production, RRG actions stream and process arbitrary data sizes as intended.
+// During fuzzing, unbounded buffers cause linear read and hash loops (like `std::io::Read`
+// and SHA-256 in `get_file_contents` or `get_file_sha256`) to cause false positives
+pub const MAX_FUZZ_BUFFER_SIZE: usize = 64 * 1024;
+
+// Empirical upper bound on vector size.
+//
+// Action handlers (such as `execute_signed_command`, `get_filesystem_timeline`, and
+// multi-action dispatch) iterate over input lists without built-in caps. This bound
+// keeps execution bounded to avoid timeouts.
+pub const MAX_FUZZ_VEC_LEN: usize = 16;
+
+// One temp dir across fuzz iterations to avoid disk churn.
+static FUZZ_TEMPDIR: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+
 // A wrapper around String that generates mostly-valid Regexes.
 // This helps fuzzers pass the parsing stage and reach the scanning logic.
 #[derive(Debug, Clone)]
 pub struct FuzzRegex(pub String);
+
+// A wrapper around Vec<T> to limit the vector length Arbitrary can generate
+#[derive(Debug, Clone)]
+pub struct BoundedVec<T, const N: usize>(pub Vec<T>);
 
 // Memory backed file descriptor to accelerate fuzzing
 pub struct MemFd {
@@ -25,13 +46,59 @@ pub struct MemFd {
 pub struct FuzzSession {
     args: rrg::args::Args,
     filestore: rrg::filestore::Filestore,
-    _filestore_tempdir: tempfile::TempDir,
+}
+
+fn get_fuzz_tempdir() -> &'static tempfile::TempDir {
+    FUZZ_TEMPDIR.get_or_init(|| {
+        tempfile::Builder::new()
+            .prefix("rrg_fuzz_")
+            .tempdir()
+            .expect("failed to create fuzz tempdir")
+    })
 }
 
 pub fn make_proto_path(s: &str) -> rrg_proto::fs::Path {
     let mut p = rrg_proto::fs::Path::new();
     p.set_raw_bytes(s.as_bytes().to_vec());
     p
+}
+
+impl<'a, T: Arbitrary<'a>, const N: usize> Arbitrary<'a> for BoundedVec<T, N> {
+    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+        let len = u.int_in_range(0..=N)?;
+        let mut vec = Vec::with_capacity(len);
+        for _ in 0..len {
+            vec.push(T::arbitrary(u)?);
+        }
+        Ok(Self(vec))
+    }
+}
+
+impl<T, const N: usize> std::ops::Deref for BoundedVec<T, N> {
+    type Target = [T];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T, const N: usize> From<BoundedVec<T, N>> for Vec<T> {
+    fn from(bounded: BoundedVec<T, N>) -> Self {
+        bounded.0
+    }
+}
+
+impl<T, const N: usize> IntoIterator for BoundedVec<T, N> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<T, const N: usize> AsRef<[T]> for BoundedVec<T, N> {
+    fn as_ref(&self) -> &[T] {
+        &self.0
+    }
 }
 
 impl<'a> Arbitrary<'a> for FuzzRegex {
@@ -65,7 +132,7 @@ impl<'a> Arbitrary<'a> for FuzzRegex {
 }
 
 impl MemFd {
-    pub fn new(content: &[u8]) -> Option<Self> {
+    pub fn new<const N: usize>(content: &BoundedVec<u8, N>) -> Option<Self> {
         let cname = CString::new("fuzzfd").unwrap();
         // SAFETY: We provide a valid pointer to a null-terminated string and
         // use flag `1` (MFD_CLOEXEC), ensuring the FD is closed on exec to avoid pollution,
@@ -106,7 +173,7 @@ impl Drop for MemFd {
 
 impl FuzzSession {
     pub fn new() -> Self {
-        let temp_dir = tempfile::Builder::new().tempdir().unwrap();
+        let temp_dir = get_fuzz_tempdir();
         let args = rrg::args::Args {
             heartbeat_rate: Duration::ZERO,
             ping_rate: Duration::ZERO,
@@ -120,14 +187,13 @@ impl FuzzSession {
         };
 
         let filestore = rrg::filestore::Filestore::init(
-            &args.filestore_dir.clone().unwrap(),
+            temp_dir.path(),
             args.filestore_ttl,
         ).unwrap();
 
         Self {
             args,
             filestore,
-            _filestore_tempdir: temp_dir,
         }
     }
 }

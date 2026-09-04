@@ -7,7 +7,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use rrg::{Request, action::dispatch};
-use fuzz_utils::{FuzzSession, make_proto_path};
+use fuzz_utils::{BoundedVec, FuzzSession, make_proto_path, MAX_FUZZ_VEC_LEN};
 use rrg_proto::rrg::Request as RequestProto;
 use arbitrary::Arbitrary;
 
@@ -40,9 +40,8 @@ enum FuzzAction {
     ListMounts,
     ListUtmpUsers { path: SafePath },
     GetFileMetadata { path: SafePath },
-    GetFileContents { path: SafePath, offset: u64, length: u16 },
+    GetFileContents { path: SafePath, offsets: BoundedVec<u64, MAX_FUZZ_VEC_LEN>, length: u16 },
     GetFileSha256 { path: SafePath },
-    GetFilesystemTimeline { path: SafePath },
     ExecuteSignedCommand { command_blob: Vec<u8>, signature: Vec<u8>},
     GetWinregValue { key: SafePath, value_name: String },
     ListWinregValues { key: SafePath },
@@ -77,11 +76,11 @@ impl FuzzAction {
                 args.mut_paths().push(make_proto_path(&path.0));
                 request.set_args(protobuf::well_known_types::any::Any::pack(&args).unwrap());
             },
-            FuzzAction::GetFileContents { path, offset, length } => {
+            FuzzAction::GetFileContents { path, offsets, length } => {
                 request.set_action(rrg_proto::rrg::Action::GET_FILE_CONTENTS);
                 let mut args = rrg_proto::get_file_contents::Args::new();
                 args.mut_paths().push(make_proto_path(&path.0));
-                args.set_offset(offset);
+                args.set_offsets(offsets.into());
                 args.set_length(length as u64);
                 request.set_args(protobuf::well_known_types::any::Any::pack(&args).unwrap());
             },
@@ -89,12 +88,6 @@ impl FuzzAction {
                 request.set_action(rrg_proto::rrg::Action::GET_FILE_SHA256);
                 let mut args = rrg_proto::get_file_sha256::Args::new();
                 args.set_path(make_proto_path(&path.0));
-                request.set_args(protobuf::well_known_types::any::Any::pack(&args).unwrap());
-            },
-            FuzzAction::GetFilesystemTimeline { path } => {
-                request.set_action(rrg_proto::rrg::Action::GET_FILESYSTEM_TIMELINE);
-                let mut args = rrg_proto::get_filesystem_timeline::Args::new();
-                args.set_root(make_proto_path(&path.0));
                 request.set_args(protobuf::well_known_types::any::Any::pack(&args).unwrap());
             },
 
@@ -136,7 +129,7 @@ impl FuzzAction {
     }
 }
 
-fuzz_target!(|actions: Vec<FuzzAction>| {
+fuzz_target!(|actions: BoundedVec<FuzzAction, MAX_FUZZ_VEC_LEN>| {
     let mut session = FuzzSession::new();
 
     for action in actions {

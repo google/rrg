@@ -2,7 +2,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use fuzz_utils::FuzzSession;
+use fuzz_utils::{BoundedVec, FuzzSession, MAX_FUZZ_BUFFER_SIZE};
 use rrg::action::get_tcp_response;
 use rrg_proto::rrg::Request as RequestProto;
 use rrg::Request;
@@ -14,8 +14,8 @@ use std::sync::mpsc;
 
 #[derive(Debug, Arbitrary)]
 struct FuzzInput {
-    server_response: Vec<u8>,
-    agent_data: Vec<u8>,
+    server_response: BoundedVec<u8, MAX_FUZZ_BUFFER_SIZE>,
+    agent_data: BoundedVec<u8, MAX_FUZZ_BUFFER_SIZE>,
     connect_timeout_ns: u32,
     write_timeout_ns: u32,
     read_timeout_ns: u32,
@@ -28,7 +28,7 @@ fuzz_target!(|input: FuzzInput| {
     let response_data = input.server_response.clone();
     let should_flood = input.flood_server;
 
-    let _handle = thread::spawn(move || {
+    let handle = thread::spawn(move || {
         let listener = match TcpListener::bind("127.0.0.1:0") {
             Ok(l) => l,
             Err(_) => {
@@ -65,7 +65,10 @@ fuzz_target!(|input: FuzzInput| {
 
     let server_addr = match rx.recv() {
         Ok(Some(addr)) => addr,
-        _ => return,
+        _ => {
+            let _ = handle.join();
+            return;
+        }
     };
 
     let mut session = FuzzSession::new();
@@ -76,11 +79,13 @@ fuzz_target!(|input: FuzzInput| {
     proto_addr.set_port(server_addr.port() as u32);
     args.set_address(proto_addr);
 
-    args.set_data(input.agent_data);
+    args.set_data(input.agent_data.into());
 
     fn make_duration(nanos: u32) -> protobuf::well_known_types::duration::Duration {
         let mut d = protobuf::well_known_types::duration::Duration::new();
-        d.nanos = (nanos % 50_000_000) as i32;
+        // Ensure connect_timeout is always > 0 so connection to loopback succeeds
+        // immediately and listener.accept() terminates without deadlocking handle.join().
+        d.nanos = (nanos % 50_000_000).max(1) as i32;
         d.seconds = 0;
         d
     }
@@ -99,4 +104,8 @@ fuzz_target!(|input: FuzzInput| {
             let _ = get_tcp_response::handle(&mut session, internal_args);
         }
     }
+
+    // Wait for the background listener thread to terminate so we don't leak
+    // detached OS threads across rapid libFuzzer iterations.
+    let _ = handle.join();
 });

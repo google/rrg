@@ -5,17 +5,13 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use fuzz_utils::{FuzzSession, MemFd, make_proto_path};
+use fuzz_utils::{BoundedVec, FuzzSession, MemFd, make_proto_path, MAX_FUZZ_BUFFER_SIZE};
 use rrg::action::get_file_contents_kmx;
 use rrg_proto::rrg::Request as RequestProto;
 use rrg::Request;
 
-fuzz_target!(|data: &[u8]| {
-    if data.len() < 512 {
-        return;
-    }
-
-    let memfd = match MemFd::new(data) {
+fuzz_target!(|data: BoundedVec<u8, MAX_FUZZ_BUFFER_SIZE>| {
+    let memfd = match MemFd::new(&data) {
         Some(fd) => fd,
         None => return,
     };
@@ -33,7 +29,6 @@ fuzz_target!(|data: &[u8]| {
         args.mut_paths().push(path_proto);
     }
 
-    args.set_offset(0);
     args.set_length(1024);
 
     let mut proto = RequestProto::new();

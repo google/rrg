@@ -6,7 +6,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use fuzz_utils::{FuzzSession, make_proto_path};
+use fuzz_utils::{BoundedVec, FuzzSession, make_proto_path, MAX_FUZZ_BUFFER_SIZE, MAX_FUZZ_VEC_LEN};
 use rrg::action::get_filesystem_timeline;
 use rrg_proto::rrg::Request as RequestProto;
 use rrg::Request;
@@ -20,12 +20,12 @@ struct FsEntry {
     path: String, // Relative path, e.g., "a/b/c.txt"
     is_dir: bool,
     is_symlink: bool,
-    content: Vec<u8>,
+    content: BoundedVec<u8, MAX_FUZZ_BUFFER_SIZE>,
 }
 
 #[derive(Debug, Arbitrary)]
 struct FuzzInput {
-    entries: Vec<FsEntry>,
+    entries: BoundedVec<FsEntry, MAX_FUZZ_VEC_LEN>,
 }
 
 // Creates a temporary directory and populates it with the given entries.
@@ -35,7 +35,7 @@ fn create_test_tree(entries: &[FsEntry]) -> Option<TempDir> {
 
     for entry in entries {
         // Prevent directory traversal ("../") and absolute paths to keep fuzzing safe.
-        if entry.path.contains("..") || entry.path.starts_with('/') {
+        if entry.path.contains("..") || entry.path.starts_with('/') || entry.path.len() > 256 {
             continue;
         }
         // Remove nulls which panic Rust's file APIs.
@@ -56,11 +56,13 @@ fn create_test_tree(entries: &[FsEntry]) -> Option<TempDir> {
             let _ = fs::create_dir(&full_path);
         } else if entry.is_symlink {
             if let Ok(target) = std::str::from_utf8(&entry.content) {
-                // Ignore errors (e.g. if symlink exists)
-                let _ = symlink(target, &full_path);
+                // Prevent symlinks from pointing to absolute paths or traversing outside the sandbox root.
+                if !target.is_empty() && !target.starts_with('/') && !target.contains("..") && !target.contains('\0') && target.len() <= 256 {
+                    let _ = symlink(target, &full_path);
+                }
             }
         } else {
-            let _ = fs::write(&full_path, &entry.content);
+            let _ = fs::write(&full_path, entry.content.clone());
         }
     }
 

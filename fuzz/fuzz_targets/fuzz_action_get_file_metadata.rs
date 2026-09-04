@@ -6,7 +6,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use fuzz_utils::{FuzzSession, MemFd, FuzzRegex, make_proto_path};
+use fuzz_utils::{BoundedVec, FuzzSession, MemFd, FuzzRegex, make_proto_path, MAX_FUZZ_BUFFER_SIZE};
 use rrg::action::get_file_metadata;
 use rrg_proto::rrg::Request as RequestProto;
 use rrg::Request;
@@ -14,7 +14,7 @@ use arbitrary::Arbitrary;
 
 #[derive(Debug, Arbitrary)]
 struct FuzzInput {
-    file_content: Vec<u8>,
+    file_content: BoundedVec<u8, MAX_FUZZ_BUFFER_SIZE>,
     max_depth: u32,
     md5: bool,
     sha1: bool,

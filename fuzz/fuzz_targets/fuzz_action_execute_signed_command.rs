@@ -6,7 +6,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use fuzz_utils::FuzzSession;
+use fuzz_utils::{BoundedVec, FuzzSession, MAX_FUZZ_BUFFER_SIZE, MAX_FUZZ_VEC_LEN};
 use rrg::action::execute_signed_command;
 use rrg_proto::rrg::Request as RequestProto;
 use rrg::Request;
@@ -24,11 +24,11 @@ struct FuzzCommandArg {
 #[derive(Debug, Arbitrary)]
 struct FuzzCommand {
     path: String,
-    args: Vec<FuzzCommandArg>,
-    env: Vec<(String, String)>,
+    args: BoundedVec<FuzzCommandArg, MAX_FUZZ_VEC_LEN>,
+    env: BoundedVec<(String, String), MAX_FUZZ_VEC_LEN>,
 
     use_signed_stdin: bool,
-    signed_stdin: Vec<u8>,
+    signed_stdin: BoundedVec<u8, MAX_FUZZ_VEC_LEN>,
     unsigned_stdin_allowed: bool,
 }
 
@@ -37,10 +37,10 @@ struct FuzzInput {
     // The structured command we will serialize.
     command: FuzzCommand,
 
-    signature: Vec<u8>,
-    unsigned_stdin: Vec<u8>,
-    unsigned_args: Vec<String>,
-    unsigned_env: Vec<(String, String)>,
+    signature: BoundedVec<u8, MAX_FUZZ_BUFFER_SIZE>,
+    unsigned_stdin: BoundedVec<u8, MAX_FUZZ_BUFFER_SIZE>,
+    unsigned_args: BoundedVec<String, MAX_FUZZ_VEC_LEN>,
+    unsigned_env: BoundedVec<(String, String), MAX_FUZZ_VEC_LEN>,
 }
 
 fuzz_target!(|input: FuzzInput| {
@@ -64,7 +64,7 @@ fuzz_target!(|input: FuzzInput| {
     }
 
     if input.command.use_signed_stdin {
-        cmd_proto.set_signed_stdin(input.command.signed_stdin);
+        cmd_proto.set_signed_stdin(input.command.signed_stdin.into());
     } else {
         cmd_proto.set_unsigned_stdin_allowed(input.command.unsigned_stdin_allowed);
     }
@@ -73,8 +73,8 @@ fuzz_target!(|input: FuzzInput| {
 
     let mut args = rrg_proto::execute_signed_command::Args::new();
     args.set_command(command_bytes);
-    args.set_command_ed25519_signature(input.signature);
-    args.set_unsigned_stdin(input.unsigned_stdin);
+    args.set_command_ed25519_signature(input.signature.into());
+    args.set_unsigned_stdin(input.unsigned_stdin.into());
     for u_arg in input.unsigned_args {
         args.mut_unsigned_args().push(u_arg);
     }
