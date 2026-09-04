@@ -2,6 +2,10 @@ name: 'Integrate'
 on:
   - push
   - pull_request
+
+permissions:
+  contents: read
+
 jobs:
   ci:
     name: 'CI'
