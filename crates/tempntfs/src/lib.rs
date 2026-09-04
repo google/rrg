@@ -3,6 +3,21 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+//! Library for creating temporary files with NTFS filesystem images.
+//!
+//! It is intended to be used for testing code dependant on parsing raw NTFS
+//! data.
+//!
+//! The library wraps [`libguestfs`] utilities (and [`mkfs.ntfs`]) and so is
+//! usable only on Linux.
+//!
+//! [`libguestfs`]: https://libguestfs.org/
+//! [`mkfs.ntfs`]: https://linux.die.net/man/8/mkfs.ntfs
+
+/// Creates a small temporary file with NTFS filesystem generated with `init`.
+///
+/// `init` takes a path to the root of the directory holding the filesystem and
+/// can create new files e.g. using `std::fs:*` functions.
 pub fn create(
     init: impl FnOnce(&std::path::Path) -> std::io::Result<()>,
 ) -> std::io::Result<tempfile::NamedTempFile>
@@ -12,6 +27,11 @@ pub fn create(
     create_with_size(2 * 1024 * 1024, init)
 }
 
+/// Creates a temporary file with NTFS filesystem generated with `init` of the
+/// given `size`.
+///
+/// `init` takes a path to the root of the directory holding the filesystem and
+/// can create new files e.g. using `std::fs:*` functions.
 pub fn create_with_size(
     size: usize,
     init: impl FnOnce(&std::path::Path) -> std::io::Result<()>,
@@ -44,9 +64,13 @@ pub fn create_with_size(
     Ok(file)
 }
 
+/// RAII wrapper for a guestmounted filesystem.
 struct GuestMount {
+    /// Path to a directory in which the filesystem is (or was) mounted.
     mountpoint: std::path::PathBuf,
+    /// PID of the `guestmount` subprocess for serving the files.
     pid: Option<u32>,
+    /// Whether the filesystem is still mounted.
     is_mounted: bool,
 }
 
