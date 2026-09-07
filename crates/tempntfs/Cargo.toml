@@ -1,0 +1,23 @@
+[package]
+name = "tempntfs"
+version = "0.0.0"
+authors.workspace = true
+edition.workspace = true
+
+description = "Utility crate to make temporary NTFS filesystem with `guestmount`."
+categories = ["filesystem"]
+
+[features]
+test-libguestfs = []
+
+[dependencies.tempfile]
+version = "3.13.0"
+
+[dev-dependencies.keramics-core]
+version = "0.0.0"
+
+[dev-dependencies.keramics-formats]
+version = "0.0.0"
+
+[dev-dependencies.keramics-types]
+version = "0.0.0"

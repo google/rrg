@@ -165,6 +165,9 @@ version = "0.8.5"
 [dev-dependencies.tempfile]
 version = "3.13.0"
 
+[dev-dependencies.tempntfs]
+path = "../tempntfs"
+
 [dev-dependencies.quickcheck]
 version = "1.0.3"
 
