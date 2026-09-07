@@ -289,7 +289,12 @@ impl<'a> Directory<'a> {
         self.as_raw().addr
     }
     /// Returns the file structure for the directory.
-    pub fn file(&self) -> File<'a> {
+    ///
+    /// The returned [`File`] borrows from this `Directory`: it points at
+    /// `TSK_FS_DIR::fs_file`, which `tsk_fs_dir_close` releases when the
+    /// `Directory` is dropped. It therefore must not outlive the `Directory`
+    /// (hence the borrow of `self` rather than the file system lifetime `'a`).
+    pub fn file(&self) -> File<'_> {
         NonNull::new(self.as_raw().fs_file)
             .map(File::new)
             .expect("TSK_FS_DIR file is null")
