@@ -61,15 +61,20 @@ where
         }
 
         const USER_OFFSET: usize = std::mem::offset_of!(libc::utmpx, ut_user);
+        const USER_SIZE: usize = {
+            let sample = std::mem::MaybeUninit::<libc::utmpx>::uninit();
+            let user_ptr = unsafe { std::ptr::addr_of!((*sample.as_ptr()).ut_user) };
+            std::mem::size_of_val(unsafe { &*user_ptr })
+        };
 
-        let user = std::ffi::CStr::from_bytes_until_nul(&buf[USER_OFFSET..])
-            .map_err(|error| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-            })
-            .map_err(crate::session::Error::action)?;
+        let user_bytes = &buf[USER_OFFSET..USER_OFFSET + USER_SIZE];
+        let user_slice = match user_bytes.iter().position(|&b| b == 0) {
+            Some(nul_pos) => &user_bytes[..nul_pos],
+            None => user_bytes,
+        };
 
         use std::os::unix::ffi::OsStrExt as _;
-        let user = std::ffi::OsStr::from_bytes(user.to_bytes());
+        let user = std::ffi::OsStr::from_bytes(user_slice);
 
         // TODO: https://github.com/rust-lang/rust/issues/60896 - Refactor once
         //``hash_set_entry` is stabilized.
