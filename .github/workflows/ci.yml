@@ -57,4 +57,7 @@ jobs:
       # of the continuous integration because it is expensive. Still, we would
       # like to ensure that there are no breaking changes to their code itself.
       - name: 'Check RRG fuzzers'
+        # Fuzzing code assumes Linux environment and does not compile on other
+        # platforms.
+        if: ${{ runner.os == 'Linux' }}
         run: cargo check --manifest-path fuzz/Cargo.toml
