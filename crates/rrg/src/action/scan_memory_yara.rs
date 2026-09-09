@@ -193,7 +193,7 @@ impl From<Match> for proto::Match {
 }
 
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     /// Failed to open the process' memory for reading.
     OpenProcessMemory(std::io::Error),
     /// There was an error (e.g. a timeout) when scanning memory
@@ -264,28 +264,35 @@ impl crate::response::Item for Item {
     }
 }
 
-/// Reads and scans a single region of memory, breaking it up into chunks of `chunk_size` with an overlap of
+/// Reads and scans memory `regions`, breaking each up into chunks of `chunk_size` with an overlap of
 /// `chunk_overlap`. Only returns an error if scanning failed; read errors are ignored.
-fn scan_region<M: MemoryReader>(
-    region: &MappedRegion,
+pub fn scan_regions<M: MemoryReader>(
+    regions: impl Iterator<Item = MappedRegion>,
     scanner: &mut Scanner,
     memory: &mut M,
     chunk_size: NonZeroU64,
     chunk_overlap: u64,
 ) -> Result<(), Error> {
     let chunk_size = chunk_size.get();
-    let mut offset = region.start_address();
-    while offset < region.end_address() {
-        let remaining = region.end_address() - offset;
-        let length = remaining.min(chunk_size + chunk_overlap);
-        // Any process will most likely have at least one region
-        // that cannot be read successfully, so there's no point
-        // in reporting an error to the user if that happens,
-        // just ignore it and continue.
-        if let Ok(buf) = memory.read_chunk(offset, length) {
-            scanner.scan(offset as usize, &buf).map_err(Error::Scan)?;
+    'outer: for region in regions {
+        let mut offset = region.start_address();
+        while offset < region.end_address() {
+            let remaining = region.end_address() - offset;
+            let length = remaining.min(chunk_size + chunk_overlap);
+            match memory.read_chunk(offset, length) {
+                Err(_) => {
+                    // Any process will most likely have at least one region
+                    // that cannot be read successfully, so there's no point
+                    // in reporting an error to the user if that happens,
+                    // just ignore it and continue.
+                    continue 'outer;
+                }
+                Ok(buf) => {
+                    scanner.scan(offset as usize, &buf).map_err(Error::Scan)?;
+                }
+            }
+            offset = offset.saturating_add(chunk_size);
         }
-        offset = offset.saturating_add(chunk_size);
     }
     Ok(())
 }
@@ -348,19 +355,14 @@ where
             scanner.max_matches_per_pattern(limit);
         }
 
-        if let Err(error) = regions
-            .into_iter()
-            .filter(|reg| args.filter.matches(reg))
-            .try_for_each(|region| {
-                scan_region(
-                    &region,
-                    &mut scanner,
-                    &mut memory,
-                    args.chunk_size,
-                    args.chunk_overlap,
-                )
-            })
-        {
+        let filtered_regions = regions.into_iter().filter(|reg| args.filter.matches(reg));
+        if let Err(error) = scan_regions(
+            filtered_regions,
+            &mut scanner,
+            &mut memory,
+            args.chunk_size,
+            args.chunk_overlap,
+        ) {
             session.reply(Err(ErrorItem { pid, error }))?;
             continue;
         }
@@ -443,10 +445,14 @@ mod tests {
         let mut scanner = Scanner::new(&rules);
 
         let mut memory = FakeProcessMemory { contents };
-        for region in regions {
-            scan_region(&region, &mut scanner, &mut memory, NonZeroU64::new(1000).unwrap(), 1000)
-                .expect("failed to scan region");
-        }
+        scan_regions(
+            regions.into_iter(),
+            &mut scanner,
+            &mut memory,
+            NonZeroU64::new(1000).unwrap(),
+            1000,
+        )
+        .expect("failed to scan regions");
         let results = scanner.finish().expect("failed to finish scan");
 
         let rule = results.matching_rules().next().expect("no matching rule");
@@ -487,8 +493,8 @@ mod tests {
         let mut scanner = Scanner::new(&rules);
         let region = MappedRegion::from_bounds(0, contents.len() as u64);
         let mut memory = FakeProcessMemory { contents };
-        scan_region(
-            &region,
+        scan_regions(
+            std::iter::once(region),
             &mut scanner,
             &mut memory,
             NonZeroU64::new(CHUNK_SIZE as u64).unwrap(),
