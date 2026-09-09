@@ -4,6 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 use crate::action::dump_process_memory::{MappedRegion, MemoryReader, RegionFilter};
+use std::num::NonZeroU64;
 use std::time::Duration;
 
 use yara_x::Compiler;
@@ -37,7 +38,7 @@ pub struct Args {
     filter: RegionFilter,
 
     /// Length of the chunks used to read large memory regions, in bytes.
-    chunk_size: u64,
+    chunk_size: NonZeroU64,
     /// Overlap across chunks, in bytes. A larger overlap decreases
     /// the chance of missing a string located across chunk boundaries
     /// that would otherwise match.
@@ -60,7 +61,7 @@ impl crate::request::Args for Args {
     type Proto = proto::Args;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Self, ParseArgsError> {
-        const DEFAULT_CHUNK_SIZE: u64 = 50 * 1024 * 1024; // 50 MiB
+        const DEFAULT_CHUNK_SIZE: NonZeroU64 = NonZeroU64::new(50 * 1024 * 1024).unwrap(); // 50 MiB
         const DEFAULT_CHUNK_OVERLAP: u64 = 10 * 1024 * 1024; // 10 MiB
 
         let mut timeout: Option<Duration> = None;
@@ -100,7 +101,10 @@ impl crate::request::Args for Args {
                 skip_executable_regions: proto.skip_executable_regions,
                 skip_readonly_regions: proto.skip_readonly_regions,
             },
-            chunk_size: proto.chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE),
+            chunk_size: proto
+                .chunk_size
+                .and_then(NonZeroU64::new)
+                .unwrap_or(DEFAULT_CHUNK_SIZE),
             chunk_overlap: proto.chunk_overlap.unwrap_or(DEFAULT_CHUNK_OVERLAP),
         })
     }
@@ -266,9 +270,10 @@ fn scan_region<M: MemoryReader>(
     region: &MappedRegion,
     scanner: &mut Scanner,
     memory: &mut M,
-    chunk_size: u64,
+    chunk_size: NonZeroU64,
     chunk_overlap: u64,
 ) -> Result<(), Error> {
+    let chunk_size = chunk_size.get();
     let mut offset = region.start_address();
     while offset < region.end_address() {
         let remaining = region.end_address() - offset;
@@ -439,7 +444,7 @@ mod tests {
 
         let mut memory = FakeProcessMemory { contents };
         for region in regions {
-            scan_region(&region, &mut scanner, &mut memory, 1000, 1000)
+            scan_region(&region, &mut scanner, &mut memory, NonZeroU64::new(1000).unwrap(), 1000)
                 .expect("failed to scan region");
         }
         let results = scanner.finish().expect("failed to finish scan");
@@ -486,7 +491,7 @@ mod tests {
             &region,
             &mut scanner,
             &mut memory,
-            CHUNK_SIZE as u64,
+            NonZeroU64::new(CHUNK_SIZE as u64).unwrap(),
             CHUNK_OVERLAP as u64,
         )
         .expect("failed to scan region");
@@ -525,7 +530,7 @@ mod tests {
             // Set limit to keep unit test time reasonable
             timeout: Some(Duration::from_secs(30)),
             max_matches_per_pattern: None,
-            chunk_size: 100 * 1024 * 1024,
+            chunk_size: NonZeroU64::new(100 * 1024 * 1024).unwrap(),
             chunk_overlap: 50 * 1024 * 1024,
             filter: Default::default(),
         };
@@ -602,7 +607,7 @@ mod tests {
             // Set limit to keep unit test time reasonable
             timeout: Some(Duration::from_secs(30)),
             max_matches_per_pattern: None,
-            chunk_size: 100 * 1024 * 1024,
+            chunk_size: NonZeroU64::new(100 * 1024 * 1024).unwrap(),
             chunk_overlap: 50 * 1024 * 1024,
             filter: Default::default(),
         };
@@ -643,7 +648,7 @@ mod tests {
             ),
             timeout: Some(Duration::from_millis(500)),
             max_matches_per_pattern: None,
-            chunk_size: 10000,
+            chunk_size: NonZeroU64::new(10000).unwrap(),
             chunk_overlap: 500,
             filter: Default::default(),
         };
@@ -686,7 +691,7 @@ mod tests {
             ),
             timeout: None,
             max_matches_per_pattern: Some(5),
-            chunk_size: 10000,
+            chunk_size: NonZeroU64::new(10000).unwrap(),
             chunk_overlap: 500,
             filter: Default::default(),
         };
@@ -725,5 +730,15 @@ mod tests {
                 pattern.matches
             );
         }
+    }
+
+    #[test]
+    fn args_defaults_zero_chunk_size() {
+        use crate::request::Args as _;
+        let mut proto = proto::Args::new();
+        proto.set_signature_inline("rule dummy { condition: true }".to_string());
+        proto.set_chunk_size(0);
+        let args = Args::from_proto(proto).unwrap();
+        assert_eq!(args.chunk_size.get(), 50 * 1024 * 1024);
     }
 }
