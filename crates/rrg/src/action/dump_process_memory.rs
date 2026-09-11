@@ -898,6 +898,9 @@ where
                     continue 'outer;
                 }
                 Ok(buf) => {
+                    if buf.is_empty() {
+                        break;
+                    }
                     // `read_chunk` could have read fewer than `size` bytes
                     let size = buf.len() as u64;
                     offset += size;
@@ -1231,5 +1234,35 @@ pub mod tests {
             assert!(!item.region.permissions.execute);
             assert!(!item.region.permissions.shared);
         }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[test]
+    fn dump_regions_handles_empty_chunk_read() {
+        struct EmptyChunkMemory;
+
+        impl MemoryReader for EmptyChunkMemory {
+            fn read_chunk(&mut self, _offset: u64, _length: u64) -> std::io::Result<Vec<u8>> {
+                // Simulates EOF or unreadable page returning 0 bytes
+                Ok(Vec::new())
+            }
+        }
+
+        let regions = vec![MappedRegion::from_bounds(1000, 2000)];
+        let mut memory = EmptyChunkMemory;
+        let mut session = crate::session::FakeSession::new();
+        let mut limit = u64::MAX;
+
+        dump_regions(
+            &mut session,
+            regions.into_iter(),
+            &mut memory,
+            42,
+            &mut limit,
+        )
+        .unwrap();
+
+        assert_eq!(session.reply_count(), 0);
+        assert_eq!(session.parcel_count(crate::Sink::Blob), 0);
     }
 }

@@ -20,6 +20,7 @@ log = { version = "0.4.22", features = ["std"] }
 rrg-proto = { path = "../crates/rrg-proto" }
 regex = "1"
 tempfile = "3.2"
+yara-x = { version = "1.8.1", default-features = false }
 
 [dependencies.rrg]
 path = "../crates/rrg"
@@ -46,6 +47,7 @@ features = [
     "action-query_wmi",
     "action-execute_signed_command",
     "action-dump_process_memory",
+    "action-scan_memory_yara",
 
     # kmx
     "action-get_file_contents_kmx",
@@ -89,3 +91,11 @@ path = "fuzz_targets/fuzz_action_execute_signed_command.rs"
 [[bin]]
 name = "fuzz_action_get_tcp_response"
 path = "fuzz_targets/fuzz_action_get_tcp_response.rs"
+
+[[bin]]
+name = "fuzz_action_dump_process_memory"
+path = "fuzz_targets/fuzz_action_dump_process_memory.rs"
+
+[[bin]]
+name = "fuzz_action_scan_memory_yara"
+path = "fuzz_targets/fuzz_action_scan_memory_yara.rs"

@@ -4,6 +4,7 @@
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
 use crate::action::dump_process_memory::{MappedRegion, MemoryReader, RegionFilter};
+use std::num::NonZeroU64;
 use std::time::Duration;
 
 use yara_x::Compiler;
@@ -37,7 +38,7 @@ pub struct Args {
     filter: RegionFilter,
 
     /// Length of the chunks used to read large memory regions, in bytes.
-    chunk_size: u64,
+    chunk_size: NonZeroU64,
     /// Overlap across chunks, in bytes. A larger overlap decreases
     /// the chance of missing a string located across chunk boundaries
     /// that would otherwise match.
@@ -60,7 +61,7 @@ impl crate::request::Args for Args {
     type Proto = proto::Args;
 
     fn from_proto(mut proto: Self::Proto) -> Result<Self, ParseArgsError> {
-        const DEFAULT_CHUNK_SIZE: u64 = 50 * 1024 * 1024; // 50 MiB
+        const DEFAULT_CHUNK_SIZE: NonZeroU64 = NonZeroU64::new(50 * 1024 * 1024).unwrap(); // 50 MiB
         const DEFAULT_CHUNK_OVERLAP: u64 = 10 * 1024 * 1024; // 10 MiB
 
         let mut timeout: Option<Duration> = None;
@@ -100,7 +101,10 @@ impl crate::request::Args for Args {
                 skip_executable_regions: proto.skip_executable_regions,
                 skip_readonly_regions: proto.skip_readonly_regions,
             },
-            chunk_size: proto.chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE),
+            chunk_size: proto
+                .chunk_size
+                .and_then(NonZeroU64::new)
+                .unwrap_or(DEFAULT_CHUNK_SIZE),
             chunk_overlap: proto.chunk_overlap.unwrap_or(DEFAULT_CHUNK_OVERLAP),
         })
     }
@@ -189,7 +193,7 @@ impl From<Match> for proto::Match {
 }
 
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     /// Failed to open the process' memory for reading.
     OpenProcessMemory(std::io::Error),
     /// There was an error (e.g. a timeout) when scanning memory
@@ -260,27 +264,35 @@ impl crate::response::Item for Item {
     }
 }
 
-/// Reads and scans a single region of memory, breaking it up into chunks of `chunk_size` with an overlap of
+/// Reads and scans memory `regions`, breaking each up into chunks of `chunk_size` with an overlap of
 /// `chunk_overlap`. Only returns an error if scanning failed; read errors are ignored.
-fn scan_region<M: MemoryReader>(
-    region: &MappedRegion,
+pub fn scan_regions<M: MemoryReader>(
+    regions: impl Iterator<Item = MappedRegion>,
     scanner: &mut Scanner,
     memory: &mut M,
-    chunk_size: u64,
+    chunk_size: NonZeroU64,
     chunk_overlap: u64,
 ) -> Result<(), Error> {
-    let mut offset = region.start_address();
-    while offset < region.end_address() {
-        let remaining = region.end_address() - offset;
-        let length = remaining.min(chunk_size + chunk_overlap);
-        // Any process will most likely have at least one region
-        // that cannot be read successfully, so there's no point
-        // in reporting an error to the user if that happens,
-        // just ignore it and continue.
-        if let Ok(buf) = memory.read_chunk(offset, length) {
-            scanner.scan(offset as usize, &buf).map_err(Error::Scan)?;
+    let chunk_size = chunk_size.get();
+    'outer: for region in regions {
+        let mut offset = region.start_address();
+        while offset < region.end_address() {
+            let remaining = region.end_address() - offset;
+            let length = remaining.min(chunk_size + chunk_overlap);
+            match memory.read_chunk(offset, length) {
+                Err(_) => {
+                    // Any process will most likely have at least one region
+                    // that cannot be read successfully, so there's no point
+                    // in reporting an error to the user if that happens,
+                    // just ignore it and continue.
+                    continue 'outer;
+                }
+                Ok(buf) => {
+                    scanner.scan(offset as usize, &buf).map_err(Error::Scan)?;
+                }
+            }
+            offset = offset.saturating_add(chunk_size);
         }
-        offset = offset.saturating_add(chunk_size);
     }
     Ok(())
 }
@@ -343,19 +355,14 @@ where
             scanner.max_matches_per_pattern(limit);
         }
 
-        if let Err(error) = regions
-            .into_iter()
-            .filter(|reg| args.filter.matches(reg))
-            .try_for_each(|region| {
-                scan_region(
-                    &region,
-                    &mut scanner,
-                    &mut memory,
-                    args.chunk_size,
-                    args.chunk_overlap,
-                )
-            })
-        {
+        let filtered_regions = regions.into_iter().filter(|reg| args.filter.matches(reg));
+        if let Err(error) = scan_regions(
+            filtered_regions,
+            &mut scanner,
+            &mut memory,
+            args.chunk_size,
+            args.chunk_overlap,
+        ) {
             session.reply(Err(ErrorItem { pid, error }))?;
             continue;
         }
@@ -438,10 +445,14 @@ mod tests {
         let mut scanner = Scanner::new(&rules);
 
         let mut memory = FakeProcessMemory { contents };
-        for region in regions {
-            scan_region(&region, &mut scanner, &mut memory, 1000, 1000)
-                .expect("failed to scan region");
-        }
+        scan_regions(
+            regions.into_iter(),
+            &mut scanner,
+            &mut memory,
+            NonZeroU64::new(1000).unwrap(),
+            1000,
+        )
+        .expect("failed to scan regions");
         let results = scanner.finish().expect("failed to finish scan");
 
         let rule = results.matching_rules().next().expect("no matching rule");
@@ -482,11 +493,11 @@ mod tests {
         let mut scanner = Scanner::new(&rules);
         let region = MappedRegion::from_bounds(0, contents.len() as u64);
         let mut memory = FakeProcessMemory { contents };
-        scan_region(
-            &region,
+        scan_regions(
+            std::iter::once(region),
             &mut scanner,
             &mut memory,
-            CHUNK_SIZE as u64,
+            NonZeroU64::new(CHUNK_SIZE as u64).unwrap(),
             CHUNK_OVERLAP as u64,
         )
         .expect("failed to scan region");
@@ -525,7 +536,7 @@ mod tests {
             // Set limit to keep unit test time reasonable
             timeout: Some(Duration::from_secs(30)),
             max_matches_per_pattern: None,
-            chunk_size: 100 * 1024 * 1024,
+            chunk_size: NonZeroU64::new(100 * 1024 * 1024).unwrap(),
             chunk_overlap: 50 * 1024 * 1024,
             filter: Default::default(),
         };
@@ -602,7 +613,7 @@ mod tests {
             // Set limit to keep unit test time reasonable
             timeout: Some(Duration::from_secs(30)),
             max_matches_per_pattern: None,
-            chunk_size: 100 * 1024 * 1024,
+            chunk_size: NonZeroU64::new(100 * 1024 * 1024).unwrap(),
             chunk_overlap: 50 * 1024 * 1024,
             filter: Default::default(),
         };
@@ -643,7 +654,7 @@ mod tests {
             ),
             timeout: Some(Duration::from_millis(500)),
             max_matches_per_pattern: None,
-            chunk_size: 10000,
+            chunk_size: NonZeroU64::new(10000).unwrap(),
             chunk_overlap: 500,
             filter: Default::default(),
         };
@@ -686,7 +697,7 @@ mod tests {
             ),
             timeout: None,
             max_matches_per_pattern: Some(5),
-            chunk_size: 10000,
+            chunk_size: NonZeroU64::new(10000).unwrap(),
             chunk_overlap: 500,
             filter: Default::default(),
         };
@@ -725,5 +736,15 @@ mod tests {
                 pattern.matches
             );
         }
+    }
+
+    #[test]
+    fn args_defaults_zero_chunk_size() {
+        use crate::request::Args as _;
+        let mut proto = proto::Args::new();
+        proto.set_signature_inline("rule dummy { condition: true }".to_string());
+        proto.set_chunk_size(0);
+        let args = Args::from_proto(proto).unwrap();
+        assert_eq!(args.chunk_size.get(), 50 * 1024 * 1024);
     }
 }
