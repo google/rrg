@@ -119,7 +119,7 @@ fn main() {
     };
 
     info!("listening for messages");
-    while let Some(request) = rrg::Request::receive(args.heartbeat_rate).transpose() {
+    while let Some(request) = rrg::Request::receive(args.heartbeat_rate) {
         rrg::session::FleetspeakSession::dispatch(&args, filestore.as_ref(), request);
     }
 
