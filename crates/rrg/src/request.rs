@@ -286,14 +286,16 @@ impl Request {
     /// However, the process will keep heartbeating at the specified rate to
     /// ensure that Fleetspeak does not kill the agent for unresponsiveness.
     ///
+    /// Returns `None` in case of the end of input on the Fleetspeak side.
+    ///
     /// # Errors
     ///
     /// This function will return an error in case the request was invalid (e.g.
     /// it was missing some necessary fields). However, it will panic in case of
     /// irrecoverable error like Fleetspeak connection issue as it makes little
     /// sense to continue running in such a state.
-    pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ParseRequestError> {
-        let message = fleetspeak::receive_with_heartbeat(heartbeat_rate);
+    pub fn receive(heartbeat_rate: std::time::Duration) -> Option<Result<Request, ParseRequestError>> {
+        let message = fleetspeak::try_receive_with_heartbeat(heartbeat_rate)?;
 
         if message.service != "GRR" {
             let service = message.service;
@@ -307,14 +309,16 @@ impl Request {
         }
 
         use protobuf::Message as _;
-        let proto = rrg_proto::rrg::Request::parse_from_bytes(&message.data[..])
-            .map_err(|error| ParseRequestError {
+        let proto = match rrg_proto::rrg::Request::parse_from_bytes(&message.data[..]) {
+            Ok(proto) => proto,
+            Err(error) => return Some(Err(ParseRequestError {
                 request_id: None,
                 kind: ParseRequestErrorKind::MalformedBytes,
                 error: Some(Box::new(error)),
-            })?;
+            })),
+        };
 
-        Ok(Request::try_from(proto)?)
+        Some(Request::try_from(proto))
     }
 }
 

@@ -119,8 +119,9 @@ fn main() {
     };
 
     info!("listening for messages");
-    loop {
-        let request = rrg::Request::receive(args.heartbeat_rate);
+    while let Some(request) = rrg::Request::receive(args.heartbeat_rate) {
         rrg::session::FleetspeakSession::dispatch(&args, filestore.as_ref(), request);
     }
+
+    info!("shutting down");
 }

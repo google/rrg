@@ -91,7 +91,7 @@ path = "../wmi"
 version = "0.1.12"
 
 [dependencies.fleetspeak]
-version = "0.4.2"
+version = "0.4.4"
 
 [dependencies.humantime]
 version = "2.1.0"
