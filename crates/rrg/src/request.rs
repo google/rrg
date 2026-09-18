@@ -293,7 +293,10 @@ impl Request {
     /// irrecoverable error like Fleetspeak connection issue as it makes little
     /// sense to continue running in such a state.
     pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Option<Request>, ParseRequestError> {
-        let message = fleetspeak::receive_with_heartbeat(heartbeat_rate);
+        let message = match fleetspeak::try_receive_with_heartbeat(heartbeat_rate) {
+            Some(message) => message,
+            None => return Ok(None),
+        };
 
         if message.service != "GRR" {
             let service = message.service;
