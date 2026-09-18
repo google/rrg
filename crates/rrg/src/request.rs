@@ -286,6 +286,8 @@ impl Request {
     /// However, the process will keep heartbeating at the specified rate to
     /// ensure that Fleetspeak does not kill the agent for unresponsiveness.
     ///
+    /// Returns `None` in case of the end of input on the Fleetspeak side.
+    ///
     /// # Errors
     ///
     /// This function will return an error in case the request was invalid (e.g.
