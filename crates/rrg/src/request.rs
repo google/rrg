@@ -292,7 +292,7 @@ impl Request {
     /// it was missing some necessary fields). However, it will panic in case of
     /// irrecoverable error like Fleetspeak connection issue as it makes little
     /// sense to continue running in such a state.
-    pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Request, ParseRequestError> {
+    pub fn receive(heartbeat_rate: std::time::Duration) -> Result<Option<Request>, ParseRequestError> {
         let message = fleetspeak::receive_with_heartbeat(heartbeat_rate);
 
         if message.service != "GRR" {
@@ -314,7 +314,7 @@ impl Request {
                 error: Some(Box::new(error)),
             })?;
 
-        Ok(Request::try_from(proto)?)
+        Ok(Some(Request::try_from(proto)?))
     }
 }
 
