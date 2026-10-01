@@ -8,6 +8,12 @@ use log::{error, info};
 fn main() {
     static COMMS: std::sync::OnceLock<fleetspeak::Comms> = std::sync::OnceLock::new();
     let comms = COMMS.get_or_init(|| {
+        // SAFETY: We are calling `from_env` at the very beginning of the `main`
+        // function and so we can guarantee that environment variables have not
+        // been tampered with and so the Fleetspeak file descriptors are what
+        // the parent process set.
+        //
+        // It is also the only place where we invoke this function.
         unsafe {
             fleetspeak::Comms::from_env()
         }.expect("failed to initialize Fleetspeak")
