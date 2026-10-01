@@ -6,6 +6,9 @@
 use log::{error, info};
 
 fn main() {
+    // We need to be able to obtain static reference to the `Comms` object to be
+    // able to use it with the response logger which is a global object and can
+    // not hold references to temporary objects. Thus, we wrap it in `OnceLock`.
     static COMMS: std::sync::OnceLock<fleetspeak::Comms> = std::sync::OnceLock::new();
     let comms = COMMS.get_or_init(|| {
         // SAFETY: We are calling `from_env` at the very beginning of the `main`
