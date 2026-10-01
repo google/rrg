@@ -226,6 +226,8 @@ impl Log for GlobalResponseLogger {
 
 /// [`Log`] implementation that sends logs to the GRR server.
 pub struct ResponseLogger {
+    /// Communication channel with the Fleetspeak process.
+    comms: &'static fleetspeak::Comms,
     /// Builder used to construct [`crate::response::Log`] objects.
     log_builder: crate::LogBuilder,
     /// Minimum level at which messages are sent to the server.
@@ -235,8 +237,9 @@ pub struct ResponseLogger {
 impl ResponseLogger {
 
     /// Constructs a new logger instance for the given [`crate::Request`].
-    pub fn new(request: &crate::Request) -> ResponseLogger {
+    pub fn new(comms: &'static fleetspeak::Comms, request: &crate::Request) -> ResponseLogger {
         ResponseLogger {
+            comms,
             log_builder: crate::LogBuilder::new(request.id()),
             log_level: request.log_level(),
         }
@@ -280,7 +283,7 @@ impl Log for ResponseLogger {
         }
 
         let log = self.log_builder.log(record);
-        log.send_unaccounted();
+        log.send_unaccounted(self.comms);
     }
 
     fn flush(&self) {
