@@ -6,6 +6,8 @@ use log::{error, info};
 /// server. It keeps track of the responses it sends and collects statistics
 /// about network and runtime utilization to kill the action if it is needed.
 pub struct FleetspeakSession<'a, 'fs> {
+    /// Communication channel with the Fleetspeak process.
+    comms: &'static fleetspeak::Comms,
     /// Identifier of the request that spawned the session.
     request_id: crate::RequestId,
     /// Arguments passed to the agent.
@@ -45,7 +47,9 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
     /// specified the arguments passed to the agent.
     pub fn dispatch(
         // TODO(@panhania): The list of arguments to this function starts to be
-        // unwieldy, we should refeactor it through some builder pattern.
+        // **really** unwieldy, we should refeactor it through some builder
+        // pattern.
+        comms: &'static fleetspeak::Comms,
         args: &'a crate::args::Args,
         filestore: Option<&'fs crate::filestore::Filestore>,
         request: Result<crate::Request, crate::ParseRequestError>,
@@ -90,6 +94,7 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
         let status = match request {
             Ok(mut request) => {
                 let mut session = FleetspeakSession {
+                    comms,
                     request_id,
                     args,
                     filestore,
@@ -102,7 +107,7 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
                     real_time_limit: request.real_time_limit(),
                 };
 
-                let result = crate::log::ResponseLogger::new(&request)
+                let result = crate::log::ResponseLogger::new(comms, &request)
                     .context(|| crate::action::dispatch(&mut session, request));
 
                 match result.as_ref() {
@@ -149,7 +154,7 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
             }
         };
 
-        status.send_unaccounted();
+        status.send_unaccounted(comms);
 
         if let Some(request_file) = request_file {
             match request_file.remove() {
@@ -232,7 +237,7 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
             }
         };
 
-        self.network_bytes_sent += reply.send_unaccounted() as u64;
+        self.network_bytes_sent += reply.send_unaccounted(self.comms) as u64;
         self.check_network_bytes_limit()?;
 
         // TODO(@panhania): Enforce CPU time limits.
@@ -247,7 +252,7 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
     {
         let parcel = crate::response::Parcel::new(sink, item);
 
-        self.network_bytes_sent += parcel.send_unaccounted() as u64;
+        self.network_bytes_sent += parcel.send_unaccounted(self.comms) as u64;
         self.check_network_bytes_limit()?;
 
         // TODO(@panhania): Enforce CPU time limits.
@@ -257,7 +262,14 @@ impl<'a, 'fs> crate::session::Session for FleetspeakSession<'a, 'fs> {
     }
 
     fn heartbeat(&mut self) {
-        fleetspeak::heartbeat_with_throttle(self.args.heartbeat_rate);
+        // TODO(https://github.com/rust-lang/rust/issues/61695): Make more
+        // readable once `unwrap_infallible` is stable.
+        match self.comms.heartbeat_with_throttle(self.args.heartbeat_rate) {
+            Ok(()) => (),
+            Err(error) => panic! {
+                "failed to send Fleetspeak heartbeat: {error}",
+            }
+        }
     }
 
     fn filestore_store(

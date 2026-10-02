@@ -294,8 +294,15 @@ impl Request {
     /// it was missing some necessary fields). However, it will panic in case of
     /// irrecoverable error like Fleetspeak connection issue as it makes little
     /// sense to continue running in such a state.
-    pub fn receive(heartbeat_rate: std::time::Duration) -> Option<Result<Request, ParseRequestError>> {
-        let message = fleetspeak::try_receive_with_heartbeat(heartbeat_rate)?;
+    pub fn receive(comms: &fleetspeak::Comms, heartbeat_rate: std::time::Duration) -> Option<Result<Request, ParseRequestError>> {
+        // TODO(panhania@): Refactor the main loop to use the `fleetspeak` crate
+        // iterator API.
+        // TODO(https://github.com/rust-lang/rust/issues/61695): Make more
+        // readable once `unwrap_infallible` is stable.
+        let message = match comms.try_receive_with_heartbeat(heartbeat_rate) {
+            Ok(message) => message?,
+            Err(error) => panic!("failed to receive Fleetspeak message: {error}"),
+        };
 
         if message.service != "GRR" {
             let service = message.service;

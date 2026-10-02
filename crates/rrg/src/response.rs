@@ -85,8 +85,11 @@ impl<I: Item> Reply<I> {
     /// Fleetspeak.
     ///
     /// [`Session::reply`]: crate::session::Session::reply
-    pub fn send_unaccounted(self) -> usize {
+    pub fn send_unaccounted(self, comms: &fleetspeak::Comms) -> usize {
         use protobuf::Message as _;
+
+        let request_id = self.request_id;
+        let response_id = self.response_id;
 
         let data = rrg_proto::rrg::Response::from(self).write_to_bytes()
             // This should only fail in case we are out of memory, which we are
@@ -95,11 +98,20 @@ impl<I: Item> Reply<I> {
 
         let data_len = data.len();
 
-        fleetspeak::send(fleetspeak::Message {
+        // TODO(https://github.com/rust-lang/rust/issues/61695): Make more
+        // readable once `unwrap_infallible` is stable.
+        match comms.send(fleetspeak::Message {
             service: String::from("GRR"),
             kind: Some(String::from("rrg.Response")),
             data,
-        });
+        }) {
+            Ok(()) => (),
+            Err(error) => panic! {
+                "failed to send reply {}/{}: {error}",
+                request_id,
+                response_id.0,
+            },
+        }
 
         data_len
     }
@@ -138,8 +150,10 @@ impl Status {
     /// Fleetspeak.
     ///
     /// [`Session::send`]: crate::session::Session::send
-    pub fn send_unaccounted(self) -> usize {
+    pub fn send_unaccounted(self, comms: &fleetspeak::Comms) -> usize {
         use protobuf::Message as _;
+
+        let request_id = self.request_id;
 
         let data = rrg_proto::rrg::Response::from(self).write_to_bytes()
             // This should only fail in case we are out of memory, which we are
@@ -148,11 +162,19 @@ impl Status {
 
         let data_len = data.len();
 
-        fleetspeak::send(fleetspeak::Message {
+        // TODO(https://github.com/rust-lang/rust/issues/61695): Make more
+        // readable once `unwrap_infallible` is stable.
+        match comms.send(fleetspeak::Message {
             service: String::from("GRR"),
             kind: Some(String::from("rrg.Response")),
             data,
-        });
+        }) {
+            Ok(()) => (),
+            Err(error) => panic! {
+                "failed to send status response for {}: {error}",
+                request_id,
+            }
+        }
 
         data_len
     }
@@ -187,7 +209,7 @@ impl<'r, 'a> Log<'r, 'a> {
     /// Note that unlike for [`Status`] and [`Reply`], there is no corresponding
     /// "accounted" method for sending logs as they should not contribute to the
     /// network usage statistics.
-    pub fn send_unaccounted(self) {
+    pub fn send_unaccounted(self, comms: &fleetspeak::Comms) {
         use protobuf::Message as _;
 
         let data = rrg_proto::rrg::Response::from(self).write_to_bytes()
@@ -195,11 +217,18 @@ impl<'r, 'a> Log<'r, 'a> {
             // almost certainly not (and if we are, we have bigger issue).
             .expect("failed to serialize a log response");
 
-        fleetspeak::send(fleetspeak::Message {
+        // TODO(https://github.com/rust-lang/rust/issues/61695): Make more
+        // readable once `unwrap_infallible` is stable.
+        match comms.send(fleetspeak::Message {
             service: String::from("GRR"),
             kind: Some(String::from("rrg.Response")),
             data,
-        });
+        }) {
+            Ok(()) => (),
+            Err(error) => panic! {
+                "failed to send log message: {error}",
+            },
+        }
     }
 }
 
@@ -311,8 +340,10 @@ impl<I: crate::response::Item> Parcel<I> {
     ///
     /// [session]: crate::session::Session
     /// [`Session::send`]: crate::session::Session::send
-    pub fn send_unaccounted(self) -> usize {
+    pub fn send_unaccounted(self, comms: &fleetspeak::Comms) -> usize {
         use protobuf::Message as _;
+
+        let sink = self.sink;
 
         let data = rrg_proto::rrg::Parcel::from(self).write_to_bytes()
             // This should only fail in case we are out of memory, which we are
@@ -321,11 +352,18 @@ impl<I: crate::response::Item> Parcel<I> {
 
         let data_len = data.len();
 
-        fleetspeak::send(fleetspeak::Message {
+        // TODO(https://github.com/rust-lang/rust/issues/61695): Make more
+        // readable once `unwrap_infallible` is stable.
+        match comms.send(fleetspeak::Message {
             service: String::from("GRR"),
             kind: Some(String::from("rrg.Parcel")),
             data,
-        });
+        }) {
+            Ok(()) => (),
+            Err(error) => panic! {
+                "failed to send parcel to {sink:?}: {error}",
+            },
+        }
 
         data_len
     }

@@ -6,6 +6,22 @@
 use log::{error, info};
 
 fn main() {
+    // We need to be able to obtain static reference to the `Comms` object to be
+    // able to use it with the response logger which is a global object and can
+    // not hold references to temporary objects. Thus, we wrap it in `OnceLock`.
+    static COMMS: std::sync::OnceLock<fleetspeak::Comms> = std::sync::OnceLock::new();
+    let comms = COMMS.get_or_init(|| {
+        // SAFETY: We are calling `from_env` at the very beginning of the `main`
+        // function and so we can guarantee that environment variables have not
+        // been tampered with and so the Fleetspeak file descriptors are what
+        // the parent process set.
+        //
+        // It is also the only place where we invoke this function.
+        unsafe {
+            fleetspeak::Comms::from_env()
+        }.expect("failed to initialize Fleetspeak")
+    });
+
     let args = rrg::args::from_env_args();
     rrg::log::init(&args);
 
@@ -27,11 +43,16 @@ fn main() {
     }));
 
     info!("sending Fleetspeak startup information");
-    fleetspeak::startup(env!("CARGO_PKG_VERSION"));
+    // TODO(https://github.com/rust-lang/rust/issues/61695): Make more readable
+    // once `unwrap_infallible` is stable.
+    match comms.startup(env!("CARGO_PKG_VERSION")) {
+        Ok(()) => (),
+        Err(error) => panic!("failed to notify Fleetspeak about startup: {error}"),
+    }
 
     info!("sending RRG startup information");
     rrg::Parcel::new(rrg::Sink::Startup, rrg::Startup::now())
-        .send_unaccounted();
+        .send_unaccounted(comms);
 
     if let Some(request_file_path) = &args.request_file {
         match rrg::abort::open_request_file(request_file_path) {
@@ -41,7 +62,7 @@ fn main() {
                     request_file_path.display(),
                 };
                 rrg::Parcel::new(rrg::Sink::Abort, request_file.abort())
-                    .send_unaccounted();
+                    .send_unaccounted(comms);
 
                 match request_file.remove() {
                     Ok(()) => {
@@ -82,7 +103,7 @@ fn main() {
                 rrg::Parcel::new(rrg::Sink::Ping, rrg::Ping {
                     sent: std::time::SystemTime::now(),
                     seq,
-                }).send_unaccounted();
+                }).send_unaccounted(comms);
 
                 std::thread::sleep(args.ping_rate);
             }
@@ -119,8 +140,8 @@ fn main() {
     };
 
     info!("listening for messages");
-    while let Some(request) = rrg::Request::receive(args.heartbeat_rate) {
-        rrg::session::FleetspeakSession::dispatch(&args, filestore.as_ref(), request);
+    while let Some(request) = rrg::Request::receive(comms, args.heartbeat_rate) {
+        rrg::session::FleetspeakSession::dispatch(comms, &args, filestore.as_ref(), request);
     }
 
     info!("shutting down");
