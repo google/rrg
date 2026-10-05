@@ -176,7 +176,35 @@ fn main() {
         };
         info!("received request '{request_id}'");
 
+        let request_file = args.request_file.as_ref().and_then(|request_file_path| {
+            match rrg::abort::create_request_file(request_file_path, request_id) {
+                Ok(request_file) => {
+                    info! {
+                        "created request file at '{}'",
+                        request_file_path.display(),
+                    };
+
+                    Some(request_file)
+                }
+                Err(error) => {
+                    error! {
+                        "could not create request file at '{}': {error}",
+                        request_file_path.display(),
+                    }
+
+                    None
+                }
+            }
+        });
+
         rrg::session::FleetspeakSession::dispatch(comms, &args, filestore.as_ref(), request);
+
+        if let Some(request_file) = request_file {
+            match request_file.remove() {
+                Ok(()) => (),
+                Err(error) => error!("could not delete request file: {error}"),
+            }
+        }
     }
 
     info!("shutting down");
