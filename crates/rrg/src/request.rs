@@ -280,52 +280,24 @@ impl Request {
         std::mem::replace(&mut self.filters, crate::filter::FilterSet::empty())
     }
 
-    /// Awaits for a new request message from Fleetspeak.
-    ///
-    /// This will suspend execution until the request is actually available.
-    /// However, the process will keep heartbeating at the specified rate to
-    /// ensure that Fleetspeak does not kill the agent for unresponsiveness.
-    ///
-    /// Returns `None` in case of the end of input on the Fleetspeak side.
+    /// Parses a Fleetspeak message into a RRG request.
     ///
     /// # Errors
     ///
     /// This function will return an error in case the request was invalid (e.g.
-    /// it was missing some necessary fields). However, it will panic in case of
-    /// irrecoverable error like Fleetspeak connection issue as it makes little
-    /// sense to continue running in such a state.
-    pub fn receive(comms: &fleetspeak::Comms, heartbeat_rate: std::time::Duration) -> Option<Result<Request, ParseRequestError>> {
-        // TODO(panhania@): Refactor the main loop to use the `fleetspeak` crate
-        // iterator API.
-        // TODO(https://github.com/rust-lang/rust/issues/61695): Make more
-        // readable once `unwrap_infallible` is stable.
-        let message = match comms.try_receive_with_heartbeat(heartbeat_rate) {
-            Ok(message) => message?,
-            Err(error) => panic!("failed to receive Fleetspeak message: {error}"),
-        };
-
-        if message.service != "GRR" {
-            let service = message.service;
-            log::warn!("request send by service '{service}' (instead of 'GRR')");
-        }
-        if message.kind.as_deref() != Some("rrg.Request") {
-            match message.kind {
-                Some(kind) => log::warn!("request with unexpected kind '{kind}'"),
-                None => log::warn!("request with unspecified kind"),
-            }
-        }
-
+    /// it was missing some necessary fields).
+    pub fn parse(message: &fleetspeak::Message) -> Result<Request, ParseRequestError> {
         use protobuf::Message as _;
         let proto = match rrg_proto::rrg::Request::parse_from_bytes(&message.data[..]) {
             Ok(proto) => proto,
-            Err(error) => return Some(Err(ParseRequestError {
+            Err(error) => return Err(ParseRequestError {
                 request_id: None,
                 kind: ParseRequestErrorKind::MalformedBytes,
                 error: Some(Box::new(error)),
-            })),
+            }),
         };
 
-        Some(Request::try_from(proto))
+        Request::try_from(proto)
     }
 }
 

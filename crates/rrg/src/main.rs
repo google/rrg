@@ -3,7 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use log::{error, info};
+use log::{error, info, warn};
 
 fn main() {
     // We need to be able to obtain static reference to the `Comms` object to be
@@ -140,7 +140,29 @@ fn main() {
     };
 
     info!("listening for messages");
-    while let Some(request) = rrg::Request::receive(comms, args.heartbeat_rate) {
+
+    for message in comms.receiver()
+        .with_heartbeat(args.heartbeat_rate)
+    {
+        // TODO(https://github.com/rust-lang/rust/issues/61695): Make more
+        // readable once `unwrap_infallible` is stable.
+        let message = match message {
+            Ok(message) => message,
+            Err(error) => panic!("failed to receive Fleetspeak message: {error}"),
+        };
+
+        if message.service != "GRR" {
+            let service = &message.service;
+            warn!("request send by service '{service}' (instead of 'GRR')");
+        }
+        if message.kind.as_deref() != Some("rrg.Request") {
+            match &message.kind {
+                Some(kind) => warn!("request with unexpected kind '{kind}'"),
+                None => warn!("request with unspecified kind"),
+            }
+        }
+
+        let request = rrg::Request::parse(&message);
         rrg::session::FleetspeakSession::dispatch(comms, &args, filestore.as_ref(), request);
     }
 
