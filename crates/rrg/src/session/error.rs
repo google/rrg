@@ -16,7 +16,7 @@ pub struct Error {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ErrorKind {
     /// The action request was invalid.
-    InvalidRequest(crate::request::ParseRequestErrorKind),
+    InvalidRequest(crate::request::InvalidRequestErrorKind),
     /// The requested action is not supported.
     UnsupportedAction,
     /// The arguments given for the action were malformed.
@@ -122,9 +122,9 @@ impl std::error::Error for Error {
     }
 }
 
-impl From<crate::request::ParseRequestError> for Error {
+impl From<crate::request::InvalidRequestError> for Error {
 
-    fn from(error: crate::request::ParseRequestError) -> Error {
+    fn from(error: crate::request::InvalidRequestError) -> Error {
         Error {
             kind: ErrorKind::InvalidRequest(error.kind()),
             error: Box::new(error),

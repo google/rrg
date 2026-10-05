@@ -162,7 +162,14 @@ fn main() {
             }
         }
 
-        let request = rrg::Request::parse(&message);
+        let request = match rrg::Request::parse(&message) {
+            Ok(request) => Ok(request),
+            Err(rrg::ParseRequestError::Invalid(error)) => Err(error),
+            Err(rrg::ParseRequestError::Malformed(error)) => {
+                error!("malformed request: {error}");
+                continue
+            }
+        };
         rrg::session::FleetspeakSession::dispatch(comms, &args, filestore.as_ref(), request);
     }
 

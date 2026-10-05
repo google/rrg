@@ -52,17 +52,11 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
         comms: &'static fleetspeak::Comms,
         args: &'a crate::args::Args,
         filestore: Option<&'fs crate::filestore::Filestore>,
-        request: Result<crate::Request, crate::ParseRequestError>,
+        request: Result<crate::Request, crate::InvalidRequestError>,
     ) {
         let request_id = match &request {
             Ok(request) => request.id(),
-            Err(error) => match error.request_id() {
-                Some(request_id) => request_id,
-                None => {
-                    error!("invalid request: {}", error);
-                    return;
-                }
-            }
+            Err(error) => error.request_id(),
         };
 
         info!("received request '{request_id}'");
