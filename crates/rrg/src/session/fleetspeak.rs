@@ -59,8 +59,6 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
             Err(error) => error.request_id(),
         };
 
-        info!("received request '{request_id}'");
-
         let request_file = args.request_file.as_ref()
             .and_then(|request_file_path| {
                 match crate::abort::create_request_file(

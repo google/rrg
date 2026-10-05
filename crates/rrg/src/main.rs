@@ -170,6 +170,12 @@ fn main() {
                 continue
             }
         };
+        let request_id = match &request {
+            Ok(request) => request.id(),
+            Err(error) => error.request_id(),
+        };
+        info!("received request '{request_id}'");
+
         rrg::session::FleetspeakSession::dispatch(comms, &args, filestore.as_ref(), request);
     }
 
