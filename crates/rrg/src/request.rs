@@ -280,60 +280,29 @@ impl Request {
         std::mem::replace(&mut self.filters, crate::filter::FilterSet::empty())
     }
 
-    /// Awaits for a new request message from Fleetspeak.
-    ///
-    /// This will suspend execution until the request is actually available.
-    /// However, the process will keep heartbeating at the specified rate to
-    /// ensure that Fleetspeak does not kill the agent for unresponsiveness.
-    ///
-    /// Returns `None` in case of the end of input on the Fleetspeak side.
+    /// Parses a Fleetspeak message into a RRG request.
     ///
     /// # Errors
     ///
     /// This function will return an error in case the request was invalid (e.g.
-    /// it was missing some necessary fields). However, it will panic in case of
-    /// irrecoverable error like Fleetspeak connection issue as it makes little
-    /// sense to continue running in such a state.
-    pub fn receive(comms: &fleetspeak::Comms, heartbeat_rate: std::time::Duration) -> Option<Result<Request, ParseRequestError>> {
-        // TODO(panhania@): Refactor the main loop to use the `fleetspeak` crate
-        // iterator API.
-        // TODO(https://github.com/rust-lang/rust/issues/61695): Make more
-        // readable once `unwrap_infallible` is stable.
-        let message = match comms.try_receive_with_heartbeat(heartbeat_rate) {
-            Ok(message) => message?,
-            Err(error) => panic!("failed to receive Fleetspeak message: {error}"),
-        };
-
-        if message.service != "GRR" {
-            let service = message.service;
-            log::warn!("request send by service '{service}' (instead of 'GRR')");
-        }
-        if message.kind.as_deref() != Some("rrg.Request") {
-            match message.kind {
-                Some(kind) => log::warn!("request with unexpected kind '{kind}'"),
-                None => log::warn!("request with unspecified kind"),
-            }
-        }
-
+    /// it was missing some necessary fields).
+    pub fn parse(message: &fleetspeak::Message) -> Result<Request, ParseRequestError> {
         use protobuf::Message as _;
         let proto = match rrg_proto::rrg::Request::parse_from_bytes(&message.data[..]) {
             Ok(proto) => proto,
-            Err(error) => return Some(Err(ParseRequestError {
-                request_id: None,
-                kind: ParseRequestErrorKind::MalformedBytes,
-                error: Some(Box::new(error)),
-            })),
+            Err(error) => return Err(ParseRequestError::Malformed(MalformedRequestError(error))),
         };
 
-        Some(Request::try_from(proto))
+        Request::try_from(proto)
+            .map_err(ParseRequestError::Invalid)
     }
 }
 
 impl TryFrom<rrg_proto::rrg::Request> for Request {
 
-    type Error = ParseRequestError;
+    type Error = InvalidRequestError;
 
-    fn try_from(mut proto: rrg_proto::rrg::Request) -> Result<Request, ParseRequestError> {
+    fn try_from(mut proto: rrg_proto::rrg::Request) -> Result<Request, InvalidRequestError> {
         use rrg_proto::try_from_duration;
 
         let request_id = RequestId {
@@ -343,9 +312,9 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
 
         let action = match proto.action().try_into() {
             Ok(action) => action,
-            Err(action) => return Err(ParseRequestError {
-                request_id: Some(request_id),
-                kind: ParseRequestErrorKind::UnknownAction(action),
+            Err(action) => return Err(InvalidRequestError {
+                request_id: request_id,
+                kind: InvalidRequestErrorKind::UnknownAction(action),
                 error: None,
             }),
         };
@@ -360,9 +329,9 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
             // TODO(@panhania): We should always require time limit to be set.
             Ok(limit) if limit.is_zero() => None,
             Ok(limit) => Some(limit),
-            Err(error) => return Err(ParseRequestError {
-                request_id: Some(request_id),
-                kind: ParseRequestErrorKind::InvalidCpuTimeLimit,
+            Err(error) => return Err(InvalidRequestError {
+                request_id: request_id,
+                kind: InvalidRequestErrorKind::InvalidCpuTimeLimit,
                 error: Some(Box::new(error)),
             }),
         };
@@ -372,9 +341,9 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
             // TODO(@panhania): We should always require time limit to be set.
             Ok(limit) if limit.is_zero() => None,
             Ok(limit) => Some(limit),
-            Err(error) => return Err(ParseRequestError {
-                request_id: Some(request_id),
-                kind: ParseRequestErrorKind::InvalidRealTimeLimit,
+            Err(error) => return Err(InvalidRequestError {
+                request_id: request_id,
+                kind: InvalidRequestErrorKind::InvalidRealTimeLimit,
                 error: Some(Box::new(error)),
             }),
         };
@@ -382,9 +351,9 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
         let filters = proto.take_filters().into_iter()
             .map(|proto| crate::filter::Filter::try_from(proto))
             .collect::<Result<_, crate::filter::ParseError>>()
-            .map_err(|error| ParseRequestError {
-                request_id: Some(request_id),
-                kind: ParseRequestErrorKind::InvalidFilter,
+            .map_err(|error| InvalidRequestError {
+                request_id: request_id,
+                kind: InvalidRequestErrorKind::InvalidFilter,
                 error: Some(Box::new(error)),
             })?;
 
@@ -402,34 +371,54 @@ impl TryFrom<rrg_proto::rrg::Request> for Request {
 }
 
 /// The error type for cases when parsing a request fails.
+pub enum ParseRequestError {
+    Malformed(MalformedRequestError),
+    Invalid(InvalidRequestError),
+}
+
+/// The error type for cases when bytes of serialized request were malformed.
 #[derive(Debug)]
-pub struct ParseRequestError {
+pub struct MalformedRequestError(protobuf::Error);
+
+impl std::fmt::Display for MalformedRequestError {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{}", self.0)
+    }
+}
+
+impl std::error::Error for MalformedRequestError {
+
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
+    }
+}
+
+/// The error type for cases when validating a request fails.
+#[derive(Debug)]
+pub struct InvalidRequestError {
     /// A unique identifier of the request that we failed to parse.
-    request_id: Option<RequestId>,
-    /// A corresponding [`ParseRequestErrorKind`] of the error.
-    kind: ParseRequestErrorKind,
+    request_id: RequestId,
+    /// A corresponding [`InvalidRequestErrorKind`] of the error.
+    kind: InvalidRequestErrorKind,
     /// A more detailed cause of the error.
     error: Option<Box<dyn std::error::Error>>,
 }
 
-impl ParseRequestError {
+impl InvalidRequestError {
 
     /// Gets the unique identifier of the request that we failed to parse.
-    ///
-    /// Note that the identifier might not be available. This can happen because
-    /// it was missing in the request or because we failed to deserialize the
-    /// Protocol Buffers message with the request.
-    pub fn request_id(&self) -> Option<RequestId> {
+    pub fn request_id(&self) -> RequestId {
         self.request_id
     }
 
-    /// Returns the corresponding [`ParseRequestErrorKind`] of this error.
-    pub fn kind(&self) -> ParseRequestErrorKind {
+    /// Returns the corresponding [`InvalidRequestErrorKind`] of this error.
+    pub fn kind(&self) -> InvalidRequestErrorKind {
         self.kind
     }
 }
 
-impl std::fmt::Display for ParseRequestError {
+impl std::fmt::Display for InvalidRequestError {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(fmt, "{}", self.kind)?;
@@ -441,18 +430,16 @@ impl std::fmt::Display for ParseRequestError {
     }
 }
 
-impl std::error::Error for ParseRequestError {
+impl std::error::Error for InvalidRequestError {
 
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.error.as_deref()
     }
 }
 
-/// List of general categories of action parsing errors.
+/// List of general categories of request validation errors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ParseRequestErrorKind {
-    /// The serialized message with request was impossible to deserialize.
-    MalformedBytes,
+pub enum InvalidRequestErrorKind {
     /// The action in the request is not known.
     UnknownAction(UnknownAction),
     /// The CPU time limit in the request is invalid.
@@ -463,13 +450,12 @@ pub enum ParseRequestErrorKind {
     InvalidFilter,
 }
 
-impl std::fmt::Display for ParseRequestErrorKind {
+impl std::fmt::Display for InvalidRequestErrorKind {
 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use ParseRequestErrorKind::*;
+        use InvalidRequestErrorKind::*;
 
         match self {
-            MalformedBytes => write!(fmt, "malformed protobuf message bytes"),
             UnknownAction(action) => write!(fmt, "unknown action: {action}"),
             InvalidCpuTimeLimit => write!(fmt, "invalid CPU time limit"),
             InvalidRealTimeLimit => write!(fmt, "invalid real time limit"),
@@ -478,17 +464,12 @@ impl std::fmt::Display for ParseRequestErrorKind {
     }
 }
 
-impl From<ParseRequestErrorKind> for rrg_proto::rrg::status::error::Type {
+impl From<InvalidRequestErrorKind> for rrg_proto::rrg::status::error::Type {
 
-    fn from(kind: ParseRequestErrorKind) -> rrg_proto::rrg::status::error::Type {
-        use ParseRequestErrorKind::*;
+    fn from(kind: InvalidRequestErrorKind) -> rrg_proto::rrg::status::error::Type {
+        use InvalidRequestErrorKind::*;
 
         match kind {
-            // Note that `MalformedBytes` error indicates that we couldn't parse
-            // the request and thus we do not have anything to send back to the
-            // server. Therefore, there is no corresponding status error type in
-            // the Protocol Buffers enum and we just leave it unset.
-            MalformedBytes => Self::UNSET,
             UnknownAction(_) => Self::UNKNOWN_ACTION,
             InvalidCpuTimeLimit => Self::INVALID_CPU_TIME_LIMIT,
             InvalidRealTimeLimit => Self::INVALID_REAL_TIME_LIMIT,

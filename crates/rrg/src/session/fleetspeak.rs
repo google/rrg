@@ -52,39 +52,8 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
         comms: &'static fleetspeak::Comms,
         args: &'a crate::args::Args,
         filestore: Option<&'fs crate::filestore::Filestore>,
-        request: Result<crate::Request, crate::ParseRequestError>,
+        request: Result<crate::Request, crate::InvalidRequestError>,
     ) {
-        let request_id = match &request {
-            Ok(request) => request.id(),
-            Err(error) => match error.request_id() {
-                Some(request_id) => request_id,
-                None => {
-                    error!("invalid request: {}", error);
-                    return;
-                }
-            }
-        };
-
-        info!("received request '{request_id}'");
-
-        let request_file = args.request_file.as_ref()
-            .and_then(|request_file_path| {
-                match crate::abort::create_request_file(
-                    request_file_path,
-                    request_id,
-                ) {
-                    Ok(request_file) => Some(request_file),
-                    Err(error) => {
-                        error! {
-                            "could not create request file at '{}': {error}",
-                            request_file_path.display(),
-                        }
-
-                        None
-                    }
-                }
-            });
-
         // Response identifiers that GRR agents use start at 1. The server
         // assumes this to determine the number of expected messages when the
         // status message is received. Thus, we have to replicate the behaviour
@@ -93,6 +62,8 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
 
         let status = match request {
             Ok(mut request) => {
+                let request_id = request.id();
+
                 let mut session = FleetspeakSession {
                     comms,
                     request_id,
@@ -141,10 +112,10 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
                 }
             },
             Err(error) => {
-                error!("invalid request '{request_id}': {error}");
+                error!("invalid request '{}': {error}", error.request_id());
 
                 crate::response::Status {
-                    request_id,
+                    request_id: error.request_id(),
                     response_id: next_response_id,
                     network_bytes_sent: 0,
                     real_time: std::time::Duration::ZERO,
@@ -155,13 +126,6 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
         };
 
         status.send_unaccounted(comms);
-
-        if let Some(request_file) = request_file {
-            match request_file.remove() {
-                Ok(()) => (),
-                Err(error) => error!("could not delete request file: {error}"),
-            }
-        }
     }
 }
 

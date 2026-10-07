@@ -3,7 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use log::{error, info};
+use log::{error, info, warn};
 
 fn main() {
     // We need to be able to obtain static reference to the `Comms` object to be
@@ -140,8 +140,71 @@ fn main() {
     };
 
     info!("listening for messages");
-    while let Some(request) = rrg::Request::receive(comms, args.heartbeat_rate) {
+
+    for message in comms.receiver()
+        .with_heartbeat(args.heartbeat_rate)
+    {
+        // TODO(https://github.com/rust-lang/rust/issues/61695): Make more
+        // readable once `unwrap_infallible` is stable.
+        let message = match message {
+            Ok(message) => message,
+            Err(error) => panic!("failed to receive Fleetspeak message: {error}"),
+        };
+
+        if message.service != "GRR" {
+            let service = &message.service;
+            warn!("request send by service '{service}' (instead of 'GRR')");
+        }
+        if message.kind.as_deref() != Some("rrg.Request") {
+            match &message.kind {
+                Some(kind) => warn!("request with unexpected kind '{kind}'"),
+                None => warn!("request with unspecified kind"),
+            }
+        }
+
+        let request = match rrg::Request::parse(&message) {
+            Ok(request) => Ok(request),
+            Err(rrg::ParseRequestError::Invalid(error)) => Err(error),
+            Err(rrg::ParseRequestError::Malformed(error)) => {
+                error!("malformed request: {error}");
+                continue
+            }
+        };
+        let request_id = match &request {
+            Ok(request) => request.id(),
+            Err(error) => error.request_id(),
+        };
+        info!("received request '{request_id}'");
+
+        let request_file = args.request_file.as_ref().and_then(|request_file_path| {
+            match rrg::abort::create_request_file(request_file_path, request_id) {
+                Ok(request_file) => {
+                    info! {
+                        "created request file at '{}'",
+                        request_file_path.display(),
+                    };
+
+                    Some(request_file)
+                }
+                Err(error) => {
+                    error! {
+                        "could not create request file at '{}': {error}",
+                        request_file_path.display(),
+                    }
+
+                    None
+                }
+            }
+        });
+
         rrg::session::FleetspeakSession::dispatch(comms, &args, filestore.as_ref(), request);
+
+        if let Some(request_file) = request_file {
+            match request_file.remove() {
+                Ok(()) => (),
+                Err(error) => error!("could not delete request file: {error}"),
+            }
+        }
     }
 
     info!("shutting down");
