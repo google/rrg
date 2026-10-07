@@ -484,7 +484,9 @@ mod tests {
         assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir\\file2")));
     }
 
-    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    // `std::os::unix::fs::symlink` is unavailable on Windows, so we can't just
+    // `ignore`.
+    #[cfg(all(target_os = "linux", feature = "test-libguestfs"))]
     #[test]
     fn handle_dir_max_depth_1_symlinks() {
         let ntfs_file = tempntfs::create(|ntfs_path| {
@@ -519,7 +521,9 @@ mod tests {
         assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\link")));
     }
 
-    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    // `std::os::unix::fs::symlink` is unavailable on Windows, so we can't just
+    // `ignore`.
+    #[cfg(all(target_os = "linux", feature = "test-libguestfs"))]
     #[test]
     fn handle_dir_max_depth_1_symlinks_circular() {
         let ntfs_file = tempntfs::create(|ntfs_path| {
