@@ -3,9 +3,16 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
+enum VolumePath {
+    // Absolute path to the raw volume file (e.g. `\\?\Volume{...}`.
+    Direct(std::path::PathBuf),
+    // Absolute path to the mount point of a volume (e.g. `C:\`).
+    Mount(std::path::PathBuf),
+}
+
 /// Arguments of the `get_file_metadata_kmx` action.
 pub struct Args {
-    volume_path: Option<std::path::PathBuf>,
+    volume_path: VolumePath,
     path: keramics_formats::ntfs::NtfsPath,
 }
 
@@ -23,12 +30,20 @@ pub fn handle<S>(session: &mut S, args: Args) -> crate::session::Result<()>
 where
     S: crate::session::Session,
 {
-    // TODO: Add support for inferring the volume from path.
-    let Some(volume_path) = args.volume_path else {
-        return Err(crate::session::Error::action(std::io::Error::new(
+    let volume_path = match args.volume_path {
+        VolumePath::Direct(path) => path,
+        #[cfg(target_os = "windows")]
+        VolumePath::Mount(path) => {
+            log::debug!("inferring direct volume path from mount: {}", path.display());
+
+            ospect::fs::windows::raw_device_path(&path)
+                .map_err(crate::session::Error::action)?
+        }
+        #[cfg(not(target_os = "windows"))]
+        VolumePath::Mount(_path) => return Err(crate::session::Error::action(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "volume path must be provided",
-        )));
+            "volume path inference not supported on Windows",
+        ))),
     };
 
     log::debug!("opening NTFS volume at '{}'", volume_path.display());
@@ -134,8 +149,22 @@ impl crate::request::Args for Args {
 
     type Proto = rrg_proto::get_file_metadata_kmx::Args;
 
-    fn from_proto(proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
+    fn from_proto(mut proto: Self::Proto) -> Result<Args, crate::request::ParseArgsError> {
         use crate::request::ParseArgsError;
+
+        let volume_path = if !proto.volume_mount_path().raw_bytes().is_empty() {
+            let volume_mount_path = proto.take_volume_mount_path()
+                .try_into()
+                .map_err(|error| ParseArgsError::invalid_field("volume mount path", error))?;
+
+            VolumePath::Mount(volume_mount_path)
+        } else {
+            let volume_path = proto.take_volume_path()
+                .try_into()
+                .map_err(|error| ParseArgsError::invalid_field("volume path", error))?;
+
+            VolumePath::Direct(volume_path)
+        };
 
         // TODO: Do not go through UTF-8 conversion.
         let path = str::from_utf8(proto.path().raw_bytes())
@@ -143,7 +172,7 @@ impl crate::request::Args for Args {
         let path = keramics_formats::ntfs::NtfsPath::from(path);
 
         Ok(Args {
-            volume_path: None,
+            volume_path,
             path,
         })
     }
@@ -224,7 +253,7 @@ mod tests {
             .unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             path: keramics_formats::ntfs::NtfsPath::from("\\idonotexist"),
         };
 
@@ -248,7 +277,7 @@ mod tests {
         let timestamp_post = std::time::SystemTime::now();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             path: keramics_formats::ntfs::NtfsPath::from("\\foo"),
         };
 
@@ -282,7 +311,7 @@ mod tests {
         }).unwrap();
 
         let args = Args {
-            volume_path: Some(ntfs_file.path().to_path_buf()),
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             path: keramics_formats::ntfs::NtfsPath::from("\\foo"),
         };
 
