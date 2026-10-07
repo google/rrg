@@ -14,6 +14,8 @@ enum VolumePath {
 pub struct Args {
     volume_path: VolumePath,
     path: keramics_formats::ntfs::NtfsPath,
+    /// Limit on the depth of recursion when visiting subfolders.
+    max_depth: u32,
 }
 
 /// Result of the `get_file_metadata_kmx` action.
@@ -80,67 +82,156 @@ where
         }
     };
 
-    let modified = match file_entry.get_modification_time() {
-        Some(keramics_datetime::DateTime::Filetime(time)) => {
-            let time = filetime_to_system_time(time);
-            if time.is_none() {
-                log::error!("unsupported modification time for '{:?}'", args.path);
-            }
-            time
-        }
-        Some(time) => {
-            log::error!("unexpected modification time type '{time:?}' for {:?}", args.path);
-            None
-        },
-        None => {
-            log::error!("missing modification time for '{:?}", args.path);
-            None
-        }
-    };
-    let accessed = match file_entry.get_access_time() {
-        Some(keramics_datetime::DateTime::Filetime(time)) => {
-            let time = filetime_to_system_time(time);
-            if time.is_none() {
-                log::error!("unsupported access time for '{:?}'", args.path);
-            }
-            time
-        }
-        Some(time) => {
-            log::error!("unexpected access time type '{time:?}' for {:?}", args.path);
-            None
-        },
-        None => {
-            log::error!("missing access time for '{:?}", args.path);
-            None
-        }
-    };
-    let created = match file_entry.get_creation_time() {
-        Some(keramics_datetime::DateTime::Filetime(time)) => {
-            let time = filetime_to_system_time(time);
-            if time.is_none() {
-                log::error!("unsupported creation time for '{:?}'", args.path);
-            }
-            time
-        }
-        Some(time) => {
-            log::error!("unexpected creation time type '{time:?}' for {:?}", args.path);
-            None
-        },
-        None => {
-            log::error!("missing creation time for '{:?}", args.path);
-            None
-        }
-    };
+    struct Queued {
+        path: keramics_formats::ntfs::NtfsPath,
+        entry: keramics_formats::ntfs::NtfsFileEntry,
+        depth: u32,
+    }
 
-    log::debug!("sending metadata for '{:?}'", args.path);
-
-    session.reply(Item {
+    let mut queued_iter = Vec::new().into_iter();
+    let mut queued_buf = Vec::new();
+    queued_buf.push(Queued {
         path: args.path,
-        modified,
-        accessed,
-        created,
-        len: file_entry.get_size(),
-    })?;
+        entry: file_entry,
+        depth: 0,
+    });
+
+    loop {
+        let mut cur = match queued_iter.next() {
+            Some(cur) => cur,
+            None if queued_buf.is_empty() => break,
+            None => {
+                queued_iter = std::mem::take(&mut queued_buf)
+                    .into_iter();
+                continue
+            }
+        };
+
+        let modified = match cur.entry.get_modification_time() {
+            Some(keramics_datetime::DateTime::Filetime(time)) => {
+                let time = filetime_to_system_time(&time);
+                if time.is_none() {
+                    log::error!("unsupported modification time for '{:?}'", cur.path);
+                }
+                time
+            }
+            Some(time) => {
+                log::error!("unexpected modification time type '{time:?}' for {:?}", cur.path);
+                None
+            },
+            None => {
+                log::error!("missing modification time for '{:?}", cur.path);
+                None
+            }
+        };
+        let accessed = match cur.entry.get_access_time() {
+            Some(keramics_datetime::DateTime::Filetime(time)) => {
+                let time = filetime_to_system_time(&time);
+                if time.is_none() {
+                    log::error!("unsupported access time for '{:?}'", cur.path);
+                }
+                time
+            }
+            Some(time) => {
+                log::error!("unexpected access time type '{time:?}' for {:?}", cur.path);
+                None
+            },
+            None => {
+                log::error!("missing access time for '{:?}", cur.path);
+                None
+            }
+        };
+        let created = match cur.entry.get_creation_time() {
+            Some(keramics_datetime::DateTime::Filetime(time)) => {
+                let time = filetime_to_system_time(&time);
+                if time.is_none() {
+                    log::error!("unsupported creation time for '{:?}'", cur.path);
+                }
+                time
+            }
+            Some(time) => {
+                log::error!("unexpected creation time type '{time:?}' for {:?}", cur.path);
+                None
+            },
+            None => {
+                log::error!("missing creation time for '{:?}", cur.path);
+                None
+            }
+        };
+
+        log::debug!("sending metadata for '{:?}'", cur.path);
+
+        session.reply(Item {
+            path: cur.path.clone(),
+            modified,
+            accessed,
+            created,
+            len: cur.entry.get_size(),
+        })?;
+
+        // https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x00000400;
+
+        if cur.depth < args.max_depth && (
+            // We do not want to descend to reparse points (e.g. symlinks) to
+            // avoid cycles.
+            // TODO(@panhania): Add `is_reparse_point` accessor to Keramics.
+            (cur.entry.get_file_attribute_flags() & FILE_ATTRIBUTE_REPARSE_POINT) == 0 ||
+            // ... except the case where we are a root directory which is a
+            // reparse point but we still want to be able to list it.
+            cur.entry.is_root_directory()
+        ) {
+            let sub_entry_count = match cur.entry.get_number_of_sub_file_entries() {
+                Ok(sub_entry_count) => sub_entry_count,
+                Err(error) => {
+                    log::error! {
+                        "failed to get number of children for '{:?}': {error}",
+                        cur.path,
+                    };
+                    continue
+                }
+            };
+
+            log::debug!("listing {sub_entry_count} children of '{:?}'", cur.path);
+
+            for index in 0..sub_entry_count {
+                let sub_entry = match cur.entry.get_sub_file_entry_by_index(index) {
+                    Ok(sub_entry) => sub_entry,
+                    Err(error) => {
+                        log::error! {
+                            "failed to list child {index} of '{:?}': {error}",
+                            cur.path,
+                        };
+                        // If we failed to list a child, we assume there is
+                        // something wrong with the entry and we do not try to
+                        // read the remaining children.
+                        break
+                    }
+                };
+
+                let mut sub_path;
+                match sub_entry.get_name() {
+                    Some(name) => {
+                        sub_path = cur.path.clone();
+                        sub_path.push(name.clone());
+                    }
+                    None => {
+                        log::error! {
+                            "no name for child {index} of {:?}",
+                            cur.path,
+                        };
+                        continue
+                    }
+                }
+
+                queued_buf.push(Queued {
+                    path: sub_path,
+                    entry: sub_entry,
+                    depth: cur.depth + 1,
+                });
+            }
+        }
+    }
 
     Ok(())
 }
@@ -173,6 +264,8 @@ impl crate::request::Args for Args {
 
         Ok(Args {
             volume_path,
+            // TODO: Read this from the proto.
+            max_depth: 0,
             path,
         })
     }
@@ -255,6 +348,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             path: keramics_formats::ntfs::NtfsPath::from("\\idonotexist"),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -279,6 +373,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             path: keramics_formats::ntfs::NtfsPath::from("\\foo"),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -313,6 +408,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             path: keramics_formats::ntfs::NtfsPath::from("\\foo"),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -324,4 +420,6 @@ mod tests {
         assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\foo"));
         // TODO: Add assertions about the file type.
     }
+
+    // TODO(@panhania): Add tests for listing descendants.
 }
