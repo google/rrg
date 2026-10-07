@@ -421,5 +421,148 @@ mod tests {
         // TODO: Add assertions about the file type.
     }
 
-    // TODO(@panhania): Add tests for listing descendants.
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_dir_max_depth_0() {
+        let ntfs_file = tempntfs::create(|ntfs_path| {
+            std::fs::File::create_new(ntfs_path.join("foo"))
+                .unwrap();
+            std::fs::File::create_new(ntfs_path.join("bar"))
+                .unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\"),
+            max_depth: 0,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        let paths = session.replies::<Item>()
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>();
+
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
+        assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\foo")));
+        assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\bar")));
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_dir_max_depth_1() {
+        let ntfs_file = tempntfs::create(|ntfs_path| {
+            std::fs::File::create_new(ntfs_path.join("file1"))
+                .unwrap();
+            std::fs::File::create_new(ntfs_path.join("file2"))
+                .unwrap();
+
+            std::fs::create_dir(ntfs_path.join("subdir"))
+                .unwrap();
+
+            std::fs::File::create(ntfs_path.join("subdir").join("file1"))
+                .unwrap();
+            std::fs::File::create(ntfs_path.join("subdir").join("file2"))
+                .unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\"),
+            max_depth: 1,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        let paths = session.replies::<Item>()
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>();
+
+        // TODO: Add assertions about the file type.
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\file1")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\file2")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir")));
+        assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir\\file1")));
+        assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir\\file2")));
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_dir_max_depth_1_symlinks() {
+        let ntfs_file = tempntfs::create(|ntfs_path| {
+            std::fs::File::create_new(ntfs_path.join("file"))
+                .unwrap();
+
+            std::os::unix::fs::symlink(
+                ntfs_path.join("file"),
+                ntfs_path.join("link"),
+            ).unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\"),
+            max_depth: 1,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        let paths = session.replies::<Item>()
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>();
+
+        // TODO: Add assertions about the file type.
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\file")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\link")));
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_dir_max_depth_1_symlinks_circular() {
+        let ntfs_file = tempntfs::create(|ntfs_path| {
+            std::fs::create_dir(ntfs_path.join("subdir"))
+                .unwrap();
+
+            std::os::unix::fs::symlink(
+                ntfs_path.join("subdir"),
+                ntfs_path.join("subdir").join("link"),
+            ).unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\"),
+            max_depth: u32::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        let paths = session.replies::<Item>()
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>();
+
+        // TODO: Add assertions about the file type.
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir\\link")));
+        assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir\\link\\link")));
+    }
 }
