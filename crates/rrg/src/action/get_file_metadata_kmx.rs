@@ -6,7 +6,7 @@
 enum VolumePath {
     // Absolute path to the raw volume file (e.g. `\\?\Volume{...}`.
     Direct(std::path::PathBuf),
-    // Absolute path to the mount point of a raw volume file (e.g. `C:\`).
+    // Absolute path to the mount point of a volume (e.g. `C:\`).
     Mount(std::path::PathBuf),
 }
 
@@ -42,7 +42,7 @@ where
         #[cfg(not(target_os = "windows"))]
         VolumePath::Mount(_path) => return Err(crate::session::Error::action(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "volume path inference not on Windows",
+            "volume path inference not supported on Windows",
         ))),
     };
 
