@@ -88,25 +88,14 @@ where
         depth: u32,
     }
 
-    let mut queued_iter = Vec::new().into_iter();
-    let mut queued_buf = Vec::new();
-    queued_buf.push(Queued {
+    let mut queue = std::collections::VecDeque::new();
+    queue.push_back(Queued {
         path: args.path,
         entry: file_entry,
         depth: 0,
     });
 
-    loop {
-        let mut cur = match queued_iter.next() {
-            Some(cur) => cur,
-            None if queued_buf.is_empty() => break,
-            None => {
-                queued_iter = std::mem::take(&mut queued_buf)
-                    .into_iter();
-                continue
-            }
-        };
-
+    while let Some(mut cur) = queue.pop_front() {
         let modified = match cur.entry.get_modification_time() {
             Some(keramics_datetime::DateTime::Filetime(time)) => {
                 let time = filetime_to_system_time(&time);
@@ -224,7 +213,7 @@ where
                     }
                 }
 
-                queued_buf.push(Queued {
+                queue.push_back(Queued {
                     path: sub_path,
                     entry: sub_entry,
                     depth: cur.depth + 1,
