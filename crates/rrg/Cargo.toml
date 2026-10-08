@@ -172,7 +172,7 @@ path = "../tempntfs"
 version = "1.0.3"
 
 [target.'cfg(target_family = "windows")'.dependencies.windows-sys]
-version = "0.59.0"
+version = "0.61.2"
 optional = true
 features = [
     "Win32_Foundation",
@@ -186,7 +186,7 @@ features = [
 ]
 
 [target.'cfg(target_family = "windows")'.dev-dependencies.windows-sys]
-version = "0.59.0"
+version = "0.61.2"
 features = [
     "Win32_Foundation",
     "Win32_Storage_FileSystem",
