@@ -79,19 +79,25 @@ impl<R: Read> LineReader<R> {
     /// [1]: std::string::String::from_utf8_lossy
     /// [2]: std::char::REPLACEMENT_CHARACTER
     pub fn read_line_lossy(&mut self, buf: &mut String) -> std::io::Result<usize> {
+        let mut raw_bytes = Vec::new();
         let mut len = 0;
 
         loop {
             // We may have a line feed somewhere in our buffer already. In such
             // a case, we extend the result buffer with content up until that
-            // point (provided that the length limit is not exceeted) and
+            // point (provided that the length limit is not exceeded) and
             // advance the internal buffer accordingly.
             if let Some(pos) = self.buf[..self.buf_fill_len].iter().position(|byte| *byte == b'\n') {
                 if len + pos + 1 > self.max_line_len {
                     return Err(std::io::Error::other(MaxLineLenError(self.max_line_len)));
                 }
 
-                buf.push_str(&String::from_utf8_lossy(&self.buf[..pos + 1]));
+                if raw_bytes.is_empty() {
+                    buf.push_str(&String::from_utf8_lossy(&self.buf[..pos + 1]));
+                } else {
+                    raw_bytes.extend_from_slice(&self.buf[..pos + 1]);
+                    buf.push_str(&String::from_utf8_lossy(&raw_bytes));
+                }
                 len += pos + 1;
 
                 self.buf.rotate_left(pos + 1);
@@ -100,14 +106,14 @@ impl<R: Read> LineReader<R> {
             }
 
             // There is no line feed in our buffer. Thus, we put everything we
-            // have to the result string (provided that the length limit is not
-            // exceeded) and fill it again with new content.
+            // have to the temporary raw byte buffer (provided that the length
+            // limit is not exceeded) and fill the internal buffer again.
 
             if len + self.buf_fill_len > self.max_line_len {
                 return Err(std::io::Error::other(MaxLineLenError(self.max_line_len)));
             }
 
-            buf.push_str(&String::from_utf8_lossy(&self.buf[..self.buf_fill_len]));
+            raw_bytes.extend_from_slice(&self.buf[..self.buf_fill_len]);
             len += self.buf_fill_len;
 
             self.buf_fill_len = 0;
@@ -116,6 +122,9 @@ impl<R: Read> LineReader<R> {
                     Ok(0) => {
                         // We reached the end of the input without finding any
                         // line feed character.
+                        if !raw_bytes.is_empty() {
+                            buf.push_str(&String::from_utf8_lossy(&raw_bytes));
+                        }
                         return Ok(len);
                     }
                     Ok(len) => {
@@ -310,6 +319,18 @@ mod tests {
         line.clear();
         assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 0);
         assert_eq!(line, "");
+    }
+
+    #[test]
+    fn line_reader_small_capacity_multibyte_utf8_split() {
+        // "🦀" is 4 bytes: [0xF0, 0x9F, 0xA6, 0x80]
+        // "a🦀b\n" is 1 + 4 + 1 + 1 = 7 bytes.
+        // With capacity 3, the buffer boundaries split the 4-byte character.
+        let mut reader = LineReader::with_capacity(3, "a🦀b\n".as_bytes());
+        let mut line = String::new();
+
+        assert_eq!(reader.read_line_lossy(&mut line).unwrap(), 7);
+        assert_eq!(line, "a🦀b\n");
     }
 
     quickcheck! {
