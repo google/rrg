@@ -289,7 +289,12 @@ impl<'a> Directory<'a> {
         self.as_raw().addr
     }
     /// Returns the file structure for the directory.
-    pub fn file(&mut self) -> File<'a> {
+    ///
+    /// The returned [`File`] borrows from this `Directory`: it points at
+    /// `TSK_FS_DIR::fs_file`, which `tsk_fs_dir_close` releases when the
+    /// `Directory` is dropped. It therefore must not outlive the `Directory`
+    /// (hence the borrow of `self` rather than the file system lifetime `'a`).
+    pub fn file(&self) -> File<'_> {
         NonNull::new(self.as_raw().fs_file)
             .map(File::new)
             .expect("TSK_FS_DIR file is null")
@@ -302,23 +307,30 @@ impl<'a> Directory<'a> {
     /// Returns an iterator containing file entries for this directory.
     ///
     /// May return errors if the file entries fail to parse, e.g. if there is filesystem corruption.
-    pub fn iter_entries(&'a mut self) -> impl Iterator<Item = Result<File<'a>>> + 'a {
+    pub fn iter_entries<'dir>(&'dir self) -> impl Iterator<Item = Result<File<'a>>> + 'dir {
         DirectoryIterator::new(self)
     }
 }
 
-struct DirectoryIterator<'a> {
-    idx: usize,
-    dir: &'a mut Directory<'a>,
+impl Drop for Directory<'_> {
+    fn drop(&mut self) {
+        // SAFETY: Calling TSK's C API to close the directory handle.
+        unsafe { tsk_sys::tsk_fs_dir_close(self.inner.as_mut()) };
+    }
 }
 
-impl<'a> DirectoryIterator<'a> {
-    fn new(dir: &'a mut Directory<'a>) -> Self {
+struct DirectoryIterator<'dir, 'a> {
+    idx: usize,
+    dir: &'dir Directory<'a>,
+}
+
+impl<'dir, 'a> DirectoryIterator<'dir, 'a> {
+    fn new(dir: &'dir Directory<'a>) -> Self {
         Self { idx: 0, dir }
     }
 }
 
-impl<'a> Iterator for DirectoryIterator<'a> {
+impl<'dir, 'a> Iterator for DirectoryIterator<'dir, 'a> {
     type Item = Result<File<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -338,7 +350,7 @@ impl<'a> Iterator for DirectoryIterator<'a> {
     }
 }
 
-impl ExactSizeIterator for DirectoryIterator<'_> {}
+impl ExactSizeIterator for DirectoryIterator<'_, '_> {}
 
 pub struct File<'a> {
     pub(crate) inner: NonNull<tsk_sys::TSK_FS_FILE>,
@@ -515,7 +527,7 @@ mod test {
         assert_eq!(root_f.meta().unwrap().addr(), 5);
         let root_name = root_f.name().expect("no root name");
         assert_eq!(root_name, "");
-        let mut root_dir = fs.open_dir("/".as_ref()).expect("failed to open root dir");
+        let root_dir = fs.open_dir("/".as_ref()).expect("failed to open root dir");
         let root_f2 = root_dir.file();
         assert_eq!(root_f2.meta().unwrap().addr(), 5);
         let mut root_dir_entries = root_dir
