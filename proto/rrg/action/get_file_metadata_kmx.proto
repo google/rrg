@@ -31,6 +31,12 @@ message Args {
   // the link points to.
   rrg.fs.Path path = 1; // TODO: Add support for multiple paths.
 
+  // Limit on the depth of recursion when visiting subfolders.
+  //
+  // The default value (0) means that there is no recursion and only metadata
+  // about the root path is returned.
+  uint32 max_depth = 4;
+
   // TODO: Add the remaining fields that original `get_file_metadata` supports.
 }
 

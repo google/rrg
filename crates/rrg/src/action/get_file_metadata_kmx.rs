@@ -14,6 +14,8 @@ enum VolumePath {
 pub struct Args {
     volume_path: VolumePath,
     path: keramics_formats::ntfs::NtfsPath,
+    /// Limit on the depth of recursion when visiting subfolders.
+    max_depth: u32,
 }
 
 /// Result of the `get_file_metadata_kmx` action.
@@ -80,67 +82,145 @@ where
         }
     };
 
-    let modified = match file_entry.get_modification_time() {
-        Some(keramics_datetime::DateTime::Filetime(time)) => {
-            let time = filetime_to_system_time(time);
-            if time.is_none() {
-                log::error!("unsupported modification time for '{:?}'", args.path);
-            }
-            time
-        }
-        Some(time) => {
-            log::error!("unexpected modification time type '{time:?}' for {:?}", args.path);
-            None
-        },
-        None => {
-            log::error!("missing modification time for '{:?}", args.path);
-            None
-        }
-    };
-    let accessed = match file_entry.get_access_time() {
-        Some(keramics_datetime::DateTime::Filetime(time)) => {
-            let time = filetime_to_system_time(time);
-            if time.is_none() {
-                log::error!("unsupported access time for '{:?}'", args.path);
-            }
-            time
-        }
-        Some(time) => {
-            log::error!("unexpected access time type '{time:?}' for {:?}", args.path);
-            None
-        },
-        None => {
-            log::error!("missing access time for '{:?}", args.path);
-            None
-        }
-    };
-    let created = match file_entry.get_creation_time() {
-        Some(keramics_datetime::DateTime::Filetime(time)) => {
-            let time = filetime_to_system_time(time);
-            if time.is_none() {
-                log::error!("unsupported creation time for '{:?}'", args.path);
-            }
-            time
-        }
-        Some(time) => {
-            log::error!("unexpected creation time type '{time:?}' for {:?}", args.path);
-            None
-        },
-        None => {
-            log::error!("missing creation time for '{:?}", args.path);
-            None
-        }
-    };
+    struct Queued {
+        path: keramics_formats::ntfs::NtfsPath,
+        entry: keramics_formats::ntfs::NtfsFileEntry,
+        depth: u32,
+    }
 
-    log::debug!("sending metadata for '{:?}'", args.path);
-
-    session.reply(Item {
+    let mut queue = std::collections::VecDeque::new();
+    queue.push_back(Queued {
         path: args.path,
-        modified,
-        accessed,
-        created,
-        len: file_entry.get_size(),
-    })?;
+        entry: file_entry,
+        depth: 0,
+    });
+
+    while let Some(mut cur) = queue.pop_front() {
+        let modified = match cur.entry.get_modification_time() {
+            Some(keramics_datetime::DateTime::Filetime(time)) => {
+                let time = filetime_to_system_time(&time);
+                if time.is_none() {
+                    log::error!("unsupported modification time for '{:?}'", cur.path);
+                }
+                time
+            }
+            Some(time) => {
+                log::error!("unexpected modification time type '{time:?}' for {:?}", cur.path);
+                None
+            },
+            None => {
+                log::error!("missing modification time for '{:?}", cur.path);
+                None
+            }
+        };
+        let accessed = match cur.entry.get_access_time() {
+            Some(keramics_datetime::DateTime::Filetime(time)) => {
+                let time = filetime_to_system_time(&time);
+                if time.is_none() {
+                    log::error!("unsupported access time for '{:?}'", cur.path);
+                }
+                time
+            }
+            Some(time) => {
+                log::error!("unexpected access time type '{time:?}' for {:?}", cur.path);
+                None
+            },
+            None => {
+                log::error!("missing access time for '{:?}", cur.path);
+                None
+            }
+        };
+        let created = match cur.entry.get_creation_time() {
+            Some(keramics_datetime::DateTime::Filetime(time)) => {
+                let time = filetime_to_system_time(&time);
+                if time.is_none() {
+                    log::error!("unsupported creation time for '{:?}'", cur.path);
+                }
+                time
+            }
+            Some(time) => {
+                log::error!("unexpected creation time type '{time:?}' for {:?}", cur.path);
+                None
+            },
+            None => {
+                log::error!("missing creation time for '{:?}", cur.path);
+                None
+            }
+        };
+
+        log::debug!("sending metadata for '{:?}'", cur.path);
+
+        session.reply(Item {
+            path: cur.path.clone(),
+            modified,
+            accessed,
+            created,
+            len: cur.entry.get_size(),
+        })?;
+
+        // https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x00000400;
+
+        if cur.depth < args.max_depth && (
+            // We do not want to descend to reparse points (e.g. symlinks) to
+            // avoid cycles.
+            // TODO(@panhania): Add `is_reparse_point` accessor to Keramics.
+            (cur.entry.get_file_attribute_flags() & FILE_ATTRIBUTE_REPARSE_POINT) == 0 ||
+            // ... except the case where we are a root directory which is a
+            // reparse point but we still want to be able to list it.
+            cur.entry.is_root_directory()
+        ) {
+            let sub_entry_count = match cur.entry.get_number_of_sub_file_entries() {
+                Ok(sub_entry_count) => sub_entry_count,
+                Err(error) => {
+                    log::error! {
+                        "failed to get number of children for '{:?}': {error}",
+                        cur.path,
+                    };
+                    continue
+                }
+            };
+
+            log::debug!("listing {sub_entry_count} children of '{:?}'", cur.path);
+
+            for index in 0..sub_entry_count {
+                let sub_entry = match cur.entry.get_sub_file_entry_by_index(index) {
+                    Ok(sub_entry) => sub_entry,
+                    Err(error) => {
+                        log::error! {
+                            "failed to list child {index} of '{:?}': {error}",
+                            cur.path,
+                        };
+                        // If we failed to list a child, we assume there is
+                        // something wrong with the entry and we do not try to
+                        // read the remaining children.
+                        break
+                    }
+                };
+
+                let mut sub_path;
+                match sub_entry.get_name() {
+                    Some(name) => {
+                        sub_path = cur.path.clone();
+                        sub_path.push(name.clone());
+                    }
+                    None => {
+                        log::error! {
+                            "no name for child {index} of {:?}",
+                            cur.path,
+                        };
+                        continue
+                    }
+                }
+
+                queue.push_back(Queued {
+                    path: sub_path,
+                    entry: sub_entry,
+                    depth: cur.depth + 1,
+                });
+            }
+        }
+    }
 
     Ok(())
 }
@@ -173,6 +253,7 @@ impl crate::request::Args for Args {
 
         Ok(Args {
             volume_path,
+            max_depth: proto.max_depth(),
             path,
         })
     }
@@ -255,6 +336,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             path: keramics_formats::ntfs::NtfsPath::from("\\idonotexist"),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -279,6 +361,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             path: keramics_formats::ntfs::NtfsPath::from("\\foo"),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -313,6 +396,7 @@ mod tests {
         let args = Args {
             volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
             path: keramics_formats::ntfs::NtfsPath::from("\\foo"),
+            max_depth: 0,
         };
 
         let mut session = crate::session::FakeSession::new();
@@ -323,5 +407,154 @@ mod tests {
         let item = session.reply::<Item>(0);
         assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\foo"));
         // TODO: Add assertions about the file type.
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_dir_max_depth_0() {
+        let ntfs_file = tempntfs::create(|ntfs_path| {
+            std::fs::File::create_new(ntfs_path.join("foo"))
+                .unwrap();
+            std::fs::File::create_new(ntfs_path.join("bar"))
+                .unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\"),
+            max_depth: 0,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        let paths = session.replies::<Item>()
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>();
+
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
+        assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\foo")));
+        assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\bar")));
+    }
+
+    #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
+    #[test]
+    fn handle_dir_max_depth_1() {
+        let ntfs_file = tempntfs::create(|ntfs_path| {
+            std::fs::File::create_new(ntfs_path.join("file1"))
+                .unwrap();
+            std::fs::File::create_new(ntfs_path.join("file2"))
+                .unwrap();
+
+            std::fs::create_dir(ntfs_path.join("subdir"))
+                .unwrap();
+
+            std::fs::File::create(ntfs_path.join("subdir").join("file1"))
+                .unwrap();
+            std::fs::File::create(ntfs_path.join("subdir").join("file2"))
+                .unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\"),
+            max_depth: 1,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        let paths = session.replies::<Item>()
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>();
+
+        // TODO: Add assertions about the file type.
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\file1")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\file2")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir")));
+        assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir\\file1")));
+        assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir\\file2")));
+    }
+
+    // `std::os::unix::fs::symlink` is unavailable on Windows, so we can't just
+    // `ignore`.
+    #[cfg(all(target_os = "linux", feature = "test-libguestfs"))]
+    #[test]
+    fn handle_dir_max_depth_1_symlinks() {
+        let ntfs_file = tempntfs::create(|ntfs_path| {
+            std::fs::File::create_new(ntfs_path.join("file"))
+                .unwrap();
+
+            std::os::unix::fs::symlink(
+                ntfs_path.join("file"),
+                ntfs_path.join("link"),
+            ).unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\"),
+            max_depth: 1,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        let paths = session.replies::<Item>()
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>();
+
+        // TODO: Add assertions about the file type.
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\file")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\link")));
+    }
+
+    // `std::os::unix::fs::symlink` is unavailable on Windows, so we can't just
+    // `ignore`.
+    #[cfg(all(target_os = "linux", feature = "test-libguestfs"))]
+    #[test]
+    fn handle_dir_max_depth_1_symlinks_circular() {
+        let ntfs_file = tempntfs::create(|ntfs_path| {
+            std::fs::create_dir(ntfs_path.join("subdir"))
+                .unwrap();
+
+            std::os::unix::fs::symlink(
+                ntfs_path.join("subdir"),
+                ntfs_path.join("subdir").join("link"),
+            ).unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\"),
+            max_depth: u32::MAX,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        handle(&mut session, args)
+            .unwrap();
+
+        let paths = session.replies::<Item>()
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>();
+
+        // TODO: Add assertions about the file type.
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir")));
+        assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir\\link")));
+        assert!(!paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir\\link\\link")));
     }
 }
