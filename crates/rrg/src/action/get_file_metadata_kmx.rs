@@ -253,8 +253,7 @@ impl crate::request::Args for Args {
 
         Ok(Args {
             volume_path,
-            // TODO: Read this from the proto.
-            max_depth: 0,
+            max_depth: proto.max_depth(),
             path,
         })
     }
