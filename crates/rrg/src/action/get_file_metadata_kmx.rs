@@ -3,8 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found
 // in the LICENSE file or at https://opensource.org/licenses/MIT.
 
-use rrg_proto::fs;
-
 enum VolumePath {
     // Absolute path to the raw volume file (e.g. `\\?\Volume{...}`.
     Direct(std::path::PathBuf),
@@ -368,9 +366,9 @@ impl From<FileType> for rrg_proto::fs::file_metadata::Type {
 
     fn from(file_type: FileType) -> rrg_proto::fs::file_metadata::Type {
         match file_type {
-            FileType::File => fs::file_metadata::Type::FILE,
-            FileType::Dir => fs::file_metadata::Type::DIR,
-            FileType::Symlink => fs::file_metadata::Type::SYMLINK,
+            FileType::File => rrg_proto::fs::file_metadata::Type::FILE,
+            FileType::Dir => rrg_proto::fs::file_metadata::Type::DIR,
+            FileType::Symlink => rrg_proto::fs::file_metadata::Type::SYMLINK,
         }
     }
 }
