@@ -111,41 +111,44 @@ where
     });
 
     while let Some(mut cur) = queue.pop_front() {
-        // Rust standard library treats [1] all "reparse tag name surrogates"
-        // (the 0x20000000 constant is from `IsReparseTagNameSurrogate` [2]) and
-        // covers both junctions (`IO_REPARSE_TAG_MOUNT_POINT`) "normal" sym-
-        // links (`IO_REPARSE_TAG_SYMLINK`) and symlinks from Windows Subsystem
-        // for Linux (`IO_REPARSE_TAG_LX_SYMLINK`) [3].
-        //
-        // Note that we do not use Keramics' accessors (`is_symbolic_link` and
-        // `is_junction`). This is because it does not cover the WSL one which
-        // is used by `libguestfs` that we use for our tests. Once the support
-        // for that is added (perhaps through a generalized `is_name_surrgate`),
-        // we can migrate to that.
-        //
-        // [1]: https://github.com/rust-lang/rust/blob/76c90957b7e422c4b9c45192b0197214d7de5a54/library/std/src/sys/fs/windows.rs#L1184-L1188
-        // [2]: https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-isreparsetagnamesurrogate
-        // [3]: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/c8e77b37-3909-4fe6-a4ea-2b9d423b1ee4
-        let is_symlink = {
-            (0..cur.entry.get_number_of_attributes()).into_iter().any(|index| {
-                let attr = match cur.entry.get_attribute_by_index(index) {
-                    Ok(attr) => attr,
-                    Err(error) => {
-                        log::error! {
-                            "failed to get attribute '{index}' of '{:?}': {error}",
-                            cur.path,
-                        };
-                        return false
-                    }
-                };
+        // TODO(@panhania): We do not use Keramics' accessors: `is_junction` and
+        // `is_symbolic_link`. This is because they do not cover the WSL one
+        // which is used by `libguestfs` that we use for our tests. Once the
+        // support for that is added (something like `is_name_surrgate`), we can
+        // migrate to that.
+        let mut is_symlink = false;
+        for index in 0..cur.entry.get_number_of_attributes() {
+            let attr = match cur.entry.get_attribute_by_index(index) {
+                Ok(attr) => attr,
+                Err(error) => {
+                    log::error! {
+                        "failed to get attribute '{index}' of '{:?}': {error}",
+                        cur.path,
+                    };
+                    continue
+                }
+            };
 
-                use keramics_formats::ntfs::NtfsAttribute::ReparsePoint;
-                let ReparsePoint { reparse_point } = attr else {
-                    return false
-                };
+            use keramics_formats::ntfs::NtfsAttribute::ReparsePoint;
+            let ReparsePoint { reparse_point } = attr else {
+                continue
+            };
 
-                (reparse_point.get_reparse_tag() & 0x20000000) != 0
-            })
+            // We follow the Rust standard library here that treats [1] all
+            // "reparse tag name surrogates" (the 0x20000000 constant is from
+            // `IsReparseTagNameSurrogate` [2]) as symlinks. That includes [3]:
+            //
+            //  * Junctions (`IO_REPARSE_TAG_MOUNT_POINT`)
+            //  * "Normal" symlinks (`IO_REPARSE_TAG_SYMLINK`)
+            //  * WSL symlinks (`IO_REPARSE_TAG_LX_SYMLINK`)
+            //
+            // [1]: https://github.com/rust-lang/rust/blob/76c90957b7e422c4b9c45192b0197214d7de5a54/library/std/src/sys/fs/windows.rs#L1184-L1188
+            // [2]: https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-isreparsetagnamesurrogate
+            // [3]: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/c8e77b37-3909-4fe6-a4ea-2b9d423b1ee4
+            if (reparse_point.get_reparse_tag() & 0x20000000) != 0 {
+                is_symlink = true;
+                break;
+            }
         };
 
         let file_type = match () {
