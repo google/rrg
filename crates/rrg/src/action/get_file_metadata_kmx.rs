@@ -21,10 +21,23 @@ pub struct Args {
 /// Result of the `get_file_metadata_kmx` action.
 pub struct Item {
     path: keramics_formats::ntfs::NtfsPath,
+    file_type: FileType,
     modified: Option<std::time::SystemTime>,
     accessed: Option<std::time::SystemTime>,
     created: Option<std::time::SystemTime>,
     len: u64,
+}
+
+/// Type of the file.
+///
+/// This is similar to [`std::fs::FileType`] except that we are not able to
+/// construct instances of the standard one, so we have to define our own (and
+/// make it an `enum` rather than a `struct`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FileType {
+    File,
+    Dir,
+    Symlink,
 }
 
 /// Handles invocations of the `get_file_metadata_kmx` action.
@@ -96,6 +109,36 @@ where
     });
 
     while let Some(mut cur) = queue.pop_front() {
+        let file_type = match () {
+            // Rust standard library treats junctions as symbolic links [1] (the
+            // 0x20000000 constant is from `IsReparseTagNameSurrogate` [2] and
+            // covers both junctions (`IO_REPARSE_TAG_MOUNT_POINT`) and "normal"
+            // symlinks (`IO_REPARSE_TAG_SYMLINK`) [3].
+            //
+            // Perhaps it would make some sense to have a separate type for
+            // junctions, but for now we just ape what the standard library
+            // does.
+            //
+            // [1]: https://github.com/rust-lang/rust/blob/76c90957b7e422c4b9c45192b0197214d7de5a54/library/std/src/sys/fs/windows.rs#L1184-L1188
+            // [2]: https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-isreparsetagnamesurrogate
+            // [3]: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/c8e77b37-3909-4fe6-a4ea-2b9d423b1ee4
+            () if cur.entry.is_symbolic_link() || cur.entry.is_junction() => {
+                FileType::Symlink
+            }
+            // Note that `has_directory_entries` does not mean "is non-empty
+            // directory" (so, it should be true even for directories that are
+            // empty).
+            () if cur.entry.has_directory_entries() => {
+                FileType::Dir
+            }
+            // Again, we follow the Rust standard library here: everything that
+            // is neither a symlink nor a directory is considered a file [1].
+            //
+            // [1]: https://github.com/rust-lang/rust/blob/76c90957b7e422c4b9c45192b0197214d7de5a54/library/std/src/sys/fs/windows.rs#L1194-L1196
+            () => {
+                FileType::File
+            }
+        };
         let modified = match cur.entry.get_modification_time() {
             Some(keramics_datetime::DateTime::Filetime(time)) => {
                 let time = filetime_to_system_time(&time);
@@ -152,6 +195,7 @@ where
 
         session.reply(Item {
             path: cur.path.clone(),
+            file_type,
             modified,
             accessed,
             created,
@@ -372,7 +416,7 @@ mod tests {
         let item = session.reply::<Item>(0);
         assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\foo"));
         assert_eq!(item.len, b"Lorem ipsum.".len() as u64);
-        // TODO: Add assertions about the file type.
+        assert_eq!(item.file_type, FileType::File);
 
         assert!(item.accessed.unwrap() >= timestamp_pre);
         assert!(item.accessed.unwrap() <= timestamp_post);
@@ -406,7 +450,69 @@ mod tests {
 
         let item = session.reply::<Item>(0);
         assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\foo"));
-        // TODO: Add assertions about the file type.
+        assert_eq!(item.file_type, FileType::Dir);
+    }
+
+    // `std::os::unix::fs::symlink` is unavailable on Windows, so we can't just
+    // `ignore`.
+    #[cfg(all(target_os = "linux", feature = "test-libguestfs"))]
+    #[test]
+    fn handle_symlink_file() {
+        let ntfs_file = tempntfs::create(|ntfs_path| {
+            std::fs::File::create(ntfs_path.join("file"))?;
+            std::os::unix::fs::symlink(
+                ntfs_path.join("file"),
+                ntfs_path.join("link"),
+            ).unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\link"),
+            max_depth: 0,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\link"));
+        assert_eq!(item.file_type, FileType::Symlink);
+    }
+
+    // `std::os::unix::fs::symlink` is unavailable on Windows, so we can't just
+    // `ignore`.
+    #[cfg(all(target_os = "linux", feature = "test-libguestfs"))]
+    #[test]
+    fn handle_symlink_dir() {
+        let ntfs_file = tempntfs::create(|ntfs_path| {
+            std::fs::create_dir(ntfs_path.join("dir"))?;
+            std::os::unix::fs::symlink(
+                ntfs_path.join("dir"),
+                ntfs_path.join("link"),
+            ).unwrap();
+
+            Ok(())
+        }).unwrap();
+
+        let args = Args {
+            volume_path: VolumePath::Direct(ntfs_file.path().to_path_buf()),
+            path: keramics_formats::ntfs::NtfsPath::from("\\link"),
+            max_depth: 0,
+        };
+
+        let mut session = crate::session::FakeSession::new();
+        assert!(handle(&mut session, args).is_ok());
+
+        assert_eq!(session.reply_count(), 1);
+
+        let item = session.reply::<Item>(0);
+        assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\link"));
+        assert_eq!(item.file_type, FileType::Symlink);
     }
 
     #[cfg_attr(not(all(target_os = "linux", feature = "test-libguestfs")), ignore)]
@@ -474,7 +580,6 @@ mod tests {
             .map(|item| item.path.clone())
             .collect::<Vec<_>>();
 
-        // TODO: Add assertions about the file type.
         assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
         assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\file1")));
         assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\file2")));
@@ -514,7 +619,6 @@ mod tests {
             .map(|item| item.path.clone())
             .collect::<Vec<_>>();
 
-        // TODO: Add assertions about the file type.
         assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
         assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\file")));
         assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\link")));
@@ -551,7 +655,6 @@ mod tests {
             .map(|item| item.path.clone())
             .collect::<Vec<_>>();
 
-        // TODO: Add assertions about the file type.
         assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\")));
         assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir")));
         assert!(paths.contains(&keramics_formats::ntfs::NtfsPath::from("\\subdir\\link")));
