@@ -316,6 +316,13 @@ impl ValueData {
     ) -> Result<ValueData, InvalidValueDataTypeError> {
         use std::os::windows::ffi::OsStringExt as _;
 
+        fn to_u16_vec(data_buf: &[u8]) -> Vec<u16> {
+            data_buf
+                .chunks_exact(2)
+                .map(|chunk| u16::from_ne_bytes([chunk[0], chunk[1]]))
+                .collect()
+        }
+
         let data = match data_type {
             windows_sys::Win32::System::Registry::REG_NONE => {
                 ValueData::None
@@ -324,68 +331,26 @@ impl ValueData {
                 ValueData::Bytes(data_buf.to_vec())
             }
             windows_sys::Win32::System::Registry::REG_SZ => {
-                // SAFETY: The type is `REG_SZ` so we need to reinterpret the
-                // buffer as 16-bit codepoint string. This is safe because we
-                // do not have any assumptions on the actual bytes.
-                let (align_prefix, mut data_buf_wide, align_suffix) = unsafe {
-                    data_buf.align_to::<u16>()
-                };
-                assert!(align_prefix.is_empty());
-                assert!(align_suffix.is_empty());
-
-                // The string may or may not be null-terminated [1, 2]. We
-                // remove that null byte if it is.
-                //
-                // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumvaluea#remarks
-                // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types#string-values
+                let mut data_buf_wide = to_u16_vec(data_buf);
                 if let Some(0) = data_buf_wide.last() {
-                    data_buf_wide = &data_buf_wide[0..data_buf_wide.len() - 1];
+                    data_buf_wide.pop();
                 }
 
-                ValueData::String(OsString::from_wide(data_buf_wide))
+                ValueData::String(OsString::from_wide(&data_buf_wide))
             }
             windows_sys::Win32::System::Registry::REG_EXPAND_SZ => {
-                // SAFETY: The type is `REG_EXPAND_SZ` so we need to reinterpret
-                // the buffer as 16-bit codepoint string. This is safe because
-                // we do not have any assumptions on the actual bytes.
-                let (align_prefix, mut data_buf_wide, align_suffix) = unsafe {
-                    data_buf.align_to::<u16>()
-                };
-                assert!(align_prefix.is_empty());
-                assert!(align_suffix.is_empty());
-
-                // The string may or may not be null-terminated [1, 2]. We
-                // remove that null byte if it is.
-                //
-                // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumvaluea#remarks
-                // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types#string-values
+                let mut data_buf_wide = to_u16_vec(data_buf);
                 if let Some(0) = data_buf_wide.last() {
-                    data_buf_wide = &data_buf_wide[0..data_buf_wide.len() - 1];
+                    data_buf_wide.pop();
                 }
 
-                ValueData::ExpandString(OsString::from_wide(data_buf_wide))
+                ValueData::ExpandString(OsString::from_wide(&data_buf_wide))
             }
             windows_sys::Win32::System::Registry::REG_MULTI_SZ => {
-                // SAFETY: The type is `REG_MULTI_SZ` so we need to reinterpret
-                // the buffer as 16-bit codepoint string. This is safe because
-                // we do not have any assumptions on the actual bytes.
-                let (align_prefix, data_buf_wide, align_suffix) = unsafe {
-                    data_buf.align_to::<u16>()
-                };
-                assert!(align_prefix.is_empty());
-                assert!(align_suffix.is_empty());
-
+                let data_buf_wide = to_u16_vec(data_buf);
                 let mut strings = Vec::new();
 
-                for string in data_buf_wide.split(|byte| *byte == 0) {
-                    // The string may or may not be null-terminated [1, 2]. We
-                    // therefore be sure if we have a "genuine" empty string or
-                    // if it was just missing null byte at the end. Skipping
-                    // such string altogether does not seem to terrible given
-                    // they should not appear in practice anyway.
-                    //
-                    // [1]: https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regenumvaluea#remarks
-                    // [2]: https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types#string-values
+                for string in data_buf_wide.split(|&byte| byte == 0) {
                     if string.is_empty() {
                         continue;
                     }
@@ -396,41 +361,32 @@ impl ValueData {
                 ValueData::MultiString(strings)
             }
             windows_sys::Win32::System::Registry::REG_LINK => {
-                // SAFETY: The type is `REG_LINK` so we need to reinterpret the
-                // buffer as 16-bit codepoint string. This is safe because we do
-                // not have any assumptions on the actual bytes.
-                let (align_prefix, mut data_buf_wide, align_suffix) = unsafe {
-                    data_buf.align_to::<u16>()
-                };
-                assert!(align_prefix.is_empty());
-                assert!(align_suffix.is_empty());
+                let mut data_buf_wide = to_u16_vec(data_buf);
+                if let Some(0) = data_buf_wide.last() {
+                    data_buf_wide.pop();
+                }
 
-                // Note that unlike with `REG_MULTI_SZ`, `REG_EXPAND_SZ` and
-                // `REG_SZ` case, the documentation does not say anything about
-                // `REG_LINK` values not being properly null terminated (which
-                // makes sense as they can be created only by the system that
-                // should enforce that).
-                assert!(matches!(data_buf_wide.last(), Some(0)));
-                data_buf_wide = &data_buf_wide[0..data_buf_wide.len() - 1];
-
-                ValueData::Link(OsString::from_wide(data_buf_wide))
+                ValueData::Link(OsString::from_wide(&data_buf_wide))
             }
             windows_sys::Win32::System::Registry::REG_DWORD_LITTLE_ENDIAN => {
-                assert!(data_buf.len() == 4);
-
-                let octets = <[u8; 4]>::try_from(&data_buf[..]).unwrap();
+                let octets = match <[u8; 4]>::try_from(data_buf) {
+                    Ok(octets) => octets,
+                    Err(_) => return Err(InvalidValueDataTypeError(data_type)),
+                };
                 ValueData::U32(u32::from_le_bytes(octets))
             }
             windows_sys::Win32::System::Registry::REG_DWORD_BIG_ENDIAN => {
-                assert!(data_buf.len() == 4);
-
-                let octets = <[u8; 4]>::try_from(&data_buf[..]).unwrap();
+                let octets = match <[u8; 4]>::try_from(data_buf) {
+                    Ok(octets) => octets,
+                    Err(_) => return Err(InvalidValueDataTypeError(data_type)),
+                };
                 ValueData::U32(u32::from_be_bytes(octets))
             }
             windows_sys::Win32::System::Registry::REG_QWORD_LITTLE_ENDIAN => {
-                assert!(data_buf.len() == 8);
-
-                let octets = <[u8; 8]>::try_from(&data_buf[..]).unwrap();
+                let octets = match <[u8; 8]>::try_from(data_buf) {
+                    Ok(octets) => octets,
+                    Err(_) => return Err(InvalidValueDataTypeError(data_type)),
+                };
                 ValueData::U64(u64::from_le_bytes(octets))
             }
             // TODO(@panhania): Handle `REG_RESOURCE_LIST`.
