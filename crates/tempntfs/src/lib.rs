@@ -96,7 +96,10 @@ impl GuestMount {
 
         let output = std::process::Command::new("guestmount")
             .arg("--add").arg(image.as_ref().as_os_str())
-            .arg("--mount").arg("/dev/sda:/::ntfs")
+            // `special_files=wsl` is used for proper symlink support (otherwise
+            // they are "faked" and are more akin to regular files with the link
+            // target as contents, Unix-style).
+            .arg("--mount").arg("/dev/sda:/:special_files=wsl:ntfs")
             .arg("--pid-file").arg(pid_file.path().as_os_str())
             .arg(mountpoint.as_ref().as_os_str())
             .output()?;
