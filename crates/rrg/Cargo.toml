@@ -202,6 +202,6 @@ features = [
 ]
 
 [dependencies.yara-x]
-version = "1.8.1"
+version = "1.16.0"
 optional = true
 default-features = false
