@@ -279,101 +279,116 @@ impl Request {
     pub fn take_filters(&mut self) -> crate::filter::FilterSet {
         std::mem::replace(&mut self.filters, crate::filter::FilterSet::empty())
     }
+}
 
-    /// Parses a Fleetspeak message into a RRG request.
+/// An unvalidated RRG action request.
+///
+/// This type is useful because the serialized request we got from Fleetspeak
+/// might contain deserializable request bytes but of which individual fields
+/// can be not fully valid. In that case we still want to be able to reply to
+/// the server (as we do have some request identifier) and report the error.
+/// This is unlike the case were request is completely borked and we have no
+/// choice but drop it on the floor.
+///
+/// The [`RequestUnvalidated::validate`] method can be used to turn it into a
+/// proper [`Request`].
+pub struct RequestUnvalidated {
+    proto: rrg_proto::rrg::Request,
+}
+
+impl RequestUnvalidated {
+
+    /// Parses a Fleetspeak message into an unvalidated RRG request.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in case the serialized request inside
+    /// the Fleetspeak message was malformed.
+    pub fn parse(message: &fleetspeak::Message) -> Result<RequestUnvalidated, MalformedRequestError> {
+        use protobuf::Message as _;
+        let proto = rrg_proto::rrg::Request::parse_from_bytes(&message.data[..])
+            .map_err(MalformedRequestError)?;
+
+        Ok(RequestUnvalidated {
+            proto,
+        })
+    }
+
+    /// Returns a unique identifier of this request.
+    pub fn id(&self) -> RequestId {
+        RequestId {
+            flow_id: self.proto.flow_id(),
+            request_id: self.proto.request_id(),
+        }
+    }
+
+    /// Validates the request.
     ///
     /// # Errors
     ///
     /// This function will return an error in case the request was invalid (e.g.
     /// it was missing some necessary fields).
-    pub fn parse(message: &fleetspeak::Message) -> Result<Request, ParseRequestError> {
-        use protobuf::Message as _;
-        let proto = match rrg_proto::rrg::Request::parse_from_bytes(&message.data[..]) {
-            Ok(proto) => proto,
-            Err(error) => return Err(ParseRequestError::Malformed(MalformedRequestError(error))),
-        };
-
-        Request::try_from(proto)
-            .map_err(ParseRequestError::Invalid)
-    }
-}
-
-impl TryFrom<rrg_proto::rrg::Request> for Request {
-
-    type Error = InvalidRequestError;
-
-    fn try_from(mut proto: rrg_proto::rrg::Request) -> Result<Request, InvalidRequestError> {
+    pub fn validate(mut self) -> Result<Request, InvalidRequestError> {
         use rrg_proto::try_from_duration;
 
-        let request_id = RequestId {
-            flow_id: proto.flow_id(),
-            request_id: proto.request_id(),
-        };
-
-        let action = match proto.action().try_into() {
+        let action = match self.proto.action().try_into() {
             Ok(action) => action,
             Err(action) => return Err(InvalidRequestError {
-                request_id: request_id,
+                request_id: self.id(),
                 kind: InvalidRequestErrorKind::UnknownAction(action),
                 error: None,
             }),
         };
 
-        let network_bytes_limit = match proto.network_bytes_limit() {
+        let network_bytes_limit = match self.proto.network_bytes_limit() {
             0 => None,
             limit => Some(limit),
         };
 
-        let proto_cpu_time_limit = proto.take_cpu_time_limit();
+        let proto_cpu_time_limit = self.proto.take_cpu_time_limit();
         let cpu_time_limit = match try_from_duration(proto_cpu_time_limit) {
             // TODO(@panhania): We should always require time limit to be set.
             Ok(limit) if limit.is_zero() => None,
             Ok(limit) => Some(limit),
             Err(error) => return Err(InvalidRequestError {
-                request_id: request_id,
+                request_id: self.id(),
                 kind: InvalidRequestErrorKind::InvalidCpuTimeLimit,
                 error: Some(Box::new(error)),
             }),
         };
 
-        let proto_real_time_limit = proto.take_real_time_limit();
+        let proto_real_time_limit = self.proto.take_real_time_limit();
         let real_time_limit = match try_from_duration(proto_real_time_limit) {
             // TODO(@panhania): We should always require time limit to be set.
             Ok(limit) if limit.is_zero() => None,
             Ok(limit) => Some(limit),
             Err(error) => return Err(InvalidRequestError {
-                request_id: request_id,
+                request_id: self.id(),
                 kind: InvalidRequestErrorKind::InvalidRealTimeLimit,
                 error: Some(Box::new(error)),
             }),
         };
 
-        let filters = proto.take_filters().into_iter()
+        let filters = self.proto.take_filters().into_iter()
             .map(|proto| crate::filter::Filter::try_from(proto))
             .collect::<Result<_, crate::filter::ParseError>>()
             .map_err(|error| InvalidRequestError {
-                request_id: request_id,
+                request_id: self.id(),
                 kind: InvalidRequestErrorKind::InvalidFilter,
                 error: Some(Box::new(error)),
             })?;
 
         Ok(Request {
-            id: request_id,
+            id: self.id(),
             action,
-            serialized_args: proto.take_args().value,
+            serialized_args: self.proto.take_args().value,
             network_bytes_limit,
             cpu_time_limit,
             real_time_limit,
-            log_level: proto.log_level().into(),
+            log_level: self.proto.log_level().into(),
             filters,
         })
     }
-}
-
-/// The error type for cases when parsing a request fails.
-pub enum ParseRequestError {
-    Malformed(MalformedRequestError),
-    Invalid(InvalidRequestError),
 }
 
 /// The error type for cases when bytes of serialized request were malformed.

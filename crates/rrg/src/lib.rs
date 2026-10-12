@@ -29,5 +29,5 @@ pub mod gzchunked;
 pub use ping::Ping;
 pub use startup::Startup;
 
-pub use request::{InvalidRequestError, MalformedRequestError, ParseRequestError, Request, RequestId};
+pub use request::{InvalidRequestError, MalformedRequestError, Request, RequestUnvalidated, RequestId};
 pub use response::{Item, LogBuilder, Parcel, ResponseId, Sink};

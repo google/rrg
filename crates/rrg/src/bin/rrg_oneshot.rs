@@ -18,7 +18,6 @@
 //! }
 //! EOF
 //! ```
-use protobuf::Message as _;
 
 struct OneshotSession {
     args: rrg::args::Args,
@@ -83,9 +82,22 @@ fn main() {
     // rust-protobuf does not support Any in text or JSON formats, so we're
     // stuck taking in encoded protobufs.
     // See https://github.com/stepancheg/rust-protobuf/issues/628
-    let request_proto = rrg_proto::rrg::Request::parse_from_reader(&mut std::io::stdin())
-        .expect("Failed to parse request protobuf");
-    let request = rrg::Request::try_from(request_proto).expect("Failed to parse request");
+    use std::io::Read as _;
+    let mut data = Vec::new();
+    std::io::stdin().read_to_end(&mut data)
+        .expect("failed to read protobuf request");
+
+    let message = fleetspeak::Message {
+        service: String::from("GRR"),
+        kind: Some(String::from("rrg.Request")),
+        data,
+    };
+
+    let request = rrg::RequestUnvalidated::parse(&message)
+        .expect("malformed request");
+    let request = request.validate()
+        .expect("invalid request");
+
     let mut session = OneshotSession::with_args(args);
     rrg::action::dispatch(&mut session, request).unwrap();
 }

@@ -12,6 +12,7 @@ name = "fuzz_utils"
 path = "fuzz_utils.rs"
 
 [dependencies]
+fleetspeak = "0.4.5"
 libfuzzer-sys = "0.4"
 protobuf = "3.7.2"
 libc = "0.2"

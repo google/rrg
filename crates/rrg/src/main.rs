@@ -162,22 +162,17 @@ fn main() {
             }
         }
 
-        let request = match rrg::Request::parse(&message) {
-            Ok(request) => Ok(request),
-            Err(rrg::ParseRequestError::Invalid(error)) => Err(error),
-            Err(rrg::ParseRequestError::Malformed(error)) => {
+        let request = match rrg::RequestUnvalidated::parse(&message) {
+            Ok(request) => request,
+            Err(error) => {
                 error!("malformed request: {error}");
                 continue
             }
         };
-        let request_id = match &request {
-            Ok(request) => request.id(),
-            Err(error) => error.request_id(),
-        };
-        info!("received request '{request_id}'");
+        info!("received request '{}'", request.id());
 
         let request_file = args.request_file.as_ref().and_then(|request_file_path| {
-            match rrg::abort::create_request_file(request_file_path, request_id) {
+            match rrg::abort::create_request_file(request_file_path, request.id()) {
                 Ok(request_file) => {
                     info! {
                         "created request file at '{}'",

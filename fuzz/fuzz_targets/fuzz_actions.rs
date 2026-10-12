@@ -6,7 +6,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use rrg::{Request, action::dispatch};
+use rrg::{RequestUnvalidated, action::dispatch};
 use fuzz_utils::{BoundedVec, FuzzSession, make_proto_path, MAX_FUZZ_VEC_LEN};
 use rrg_proto::rrg::Request as RequestProto;
 use arbitrary::Arbitrary;
@@ -133,9 +133,20 @@ fuzz_target!(|actions: BoundedVec<FuzzAction, MAX_FUZZ_VEC_LEN>| {
     let mut session = FuzzSession::new();
 
     for action in actions {
+        use protobuf::Message as _;
         let proto = action.into_request();
+
+        let message = fleetspeak::Message {
+            service: String::from("GRR"),
+            kind: Some(String::from("rrg.Request")),
+            data: proto.write_to_bytes().unwrap(),
+        };
+
         // Parsing Check
-        let Ok(request) = Request::try_from(proto) else {
+        let Ok(request) = RequestUnvalidated::parse(&message) else {
+            continue
+        };
+        let Ok(request) = request.validate() else {
             continue;
         };
         // Logic Check

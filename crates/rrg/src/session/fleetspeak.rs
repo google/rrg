@@ -52,18 +52,17 @@ impl<'a, 'fs> FleetspeakSession<'a, 'fs> {
         comms: &'static fleetspeak::Comms,
         args: &'a crate::args::Args,
         filestore: Option<&'fs crate::filestore::Filestore>,
-        request: Result<crate::Request, crate::InvalidRequestError>,
+        request: crate::RequestUnvalidated,
     ) {
         // Response identifiers that GRR agents use start at 1. The server
         // assumes this to determine the number of expected messages when the
         // status message is received. Thus, we have to replicate the behaviour
         // of the existing GRR agent and start at 1 as well.
         let next_response_id = crate::ResponseId(1);
+        let request_id = request.id();
 
-        let status = match request {
+        let status = match request.validate() {
             Ok(mut request) => {
-                let request_id = request.id();
-
                 let mut session = FleetspeakSession {
                     comms,
                     request_id,
