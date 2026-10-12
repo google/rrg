@@ -9,7 +9,7 @@ use libfuzzer_sys::fuzz_target;
 use fuzz_utils::{BoundedVec, FuzzSession, MAX_FUZZ_BUFFER_SIZE, MAX_FUZZ_VEC_LEN};
 use rrg::action::execute_signed_command;
 use rrg_proto::rrg::Request as RequestProto;
-use rrg::Request;
+use rrg::RequestUnvalidated;
 use arbitrary::Arbitrary;
 use protobuf::Message;
 
@@ -87,7 +87,17 @@ fuzz_target!(|input: FuzzInput| {
     proto.set_action(rrg_proto::rrg::Action::EXECUTE_SIGNED_COMMAND);
     proto.set_args(protobuf::well_known_types::any::Any::pack(&args).unwrap());
 
-    if let Ok(request) = Request::try_from(proto) {
+    let message = fleetspeak::Message {
+        service: String::from("GRR"),
+        kind: Some(String::from("rrg.Request")),
+        data: proto.write_to_bytes().unwrap(),
+    };
+
+    let Ok(request) = RequestUnvalidated::parse(&message) else {
+        return
+    };
+    // TODO(@panhania): Reduce nesting with `let .. else`.
+    if let Ok(request) = request.validate() {
         if let Ok(internal_args) = request.args() {
             // Fuzzing Goal:
             // 1. Deserialization of 'command_bytes' inside RRG.
