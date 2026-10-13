@@ -21,7 +21,7 @@ log = { version = "0.4.22", features = ["std"] }
 rrg-proto = { path = "../crates/rrg-proto" }
 regex = "1"
 tempfile = "3.2"
-yara-x = { version = "1.8.1", default-features = false }
+yara-x = { version = "1.16.0", default-features = false }
 
 [dependencies.rrg]
 path = "../crates/rrg"
