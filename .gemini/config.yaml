@@ -1,0 +1,4 @@
+# https://docs.cloud.google.com/gemini/docs/code-review/customize-repo-review#schema
+
+code_review:
+  disable: true
