@@ -8,8 +8,6 @@
 use libfuzzer_sys::fuzz_target;
 use fuzz_utils::{BoundedVec, FuzzSession, MemFd, FuzzRegex, make_proto_path, MAX_FUZZ_BUFFER_SIZE};
 use rrg::action::grep_file_contents;
-use rrg_proto::rrg::Request as RequestProto;
-use rrg::RequestUnvalidated;
 use arbitrary::Arbitrary;
 
 #[derive(Debug, Arbitrary)]
@@ -29,25 +27,9 @@ fuzz_target!(|input: FuzzInput| {
     args.set_path(make_proto_path(&memfd.path));
     args.set_regex(input.pattern.0);
 
-    use protobuf::Message as _;
-    let mut proto = RequestProto::new();
-    proto.set_request_id(12345);
-    proto.set_action(rrg_proto::rrg::Action::GREP_FILE_CONTENTS);
-    proto.set_args(protobuf::well_known_types::any::Any::pack(&args).unwrap());
-
-    let message = fleetspeak::Message {
-        service: String::from("GRR"),
-        kind: Some(String::from("rrg.Request")),
-        data: proto.write_to_bytes().unwrap(),
-    };
-
-    let Ok(request) = RequestUnvalidated::parse(&message) else {
+    use rrg::request::Args as _;
+    let Ok(args) = grep_file_contents::Args::from_proto(args) else {
         return
     };
-    // TODO(@panhania): Reduce nesting with `let .. else`.
-    if let Ok(request) = request.validate() {
-        if let Ok(internal_args) = request.args() {
-            let _ = grep_file_contents::handle(&mut session, internal_args);
-        }
-    }
+    let _ = grep_file_contents::handle(&mut session, args);
 });
