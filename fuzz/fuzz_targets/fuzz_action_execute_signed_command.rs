@@ -8,8 +8,6 @@
 use libfuzzer_sys::fuzz_target;
 use fuzz_utils::{BoundedVec, FuzzSession, MAX_FUZZ_BUFFER_SIZE, MAX_FUZZ_VEC_LEN};
 use rrg::action::execute_signed_command;
-use rrg_proto::rrg::Request as RequestProto;
-use rrg::RequestUnvalidated;
 use arbitrary::Arbitrary;
 use protobuf::Message;
 
@@ -82,28 +80,13 @@ fuzz_target!(|input: FuzzInput| {
         args.mut_unsigned_env().insert(k, v);
     }
 
-    let mut proto = RequestProto::new();
-    proto.set_request_id(12345);
-    proto.set_action(rrg_proto::rrg::Action::EXECUTE_SIGNED_COMMAND);
-    proto.set_args(protobuf::well_known_types::any::Any::pack(&args).unwrap());
-
-    let message = fleetspeak::Message {
-        service: String::from("GRR"),
-        kind: Some(String::from("rrg.Request")),
-        data: proto.write_to_bytes().unwrap(),
-    };
-
-    let Ok(request) = RequestUnvalidated::parse(&message) else {
+    use rrg::request::Args as _;
+    let Ok(args) = execute_signed_command::Args::from_proto(args) else {
         return
     };
-    // TODO(@panhania): Reduce nesting with `let .. else`.
-    if let Ok(request) = request.validate() {
-        if let Ok(internal_args) = request.args() {
-            // Fuzzing Goal:
-            // 1. Deserialization of 'command_bytes' inside RRG.
-            // 2. Logic checking 'unsigned_args' against the 'Command' policy.
-            // 3. Signature verification (will fail, but code path is exercised).
-            let _ = execute_signed_command::handle(&mut session, internal_args);
-        }
-    }
+    // Fuzzing Goal:
+    // 1. Deserialization of 'command_bytes' inside RRG.
+    // 2. Logic checking 'unsigned_args' against the 'Command' policy.
+    // 3. Signature verification (will fail, but code path is exercised).
+    let _ = execute_signed_command::handle(&mut session, args);
 });

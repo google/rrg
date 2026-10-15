@@ -12,11 +12,11 @@ pub mod filestore;
 pub mod fs;
 pub mod io;
 pub mod log;
+pub mod request;
 pub mod session;
 
 mod blob;
 mod filter;
-mod request;
 mod response;
 
 mod ping;

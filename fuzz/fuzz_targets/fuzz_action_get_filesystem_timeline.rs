@@ -8,8 +8,6 @@
 use libfuzzer_sys::fuzz_target;
 use fuzz_utils::{BoundedVec, FuzzSession, make_proto_path, MAX_FUZZ_BUFFER_SIZE, MAX_FUZZ_VEC_LEN};
 use rrg::action::get_filesystem_timeline;
-use rrg_proto::rrg::Request as RequestProto;
-use rrg::RequestUnvalidated;
 use arbitrary::Arbitrary;
 use std::fs;
 use std::os::unix::fs::symlink;
@@ -80,26 +78,10 @@ fuzz_target!(|input: FuzzInput| {
     let mut args = rrg_proto::get_filesystem_timeline::Args::new();
     args.set_root(make_proto_path(temp_dir.path().to_str().unwrap()));
 
-    use protobuf::Message as _;
-    let mut proto = RequestProto::new();
-    proto.set_request_id(12345);
-    proto.set_action(rrg_proto::rrg::Action::GET_FILESYSTEM_TIMELINE);
-    proto.set_args(protobuf::well_known_types::any::Any::pack(&args).unwrap());
-
-    let message = fleetspeak::Message {
-        service: String::from("GRR"),
-        kind: Some(String::from("rrg.Request")),
-        data: proto.write_to_bytes().unwrap(),
-    };
-
-    let Ok(request) = RequestUnvalidated::parse(&message) else {
+    use rrg::request::Args as _;
+    let Ok(args) = get_filesystem_timeline::Args::from_proto(args) else {
         return
     };
-    // TODO(@panhania): Reduce nesting with `let .. else`.
-    if let Ok(request) = request.validate() {
-        if let Ok(internal_args) = request.args() {
-            let _ = get_filesystem_timeline::handle(&mut session, internal_args);
-        }
-    }
+    let _ = get_filesystem_timeline::handle(&mut session, args);
     // temp_dir is automatically dropped here, cleaning up the files
 });
