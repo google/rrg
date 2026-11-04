@@ -95,24 +95,24 @@ pub fn fqdn() -> std::io::Result<std::ffi::OsString> {
         info.assume_init()
     };
 
-    let fqdn = {
-        // SAFETY: We have verified that the call for which we specified the
-        // `AI_CANONNAME` flag succeeded, to the `ai_canonname` is pointing to
-        // the name of the host. We create a scoped reference that is used then
-        // copied to an owned value and free the memory afterwards.
-        let fqdn = unsafe {
-            std::ffi::CStr::from_ptr((*info).ai_canonname)
-        };
-
-        use std::os::unix::ffi::OsStrExt as _;
-        std::ffi::OsStr::from_bytes(fqdn.to_bytes()).to_os_string()
-    };
-
-    // SAFETY: `fqdn` has been copied and no references are kept around, so we
-    // can release the memory now.
-    unsafe {
-        libc::freeaddrinfo(info);
+    if info.is_null() {
+        use std::io::{Error, ErrorKind::Other};
+        return Err(Error::new(Other, "`getaddrinfo` returned null"));
     }
+
+    let fqdn = unsafe {
+        if (*info).ai_canonname.is_null() {
+            libc::freeaddrinfo(info);
+            use std::io::{Error, ErrorKind::Other};
+            return Err(Error::new(Other, "canonical hostname not available"));
+        }
+
+        let fqdn = std::ffi::CStr::from_ptr((*info).ai_canonname);
+        use std::os::unix::ffi::OsStrExt as _;
+        let result = std::ffi::OsStr::from_bytes(fqdn.to_bytes()).to_os_string();
+        libc::freeaddrinfo(info);
+        result
+    };
 
     Ok(fqdn)
 }
