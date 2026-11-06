@@ -31,6 +31,8 @@ type Item = Result<OkItem, ErrorItem>;
 /// Result of the `get_file_contents` action in case of success.
 #[derive(Debug)]
 pub struct OkItem {
+    /// Absolute path to the raw volume on which the file is located.
+    volume_path: std::path::PathBuf,
     /// Path to the file this result corresponds to.
     path: keramics_formats::ntfs::NtfsPath,
     /// Byte offset of the file part sent to the blob sink.
@@ -44,6 +46,8 @@ pub struct OkItem {
 /// Result of the `get_file_contents` action in case of an error.
 #[derive(Debug)]
 struct ErrorItem {
+    /// Absolute path to the raw volume on which the file is located.
+    volume_path: std::path::PathBuf,
     /// Path to the file that cause the issue.
     path: keramics_formats::ntfs::NtfsPath,
     /// Error that occurred when working with the file.
@@ -111,6 +115,7 @@ where
             Ok(file_entry) => file_entry,
             Err(error) => {
                 session.reply(Err(ErrorItem {
+                    volume_path: volume_path.clone(),
                     path,
                     error,
                 }))?;
@@ -143,6 +148,7 @@ where
             Ok(file_data_stream) => file_data_stream,
             Err(error) => {
                 session.reply(Err(ErrorItem {
+                    volume_path: volume_path.clone(),
                     path: path.clone(),
                     error,
                 }))?;
@@ -167,6 +173,7 @@ where
                 Ok(_) => (),
                 Err(error) => {
                     session.reply(Err(ErrorItem {
+                        volume_path: volume_path.clone(),
                         path: path.clone(),
                         error: FileError {
                             kind: FileErrorKind::Seek,
@@ -190,6 +197,7 @@ where
                     Ok(len_read) => len_read,
                     Err(error) => {
                         session.reply(Err(ErrorItem {
+                            volume_path: volume_path.clone(),
                             path: path.clone(),
                             error: FileError {
                                 kind: FileErrorKind::Read,
@@ -209,6 +217,7 @@ where
 
                 session.send(crate::Sink::Blob, blob)?;
                 session.reply(Ok(OkItem {
+                    volume_path: volume_path.clone(),
                     path: path.clone(),
                     offset,
                     len: len_read,
@@ -287,6 +296,7 @@ impl crate::response::Item for Item {
                         .map(|comp| String::from_utf16_lossy(&comp.elements))
                 );
 
+                proto.set_volume_path(item.volume_path.into());
                 proto.set_path(path.into());
                 proto.set_offset(item.offset);
                 proto.set_length(item.len as u64);
@@ -299,6 +309,7 @@ impl crate::response::Item for Item {
                         .map(|comp| String::from_utf16_lossy(&comp.elements))
                 );
 
+                proto.set_volume_path(item.volume_path.into());
                 proto.set_path(path.into());
                 proto.set_error(item.error.to_string());
             }
@@ -374,6 +385,7 @@ mod tests {
 
         let error_item = session.reply::<Item>(0)
             .as_ref().unwrap_err();
+        assert_eq!(error_item.volume_path, ntfs_file.path());
         assert_eq!(error_item.path, "\\idonotexist".into());
         assert_eq!(error_item.error.kind, FileErrorKind::OpenEntry);
     }
@@ -403,6 +415,7 @@ mod tests {
 
         let error_item = session.reply::<Item>(0)
             .as_ref().unwrap_err();
+        assert_eq!(error_item.volume_path, ntfs_file.path());
         assert_eq!(error_item.path, "\\dir".into());
         assert_eq!(error_item.error.kind, FileErrorKind::OpenDataStream);
     }
@@ -458,6 +471,8 @@ mod tests {
 
         let item = session.reply::<Item>(0)
             .as_ref().unwrap();
+        assert_eq!(item.volume_path, ntfs_file.path());
+        assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\file"));
         assert_eq!(item.offset, 0);
         assert_eq!(item.len, b"0123456789".len());
 
@@ -494,6 +509,8 @@ mod tests {
 
         let item = session.reply::<Item>(0)
             .as_ref().unwrap();
+        assert_eq!(item.volume_path, ntfs_file.path());
+        assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\file"));
         assert_eq!(item.offset, 5);
         assert_eq!(item.len, 5);
 
@@ -530,6 +547,8 @@ mod tests {
 
         let item = session.reply::<Item>(0)
             .as_ref().unwrap();
+        assert_eq!(item.volume_path, ntfs_file.path());
+        assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\file"));
         assert_eq!(item.offset, 0);
         assert_eq!(item.len, 5);
 
@@ -566,6 +585,8 @@ mod tests {
 
         let item = session.reply::<Item>(0)
             .as_ref().unwrap();
+        assert_eq!(item.volume_path, ntfs_file.path());
+        assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\file"));
         assert_eq!(item.offset, 0xb33f);
         assert_eq!(item.len, MAX_BLOB_LEN);
 
@@ -727,18 +748,21 @@ mod tests {
 
         let item_34 = session.reply::<Item>(0)
             .as_ref().unwrap();
+        assert_eq!(item_34.volume_path, ntfs_file.path());
         assert_eq!(item_34.path, "\\foo".into());
         assert_eq!(item_34.offset, 3);
         assert_eq!(item_34.len, 2);
 
         let item_78 = session.reply::<Item>(1)
             .as_ref().unwrap();
+        assert_eq!(item_78.volume_path, ntfs_file.path());
         assert_eq!(item_78.path, "\\foo".into());
         assert_eq!(item_78.offset, 7);
         assert_eq!(item_78.len, 2);
 
         let item_9 = session.reply::<Item>(2)
             .as_ref().unwrap();
+        assert_eq!(item_9.volume_path, ntfs_file.path());
         assert_eq!(item_9.path, "\\foo".into());
         assert_eq!(item_9.offset, 9);
         assert_eq!(item_9.len, 1);

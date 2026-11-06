@@ -20,6 +20,7 @@ pub struct Args {
 
 /// Result of the `get_file_metadata_kmx` action.
 pub struct Item {
+    volume_path: std::path::PathBuf,
     path: keramics_formats::ntfs::NtfsPath,
     file_type: FileType,
     modified: Option<std::time::SystemTime>,
@@ -222,6 +223,7 @@ where
         log::debug!("sending metadata for '{:?}'", cur.path);
 
         session.reply(Item {
+            volume_path: volume_path.clone(),
             path: cur.path.clone(),
             file_type,
             modified,
@@ -345,6 +347,7 @@ impl crate::response::Item for Item {
         );
 
         let mut proto = rrg_proto::get_file_metadata_kmx::Result::new();
+        proto.set_volume_path(self.volume_path.into());
         proto.set_path(path.into());
         proto.mut_metadata().set_type(self.file_type.into());
         proto.mut_metadata().set_size(self.len);
@@ -520,6 +523,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
+        assert_eq!(item.volume_path, ntfs_file.path());
         assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\link"));
         assert_eq!(item.file_type, FileType::Symlink);
     }
@@ -551,6 +555,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
+        assert_eq!(item.volume_path, ntfs_file.path());
         assert_eq!(item.path, keramics_formats::ntfs::NtfsPath::from("\\link"));
         assert_eq!(item.file_type, FileType::Symlink);
     }

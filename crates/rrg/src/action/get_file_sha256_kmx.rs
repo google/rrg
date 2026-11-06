@@ -25,6 +25,8 @@ pub struct Args {
 
 /// Result of the `get_file_sha256_kmx` action.
 struct Item {
+    /// Absolute path to the raw volume on which the file is located.
+    volume_path: std::path::PathBuf,
     /// Path of the file this result corresponds to.
     path: keramics_formats::ntfs::NtfsPath,
     /// Byte offset from which the file content was hashed.
@@ -119,6 +121,7 @@ where
         let sha256 = <[u8; 32]>::from(sha256.finalize());
 
         session.reply(Item {
+            volume_path: volume_path.clone(),
             path: args.path.clone(),
             offset,
             len: len_read_total,
@@ -182,6 +185,7 @@ impl crate::response::Item for Item {
                 .map(|comp| String::from_utf16_lossy(&comp.elements))
         );
 
+        proto.set_path(self.volume_path.into());
         proto.set_path(path.into());
         proto.set_offset(self.offset);
         proto.set_length(self.len);
@@ -284,6 +288,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
+        assert_eq!(item.volume_path, ntfs_file.path());
         assert_eq!(item.path, "\\foo".into());
         assert_eq!(item.offset, 0);
         assert_eq!(item.len, u64::try_from(b"hello\n".len()).unwrap());
@@ -321,6 +326,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
+        assert_eq!(item.volume_path, ntfs_file.path());
         assert_eq!(item.path, "\\foo".into());
         assert_eq!(item.offset, u64::try_from(b"<ignore me>".len()).unwrap());
         assert_eq!(item.len, u64::try_from(b"hello\n".len()).unwrap());
@@ -361,6 +367,7 @@ mod tests {
         assert_eq!(session.reply_count(), 2);
 
         let item_foo = session.reply::<Item>(0);
+        assert_eq!(item_foo.volume_path, ntfs_file.path());
         assert_eq!(item_foo.path, "\\foo".into());
         assert_eq!(item_foo.offset, 9);
         assert_eq!(item_foo.len, 3);
@@ -373,6 +380,7 @@ mod tests {
         ]);
 
         let item_bar = session.reply::<Item>(1);
+        assert_eq!(item_bar.volume_path, ntfs_file.path());
         assert_eq!(item_bar.path, "\\foo".into());
         assert_eq!(item_bar.offset, 21);
         assert_eq!(item_bar.len, 3);
@@ -410,6 +418,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
+        assert_eq!(item.volume_path, ntfs_file.path());
         assert_eq!(item.path, "\\foo".into());
         assert_eq!(item.offset, 0);
         assert_eq!(item.len, u64::try_from(b"hello\n".len()).unwrap());
@@ -448,6 +457,7 @@ mod tests {
         assert_eq!(session.reply_count(), 1);
 
         let item = session.reply::<Item>(0);
+        assert_eq!(item.volume_path, ntfs_file.path());
         assert_eq!(item.path, "\\foo".into());
         assert_eq!(item.offset, 0);
         assert_eq!(item.len, 13371337);
