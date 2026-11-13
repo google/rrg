@@ -185,7 +185,7 @@ impl crate::response::Item for Item {
                 .map(|comp| String::from_utf16_lossy(&comp.elements))
         );
 
-        proto.set_path(self.volume_path.into());
+        proto.set_volume_path(self.volume_path.into());
         proto.set_path(path.into());
         proto.set_offset(self.offset);
         proto.set_length(self.len);
