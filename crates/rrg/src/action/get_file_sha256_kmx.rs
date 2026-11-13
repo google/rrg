@@ -174,10 +174,10 @@ impl crate::request::Args for Args {
 
 impl crate::response::Item for Item {
 
-    type Proto = rrg_proto::get_file_sha256::Result;
+    type Proto = rrg_proto::get_file_sha256_kmx::Result;
 
     fn into_proto(self) -> Self::Proto {
-        let mut proto = rrg_proto::get_file_sha256::Result::new();
+        let mut proto = rrg_proto::get_file_sha256_kmx::Result::new();
 
         // TODO: Use lossless conversion (preferably in Keramics directly).
         let path = std::path::PathBuf::from_iter(
